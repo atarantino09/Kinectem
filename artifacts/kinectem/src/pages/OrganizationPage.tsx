@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { useParams, Link } from "wouter";
+import { useParams, Link, useSearch } from "wouter";
 import { useQueryClient, useQuery, useInfiniteQuery } from "@tanstack/react-query";
 import {
   useGetOrganizationById,
@@ -119,6 +119,9 @@ const ORG_TOUR_KEY = "kinectem:org-tour-v2";
 export default function OrganizationPage() {
   const params = useParams<{ orgId: string }>();
   const orgId = params.orgId;
+  const search = useSearch();
+  const showAroundQuery =
+    new URLSearchParams(search.replace(/^\?/, "")).get("showAround") === "1";
   const qc = useQueryClient();
   const { toast } = useToast();
   const [createTeamOpen, setCreateTeamOpen] = useState(false);
@@ -138,6 +141,9 @@ export default function OrganizationPage() {
   // refresh / revisit can never re-trigger the modal.
   const [welcomeOrgName, setWelcomeOrgName] = useState<string | null>(null);
   const [orgTourOpen, setOrgTourOpen] = useState(false);
+  const [showAroundRequested, setShowAroundRequested] =
+    useState(showAroundQuery);
+  const [isGuidedTour, setIsGuidedTour] = useState(false);
   const [manageMenuOpen, setManageMenuOpen] = useState(false);
   // Gate the first-run tour until the post-create welcome / bulk-add popups
   // have been resolved on mount, so the tour never flashes on top of them.
@@ -376,6 +382,72 @@ export default function OrganizationPage() {
     [],
   );
 
+  const guidedOrgTourSteps = useMemo<TourStep[]>(
+    () => [
+      {
+        targetTestId: "org-header-identity",
+        title: "This is your club home",
+        body: (
+          <>
+            Your organization page brings your club&apos;s identity, teams, and
+            updates together in one simple place.
+          </>
+        ),
+      },
+      {
+        targetTestId: "btn-org-community-menu",
+        title: "Stay connected",
+        body: (
+          <>
+            Open <strong>Community</strong> to follow the club and keep up with
+            everything your organization shares.
+          </>
+        ),
+      },
+      {
+        targetTestId: "rail-teams",
+        onEnter: () => {
+          const toggle = document.querySelector<HTMLButtonElement>(
+            '[data-testid="btn-toggle-teams"][aria-expanded="false"]',
+          );
+          if (toggle) toggle.click();
+        },
+        title: "Find your team",
+        body: (
+          <>
+            Open <strong>Teams</strong> to find your roster and jump into the
+            team page that matters to you.
+          </>
+        ),
+      },
+      {
+        targetTestId: "org-posts",
+        title: "Keep up with the story",
+        body: (
+          <>
+            The latest club updates and game-day stories appear here, so your
+            season stays easy to follow in one place.
+          </>
+        ),
+      },
+    ],
+    [],
+  );
+
+  // Partner landing links include showAround=1 so a first-time visitor gets a
+  // friendly tour after the organization page has had time to render. Remove
+  // the one-shot query from the browser URL so a refresh does not replay it.
+  useEffect(() => {
+    if (!showAroundQuery || typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("showAround");
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${url.pathname}${url.search}${url.hash}`,
+    );
+  }, [showAroundQuery]);
+
   // Open the org walkthrough once per user (per browser), the first time an
   // owner/admin lands on any org page. Gated on `isManagerRole` so a
   // non-manager viewer never triggers it. Suppressed until the post-create
@@ -383,6 +455,7 @@ export default function OrganizationPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!orgId || !firstRunResolved || !isManagerRole) return;
+    if (showAroundRequested || isGuidedTour) return;
     if (
       welcomeOrgName !== null ||
       createTeamOpen ||
@@ -401,6 +474,40 @@ export default function OrganizationPage() {
     orgId,
     firstRunResolved,
     isManagerRole,
+    welcomeOrgName,
+    createTeamOpen,
+    bulkTeamsOpen,
+    coachSetupPending,
+    showAroundRequested,
+    isGuidedTour,
+  ]);
+
+  // The partner-page tour is intentionally delayed until the visitor has seen
+  // the organization page, rather than opening over the navigation transition.
+  useEffect(() => {
+    if (
+      !showAroundRequested ||
+      !orgId ||
+      !organization ||
+      !firstRunResolved ||
+      welcomeOrgName !== null ||
+      createTeamOpen ||
+      bulkTeamsOpen ||
+      coachSetupPending
+    ) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setIsGuidedTour(true);
+      setOrgTourOpen(true);
+      setShowAroundRequested(false);
+    }, 3000);
+    return () => window.clearTimeout(timer);
+  }, [
+    showAroundRequested,
+    orgId,
+    organization,
+    firstRunResolved,
     welcomeOrgName,
     createTeamOpen,
     bulkTeamsOpen,
@@ -1058,7 +1165,7 @@ export default function OrganizationPage() {
           {!isOrgManager && organization.role && <RolesPermissionsCard />}
 
           {/* Posts */}
-          <section>
+          <section data-testid="org-posts">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
               <h2 className="text-xl font-black tracking-tight">Recent Posts</h2>
               {isOrgManager && (
@@ -1165,8 +1272,15 @@ export default function OrganizationPage() {
           </aside>
         )}
       </div>
-      {orgTourOpen && orgTourSteps.length > 0 && (
-        <SpotlightTour steps={orgTourSteps} onFinish={finishOrgTour} />
+      {orgTourOpen &&
+        (isGuidedTour ? guidedOrgTourSteps : orgTourSteps).length > 0 && (
+          <SpotlightTour
+            steps={isGuidedTour ? guidedOrgTourSteps : orgTourSteps}
+            onFinish={() => {
+              setIsGuidedTour(false);
+              finishOrgTour();
+            }}
+          />
       )}
     </>
   );

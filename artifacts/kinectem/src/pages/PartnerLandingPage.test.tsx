@@ -65,24 +65,54 @@ describe("PartnerLandingPage featured competition", () => {
     ).toHaveAttribute("href", "/c/fall-classic-2026");
   });
 
-  it("shows partner-specific post-game messaging and centers the separator between marks", async () => {
+  it("shows the platform hero messaging and centers the separator between marks", async () => {
     mockedFetch.mockResolvedValue(partnerResponse(null) as never);
 
     renderWithProviders(<PartnerLandingPage />);
 
     expect(
       await screen.findByRole("heading", {
-        name: "North Stars Soccer runs the season. Kinectem preserves the story.",
+        name: "Kinectem is the youth-sports platform where the story of your season comes to life.",
       }),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Kinectem preserves the game stories that would otherwise disappear — turning them into lasting recaps, player and team histories, and one connected club story alongside the tools your club already uses.",
+        "Kinectem is not another registration, scheduling, or communication app — it's the layer that sits on top of the one you already use. They run your season. Kinectem makes it last.",
       ),
     ).toBeInTheDocument();
     const lockup = screen.getByTestId("partner-logo-lockup");
     expect(lockup.querySelector('[data-testid="partner-logo-separator"]')).toBeInTheDocument();
     expect(lockup.querySelector('[alt="Kinectem logo"]')).toBeInTheDocument();
+  });
+
+  it("adds the guided tour trigger to each club page link", async () => {
+    mockedFetch.mockResolvedValue(
+      partnerResponse(null, [
+        {
+          id: "org-1",
+          name: "North Stars Soccer",
+          location: "Riverside",
+          city: "Riverside",
+          state: "CA",
+          logoUrl: null,
+          canRequestClaim: false,
+          teams: [],
+        },
+      ]) as never,
+    );
+
+    renderWithProviders(<PartnerLandingPage />);
+    await userEvent.setup().click(
+      await screen.findByRole("button", { name: "Find Your Club" }),
+    );
+
+    const viewClubButton = await screen.findByRole("button", {
+      name: "View club page",
+    });
+    expect(viewClubButton.closest("a")).toHaveAttribute(
+      "href",
+      "/organizations/org-1?showAround=1",
+    );
   });
 
   it("keeps the existing page unchanged when no competition is linked", async () => {

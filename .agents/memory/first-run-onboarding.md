@@ -53,3 +53,17 @@ chosen over the "open each window" approach. Note the recap composer is a separa
 route (`/posts/new?...`, the button is a `<Link>`), so spotlighting AI Assist there
 would navigate away and break the tour — the tour explains AI Assist in the tooltip
 instead.
+
+# Partner-directory visitor tour
+
+Partner-directory club links should open the normal organization page, leave it
+visible for about three seconds, then run a public-facing spotlight tour. This
+entry tour applies to logged-out and non-manager visitors as well as members.
+
+**Why:** Visitors should see the real club page first and then learn how simple it
+is to find teams, follow the club, and read updates. The manager tour cannot serve
+this flow because its controls are intentionally role-gated.
+
+**How to apply:** Keep partner-entry steps limited to controls visible to every
+visitor, consume the entry signal so refresh does not replay it, and do not let it
+stack with the role-gated first-run manager tour or post-create dialogs.

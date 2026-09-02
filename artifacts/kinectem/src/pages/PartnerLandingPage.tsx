@@ -484,7 +484,7 @@ export default function PartnerLandingPage() {
                     <div className="flex items-start gap-3"><OrgLogo name={org.name} logoUrl={org.logoUrl} className="h-14 w-14 rounded-xl" /><div className="min-w-0"><h3 className="font-black text-slate-900">{formatOrgName(org.name)}</h3><p className="mt-1 flex items-center gap-1 text-sm text-slate-500"><MapPin className="h-3.5 w-3.5" />{locationOf(org)}</p></div></div>
                     <div className="mt-4 text-sm text-slate-500">{org.teams.slice(0, 3).map((team) => team.name).join(" · ") || "Team pages are ready to explore"}{org.teams.length > 3 ? ` +${org.teams.length - 3} more` : ""}</div>
                     <div className="mt-auto flex flex-wrap gap-2 pt-5">
-                      <Link href={`/organizations/${org.id}`}><Button variant="outline" size="sm" className="font-bold">View club page</Button></Link>
+                      <Link href={`/organizations/${org.id}?showAround=1`}><Button variant="outline" size="sm" className="font-bold">View club page</Button></Link>
                       {org.canRequestClaim && <Button size="sm" className="font-bold" style={{ background: page.primaryColor }} onClick={() => beginClaim(org)}>Request access</Button>}
                     </div>
                   </CardContent>

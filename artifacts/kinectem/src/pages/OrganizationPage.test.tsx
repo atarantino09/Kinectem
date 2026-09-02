@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { renderWithProviders } from "@/test";
@@ -316,5 +316,31 @@ describe("OrganizationPage — admin control gating", () => {
     expect(screen.queryByTestId("btn-share-org-page")).not.toBeInTheDocument();
     expect(screen.queryByTestId("org-manager-actions")).not.toBeInTheDocument();
     expect(screen.queryByTestId("org-guides-actions")).not.toBeInTheDocument();
+  });
+
+  it("shows the visitor tour after arriving from a partner club link", async () => {
+    vi.useFakeTimers();
+    try {
+      setMockSearch("showAround=1");
+      installHandlers({ role: null });
+
+      renderWithProviders(<OrganizationPage />);
+
+      expect(screen.getByTestId("btn-org-community-menu")).toBeInTheDocument();
+      expect(screen.queryByTestId("team-tour")).not.toBeInTheDocument();
+
+      act(() => {
+        vi.advanceTimersByTime(2999);
+      });
+      expect(screen.queryByTestId("team-tour")).not.toBeInTheDocument();
+
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(screen.getByTestId("team-tour")).toBeInTheDocument();
+      expect(screen.getByText("This is your club home")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
