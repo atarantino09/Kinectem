@@ -22,6 +22,7 @@ import {
   IMAGE_UPLOAD_MAX_BYTES,
 } from "@/lib/shrinkImage";
 import { extractBrandColorsFromDataUrl } from "@/lib/extractBrandColors";
+import { BrandColorSwapButton } from "@/components/BrandColorSwapButton";
 import { PLANS, type PlanTier } from "@/lib/plans";
 import {
   X,
@@ -798,6 +799,14 @@ export function OrgClaimLinksContent({
                   )}
                 </div>
               ))}
+              <BrandColorSwapButton
+                testId="btn-swap-add-org-brand-colors"
+                onSwap={() => {
+                  const currentPrimary = primaryColor;
+                  setPrimaryColor(secondaryColor);
+                  setSecondaryColor(currentPrimary);
+                }}
+              />
             </div>
           </div>
         </div>

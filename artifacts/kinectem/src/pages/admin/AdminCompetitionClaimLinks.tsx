@@ -23,6 +23,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { BrandImageField } from "@/components/BrandImageField";
 import { BrandColorField } from "@/components/BrandColorField";
+import { BrandColorSwapButton } from "@/components/BrandColorSwapButton";
 import {
   Dialog,
   DialogContent,
@@ -810,6 +811,14 @@ export default function AdminCompetitionClaimLinks() {
               logoUrl={brandingTarget?.logoUrl}
               idPrefix="competition-secondary"
               label="Secondary color"
+            />
+            <BrandColorSwapButton
+              testId="btn-swap-competition-brand-colors"
+              onSwap={() => {
+                const currentPrimary = brandDraft;
+                setBrandDraft(secondaryDraft);
+                setSecondaryDraft(currentPrimary);
+              }}
             />
             {(brandDraft.trim() || secondaryDraft.trim()) && (
               <div

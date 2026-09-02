@@ -36,6 +36,7 @@ import { normalizeWebsite } from "@/lib/normalizeWebsite";
 import { apiErrorMessage } from "@/lib/api-errors";
 import { useWhoami } from "@/hooks/useWhoami";
 import { extractLogoColors } from "@/components/BrandColorField";
+import { BrandColorSwapButton } from "@/components/BrandColorSwapButton";
 import {
   readOrgBrandColors,
   orgHeroGradient,
@@ -444,6 +445,17 @@ export function EditOrgDialog({
                     Secondary
                   </span>
                 </div>
+                <BrandColorSwapButton
+                  testId="btn-swap-org-brand-colors"
+                  onSwap={() => {
+                    const currentPrimary =
+                      brandPrimary ?? DEFAULT_BRAND_PRIMARY;
+                    const currentSecondary =
+                      brandSecondary ?? DEFAULT_BRAND_SECONDARY;
+                    setBrandPrimary(currentSecondary);
+                    setBrandSecondary(currentPrimary);
+                  }}
+                />
                 {(brandPrimary || brandSecondary) && (
                   <Button
                     type="button"

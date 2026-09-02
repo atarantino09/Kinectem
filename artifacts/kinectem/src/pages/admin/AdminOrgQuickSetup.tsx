@@ -26,6 +26,7 @@ import {
 } from "@/components/BulkPairEditor";
 import { PLANS, type PlanTier } from "@/lib/plans";
 import { extractBrandColorsFromDataUrl } from "@/lib/extractBrandColors";
+import { BrandColorSwapButton } from "@/components/BrandColorSwapButton";
 import { X } from "lucide-react";
 
 // Task #829 — One-page org quick setup for platform admins. Org info and the
@@ -566,6 +567,14 @@ export default function AdminOrgQuickSetup() {
                     )}
                   </div>
                 ))}
+                <BrandColorSwapButton
+                  testId="btn-swap-qs-brand-colors"
+                  onSwap={() => {
+                    const currentPrimary = primaryColor;
+                    setPrimaryColor(secondaryColor);
+                    setSecondaryColor(currentPrimary);
+                  }}
+                />
               </div>
               {(primaryColor || secondaryColor) && (
                 <div

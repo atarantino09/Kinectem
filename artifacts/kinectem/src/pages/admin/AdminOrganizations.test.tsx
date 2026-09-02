@@ -702,5 +702,13 @@ describe("AdminOrganizations bulk import", () => {
         "#141414",
       );
     });
+
+    await user.click(screen.getByTestId("btn-swap-partner-brand-colors"));
+    expect(screen.getByTestId("input-partner-primary-color")).toHaveValue(
+      "#141414",
+    );
+    expect(screen.getByTestId("input-partner-secondary-color")).toHaveValue(
+      "#e6781e",
+    );
   });
 });

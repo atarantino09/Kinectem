@@ -39,6 +39,7 @@ import { apiErrorMessage } from "@/lib/api-errors";
 import { US_STATES, US_ZIP_PATTERN } from "@/lib/usStates";
 import { normalizeWebsite } from "@/lib/normalizeWebsite";
 import { extractLogoColors } from "@/components/BrandColorField";
+import { BrandColorSwapButton } from "@/components/BrandColorSwapButton";
 import {
   readOrgBrandColors,
   orgHeroGradient,
@@ -387,6 +388,17 @@ export function CreateOrgDialog({
                     Secondary
                   </span>
                 </div>
+                <BrandColorSwapButton
+                  testId="btn-swap-create-org-brand-colors"
+                  onSwap={() => {
+                    const currentPrimary =
+                      brandPrimary ?? DEFAULT_BRAND_PRIMARY;
+                    const currentSecondary =
+                      brandSecondary ?? DEFAULT_BRAND_SECONDARY;
+                    setBrandPrimary(currentSecondary);
+                    setBrandSecondary(currentPrimary);
+                  }}
+                />
                 {(brandPrimary || brandSecondary) && (
                   <Button
                     type="button"

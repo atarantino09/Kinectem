@@ -3,6 +3,7 @@ import { Link, useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { BrandColorField } from "@/components/BrandColorField";
+import { BrandColorSwapButton } from "@/components/BrandColorSwapButton";
 import { BrandImageField } from "@/components/BrandImageField";
 import { NewHubDialog, OrganizerSidebar } from "@/components/OrganizerSidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -559,6 +560,16 @@ function CreateCompetitionCard({
                 logoUrl={logoUrl}
                 idPrefix="wizard-brand-secondary"
               />
+              <div className="flex items-end">
+                <BrandColorSwapButton
+                  testId="btn-swap-wizard-brand-colors"
+                  onSwap={() => {
+                    const currentPrimary = brandColor;
+                    setBrandColor(secondaryColor);
+                    setSecondaryColor(currentPrimary);
+                  }}
+                />
+              </div>
               <BrandColorField
                 label="Third color"
                 value={tertiaryColor}

@@ -3,6 +3,7 @@ import { Link, useLocation, useRoute } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch, useGetLoggedInUser } from "@workspace/api-client-react";
 import { BrandColorField } from "@/components/BrandColorField";
+import { BrandColorSwapButton } from "@/components/BrandColorSwapButton";
 import { BrandImageField } from "@/components/BrandImageField";
 import { CompetitionAdminsPanel } from "@/components/CompetitionAdminsPanel";
 import { CompetitionBrandStrip } from "@/components/CompetitionBrandStrip";
@@ -377,6 +378,16 @@ function EditHubPanel({ organizer }: { organizer: OrganizerMeta }) {
             logoUrl={logoUrl}
             idPrefix="hub-brand-secondary"
           />
+          <div className="flex items-end">
+            <BrandColorSwapButton
+              testId="btn-swap-hub-brand-colors"
+              onSwap={() => {
+                const currentPrimary = brandColor;
+                setBrandColor(secondaryColor);
+                setSecondaryColor(currentPrimary);
+              }}
+            />
+          </div>
           <BrandColorField
             label="Third color"
             value={tertiaryColor}

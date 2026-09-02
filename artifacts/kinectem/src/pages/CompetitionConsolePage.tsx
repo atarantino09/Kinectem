@@ -3,6 +3,7 @@ import { Link, useLocation, useRoute } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { BrandColorField } from "@/components/BrandColorField";
+import { BrandColorSwapButton } from "@/components/BrandColorSwapButton";
 import { BrandImageField } from "@/components/BrandImageField";
 import { CompetitionAdminsPanel } from "@/components/CompetitionAdminsPanel";
 import { CompetitionHowItWorks } from "@/components/CompetitionHowItWorks";
@@ -732,6 +733,16 @@ function BrandingPanel({
             logoUrl={logoUrl}
             idPrefix="brand-secondary"
           />
+          <div className="flex items-end">
+            <BrandColorSwapButton
+              testId="btn-swap-console-brand-colors"
+              onSwap={() => {
+                const currentPrimary = brandColor;
+                setBrandColor(secondaryColor);
+                setSecondaryColor(currentPrimary);
+              }}
+            />
+          </div>
           <BrandColorField
             label="Third color"
             value={tertiaryColor}

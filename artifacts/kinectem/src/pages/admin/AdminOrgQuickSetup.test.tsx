@@ -168,13 +168,21 @@ describe("AdminOrgQuickSetup", () => {
     expect(screen.getByTestId("text-qs-team-count")).toHaveTextContent("2/15 teams");
   });
 
-  it("sends brand colors when set", async () => {
+  it("swaps the exact brand colors before sending them", async () => {
     const user = userEvent.setup();
     renderWithProviders(<AdminOrgQuickSetup />);
     await user.type(await screen.findByTestId("input-qs-org-name"), "Quick Org");
     fireEvent.input(screen.getByTestId("input-qs-color-primary"), {
       target: { value: "#112233" },
     });
+    fireEvent.input(screen.getByTestId("input-qs-color-secondary"), {
+      target: { value: "#aabbcc" },
+    });
+    await user.click(screen.getByTestId("btn-swap-qs-brand-colors"));
+
+    expect(screen.getByTestId("input-qs-color-primary")).toHaveValue("#aabbcc");
+    expect(screen.getByTestId("input-qs-color-secondary")).toHaveValue("#112233");
+
     await user.click(screen.getByTestId("btn-qs-save"));
     await waitFor(() =>
       expect(screen.getByTestId("quick-setup-success")).toBeInTheDocument(),
@@ -183,8 +191,8 @@ describe("AdminOrgQuickSetup", () => {
       brandPrimaryColor?: string;
       brandSecondaryColor?: string;
     };
-    expect(body.brandPrimaryColor).toBe("#112233");
-    expect(body.brandSecondaryColor).toBeUndefined();
+    expect(body.brandPrimaryColor).toBe("#aabbcc");
+    expect(body.brandSecondaryColor).toBe("#112233");
   });
 });
 

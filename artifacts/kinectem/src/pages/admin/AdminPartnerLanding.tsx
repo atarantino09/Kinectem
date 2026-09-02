@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { BrandImageField } from "@/components/BrandImageField";
+import { BrandColorSwapButton } from "@/components/BrandColorSwapButton";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -656,6 +657,19 @@ export function AdminPartnerLanding({
           <div className="grid grid-cols-2 gap-2">
             <div><Label>Primary</Label><Input type="color" value={draft.primaryColor} onChange={(e) => setDraft({ ...draft, primaryColor: e.target.value })} data-testid="input-partner-primary-color" /></div>
             <div><Label>Secondary</Label><Input type="color" value={draft.secondaryColor} onChange={(e) => setDraft({ ...draft, secondaryColor: e.target.value })} data-testid="input-partner-secondary-color" /></div>
+            <div className="col-span-2">
+              <BrandColorSwapButton
+                testId="btn-swap-partner-brand-colors"
+                onSwap={() => {
+                  const currentPrimary = draft.primaryColor;
+                  setDraft({
+                    ...draft,
+                    primaryColor: draft.secondaryColor,
+                    secondaryColor: currentPrimary,
+                  });
+                }}
+              />
+            </div>
           </div>
           <BrandImageField label="Partner logo" value={draft.logoUrl} onChange={onPartnerLogoChange} kind="logo" idPrefix="partner-logo" />
           <BrandImageField label="Partner banner" value={draft.bannerUrl} onChange={(bannerUrl) => setDraft({ ...draft, bannerUrl })} kind="banner" idPrefix="partner-banner" />
