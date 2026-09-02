@@ -138,9 +138,7 @@ describe("AdminOrganizations bulk import", () => {
     expect(await screen.findByTestId("bulk-import-preview")).toHaveTextContent(
       "2 organizations · 3 teams",
     );
-    expect(screen.getByTestId("bulk-import-issues")).toHaveTextContent(
-      "repeated names will be imported once",
-    );
+    expect(screen.queryByTestId("bulk-import-issues")).not.toBeInTheDocument();
 
     await user.type(
       screen.getByTestId("input-org-bulk-list-name"),

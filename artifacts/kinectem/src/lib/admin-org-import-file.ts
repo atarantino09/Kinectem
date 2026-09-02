@@ -158,11 +158,6 @@ export async function parseOrganizationImportFile(
       seen.add(key);
       teams.push(team);
     }
-    if (duplicateTeams.length > 0) {
-      warnings.push(
-        `Column ${columnLabel(column)} (“${name}”) repeats team name${duplicateTeams.length === 1 ? "" : "s"}; repeated names will be imported once: ${duplicateTeams.join(", ")}.`,
-      );
-    }
     if (teams.length === 0) {
       warnings.push(`Column ${columnLabel(column)} (“${name}”) has no teams.`);
     }

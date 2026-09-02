@@ -72,8 +72,6 @@ describe("organization import file parser", () => {
     expect(parsed.errors).not.toEqual(
       expect.arrayContaining([expect.stringContaining("repeats team name")]),
     );
-    expect(parsed.warnings).toEqual(
-      expect.arrayContaining([expect.stringContaining("repeated names will be imported once")]),
-    );
+    expect(parsed.warnings).toEqual([]);
   });
 });
