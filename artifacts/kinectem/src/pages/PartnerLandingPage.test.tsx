@@ -129,8 +129,12 @@ describe("PartnerLandingPage featured competition", () => {
 
     renderWithProviders(<PartnerLandingPage />);
 
+    const hero = await screen.findByTestId("partner-hero");
+    expect(hero).toHaveClass("py-8", "md:py-12");
+    expect(screen.getByTestId("partner-hero-branding")).toHaveClass("mb-5");
+    expect(screen.getByTestId("partner-hero-opening")).toHaveClass("gap-5");
     expect(
-      await screen.findByRole("heading", {
+      screen.getByRole("heading", {
         name: "Kinectem is the youth-sports platform where the story of your season comes to life.",
       }),
     ).toBeInTheDocument();

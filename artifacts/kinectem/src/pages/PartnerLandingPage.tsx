@@ -205,7 +205,8 @@ export default function PartnerLandingPage() {
   return (
     <main className="min-h-screen bg-slate-50">
       <section
-        className="relative overflow-hidden px-5 py-16 md:py-24"
+        className="relative overflow-hidden px-5 py-8 md:py-12"
+        data-testid="partner-hero"
         style={{
           color: "#ffffff",
           background: page.bannerUrl
@@ -216,7 +217,7 @@ export default function PartnerLandingPage() {
         <div className="absolute inset-0 opacity-20" style={{ backgroundImage: "radial-gradient(circle at 80% 10%, white 0, transparent 32%), radial-gradient(circle at 10% 90%, white 0, transparent 26%)" }} />
         <div className="relative mx-auto max-w-6xl">
           {isPlatformAdmin && (
-            <div className="mb-5 flex justify-end">
+            <div className="mb-3 flex justify-end" data-testid="partner-hero-admin">
               <Link
                 href={`/admin/organizations?section=partner&edit=${encodeURIComponent(slug)}`}
                 data-testid="link-edit-partner-page"
@@ -231,8 +232,8 @@ export default function PartnerLandingPage() {
               </Link>
             </div>
           )}
-          <div className="mb-8 text-center">
-            <p className="mb-5 inline-flex rounded-full border border-white/20 bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-white/90 shadow-sm backdrop-blur-sm md:text-sm">
+          <div className="mb-5 text-center" data-testid="partner-hero-branding">
+            <p className="mb-3 inline-flex rounded-full border border-white/20 bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-white/90 shadow-sm backdrop-blur-sm md:text-sm">
               Proud partner with Kinectem
             </p>
             <div
@@ -250,7 +251,7 @@ export default function PartnerLandingPage() {
                   className="h-32 w-32 rounded-3xl object-contain shadow-xl md:h-40 md:w-40"
                 />
               </div>
-              <div className="mt-3 grid grid-cols-[8rem_auto_8rem] gap-3 text-center sm:gap-5 md:grid-cols-[10rem_auto_10rem]">
+              <div className="mt-2 grid grid-cols-[8rem_auto_8rem] gap-3 text-center sm:gap-5 md:grid-cols-[10rem_auto_10rem]">
                 <div className="flex min-h-[3.25rem] min-w-0 flex-col items-center justify-start">
                   <div className="text-[10px] font-black uppercase tracking-[0.18em] opacity-70">{page.associationLabel}</div>
                   <div className="mt-1 text-sm font-black leading-tight md:text-base">{page.officialName}</div>
@@ -260,7 +261,10 @@ export default function PartnerLandingPage() {
               </div>
             </div>
           </div>
-          <div className="grid gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(18rem,0.7fr)] lg:items-stretch">
+          <div
+            className="grid gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(18rem,0.7fr)] lg:items-stretch"
+            data-testid="partner-hero-opening"
+          >
             <div className="rounded-[2rem] border border-white/20 bg-slate-950/20 p-6 shadow-2xl backdrop-blur-[2px] md:p-9">
               <div className="mb-4 flex items-center gap-3 text-xs font-black uppercase tracking-[0.2em] text-white/65">
                 <span className="h-px w-8 bg-white/50" />
