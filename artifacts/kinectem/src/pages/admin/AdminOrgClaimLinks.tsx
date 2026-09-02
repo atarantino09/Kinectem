@@ -85,6 +85,21 @@ type OrgList = {
 };
 type OrgListsResponse = { data: OrgList[] };
 
+type BulkDeleteResult = {
+  data: {
+    requestedCount: number;
+    deletedCount: number;
+    deleted: Array<{ id: string; name: string }>;
+    protectedCount: number;
+    protected: Array<{ id: string; name: string }>;
+    missingCount: number;
+    listDeleted: boolean;
+    list: { id: string; name: string } | null;
+  };
+};
+
+const BULK_DELETE_CONFIRMATION = "DELETE UNCLAIMED ORGANIZATIONS";
+
 type NameMatch = {
   id: string;
   name: string;
@@ -198,6 +213,12 @@ export function OrgClaimLinksContent({
   const [newListName, setNewListName] = useState("");
   const [creatingList, setCreatingList] = useState(false);
   const [listToDelete, setListToDelete] = useState<OrgList | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleteScope, setDeleteScope] = useState<
+    { kind: "selected" } | { kind: "list"; list: OrgList } | null
+  >(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [deletingOrganizations, setDeletingOrganizations] = useState(false);
   // Sort rows by their assigned list — click the "List" column header to
   // cycle asc → desc → off. Unlisted orgs always sort to the end so a
   // partially-sorted list doesn't scatter them through the middle.
@@ -478,6 +499,105 @@ export function OrgClaimLinksContent({
       ),
     [filtered, listSort],
   );
+
+  const visibleIds = useMemo(() => filtered.map((row) => row.id), [filtered]);
+  const allVisibleSelected =
+    visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+  const someVisibleSelected = visibleIds.some((id) => selectedIds.has(id));
+
+  const toggleSelected = (id: string, selected: boolean) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (selected) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const toggleAllVisible = (selected: boolean) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      for (const id of visibleIds) {
+        if (selected) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+  };
+
+  const closeDeleteOrganizations = () => {
+    if (deletingOrganizations) return;
+    setDeleteScope(null);
+    setDeleteConfirmation("");
+  };
+
+  const deleteOrganizations = async () => {
+    if (!deleteScope || deletingOrganizations) return;
+    const organizationIds =
+      deleteScope.kind === "selected" ? [...selectedIds] : undefined;
+    if (deleteScope.kind === "selected" && organizationIds?.length === 0)
+      return;
+    setDeletingOrganizations(true);
+    try {
+      const response = await customFetch<BulkDeleteResult>(
+        "/api/v1/admin/org-claim-links/bulk-delete",
+        {
+          method: "POST",
+          body: JSON.stringify(
+            deleteScope.kind === "list"
+              ? {
+                  listId: deleteScope.list.id,
+                  deleteList: true,
+                  confirm: deleteConfirmation,
+                }
+              : {
+                  organizationIds,
+                  confirm: deleteConfirmation,
+                },
+          ),
+        },
+      );
+      setSelectedIds(new Set());
+      if (deleteScope.kind === "list" && listFilter === deleteScope.list.id) {
+        setListFilter("all");
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["admin", "organizations"] }),
+        queryClient.invalidateQueries({ queryKey: ["admin", "org-lists"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["admin", "org-claim-links"],
+        }),
+      ]);
+      const blocked = response.data.protectedCount + response.data.missingCount;
+      toast({
+        title: `Permanently deleted ${response.data.deletedCount} organization${
+          response.data.deletedCount === 1 ? "" : "s"
+        }`,
+        description:
+          blocked > 0
+            ? `${response.data.protectedCount} claimed organization${
+                response.data.protectedCount === 1 ? " was" : "s were"
+              } protected${
+                response.data.missingCount
+                  ? `; ${response.data.missingCount} could not be found`
+                  : ""
+              }.`
+            : response.data.listDeleted
+              ? `The list "${response.data.list?.name}" was also deleted.`
+              : "The selected ownerless pages and their dependent data were removed.",
+      });
+      setDeleteScope(null);
+      setDeleteConfirmation("");
+    } catch (err) {
+      toast({
+        title: "Organizations could not be deleted",
+        description: err instanceof Error ? err.message : undefined,
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingOrganizations(false);
+    }
+  };
 
   const toggleMessaged = async (id: string, messaged: boolean) => {
     try {
@@ -970,6 +1090,19 @@ export function OrgClaimLinksContent({
                 >
                   <Trash2 className="h-3 w-3" />
                 </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  className="h-6 px-2 text-[11px]"
+                  aria-label={`Permanently delete organizations in list ${l.name} and delete the list`}
+                  onClick={() => {
+                    setDeleteConfirmation("");
+                    setDeleteScope({ kind: "list", list: l });
+                  }}
+                  data-testid={`btn-delete-list-and-orgs-${l.id}`}
+                >
+                  Delete orgs + list
+                </Button>
               </li>
             ))}
           </ul>
@@ -990,6 +1123,19 @@ export function OrgClaimLinksContent({
         >
           {rows.length} ownerless page{rows.length === 1 ? "" : "s"}
         </div>
+        <Button
+          variant="destructive"
+          size="sm"
+          disabled={selectedIds.size === 0}
+          onClick={() => {
+            setDeleteConfirmation("");
+            setDeleteScope({ kind: "selected" });
+          }}
+          data-testid="btn-delete-selected-orgs"
+        >
+          <Trash2 className="h-3.5 w-3.5 mr-1" />
+          Permanently delete {selectedIds.size} selected
+        </Button>
       </div>
 
       <AlertDialog
@@ -1016,11 +1162,93 @@ export function OrgClaimLinksContent({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <AlertDialog
+        open={!!deleteScope}
+        onOpenChange={(open) => !open && closeDeleteOrganizations()}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {deleteScope?.kind === "list"
+                ? `Permanently delete "${deleteScope.list.name}" and its unclaimed organizations?`
+                : `Permanently delete ${selectedIds.size} selected organization${
+                    selectedIds.size === 1 ? "" : "s"
+                  }?`}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>
+                  This cannot be undone. Teams, posts, invites, claim requests,
+                  subscriptions, partner memberships, and related activity for
+                  each still-unclaimed organization will be removed. Any
+                  organization claimed before the final delete is protected.
+                </p>
+                <div className="space-y-1">
+                  <Label htmlFor="delete-organizations-confirmation">
+                    Type{" "}
+                    <span className="font-mono font-bold text-foreground">
+                      {deleteScope?.kind === "list"
+                        ? deleteScope.list.name
+                        : BULK_DELETE_CONFIRMATION}
+                    </span>{" "}
+                    to confirm
+                  </Label>
+                  <Input
+                    id="delete-organizations-confirmation"
+                    value={deleteConfirmation}
+                    onChange={(event) =>
+                      setDeleteConfirmation(event.target.value)
+                    }
+                    autoComplete="off"
+                    data-testid="input-delete-organizations-confirmation"
+                  />
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingOrganizations}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                void deleteOrganizations();
+              }}
+              disabled={
+                deletingOrganizations ||
+                deleteConfirmation !==
+                  (deleteScope?.kind === "list"
+                    ? deleteScope.list.name
+                    : BULK_DELETE_CONFIRMATION)
+              }
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-confirm-delete-organizations"
+            >
+              {deletingOrganizations
+                ? "Deleting…"
+                : deleteScope?.kind === "list"
+                  ? "Delete organizations and list"
+                  : "Permanently delete organizations"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {(() => {
         const renderRow = (r: ClaimLinkRow) => {
           const location = [r.city, r.state].filter(Boolean).join(", ");
           return (
             <TableRow key={r.id} data-testid={`row-claim-link-${r.id}`}>
+              <TableCell>
+                <Checkbox
+                  checked={selectedIds.has(r.id)}
+                  onCheckedChange={(value) =>
+                    toggleSelected(r.id, value === true)
+                  }
+                  aria-label={`Select ${r.name} for permanent deletion`}
+                  data-testid={`checkbox-delete-org-${r.id}`}
+                />
+              </TableCell>
               <TableCell>
                 <Checkbox
                   checked={!!r.facebookAddedAt}
@@ -1109,6 +1337,20 @@ export function OrgClaimLinksContent({
         const header = (
           <TableHeader>
             <TableRow>
+              <TableHead className="w-[52px]">
+                <Checkbox
+                  checked={
+                    allVisibleSelected
+                      ? true
+                      : someVisibleSelected
+                        ? "indeterminate"
+                        : false
+                  }
+                  onCheckedChange={(value) => toggleAllVisible(value === true)}
+                  aria-label="Select all visible organizations for permanent deletion"
+                  data-testid="checkbox-delete-select-all-visible"
+                />
+              </TableHead>
               <TableHead className="w-[110px]">Facebook</TableHead>
               <TableHead className="w-[110px]">Messaged</TableHead>
               <TableHead>Organization</TableHead>
@@ -1162,7 +1404,7 @@ export function OrgClaimLinksContent({
                   {isLoading ? (
                     <TableRow>
                       <TableCell
-                        colSpan={6}
+                        colSpan={7}
                         className="text-center py-6 text-muted-foreground"
                       >
                         Loading…
@@ -1171,7 +1413,7 @@ export function OrgClaimLinksContent({
                   ) : filtered.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={6}
+                        colSpan={7}
                         className="text-center py-6 text-muted-foreground"
                       >
                         No ownerless pages.
@@ -1180,7 +1422,7 @@ export function OrgClaimLinksContent({
                   ) : otherRows.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={6}
+                        colSpan={7}
                         className="text-center py-6 text-muted-foreground"
                       >
                         No other unclaimed orgs match.

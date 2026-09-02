@@ -24,6 +24,9 @@ let partnerCreateBody: Record<string, unknown> | null = null;
 let partnerCompetitionBody: Record<string, unknown> | null = null;
 let partnerPages: Array<Record<string, unknown>> = [];
 let partnerPublished = false;
+let claimLinkRows: Array<Record<string, unknown>> = [];
+let orgLists: Array<Record<string, unknown>> = [];
+let bulkDeleteBody: Record<string, unknown> | null = null;
 
 beforeEach(() => {
   validatedBody = null;
@@ -32,6 +35,9 @@ beforeEach(() => {
   partnerCompetitionBody = null;
   partnerPages = [];
   partnerPublished = false;
+  claimLinkRows = [];
+  orgLists = [];
+  bulkDeleteBody = null;
   Object.defineProperties(HTMLElement.prototype, {
     hasPointerCapture: { configurable: true, value: () => false },
     setPointerCapture: { configurable: true, value: () => undefined },
@@ -71,10 +77,10 @@ beforeEach(() => {
         });
       }
       if (method === "GET" && path === "/api/v1/admin/org-lists") {
-        return jsonResponse({ data: [] });
+        return jsonResponse({ data: orgLists });
       }
       if (method === "GET" && path === "/api/v1/admin/org-claim-links") {
-        return jsonResponse({ data: [] });
+        return jsonResponse({ data: claimLinkRows });
       }
       if (method === "GET" && path === "/api/v1/admin/org-name-check") {
         return jsonResponse({ data: [] });
@@ -210,6 +216,39 @@ beforeEach(() => {
           201,
         );
       }
+      if (
+        method === "POST" &&
+        path === "/api/v1/admin/org-claim-links/bulk-delete"
+      ) {
+        bulkDeleteBody = JSON.parse(String(init?.body ?? "{}"));
+        const ids = Array.isArray(bulkDeleteBody.organizationIds)
+          ? (bulkDeleteBody.organizationIds as string[])
+          : claimLinkRows
+              .filter((row) => row.listId === bulkDeleteBody?.listId)
+              .map((row) => String(row.id));
+        claimLinkRows = claimLinkRows.filter(
+          (row) => !ids.includes(String(row.id)),
+        );
+        if (bulkDeleteBody.deleteList) {
+          orgLists = orgLists.filter(
+            (list) => list.id !== bulkDeleteBody?.listId,
+          );
+        }
+        return jsonResponse({
+          data: {
+            requestedCount: ids.length,
+            deletedCount: ids.length,
+            deleted: [],
+            protectedCount: 0,
+            protected: [],
+            missingCount: 0,
+            listDeleted: Boolean(bulkDeleteBody.deleteList),
+            list: bulkDeleteBody.listId
+              ? { id: bulkDeleteBody.listId, name: "Fall Partners" }
+              : null,
+          },
+        });
+      }
       return jsonResponse({ error: "Unhandled in test", method, path }, 404);
     }),
   );
@@ -319,6 +358,138 @@ describe("AdminOrganizations bulk import", () => {
     );
   });
 
+  it("selects individual and all visible rows and requires typed bulk confirmation", async () => {
+    claimLinkRows = [
+      {
+        id: "org-1",
+        name: "North League",
+        city: "Northville",
+        state: "NY",
+        logoUrl: null,
+        token: "north-token",
+        messagedAt: null,
+        facebookAddedAt: null,
+        quickSetupAt: null,
+        listId: null,
+        listName: null,
+      },
+      {
+        id: "org-2",
+        name: "South League",
+        city: "Southville",
+        state: "NJ",
+        logoUrl: null,
+        token: "south-token",
+        messagedAt: null,
+        facebookAddedAt: null,
+        quickSetupAt: null,
+        listId: null,
+        listName: null,
+      },
+    ];
+    const user = userEvent.setup();
+    renderWithProviders(<AdminOrganizations />);
+    await user.click(await screen.findByTestId("tab-org-claim-links"));
+
+    await user.click(screen.getByTestId("checkbox-delete-org-org-2"));
+    expect(screen.getByTestId("checkbox-delete-org-org-2")).toBeChecked();
+    await user.click(screen.getByTestId("checkbox-delete-org-org-2"));
+    expect(screen.getByTestId("checkbox-delete-org-org-2")).not.toBeChecked();
+
+    await user.type(screen.getByTestId("input-claim-links-search"), "North");
+    const selectAll = screen.getAllByTestId(
+      "checkbox-delete-select-all-visible",
+    )[0];
+    await user.click(selectAll);
+    expect(screen.getByTestId("checkbox-delete-org-org-1")).toBeChecked();
+    expect(
+      screen.queryByTestId("checkbox-delete-org-org-2"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("btn-delete-selected-orgs")).toHaveTextContent(
+      "1 selected",
+    );
+
+    await user.click(screen.getByTestId("btn-delete-selected-orgs"));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(bulkDeleteBody).toBeNull();
+    await user.click(screen.getByTestId("btn-delete-selected-orgs"));
+    const confirmButton = screen.getByTestId(
+      "button-confirm-delete-organizations",
+    );
+    expect(confirmButton).toBeDisabled();
+    await user.type(
+      screen.getByTestId("input-delete-organizations-confirmation"),
+      "DELETE UNCLAIMED ORGANIZATIONS",
+    );
+    expect(confirmButton).toBeEnabled();
+    await user.click(confirmButton);
+    await waitFor(() =>
+      expect(bulkDeleteBody).toEqual({
+        organizationIds: ["org-1"],
+        confirm: "DELETE UNCLAIMED ORGANIZATIONS",
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("row-claim-link-org-1"),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
+  it("keeps list-only deletion distinct and requires the exact list name to delete its organizations", async () => {
+    orgLists = [
+      {
+        id: "list-1",
+        name: "Fall Partners",
+        orgCount: 1,
+        createdAt: "2026-09-01T00:00:00.000Z",
+      },
+    ];
+    claimLinkRows = [
+      {
+        id: "org-1",
+        name: "North League",
+        city: null,
+        state: null,
+        logoUrl: null,
+        token: "north-token",
+        messagedAt: null,
+        facebookAddedAt: null,
+        quickSetupAt: null,
+        listId: "list-1",
+        listName: "Fall Partners",
+      },
+    ];
+    const user = userEvent.setup();
+    renderWithProviders(<AdminOrganizations />);
+    await user.click(await screen.findByTestId("tab-org-claim-links"));
+
+    expect(screen.getByTestId("btn-delete-list-list-1")).toHaveAccessibleName(
+      "Delete list Fall Partners",
+    );
+    await user.click(screen.getByTestId("btn-delete-list-and-orgs-list-1"));
+    const confirmation = screen.getByTestId(
+      "input-delete-organizations-confirmation",
+    );
+    const submit = screen.getByTestId("button-confirm-delete-organizations");
+    await user.type(confirmation, "fall partners");
+    expect(submit).toBeDisabled();
+    await user.clear(confirmation);
+    await user.type(confirmation, "Fall Partners");
+    await user.click(submit);
+
+    await waitFor(() =>
+      expect(bulkDeleteBody).toEqual({
+        listId: "list-1",
+        deleteList: true,
+        confirm: "Fall Partners",
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByTestId("list-chip-list-1")).not.toBeInTheDocument(),
+    );
+  });
+
   it("normalizes pasted partner URLs, blocks invalid values, and submits the canonical URL", async () => {
     const user = userEvent.setup();
     renderWithProviders(<AdminOrganizations />);
@@ -425,23 +596,23 @@ describe("AdminOrganizations bulk import", () => {
     renderWithProviders(<AdminOrganizations />);
 
     await user.click(await screen.findByTestId("tab-org-partner"));
-    await user.click(await screen.findByRole("button", { name: /North Stars/ }));
+    await user.click(
+      await screen.findByRole("button", { name: /North Stars/ }),
+    );
     await user.type(
       await screen.findByTestId("input-partner-competition-search"),
       "Fall",
     );
-    await user.click(
-      await screen.findByRole("button", { name: "Feature" }),
-    );
+    await user.click(await screen.findByRole("button", { name: "Feature" }));
 
     await waitFor(() =>
       expect(partnerCompetitionBody).toEqual({
         competitionId: "competition-1",
       }),
     );
-    expect(screen.getByTestId("featured-competition-current")).toHaveTextContent(
-      "Fall Classic",
-    );
+    expect(
+      screen.getByTestId("featured-competition-current"),
+    ).toHaveTextContent("Fall Classic");
     expect(
       screen.getByRole("button", { name: "Open console" }).closest("a"),
     ).toHaveAttribute("href", "/competitions/competition-1");

@@ -30,12 +30,28 @@ import {
   orgAdminLists,
   partnerLandingPages,
 } from "@workspace/db";
-import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gte,
+  ilike,
+  inArray,
+  isNotNull,
+  isNull,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { hardDeleteUser } from "@workspace/user-hard-delete";
 import { asyncHandler } from "../lib/async-handler";
-import { ensureActiveGuardianLink, syncParentIdMirror } from "../lib/guardian-links";
+import {
+  ensureActiveGuardianLink,
+  syncParentIdMirror,
+} from "../lib/guardian-links";
 import { hashPassword, generateToken } from "../lib/passwords";
 import { requireAdmin } from "../lib/auth";
 import {
@@ -82,7 +98,14 @@ async function logAdminAction(
     | "reset_password"
     | "masquerade_start"
     | "masquerade_stop",
-  targetType: "user" | "article" | "highlight" | "org_post" | "comment" | "report" | null,
+  targetType:
+    | "user"
+    | "article"
+    | "highlight"
+    | "org_post"
+    | "comment"
+    | "report"
+    | null,
   targetId: string | null,
   metadata?: Record<string, unknown>,
 ) {
@@ -104,7 +127,9 @@ const CONTENT_TABLES = {
 type ContentType = keyof typeof CONTENT_TABLES;
 
 function isValidContentType(s: string): s is ContentType {
-  return s === "article" || s === "highlight" || s === "org_post" || s === "comment";
+  return (
+    s === "article" || s === "highlight" || s === "org_post" || s === "comment"
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -150,28 +175,47 @@ router.get(
       newTeamsByMonth,
       gameRecapsByMonth,
     ] = await Promise.all([
-      db.select({ totalUsers: sql<number>`count(*)::int` }).from(users).where(isNull(users.deletedAt)),
+      db
+        .select({ totalUsers: sql<number>`count(*)::int` })
+        .from(users)
+        .where(isNull(users.deletedAt)),
       db
         .select({ role: users.role, count: sql<number>`count(*)::int` })
         .from(users)
         .where(isNull(users.deletedAt))
         .groupBy(users.role),
-      db.select({ deletedUsers: sql<number>`count(*)::int` }).from(users).where(isNotNull(users.deletedAt)),
+      db
+        .select({ deletedUsers: sql<number>`count(*)::int` })
+        .from(users)
+        .where(isNotNull(users.deletedAt)),
       db.select({ totalOrgs: sql<number>`count(*)::int` }).from(organizations),
       db.select({ totalTeams: sql<number>`count(*)::int` }).from(teams),
       db.select({ totalArticles: sql<number>`count(*)::int` }).from(articles),
-      db.select({ hiddenArticles: sql<number>`count(*)::int` }).from(articles).where(isNotNull(articles.hiddenAt)),
-      db.select({ totalHighlights: sql<number>`count(*)::int` }).from(highlights),
+      db
+        .select({ hiddenArticles: sql<number>`count(*)::int` })
+        .from(articles)
+        .where(isNotNull(articles.hiddenAt)),
+      db
+        .select({ totalHighlights: sql<number>`count(*)::int` })
+        .from(highlights),
       db
         .select({ hiddenHighlights: sql<number>`count(*)::int` })
         .from(highlights)
         .where(isNotNull(highlights.hiddenAt)),
       db.select({ totalOrgPosts: sql<number>`count(*)::int` }).from(orgPosts),
-      db.select({ totalComments: sql<number>`count(*)::int` }).from(postComments),
+      db
+        .select({ totalComments: sql<number>`count(*)::int` })
+        .from(postComments),
       db.select({ totalMessages: sql<number>`count(*)::int` }).from(messages),
-      db.select({ totalUserFollows: sql<number>`count(*)::int` }).from(userFollowers),
-      db.select({ totalOrgFollows: sql<number>`count(*)::int` }).from(organizationFollowers),
-      db.select({ totalTeamFollows: sql<number>`count(*)::int` }).from(teamFollowers),
+      db
+        .select({ totalUserFollows: sql<number>`count(*)::int` })
+        .from(userFollowers),
+      db
+        .select({ totalOrgFollows: sql<number>`count(*)::int` })
+        .from(organizationFollowers),
+      db
+        .select({ totalTeamFollows: sql<number>`count(*)::int` })
+        .from(teamFollowers),
       db
         .select({ openReports: sql<number>`count(*)::int` })
         .from(contentReports)
@@ -223,7 +267,9 @@ router.get(
           count: sql<number>`count(distinct ${users.id})::int`,
         })
         .from(users)
-        .where(and(isNotNull(users.lastSignInAt), gte(users.lastSignInAt, since)))
+        .where(
+          and(isNotNull(users.lastSignInAt), gte(users.lastSignInAt, since)),
+        )
         .groupBy(sql`date_trunc('day', ${users.lastSignInAt})`)
         .orderBy(sql`date_trunc('day', ${users.lastSignInAt})`),
       db
@@ -237,7 +283,10 @@ router.get(
           count: sql<number>`count(*)::int`,
         })
         .from(organizationFollowers)
-        .leftJoin(organizations, eq(organizationFollowers.organizationId, organizations.id))
+        .leftJoin(
+          organizations,
+          eq(organizationFollowers.organizationId, organizations.id),
+        )
         .groupBy(organizationFollowers.organizationId, organizations.name)
         .orderBy(sql`count(*) desc`)
         .limit(10),
@@ -278,12 +327,14 @@ router.get(
           `,
         )
         .then((r) =>
-          (r.rows as Array<{
-            userId: string;
-            name: string | null;
-            email: string | null;
-            count: number;
-          }>).map((row) => ({
+          (
+            r.rows as Array<{
+              userId: string;
+              name: string | null;
+              email: string | null;
+              count: number;
+            }>
+          ).map((row) => ({
             userId: row.userId,
             name: row.name,
             email: row.email,
@@ -298,7 +349,12 @@ router.get(
           count: sql<number>`count(*)::int`,
         })
         .from(organizations)
-        .where(and(isNotNull(organizations.claimToken), gte(organizations.createdAt, since12Months)))
+        .where(
+          and(
+            isNotNull(organizations.claimToken),
+            gte(organizations.createdAt, since12Months),
+          ),
+        )
         .groupBy(sql`date_trunc('month', ${organizations.createdAt})`)
         .orderBy(sql`date_trunc('month', ${organizations.createdAt})`),
       db
@@ -307,7 +363,12 @@ router.get(
           count: sql<number>`count(*)::int`,
         })
         .from(organizations)
-        .where(and(isNull(organizations.claimToken), gte(organizations.createdAt, since12Months)))
+        .where(
+          and(
+            isNull(organizations.claimToken),
+            gte(organizations.createdAt, since12Months),
+          ),
+        )
         .groupBy(sql`date_trunc('month', ${organizations.createdAt})`)
         .orderBy(sql`date_trunc('month', ${organizations.createdAt})`),
       // Claimed orgs, dated by when the claim was approved (not when created).
@@ -324,8 +385,12 @@ router.get(
             gte(organizationClaimRequests.decidedAt, since12Months),
           ),
         )
-        .groupBy(sql`date_trunc('month', ${organizationClaimRequests.decidedAt})`)
-        .orderBy(sql`date_trunc('month', ${organizationClaimRequests.decidedAt})`),
+        .groupBy(
+          sql`date_trunc('month', ${organizationClaimRequests.decidedAt})`,
+        )
+        .orderBy(
+          sql`date_trunc('month', ${organizationClaimRequests.decidedAt})`,
+        ),
       db
         .select({
           month: sql<string>`to_char(date_trunc('month', ${teams.createdAt}), 'YYYY-MM-DD')`,
@@ -411,17 +476,23 @@ router.get(
   asyncHandler(async (req, res) => {
     const q = typeof req.query["q"] === "string" ? req.query["q"].trim() : "";
     const includeDeleted =
-      req.query["includeDeleted"] === "1" || req.query["includeDeleted"] === "true";
+      req.query["includeDeleted"] === "1" ||
+      req.query["includeDeleted"] === "true";
     const role = typeof req.query["role"] === "string" ? req.query["role"] : "";
     const limitRaw = parseInt(p(req.query["limit"] as string), 10);
     const offsetRaw = parseInt(p(req.query["offset"] as string), 10);
-    const limit = Number.isFinite(limitRaw) && limitRaw > 0 && limitRaw <= 200 ? limitRaw : 50;
+    const limit =
+      Number.isFinite(limitRaw) && limitRaw > 0 && limitRaw <= 200
+        ? limitRaw
+        : 50;
     const offset = Number.isFinite(offsetRaw) && offsetRaw > 0 ? offsetRaw : 0;
 
     const conds = [] as ReturnType<typeof eq>[];
     if (!includeDeleted) conds.push(isNull(users.deletedAt));
     if (q) {
-      conds.push(or(ilike(users.name, `%${q}%`), ilike(users.email, `%${q}%`))!);
+      conds.push(
+        or(ilike(users.name, `%${q}%`), ilike(users.email, `%${q}%`))!,
+      );
     }
     if (role && (ROLE_VALUES as readonly string[]).includes(role)) {
       conds.push(eq(users.role, role as (typeof ROLE_VALUES)[number]));
@@ -436,7 +507,10 @@ router.get(
         .orderBy(desc(users.createdAt))
         .limit(limit)
         .offset(offset),
-      db.select({ totalCount: sql<number>`count(*)::int` }).from(users).where(where),
+      db
+        .select({ totalCount: sql<number>`count(*)::int` })
+        .from(users)
+        .where(where),
     ]);
     const data = rows.map((u) => {
       const { firstName, lastName } = splitName(u.name);
@@ -492,9 +566,15 @@ router.post(
   asyncHandler(async (req, res) => {
     const body = CreateUserBody.parse(req.body);
     const email = body.email.toLowerCase();
-    const [existing] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    const [existing] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
     if (existing) {
-      res.status(409).json({ error: "An account with that email already exists." });
+      res
+        .status(409)
+        .json({ error: "An account with that email already exists." });
       return;
     }
     const passwordHash = await hashPassword(body.password);
@@ -537,7 +617,11 @@ const UpdateUserBody = z.object({
 router.patch(
   "/users/:userId",
   asyncHandler(async (req, res) => {
-    const [u] = await db.select().from(users).where(eq(users.id, p(req.params.userId))).limit(1);
+    const [u] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, p(req.params.userId)))
+      .limit(1);
     if (!u) return notFound(res, "User not found");
     const body = UpdateUserBody.parse(req.body);
     const updates: Partial<typeof users.$inferInsert> = {};
@@ -552,7 +636,8 @@ router.patch(
     if (body.bio !== undefined) updates.bio = body.bio;
     if (body.sport !== undefined) updates.sport = body.sport;
     if (body.position !== undefined) updates.position = body.position;
-    if (body.jerseyNumber !== undefined) updates.jerseyNumber = body.jerseyNumber;
+    if (body.jerseyNumber !== undefined)
+      updates.jerseyNumber = body.jerseyNumber;
     if (body.grade !== undefined) updates.grade = body.grade;
     if (body.location !== undefined) updates.location = body.location;
     if (body.avatarUrl !== undefined) {
@@ -571,12 +656,15 @@ router.patch(
       updates.avatarUrl = body.avatarUrl;
     }
     if (body.dateOfBirth !== undefined) {
-      updates.dateOfBirth = body.dateOfBirth ? new Date(body.dateOfBirth) : null;
+      updates.dateOfBirth = body.dateOfBirth
+        ? new Date(body.dateOfBirth)
+        : null;
     }
     // Task #755 — parentId is a mirror of the primary ACTIVE guardian
     // link. Route admin edits through the links table (below) instead of
     // writing the column directly, so the invariant holds.
-    if (body.guardianEmail !== undefined) updates.guardianEmail = body.guardianEmail;
+    if (body.guardianEmail !== undefined)
+      updates.guardianEmail = body.guardianEmail;
     if (body.requireTagConsent !== undefined) {
       updates.requireTagConsent = body.requireTagConsent;
       // Task #800 — admin edits count as deliberate choices too.
@@ -589,7 +677,11 @@ router.patch(
       updates.guardianConfirmTokenExpiresAt = null;
     }
     let [updated] = Object.keys(updates).length
-      ? await db.update(users).set(updates).where(eq(users.id, u.id)).returning()
+      ? await db
+          .update(users)
+          .set(updates)
+          .where(eq(users.id, u.id))
+          .returning()
       : [u];
     // Task #755 — apply the parent link change via guardian_links so the
     // parentId mirror stays consistent with the links table.
@@ -641,10 +733,16 @@ router.patch(
 router.delete(
   "/users/:userId",
   asyncHandler(async (req, res) => {
-    const [u] = await db.select().from(users).where(eq(users.id, p(req.params.userId))).limit(1);
+    const [u] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, p(req.params.userId)))
+      .limit(1);
     if (!u) return notFound(res, "User not found");
     if (u.id === req.realUser!.id) {
-      res.status(400).json({ error: "You cannot deactivate your own admin account." });
+      res
+        .status(400)
+        .json({ error: "You cannot deactivate your own admin account." });
       return;
     }
     if (u.deletedAt) {
@@ -658,7 +756,13 @@ router.delete(
       .returning();
     // Invalidate all the deleted user's sessions.
     await db.delete(sessions).where(eq(sessions.userId, u.id));
-    await logAdminAction(req.realUser!.id, "soft_delete_user", "user", u.id, {});
+    await logAdminAction(
+      req.realUser!.id,
+      "soft_delete_user",
+      "user",
+      u.id,
+      {},
+    );
     res.json(toPrivateUser(updated));
   }),
 );
@@ -666,7 +770,11 @@ router.delete(
 router.post(
   "/users/:userId/restore",
   asyncHandler(async (req, res) => {
-    const [u] = await db.select().from(users).where(eq(users.id, p(req.params.userId))).limit(1);
+    const [u] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, p(req.params.userId)))
+      .limit(1);
     if (!u) return notFound(res, "User not found");
     const [updated] = await db
       .update(users)
@@ -689,7 +797,8 @@ const PermanentDeleteBody = z.object({
   confirm: z.string(),
 });
 
-const normalizeConfirm = (s: string) => s.trim().replace(/\s+/g, " ").toLowerCase();
+const normalizeConfirm = (s: string) =>
+  s.trim().replace(/\s+/g, " ").toLowerCase();
 
 router.delete(
   "/users/:userId/permanent",
@@ -702,10 +811,16 @@ router.delete(
       });
       return;
     }
-    const [u] = await db.select().from(users).where(eq(users.id, p(req.params.userId))).limit(1);
+    const [u] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, p(req.params.userId)))
+      .limit(1);
     if (!u) return notFound(res, "User not found");
     if (u.id === req.realUser!.id) {
-      res.status(400).json({ error: "You cannot delete your own admin account." });
+      res
+        .status(400)
+        .json({ error: "You cannot delete your own admin account." });
       return;
     }
     if (!u.deletedAt) {
@@ -732,7 +847,13 @@ router.delete(
     // users row is gone once hardDeleteUser returns.
     const snapshot = { name: u.name, email: u.email };
     await hardDeleteUser(u.id);
-    await logAdminAction(req.realUser!.id, "permanent_delete_user", "user", u.id, snapshot);
+    await logAdminAction(
+      req.realUser!.id,
+      "permanent_delete_user",
+      "user",
+      u.id,
+      snapshot,
+    );
     res.json({ ok: true, id: u.id });
   }),
 );
@@ -740,7 +861,11 @@ router.delete(
 router.post(
   "/users/:userId/reset-password",
   asyncHandler(async (req, res) => {
-    const [u] = await db.select().from(users).where(eq(users.id, p(req.params.userId))).limit(1);
+    const [u] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, p(req.params.userId)))
+      .limit(1);
     if (!u) return notFound(res, "User not found");
     const tempPassword = generateToken().slice(0, 16);
     const passwordHash = await hashPassword(tempPassword);
@@ -767,7 +892,10 @@ router.get(
     if (type === "article") {
       const conds = [] as ReturnType<typeof eq>[];
       if (onlyHidden) conds.push(isNotNull(articles.hiddenAt));
-      if (q) conds.push(or(ilike(articles.title, `%${q}%`), ilike(articles.body, `%${q}%`))!);
+      if (q)
+        conds.push(
+          or(ilike(articles.title, `%${q}%`), ilike(articles.body, `%${q}%`))!,
+        );
       const rows = await db
         .select({ a: articles, author: users })
         .from(articles)
@@ -821,7 +949,10 @@ router.get(
     if (type === "org_post") {
       const conds = [] as ReturnType<typeof eq>[];
       if (onlyHidden) conds.push(isNotNull(orgPosts.hiddenAt));
-      if (q) conds.push(or(ilike(orgPosts.title, `%${q}%`), ilike(orgPosts.body, `%${q}%`))!);
+      if (q)
+        conds.push(
+          or(ilike(orgPosts.title, `%${q}%`), ilike(orgPosts.body, `%${q}%`))!,
+        );
       const rows = await db
         .select({ p: orgPosts, author: users })
         .from(orgPosts)
@@ -873,7 +1004,12 @@ router.get(
   }),
 );
 
-async function setHidden(type: ContentType, id: string, hidden: boolean, adminId: string) {
+async function setHidden(
+  type: ContentType,
+  id: string,
+  hidden: boolean,
+  adminId: string,
+) {
   const table = CONTENT_TABLES[type];
   const update = hidden
     ? { hiddenAt: new Date(), hiddenByUserId: adminId }
@@ -897,7 +1033,13 @@ router.post(
     const type = p(req.params.type);
     if (!isValidContentType(type)) return notFound(res, "Unknown content type");
     await setHidden(type, p(req.params.id), true, req.realUser!.id);
-    await logAdminAction(req.realUser!.id, "hide_content", type, p(req.params.id), {});
+    await logAdminAction(
+      req.realUser!.id,
+      "hide_content",
+      type,
+      p(req.params.id),
+      {},
+    );
     res.json({ ok: true });
   }),
 );
@@ -908,7 +1050,13 @@ router.post(
     const type = p(req.params.type);
     if (!isValidContentType(type)) return notFound(res, "Unknown content type");
     await setHidden(type, p(req.params.id), false, req.realUser!.id);
-    await logAdminAction(req.realUser!.id, "unhide_content", type, p(req.params.id), {});
+    await logAdminAction(
+      req.realUser!.id,
+      "unhide_content",
+      type,
+      p(req.params.id),
+      {},
+    );
     res.json({ ok: true });
   }),
 );
@@ -930,7 +1078,13 @@ router.delete(
         .set({ deletedAt: new Date() })
         .where(eq(postComments.id, p(req.params.id)));
     }
-    await logAdminAction(req.realUser!.id, "delete_content", type, p(req.params.id), {});
+    await logAdminAction(
+      req.realUser!.id,
+      "delete_content",
+      type,
+      p(req.params.id),
+      {},
+    );
     res.json({ ok: true });
   }),
 );
@@ -951,29 +1105,46 @@ router.get(
     const rows = await db
       .select({ r: contentReports, reporter: reporterAlias })
       .from(contentReports)
-      .leftJoin(reporterAlias, eq(contentReports.reporterUserId, reporterAlias.id))
+      .leftJoin(
+        reporterAlias,
+        eq(contentReports.reporterUserId, reporterAlias.id),
+      )
       .where(conds.length ? and(...conds) : undefined)
       .orderBy(desc(contentReports.createdAt))
       .limit(200);
 
     // Hydrate content snippets for each report.
-    const articleIds = rows.filter((r) => r.r.contentType === "article").map((r) => r.r.contentId);
-    const highlightIds = rows.filter((r) => r.r.contentType === "highlight").map((r) => r.r.contentId);
-    const orgPostIds = rows.filter((r) => r.r.contentType === "org_post").map((r) => r.r.contentId);
-    const commentIds = rows.filter((r) => r.r.contentType === "comment").map((r) => r.r.contentId);
+    const articleIds = rows
+      .filter((r) => r.r.contentType === "article")
+      .map((r) => r.r.contentId);
+    const highlightIds = rows
+      .filter((r) => r.r.contentType === "highlight")
+      .map((r) => r.r.contentId);
+    const orgPostIds = rows
+      .filter((r) => r.r.contentType === "org_post")
+      .map((r) => r.r.contentId);
+    const commentIds = rows
+      .filter((r) => r.r.contentType === "comment")
+      .map((r) => r.r.contentId);
 
     const [aRows, hRows, opRows, cRows] = await Promise.all([
       articleIds.length
         ? db.select().from(articles).where(inArray(articles.id, articleIds))
         : Promise.resolve([] as (typeof articles.$inferSelect)[]),
       highlightIds.length
-        ? db.select().from(highlights).where(inArray(highlights.id, highlightIds))
+        ? db
+            .select()
+            .from(highlights)
+            .where(inArray(highlights.id, highlightIds))
         : Promise.resolve([] as (typeof highlights.$inferSelect)[]),
       orgPostIds.length
         ? db.select().from(orgPosts).where(inArray(orgPosts.id, orgPostIds))
         : Promise.resolve([] as (typeof orgPosts.$inferSelect)[]),
       commentIds.length
-        ? db.select().from(postComments).where(inArray(postComments.id, commentIds))
+        ? db
+            .select()
+            .from(postComments)
+            .where(inArray(postComments.id, commentIds))
         : Promise.resolve([] as (typeof postComments.$inferSelect)[]),
     ]);
 
@@ -986,24 +1157,44 @@ router.get(
       if (type === "article") {
         const a = articleMap.get(id);
         return a
-          ? { title: a.title, body: (a.body ?? "").slice(0, 240), hiddenAt: a.hiddenAt?.toISOString() ?? null, deleted: false }
+          ? {
+              title: a.title,
+              body: (a.body ?? "").slice(0, 240),
+              hiddenAt: a.hiddenAt?.toISOString() ?? null,
+              deleted: false,
+            }
           : { title: null, body: null, hiddenAt: null, deleted: true };
       }
       if (type === "highlight") {
         const h = highlightMap.get(id);
         return h
-          ? { title: h.title, body: h.description ?? "", hiddenAt: h.hiddenAt?.toISOString() ?? null, deleted: false }
+          ? {
+              title: h.title,
+              body: h.description ?? "",
+              hiddenAt: h.hiddenAt?.toISOString() ?? null,
+              deleted: false,
+            }
           : { title: null, body: null, hiddenAt: null, deleted: true };
       }
       if (type === "org_post") {
         const p = orgPostMap.get(id);
         return p
-          ? { title: p.title, body: (p.body ?? "").slice(0, 240), hiddenAt: p.hiddenAt?.toISOString() ?? null, deleted: false }
+          ? {
+              title: p.title,
+              body: (p.body ?? "").slice(0, 240),
+              hiddenAt: p.hiddenAt?.toISOString() ?? null,
+              deleted: false,
+            }
           : { title: null, body: null, hiddenAt: null, deleted: true };
       }
       const c = commentMap.get(id);
       return c
-        ? { title: null, body: c.body, hiddenAt: c.hiddenAt?.toISOString() ?? null, deleted: !!c.deletedAt }
+        ? {
+            title: null,
+            body: c.body,
+            hiddenAt: c.hiddenAt?.toISOString() ?? null,
+            deleted: !!c.deletedAt,
+          }
         : { title: null, body: null, hiddenAt: null, deleted: true };
     }
 
@@ -1034,7 +1225,12 @@ router.get(
 );
 
 const ResolveReportBody = z.object({
-  action: z.enum(["dismiss", "hide_content", "delete_content", "mark_resolved"]),
+  action: z.enum([
+    "dismiss",
+    "hide_content",
+    "delete_content",
+    "mark_resolved",
+  ]),
   note: z.string().optional(),
 });
 
@@ -1049,25 +1245,46 @@ router.post(
     if (!r) return notFound(res, "Report not found");
     const body = ResolveReportBody.parse(req.body);
     if (body.action === "hide_content") {
-      if (!isValidContentType(r.contentType)) return notFound(res, "Bad content type");
-      await setHidden(r.contentType as ContentType, r.contentId, true, req.realUser!.id);
-      await logAdminAction(req.realUser!.id, "hide_content", r.contentType as ContentType, r.contentId, {
-        viaReportId: r.id,
-      });
+      if (!isValidContentType(r.contentType))
+        return notFound(res, "Bad content type");
+      await setHidden(
+        r.contentType as ContentType,
+        r.contentId,
+        true,
+        req.realUser!.id,
+      );
+      await logAdminAction(
+        req.realUser!.id,
+        "hide_content",
+        r.contentType as ContentType,
+        r.contentId,
+        {
+          viaReportId: r.id,
+        },
+      );
     } else if (body.action === "delete_content") {
       const type = r.contentType as ContentType;
       if (!isValidContentType(type)) return notFound(res, "Bad content type");
-      if (type === "article") await db.delete(articles).where(eq(articles.id, r.contentId));
-      else if (type === "highlight") await db.delete(highlights).where(eq(highlights.id, r.contentId));
-      else if (type === "org_post") await db.delete(orgPosts).where(eq(orgPosts.id, r.contentId));
+      if (type === "article")
+        await db.delete(articles).where(eq(articles.id, r.contentId));
+      else if (type === "highlight")
+        await db.delete(highlights).where(eq(highlights.id, r.contentId));
+      else if (type === "org_post")
+        await db.delete(orgPosts).where(eq(orgPosts.id, r.contentId));
       else
         await db
           .update(postComments)
           .set({ deletedAt: new Date() })
           .where(eq(postComments.id, r.contentId));
-      await logAdminAction(req.realUser!.id, "delete_content", type, r.contentId, {
-        viaReportId: r.id,
-      });
+      await logAdminAction(
+        req.realUser!.id,
+        "delete_content",
+        type,
+        r.contentId,
+        {
+          viaReportId: r.id,
+        },
+      );
     }
     const isDismiss = body.action === "dismiss";
     const newStatus = isDismiss ? "dismissed" : "resolved";
@@ -1132,20 +1349,28 @@ const ACTION_TYPES = [
 router.get(
   "/activity",
   asyncHandler(async (req, res) => {
-    const adminUserId = typeof req.query["adminUserId"] === "string"
-      ? req.query["adminUserId"]
-      : "";
-    const actionType = typeof req.query["actionType"] === "string"
-      ? req.query["actionType"]
-      : "";
+    const adminUserId =
+      typeof req.query["adminUserId"] === "string"
+        ? req.query["adminUserId"]
+        : "";
+    const actionType =
+      typeof req.query["actionType"] === "string"
+        ? req.query["actionType"]
+        : "";
     const limitRaw = parseInt(p(req.query["limit"] as string), 10);
     const offsetRaw = parseInt(p(req.query["offset"] as string), 10);
-    const limit = Number.isFinite(limitRaw) && limitRaw > 0 && limitRaw <= 200 ? limitRaw : 100;
+    const limit =
+      Number.isFinite(limitRaw) && limitRaw > 0 && limitRaw <= 200
+        ? limitRaw
+        : 100;
     const offset = Number.isFinite(offsetRaw) && offsetRaw > 0 ? offsetRaw : 0;
 
     const conds = [] as ReturnType<typeof eq>[];
     if (adminUserId) conds.push(eq(adminActivityLog.adminUserId, adminUserId));
-    if (actionType && (ACTION_TYPES as readonly string[]).includes(actionType)) {
+    if (
+      actionType &&
+      (ACTION_TYPES as readonly string[]).includes(actionType)
+    ) {
       conds.push(
         eq(
           adminActivityLog.actionType,
@@ -1220,7 +1445,9 @@ router.post(
       .limit(1);
     if (!target) return notFound(res, "User not found");
     if (target.deletedAt) {
-      res.status(400).json({ error: "Cannot masquerade as a deactivated user." });
+      res
+        .status(400)
+        .json({ error: "Cannot masquerade as a deactivated user." });
       return;
     }
     if (target.id === req.realUser!.id) {
@@ -1235,10 +1462,19 @@ router.post(
       .update(sessions)
       .set({ masqueradingAsUserId: target.id })
       .where(eq(sessions.id, req.sessionRow.id));
-    await logAdminAction(req.realUser!.id, "masquerade_start", "user", target.id, {
-      targetEmail: target.email,
+    await logAdminAction(
+      req.realUser!.id,
+      "masquerade_start",
+      "user",
+      target.id,
+      {
+        targetEmail: target.email,
+      },
+    );
+    res.json({
+      ok: true,
+      viewingAs: { id: target.id, name: target.name, email: target.email },
     });
-    res.json({ ok: true, viewingAs: { id: target.id, name: target.name, email: target.email } });
   }),
 );
 
@@ -1255,7 +1491,13 @@ router.post(
       .set({ masqueradingAsUserId: null })
       .where(eq(sessions.id, req.sessionRow.id));
     if (previousTarget) {
-      await logAdminAction(req.realUser!.id, "masquerade_stop", "user", previousTarget, {});
+      await logAdminAction(
+        req.realUser!.id,
+        "masquerade_stop",
+        "user",
+        previousTarget,
+        {},
+      );
     }
     res.json({ ok: true });
   }),
@@ -1326,7 +1568,9 @@ router.get(
     ];
     const articleIds = [
       ...new Set(
-        rows.filter((r) => r.t.postKind === "article").map((r) => r.t.postRefId),
+        rows
+          .filter((r) => r.t.postKind === "article")
+          .map((r) => r.t.postRefId),
       ),
     ];
     const highlightIds = [
@@ -1379,7 +1623,7 @@ router.get(
 
     const out = rows.map((r) => {
       const guardian = r.t.requestedByGuardianId
-        ? guardianById.get(r.t.requestedByGuardianId) ?? null
+        ? (guardianById.get(r.t.requestedByGuardianId) ?? null)
         : null;
       const kind = r.t.postKind as "article" | "highlight" | "org_post";
       let title: string | null = null;
@@ -1409,14 +1653,15 @@ router.get(
   }),
 );
 
-async function resolveTakedownRow(
-  takedownId: string,
-): Promise<{
+async function resolveTakedownRow(takedownId: string): Promise<{
   kind: "article" | "highlight" | "org_post";
   refId: string;
 } | null> {
   const [row] = await db
-    .select({ postKind: takedownRequests.postKind, postRefId: takedownRequests.postRefId })
+    .select({
+      postKind: takedownRequests.postKind,
+      postRefId: takedownRequests.postRefId,
+    })
     .from(takedownRequests)
     .where(eq(takedownRequests.id, takedownId))
     .limit(1);
@@ -1615,10 +1860,16 @@ router.get(
         organizations,
         eq(organizations.id, organizationClaimRequests.organizationId),
       )
-      .leftJoin(users, eq(users.id, organizationClaimRequests.requestedByUserId))
+      .leftJoin(
+        users,
+        eq(users.id, organizationClaimRequests.requestedByUserId),
+      )
       .leftJoin(
         partnerLandingPages,
-        eq(partnerLandingPages.id, organizationClaimRequests.sourcePartnerPageId),
+        eq(
+          partnerLandingPages.id,
+          organizationClaimRequests.sourcePartnerPageId,
+        ),
       )
       .where(filter)
       .orderBy(desc(organizationClaimRequests.createdAt))
@@ -1712,10 +1963,7 @@ async function decideOrgClaim(
         })
         .where(
           and(
-            eq(
-              organizationClaimRequests.organizationId,
-              claim.organizationId,
-            ),
+            eq(organizationClaimRequests.organizationId, claim.organizationId),
             eq(organizationClaimRequests.status, "pending"),
             sql`${organizationClaimRequests.id} <> ${claim.id}`,
           ),
@@ -1758,7 +2006,8 @@ async function notifyOrgClaimDecision(
   try {
     await db.insert(notifications).values({
       userId: claim.requestedByUserId,
-      kind: decision === "approved" ? "org_claim_approved" : "org_claim_declined",
+      kind:
+        decision === "approved" ? "org_claim_approved" : "org_claim_declined",
       message:
         decision === "approved"
           ? `Your claim for ${orgName} was approved. You're now the owner of the page.`
@@ -1776,7 +2025,8 @@ router.post(
   asyncHandler(async (req, res) => {
     const result = await decideOrgClaim(req, p(req.params.claimId), "approved");
     if (!result.ok) {
-      if (result.reason === "not_found") return notFound(res, "Claim not found");
+      if (result.reason === "not_found")
+        return notFound(res, "Claim not found");
       return res.status(409).json({
         error:
           result.reason === "already_claimed"
@@ -1798,7 +2048,8 @@ router.post(
   asyncHandler(async (req, res) => {
     const result = await decideOrgClaim(req, p(req.params.claimId), "declined");
     if (!result.ok) {
-      if (result.reason === "not_found") return notFound(res, "Claim not found");
+      if (result.reason === "not_found")
+        return notFound(res, "Claim not found");
       return res.status(409).json({
         error: "This claim has already been decided",
         code: "ALREADY_DECIDED",
@@ -1837,6 +2088,8 @@ const ORG_BULK_MAX_TEAMS_PER_ORG = 100;
 const ORG_BULK_MAX_TOTAL_TEAMS = 5000;
 const ORG_BULK_MAX_NAME_LENGTH = 200;
 const ORG_BULK_MAX_LIST_NAME_LENGTH = 120;
+const ORG_BULK_DELETE_MAX_ORGS = 2000;
+const ORG_BULK_DELETE_CONFIRMATION = "DELETE UNCLAIMED ORGANIZATIONS";
 
 type BulkImportOrganization = {
   name: string;
@@ -1869,7 +2122,10 @@ function parseBulkImportOrganizations(body: unknown): {
     };
   }
   if (raw.organizations.length === 0) {
-    issues.push({ scope: "file", message: "Upload at least one organization." });
+    issues.push({
+      scope: "file",
+      message: "Upload at least one organization.",
+    });
   }
   if (raw.organizations.length > ORG_BULK_MAX_ORGS) {
     issues.push({
@@ -1880,7 +2136,11 @@ function parseBulkImportOrganizations(body: unknown): {
 
   const seenOrganizations = new Map<string, number>();
   let totalTeams = 0;
-  for (let organizationIndex = 0; organizationIndex < raw.organizations.length; organizationIndex++) {
+  for (
+    let organizationIndex = 0;
+    organizationIndex < raw.organizations.length;
+    organizationIndex++
+  ) {
     const item = raw.organizations[organizationIndex] as {
       name?: unknown;
       teams?: unknown;
@@ -2001,7 +2261,10 @@ async function bulkImportPreflight(body: unknown, checkExistingNames: boolean) {
       .where(eq(organizations.pendingPromoCodeId, promo.id));
     const committedAssignments =
       promo.redemptionCount + Number(pending?.count ?? 0);
-    if (committedAssignments + parsed.organizations.length > promo.maxRedemptions) {
+    if (
+      committedAssignments + parsed.organizations.length >
+      promo.maxRedemptions
+    ) {
       issues.push({
         scope: "file",
         message: `Promo code "${promo.code}" does not have enough remaining redemptions for this batch. Reduce the batch or choose another code.`,
@@ -2030,7 +2293,9 @@ async function bulkImportPreflight(body: unknown, checkExistingNames: boolean) {
         .where(nameWhere);
       for (const row of rows) existingByName.set(row.name.toLowerCase(), row);
       for (let i = 0; i < parsed.organizations.length; i++) {
-        const existing = existingByName.get(parsed.organizations[i].name.toLowerCase());
+        const existing = existingByName.get(
+          parsed.organizations[i].name.toLowerCase(),
+        );
         if (existing) {
           issues.push({
             scope: "organization",
@@ -2183,7 +2448,9 @@ router.post(
       let [list] = await tx
         .select({ id: orgAdminLists.id, name: orgAdminLists.name })
         .from(orgAdminLists)
-        .where(sql`lower(${orgAdminLists.name}) = ${preflight.listName.toLowerCase()}`)
+        .where(
+          sql`lower(${orgAdminLists.name}) = ${preflight.listName.toLowerCase()}`,
+        )
         .limit(1);
       if (!list) {
         const inserted = await tx.execute<{
@@ -2205,7 +2472,9 @@ router.post(
           [list] = await tx
             .select({ id: orgAdminLists.id, name: orgAdminLists.name })
             .from(orgAdminLists)
-            .where(sql`lower(${orgAdminLists.name}) = ${preflight.listName.toLowerCase()}`)
+            .where(
+              sql`lower(${orgAdminLists.name}) = ${preflight.listName.toLowerCase()}`,
+            )
             .limit(1);
         }
       }
@@ -2328,10 +2597,14 @@ router.post(
   asyncHandler(async (req, res) => {
     const name = String(req.body?.name ?? "").trim();
     if (!name) {
-      return res.status(400).json({ error: "name required", code: "NAME_REQUIRED" });
+      return res
+        .status(400)
+        .json({ error: "name required", code: "NAME_REQUIRED" });
     }
     if (name.length > 120) {
-      return res.status(400).json({ error: "name too long", code: "NAME_TOO_LONG" });
+      return res
+        .status(400)
+        .json({ error: "name too long", code: "NAME_TOO_LONG" });
     }
     // Race-safe create-or-reuse: two admin tabs submitting the same name
     // (e.g. "Fall 2026 Soccer League") concurrently must converge on one
@@ -2374,7 +2647,9 @@ router.post(
       // Should be unreachable (the conflict target guarantees a matching
       // row exists), but fail loudly rather than silently 200-ing with
       // nothing if it ever happens.
-      return res.status(500).json({ error: "List creation raced unexpectedly" });
+      return res
+        .status(500)
+        .json({ error: "List creation raced unexpectedly" });
     }
     return res.status(200).json({
       data: { id: existing.id, name: existing.name, orgCount: null },
@@ -2392,6 +2667,366 @@ router.delete(
       .returning({ id: orgAdminLists.id });
     if (!row) return notFound(res, "List not found");
     res.json({ ok: true });
+  }),
+);
+
+const BulkDeleteOrganizationsBody = z
+  .object({
+    organizationIds: z
+      .array(z.string().uuid())
+      .min(1)
+      .max(ORG_BULK_DELETE_MAX_ORGS)
+      .optional(),
+    listId: z.string().uuid().optional(),
+    deleteList: z.boolean().optional(),
+    confirm: z.string(),
+  })
+  .superRefine((value, ctx) => {
+    const selectedScope = value.organizationIds !== undefined;
+    const listScope = value.listId !== undefined;
+    if (selectedScope === listScope) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Choose either organizationIds or listId.",
+      });
+    }
+    if (value.deleteList && !listScope) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "deleteList is only valid with listId.",
+      });
+    }
+  });
+
+// Permanently remove ownerless organization pages. This deliberately lives
+// under the admin router rather than the public organization DELETE endpoint.
+// Locking the organization rows before the final owner check serializes this
+// operation with an in-flight claim: a claim that acquired its FK row lock
+// first becomes protected, while a later claim cannot attach to a row this
+// transaction has already committed to deleting.
+router.post(
+  "/org-claim-links/bulk-delete",
+  asyncHandler(async (req, res) => {
+    const parsed = BulkDeleteOrganizationsBody.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: `Choose up to ${ORG_BULK_DELETE_MAX_ORGS} organizations or one named list and provide confirmation.`,
+        code: "INVALID_BULK_DELETE",
+      });
+    }
+
+    const result = await db.transaction(async (tx) => {
+      let list: { id: string; name: string } | null = null;
+      if (parsed.data.listId) {
+        [list] = await tx
+          .select({ id: orgAdminLists.id, name: orgAdminLists.name })
+          .from(orgAdminLists)
+          .where(eq(orgAdminLists.id, parsed.data.listId))
+          .limit(1);
+        if (!list) return { notFound: true } as const;
+      }
+
+      const expectedConfirmation = list?.name ?? ORG_BULK_DELETE_CONFIRMATION;
+      if (parsed.data.confirm !== expectedConfirmation) {
+        return { confirmationRequired: true, expectedConfirmation } as const;
+      }
+
+      const requestedIds = parsed.data.organizationIds
+        ? [...new Set(parsed.data.organizationIds)]
+        : null;
+      const candidatesResult = requestedIds
+        ? await tx.execute<{ id: string; name: string }>(sql`
+            SELECT id, name
+            FROM organizations
+            WHERE id IN (${sql.join(
+              requestedIds.map((id) => sql`${id}`),
+              sql`, `,
+            )})
+            ORDER BY id
+            FOR UPDATE
+          `)
+        : await tx.execute<{ id: string; name: string }>(sql`
+            SELECT id, name
+            FROM organizations
+            WHERE admin_list_id = ${list!.id}
+            ORDER BY id
+            FOR UPDATE
+          `);
+      const candidates = (candidatesResult.rows ?? candidatesResult) as Array<{
+        id: string;
+        name: string;
+      }>;
+      const candidateIds = candidates.map((row) => row.id);
+
+      const owners =
+        candidateIds.length === 0
+          ? []
+          : await tx
+              .select({ organizationId: organizationAdmins.organizationId })
+              .from(organizationAdmins)
+              .where(
+                and(
+                  inArray(organizationAdmins.organizationId, candidateIds),
+                  eq(organizationAdmins.role, "owner"),
+                ),
+              );
+      const protectedIds = new Set(owners.map((row) => row.organizationId));
+      const deletable = candidates.filter((row) => !protectedIds.has(row.id));
+      const deletableIds = deletable.map((row) => row.id);
+
+      if (deletableIds.length > 0) {
+        // Most dependent rows have real ON DELETE CASCADE constraints.
+        // These tables are intentionally polymorphic and therefore have no FK
+        // to their target post, so remove their organization-owned targets
+        // explicitly before cascading the organizations/teams/posts.
+        await tx.execute(sql`
+          WITH doomed_posts AS (
+            SELECT 'article'::post_kind AS kind, a.id
+              FROM articles a JOIN teams t ON t.id = a.team_id
+             WHERE t.organization_id IN (${sql.join(
+               deletableIds.map((id) => sql`${id}`),
+               sql`, `,
+             )})
+            UNION ALL
+            SELECT 'highlight'::post_kind, h.id
+              FROM highlights h JOIN teams t ON t.id = h.team_id
+             WHERE t.organization_id IN (${sql.join(
+               deletableIds.map((id) => sql`${id}`),
+               sql`, `,
+             )})
+            UNION ALL
+            SELECT 'org_post'::post_kind, op.id
+              FROM org_posts op
+             WHERE op.organization_id IN (${sql.join(
+               deletableIds.map((id) => sql`${id}`),
+               sql`, `,
+             )})
+            UNION ALL
+            SELECT 'news'::post_kind, nl.id
+              FROM team_news_links nl JOIN teams t ON t.id = nl.team_id
+             WHERE t.organization_id IN (${sql.join(
+               deletableIds.map((id) => sql`${id}`),
+               sql`, `,
+             )})
+          ),
+          doomed_comments AS (
+            SELECT pc.id
+              FROM post_comments pc
+              JOIN doomed_posts dp
+                ON pc.post_kind = dp.kind AND pc.post_ref_id = dp.id
+          )
+          DELETE FROM content_reports cr
+          USING doomed_comments dc
+          WHERE cr.content_type = 'comment' AND cr.content_id = dc.id
+        `);
+        await tx.execute(sql`
+          WITH doomed_posts AS (
+            SELECT 'article'::post_kind AS kind, a.id
+              FROM articles a JOIN teams t ON t.id = a.team_id
+             WHERE t.organization_id IN (${sql.join(
+               deletableIds.map((id) => sql`${id}`),
+               sql`, `,
+             )})
+            UNION ALL
+            SELECT 'highlight'::post_kind, h.id
+              FROM highlights h JOIN teams t ON t.id = h.team_id
+             WHERE t.organization_id IN (${sql.join(
+               deletableIds.map((id) => sql`${id}`),
+               sql`, `,
+             )})
+            UNION ALL
+            SELECT 'org_post'::post_kind, op.id
+              FROM org_posts op
+             WHERE op.organization_id IN (${sql.join(
+               deletableIds.map((id) => sql`${id}`),
+               sql`, `,
+             )})
+            UNION ALL
+            SELECT 'news'::post_kind, nl.id
+              FROM team_news_links nl JOIN teams t ON t.id = nl.team_id
+             WHERE t.organization_id IN (${sql.join(
+               deletableIds.map((id) => sql`${id}`),
+               sql`, `,
+             )})
+          )
+          DELETE FROM post_comments pc
+          USING doomed_posts dp
+          WHERE pc.post_kind = dp.kind AND pc.post_ref_id = dp.id
+        `);
+        await tx.execute(sql`
+          WITH doomed_posts AS (
+            SELECT 'article'::post_kind AS kind, a.id FROM articles a JOIN teams t ON t.id = a.team_id
+              WHERE t.organization_id IN (${sql.join(
+                deletableIds.map((id) => sql`${id}`),
+                sql`, `,
+              )})
+            UNION ALL SELECT 'highlight'::post_kind, h.id FROM highlights h JOIN teams t ON t.id = h.team_id
+              WHERE t.organization_id IN (${sql.join(
+                deletableIds.map((id) => sql`${id}`),
+                sql`, `,
+              )})
+            UNION ALL SELECT 'org_post'::post_kind, op.id FROM org_posts op
+              WHERE op.organization_id IN (${sql.join(
+                deletableIds.map((id) => sql`${id}`),
+                sql`, `,
+              )})
+            UNION ALL SELECT 'news'::post_kind, nl.id FROM team_news_links nl JOIN teams t ON t.id = nl.team_id
+              WHERE t.organization_id IN (${sql.join(
+                deletableIds.map((id) => sql`${id}`),
+                sql`, `,
+              )})
+          )
+          DELETE FROM post_reactions pr USING doomed_posts dp
+          WHERE pr.post_kind = dp.kind AND pr.post_ref_id = dp.id
+        `);
+        await tx.execute(sql`
+          WITH doomed_posts AS (
+            SELECT 'article'::post_kind AS kind, a.id FROM articles a JOIN teams t ON t.id = a.team_id
+              WHERE t.organization_id IN (${sql.join(
+                deletableIds.map((id) => sql`${id}`),
+                sql`, `,
+              )})
+            UNION ALL SELECT 'highlight'::post_kind, h.id FROM highlights h JOIN teams t ON t.id = h.team_id
+              WHERE t.organization_id IN (${sql.join(
+                deletableIds.map((id) => sql`${id}`),
+                sql`, `,
+              )})
+            UNION ALL SELECT 'org_post'::post_kind, op.id FROM org_posts op
+              WHERE op.organization_id IN (${sql.join(
+                deletableIds.map((id) => sql`${id}`),
+                sql`, `,
+              )})
+            UNION ALL SELECT 'news'::post_kind, nl.id FROM team_news_links nl JOIN teams t ON t.id = nl.team_id
+              WHERE t.organization_id IN (${sql.join(
+                deletableIds.map((id) => sql`${id}`),
+                sql`, `,
+              )})
+          )
+          DELETE FROM post_shares ps USING doomed_posts dp
+          WHERE ps.post_kind = dp.kind AND ps.post_ref_id = dp.id
+        `);
+        await tx.execute(sql`
+          WITH doomed_posts AS (
+            SELECT 'article'::post_kind AS kind, a.id FROM articles a JOIN teams t ON t.id = a.team_id
+              WHERE t.organization_id IN (${sql.join(
+                deletableIds.map((id) => sql`${id}`),
+                sql`, `,
+              )})
+            UNION ALL SELECT 'highlight'::post_kind, h.id FROM highlights h JOIN teams t ON t.id = h.team_id
+              WHERE t.organization_id IN (${sql.join(
+                deletableIds.map((id) => sql`${id}`),
+                sql`, `,
+              )})
+            UNION ALL SELECT 'org_post'::post_kind, op.id FROM org_posts op
+              WHERE op.organization_id IN (${sql.join(
+                deletableIds.map((id) => sql`${id}`),
+                sql`, `,
+              )})
+            UNION ALL SELECT 'news'::post_kind, nl.id FROM team_news_links nl JOIN teams t ON t.id = nl.team_id
+              WHERE t.organization_id IN (${sql.join(
+                deletableIds.map((id) => sql`${id}`),
+                sql`, `,
+              )})
+          )
+          DELETE FROM album_photos ap USING doomed_posts dp
+          WHERE ap.post_kind = dp.kind AND ap.post_ref_id = dp.id
+        `);
+        await tx.execute(sql`
+          WITH doomed_posts AS (
+            SELECT 'article'::post_kind AS kind, a.id FROM articles a JOIN teams t ON t.id = a.team_id
+              WHERE t.organization_id IN (${sql.join(
+                deletableIds.map((id) => sql`${id}`),
+                sql`, `,
+              )})
+            UNION ALL SELECT 'highlight'::post_kind, h.id FROM highlights h JOIN teams t ON t.id = h.team_id
+              WHERE t.organization_id IN (${sql.join(
+                deletableIds.map((id) => sql`${id}`),
+                sql`, `,
+              )})
+            UNION ALL SELECT 'org_post'::post_kind, op.id FROM org_posts op
+              WHERE op.organization_id IN (${sql.join(
+                deletableIds.map((id) => sql`${id}`),
+                sql`, `,
+              )})
+            UNION ALL SELECT 'news'::post_kind, nl.id FROM team_news_links nl JOIN teams t ON t.id = nl.team_id
+              WHERE t.organization_id IN (${sql.join(
+                deletableIds.map((id) => sql`${id}`),
+                sql`, `,
+              )})
+          )
+          DELETE FROM takedown_requests tr USING doomed_posts dp
+          WHERE tr.post_kind = dp.kind AND tr.post_ref_id = dp.id
+        `);
+        await tx.execute(sql`
+          WITH doomed_content AS (
+            SELECT a.id FROM articles a JOIN teams t ON t.id = a.team_id
+              WHERE t.organization_id IN (${sql.join(
+                deletableIds.map((id) => sql`${id}`),
+                sql`, `,
+              )})
+            UNION ALL SELECT h.id FROM highlights h JOIN teams t ON t.id = h.team_id
+              WHERE t.organization_id IN (${sql.join(
+                deletableIds.map((id) => sql`${id}`),
+                sql`, `,
+              )})
+            UNION ALL SELECT op.id FROM org_posts op
+              WHERE op.organization_id IN (${sql.join(
+                deletableIds.map((id) => sql`${id}`),
+                sql`, `,
+              )})
+            UNION ALL SELECT nl.id FROM team_news_links nl JOIN teams t ON t.id = nl.team_id
+              WHERE t.organization_id IN (${sql.join(
+                deletableIds.map((id) => sql`${id}`),
+                sql`, `,
+              )})
+          )
+          DELETE FROM content_reports cr USING doomed_content dc
+          WHERE cr.content_id = dc.id
+        `);
+        await tx.execute(sql`
+          DELETE FROM conversation_participants cp
+          WHERE cp.participant_type = 'organization'
+            AND cp.participant_id IN (${sql.join(
+              deletableIds.map((id) => sql`${id}`),
+              sql`, `,
+            )})
+        `);
+        await tx
+          .delete(organizations)
+          .where(inArray(organizations.id, deletableIds));
+      }
+
+      let listDeleted = false;
+      if (list && parsed.data.deleteList) {
+        await tx.delete(orgAdminLists).where(eq(orgAdminLists.id, list.id));
+        listDeleted = true;
+      }
+
+      const missingCount = requestedIds
+        ? requestedIds.length - candidates.length
+        : 0;
+      return {
+        data: {
+          requestedCount: requestedIds?.length ?? candidates.length,
+          deletedCount: deletable.length,
+          deleted: deletable,
+          protectedCount: candidates.length - deletable.length,
+          protected: candidates.filter((row) => protectedIds.has(row.id)),
+          missingCount,
+          listDeleted,
+          list: list ? { id: list.id, name: list.name } : null,
+        },
+      } as const;
+    });
+
+    if ("notFound" in result) return notFound(res, "List not found");
+    if ("confirmationRequired" in result) {
+      return res.status(400).json({
+        error: "Type the required confirmation exactly.",
+        code: "CONFIRMATION_REQUIRED",
+      });
+    }
+    return res.json(result);
   }),
 );
 
@@ -2425,7 +3060,9 @@ router.patch(
         .where(eq(orgAdminLists.id, listId))
         .limit(1);
       if (!list) {
-        return res.status(400).json({ error: "List not found", code: "LIST_NOT_FOUND" });
+        return res
+          .status(400)
+          .json({ error: "List not found", code: "LIST_NOT_FOUND" });
       }
     }
     const ownerExists = sql`EXISTS (
@@ -2550,10 +3187,11 @@ router.get(
         // Non-null for operator-created orgs so the Claim Links tab lists
         // them in its recent section. createdAt is a compatibility fallback
         // for inline saves made between that section's launch and this fix.
-        quickSetupAt: (
-          r.createdViaQuickSetupAt ??
-          (r.createdAt >= operatorSetupCompatCutoff ? r.createdAt : null)
-        )?.toISOString() ?? null,
+        quickSetupAt:
+          (
+            r.createdViaQuickSetupAt ??
+            (r.createdAt >= operatorSetupCompatCutoff ? r.createdAt : null)
+          )?.toISOString() ?? null,
       });
     }
     res.json({ data: out });
@@ -2615,10 +3253,14 @@ router.post(
   asyncHandler(async (req, res) => {
     const name = String(req.body?.name ?? "").trim();
     if (!name) {
-      return res.status(400).json({ error: "name required", code: "NAME_REQUIRED" });
+      return res
+        .status(400)
+        .json({ error: "name required", code: "NAME_REQUIRED" });
     }
     if (name.length > 200) {
-      return res.status(400).json({ error: "name too long", code: "NAME_TOO_LONG" });
+      return res
+        .status(400)
+        .json({ error: "name too long", code: "NAME_TOO_LONG" });
     }
     const existing = await db
       .select({ id: organizations.id, name: organizations.name })
@@ -2638,10 +3280,15 @@ router.post(
     let logoUrl: string | null = null;
     if (typeof req.body?.logoUrl === "string" && req.body.logoUrl) {
       if (!req.body.logoUrl.startsWith("data:image/")) {
-        return res.status(400).json({ error: "logoUrl must be an image data URL", code: "INVALID_LOGO" });
+        return res.status(400).json({
+          error: "logoUrl must be an image data URL",
+          code: "INVALID_LOGO",
+        });
       }
       if (req.body.logoUrl.length > MAX_IMAGE_DATA_URL_LENGTH) {
-        return res.status(413).json({ error: "logo too large", code: "LOGO_TOO_LARGE" });
+        return res
+          .status(413)
+          .json({ error: "logo too large", code: "LOGO_TOO_LARGE" });
       }
       logoUrl = req.body.logoUrl;
     }
@@ -2681,7 +3328,8 @@ router.post(
       const promo = await findRedeemablePromo(req.body.promoCode);
       if (!promo) {
         return res.status(400).json({
-          error: "That promo code isn't valid (inactive, expired, or fully redeemed).",
+          error:
+            "That promo code isn't valid (inactive, expired, or fully redeemed).",
           code: "INVALID_PROMO_CODE",
         });
       }
@@ -2697,7 +3345,9 @@ router.post(
         .where(eq(orgAdminLists.id, requestedListId))
         .limit(1);
       if (!list) {
-        return res.status(400).json({ error: "List not found", code: "LIST_NOT_FOUND" });
+        return res
+          .status(400)
+          .json({ error: "List not found", code: "LIST_NOT_FOUND" });
       }
       adminListId = requestedListId;
     }
@@ -2753,27 +3403,42 @@ router.post(
     const body = req.body ?? {};
     const name = String(body.name ?? "").trim();
     if (!name) {
-      return res.status(400).json({ error: "name required", code: "NAME_REQUIRED" });
+      return res
+        .status(400)
+        .json({ error: "name required", code: "NAME_REQUIRED" });
     }
     if (name.length > 200) {
-      return res.status(400).json({ error: "name too long", code: "NAME_TOO_LONG" });
+      return res
+        .status(400)
+        .json({ error: "name too long", code: "NAME_TOO_LONG" });
     }
-    const city = typeof body.city === "string" ? body.city.trim().slice(0, 120) || null : null;
+    const city =
+      typeof body.city === "string"
+        ? body.city.trim().slice(0, 120) || null
+        : null;
     let state: string | null = null;
     if (typeof body.state === "string" && body.state.trim()) {
       const s = body.state.trim().toUpperCase();
       if (!/^[A-Z]{2}$/.test(s)) {
-        return res.status(400).json({ error: "state must be a 2-letter code", code: "INVALID_STATE" });
+        return res.status(400).json({
+          error: "state must be a 2-letter code",
+          code: "INVALID_STATE",
+        });
       }
       state = s;
     }
     let logoUrl: string | null = null;
     if (typeof body.logoUrl === "string" && body.logoUrl) {
       if (!body.logoUrl.startsWith("data:image/")) {
-        return res.status(400).json({ error: "logoUrl must be an image data URL", code: "INVALID_LOGO" });
+        return res.status(400).json({
+          error: "logoUrl must be an image data URL",
+          code: "INVALID_LOGO",
+        });
       }
       if (body.logoUrl.length > MAX_IMAGE_DATA_URL_LENGTH) {
-        return res.status(413).json({ error: "logo too large", code: "LOGO_TOO_LARGE" });
+        return res
+          .status(413)
+          .json({ error: "logo too large", code: "LOGO_TOO_LARGE" });
       }
       logoUrl = body.logoUrl;
     }
@@ -2804,7 +3469,8 @@ router.post(
       const promo = await findRedeemablePromo(body.promoCode);
       if (!promo) {
         return res.status(400).json({
-          error: "That promo code isn't valid (inactive, expired, or fully redeemed).",
+          error:
+            "That promo code isn't valid (inactive, expired, or fully redeemed).",
           code: "INVALID_PROMO_CODE",
         });
       }
@@ -2836,14 +3502,19 @@ router.post(
         .where(eq(orgAdminLists.id, requestedListId))
         .limit(1);
       if (!list) {
-        return res.status(400).json({ error: "List not found", code: "LIST_NOT_FOUND" });
+        return res
+          .status(400)
+          .json({ error: "List not found", code: "LIST_NOT_FOUND" });
       }
       adminListId = requestedListId;
     }
 
     const teamsRaw = Array.isArray(body.teams) ? body.teams : [];
     if (teamsRaw.length > QUICK_SETUP_MAX_TEAMS) {
-      return res.status(400).json({ error: `too many teams (max ${QUICK_SETUP_MAX_TEAMS})`, code: "TOO_MANY_TEAMS" });
+      return res.status(400).json({
+        error: `too many teams (max ${QUICK_SETUP_MAX_TEAMS})`,
+        code: "TOO_MANY_TEAMS",
+      });
     }
     // Enforce the team cap of the staged tier (or the default entry tier when
     // none was picked) up front — same source of truth as the normal
@@ -2873,24 +3544,42 @@ router.post(
       const t = teamsRaw[i] ?? {};
       const teamName = String(t.name ?? "").trim();
       if (!teamName) {
-        return res.status(400).json({ error: `Team ${i + 1}: name required`, code: "TEAM_NAME_REQUIRED", index: i });
+        return res.status(400).json({
+          error: `Team ${i + 1}: name required`,
+          code: "TEAM_NAME_REQUIRED",
+          index: i,
+        });
       }
       if (teamName.length > 200) {
-        return res.status(400).json({ error: `Team ${i + 1}: name too long`, code: "TEAM_NAME_TOO_LONG", index: i });
+        return res.status(400).json({
+          error: `Team ${i + 1}: name too long`,
+          code: "TEAM_NAME_TOO_LONG",
+          index: i,
+        });
       }
       const nameKey = teamName.toLowerCase();
       if (seenTeamNames.has(nameKey)) {
-        return res.status(400).json({ error: `Team ${i + 1}: duplicate team name "${teamName}"`, code: "DUPLICATE_TEAM_NAME", index: i });
+        return res.status(400).json({
+          error: `Team ${i + 1}: duplicate team name "${teamName}"`,
+          code: "DUPLICATE_TEAM_NAME",
+          index: i,
+        });
       }
       seenTeamNames.add(nameKey);
       const emailsRaw = Array.isArray(t.coachEmails) ? t.coachEmails : [];
       const emails: string[] = [];
       const seenEmails = new Set<string>();
       for (const raw of emailsRaw) {
-        const email = String(raw ?? "").trim().toLowerCase();
+        const email = String(raw ?? "")
+          .trim()
+          .toLowerCase();
         if (!email) continue;
         if (!QUICK_SETUP_EMAIL_RE.test(email)) {
-          return res.status(400).json({ error: `Team ${i + 1}: invalid email "${String(raw)}"`, code: "INVALID_EMAIL", index: i });
+          return res.status(400).json({
+            error: `Team ${i + 1}: invalid email "${String(raw)}"`,
+            code: "INVALID_EMAIL",
+            index: i,
+          });
         }
         if (seenEmails.has(email)) continue;
         seenEmails.add(email);
@@ -2900,7 +3589,10 @@ router.post(
       teamInputs.push({ name: teamName, coachEmails: emails });
     }
     if (totalCoaches > QUICK_SETUP_MAX_COACHES) {
-      return res.status(400).json({ error: `too many coach emails (max ${QUICK_SETUP_MAX_COACHES})`, code: "TOO_MANY_COACHES" });
+      return res.status(400).json({
+        error: `too many coach emails (max ${QUICK_SETUP_MAX_COACHES})`,
+        code: "TOO_MANY_COACHES",
+      });
     }
 
     const token = generateToken();
@@ -2940,7 +3632,12 @@ router.post(
         })
         .returning();
       const createdTeams: Array<{ id: string; name: string }> = [];
-      const staged: Array<{ organizationId: string; teamId: string; email: string; createdById: string }> = [];
+      const staged: Array<{
+        organizationId: string;
+        teamId: string;
+        email: string;
+        createdById: string;
+      }> = [];
       for (const t of teamInputs) {
         const [team] = await tx
           .insert(teams)
@@ -3031,9 +3728,10 @@ router.patch(
     const id = String(req.params.id);
     const facebookAdded = req.body?.facebookAdded;
     if (typeof facebookAdded !== "boolean") {
-      return res
-        .status(400)
-        .json({ error: "facebookAdded must be a boolean", code: "INVALID_BODY" });
+      return res.status(400).json({
+        error: "facebookAdded must be a boolean",
+        code: "INVALID_BODY",
+      });
     }
     const [org] = await db
       .update(organizations)
@@ -3210,7 +3908,9 @@ router.get(
 // data:image URL (capped, friendly 413) or plain http(s) URL.
 function parseClaimLinkLogo(
   raw: unknown,
-): { ok: true; logoUrl: string | null } | { ok: false; status: number; error: string } {
+):
+  | { ok: true; logoUrl: string | null }
+  | { ok: false; status: number; error: string } {
   if (raw === undefined || raw === null || raw === "") {
     return { ok: true, logoUrl: null };
   }
@@ -3233,7 +3933,11 @@ function parseClaimLinkLogo(
   if (/^https?:\/\//.test(raw) && raw.length <= 2000) {
     return { ok: true, logoUrl: raw };
   }
-  return { ok: false, status: 400, error: "logoUrl must be an image data: URL or http(s) URL" };
+  return {
+    ok: false,
+    status: 400,
+    error: "logoUrl must be an image data: URL or http(s) URL",
+  };
 }
 
 // Create a fresh ownerless competition with a claim token. Unlike orgs,
@@ -3246,10 +3950,14 @@ router.post(
   asyncHandler(async (req, res) => {
     const name = String(req.body?.name ?? "").trim();
     if (!name) {
-      return res.status(400).json({ error: "name required", code: "NAME_REQUIRED" });
+      return res
+        .status(400)
+        .json({ error: "name required", code: "NAME_REQUIRED" });
     }
     if (name.length > 200) {
-      return res.status(400).json({ error: "name too long", code: "NAME_TOO_LONG" });
+      return res
+        .status(400)
+        .json({ error: "name too long", code: "NAME_TOO_LONG" });
     }
     const type = req.body?.type === "league" ? "league" : "tournament";
     const startDate = String(req.body?.startDate ?? "").trim();
@@ -3281,7 +3989,9 @@ router.post(
     }
     const logo = parseClaimLinkLogo(req.body?.logoUrl);
     if (!logo.ok) {
-      return res.status(logo.status).json({ error: logo.error, code: "INVALID_LOGO" });
+      return res
+        .status(logo.status)
+        .json({ error: logo.error, code: "INVALID_LOGO" });
     }
     const token = generateToken();
     const [row] = await db
@@ -3322,7 +4032,9 @@ router.patch(
     const id = String(req.params.id);
     const logo = parseClaimLinkLogo(req.body?.logoUrl);
     if (!logo.ok) {
-      return res.status(logo.status).json({ error: logo.error, code: "INVALID_LOGO" });
+      return res
+        .status(logo.status)
+        .json({ error: logo.error, code: "INVALID_LOGO" });
     }
     const [row] = await db
       .update(tournaments)
@@ -3364,15 +4076,20 @@ router.patch(
       }
       return { ok: true, value: raw.trim() };
     };
-    const updates: { brandColor?: string | null; secondaryColor?: string | null } = {};
+    const updates: {
+      brandColor?: string | null;
+      secondaryColor?: string | null;
+    } = {};
     if (req.body && "brandColor" in req.body) {
       const p = parseColor(req.body.brandColor, "brandColor");
-      if (!p.ok) return res.status(400).json({ error: p.error, code: "INVALID_COLOR" });
+      if (!p.ok)
+        return res.status(400).json({ error: p.error, code: "INVALID_COLOR" });
       updates.brandColor = p.value;
     }
     if (req.body && "secondaryColor" in req.body) {
       const p = parseColor(req.body.secondaryColor, "secondaryColor");
-      if (!p.ok) return res.status(400).json({ error: p.error, code: "INVALID_COLOR" });
+      if (!p.ok)
+        return res.status(400).json({ error: p.error, code: "INVALID_COLOR" });
       updates.secondaryColor = p.value;
     }
     if (Object.keys(updates).length === 0) {
@@ -3418,9 +4135,10 @@ router.patch(
     // Require the key explicitly — a body missing `promoCode` must not
     // silently clear an existing code.
     if (!req.body || !("promoCode" in req.body)) {
-      return res
-        .status(400)
-        .json({ error: "promoCode is required (null/\"\" clears)", code: "INVALID_BODY" });
+      return res.status(400).json({
+        error: 'promoCode is required (null/"" clears)',
+        code: "INVALID_BODY",
+      });
     }
     const raw = req.body.promoCode;
     let promoCode: string | null = null;
@@ -3480,9 +4198,10 @@ router.patch(
         messagedAt: tournaments.outreachMessagedAt,
       });
     if (!row) {
-      return res
-        .status(404)
-        .json({ error: "competition not found", code: "COMPETITION_NOT_FOUND" });
+      return res.status(404).json({
+        error: "competition not found",
+        code: "COMPETITION_NOT_FOUND",
+      });
     }
     return res.json({
       data: {
@@ -3499,9 +4218,10 @@ router.patch(
     const id = String(req.params.id);
     const facebookAdded = req.body?.facebookAdded;
     if (typeof facebookAdded !== "boolean") {
-      return res
-        .status(400)
-        .json({ error: "facebookAdded must be a boolean", code: "INVALID_BODY" });
+      return res.status(400).json({
+        error: "facebookAdded must be a boolean",
+        code: "INVALID_BODY",
+      });
     }
     const [row] = await db
       .update(tournaments)
@@ -3512,9 +4232,10 @@ router.patch(
         facebookAddedAt: tournaments.outreachFacebookAddedAt,
       });
     if (!row) {
-      return res
-        .status(404)
-        .json({ error: "competition not found", code: "COMPETITION_NOT_FOUND" });
+      return res.status(404).json({
+        error: "competition not found",
+        code: "COMPETITION_NOT_FOUND",
+      });
     }
     return res.json({
       data: {
@@ -3535,8 +4256,12 @@ router.get(
   "/schedule/upcoming",
   asyncHandler(async (req, res) => {
     const limitParam = req.query["limit"];
-    const limitRaw = typeof limitParam === "string" ? parseInt(limitParam, 10) : NaN;
-    const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 100, 1), 200);
+    const limitRaw =
+      typeof limitParam === "string" ? parseInt(limitParam, 10) : NaN;
+    const limit = Math.min(
+      Math.max(Number.isFinite(limitRaw) ? limitRaw : 100, 1),
+      200,
+    );
     const now = new Date();
 
     const events = await db
@@ -3556,7 +4281,10 @@ router.get(
       })
       .from(scheduleEvents)
       .innerJoin(teams, eq(teams.id, scheduleEvents.teamId))
-      .leftJoin(organizations, eq(organizations.id, scheduleEvents.organizationId))
+      .leftJoin(
+        organizations,
+        eq(organizations.id, scheduleEvents.organizationId),
+      )
       .where(gte(scheduleEvents.startAt, now))
       .orderBy(asc(scheduleEvents.startAt))
       .limit(limit);
@@ -3573,7 +4301,10 @@ router.get(
           .where(inArray(scheduleEventRsvps.eventId, eventIds))
           .groupBy(scheduleEventRsvps.eventId, scheduleEventRsvps.status)
       : [];
-    const byEvent = new Map<string, { going: number; maybe: number; out: number }>();
+    const byEvent = new Map<
+      string,
+      { going: number; maybe: number; out: number }
+    >();
     for (const c of counts) {
       const cur = byEvent.get(c.eventId) ?? { going: 0, maybe: 0, out: 0 };
       cur[c.status as "going" | "maybe" | "out"] = c.count;
@@ -3700,12 +4431,15 @@ router.patch(
         .json({ error: parsed.error.issues[0]?.message ?? "Invalid body" });
     }
     const { title, body, level, active, startsAt, endsAt } = parsed.data;
-    const patch: Partial<typeof announcements.$inferInsert> = { updatedAt: new Date() };
+    const patch: Partial<typeof announcements.$inferInsert> = {
+      updatedAt: new Date(),
+    };
     if (title !== undefined) patch.title = title;
     if (body !== undefined) patch.body = body;
     if (level !== undefined) patch.level = level;
     if (active !== undefined) patch.active = active;
-    if (startsAt !== undefined) patch.startsAt = startsAt ? new Date(startsAt) : null;
+    if (startsAt !== undefined)
+      patch.startsAt = startsAt ? new Date(startsAt) : null;
     if (endsAt !== undefined) patch.endsAt = endsAt ? new Date(endsAt) : null;
     const [row] = await db
       .update(announcements)
@@ -3823,7 +4557,10 @@ router.get(
         ownerId: r.ownerId,
         ownerName: r.ownerName,
         ownerEmail: r.ownerEmail,
-        claimedAt: (r.approvedRequestAt ?? r.ownerSince) as Date | string | null,
+        claimedAt: (r.approvedRequestAt ?? r.ownerSince) as
+          | Date
+          | string
+          | null,
         method: r.approvedRequestAt ? ("request" as const) : ("link" as const),
       }));
 
