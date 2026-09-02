@@ -159,6 +159,10 @@ export default function PartnerLandingPage() {
   const foreground = readableText(page.primaryColor);
   const intro = page.introduction || "Kinectem is the youth-sports platform where the story of your season comes to life — a lasting home for every club, team, player, and game day.";
   const featuredCompetition = data.competition;
+  const createOrganizationPath = "/organizations/mine?new=1";
+  const createOrganizationHref = me
+    ? createOrganizationPath
+    : `/login?signup=1&returnTo=${encodeURIComponent(createOrganizationPath)}`;
   const competitionDate = (value: string) =>
     new Date(`${value}T00:00:00`).toLocaleDateString(undefined, {
       month: "short",
@@ -428,6 +432,47 @@ export default function PartnerLandingPage() {
         ) : (
           <div className="space-y-6">
             <div className="relative max-w-xl"><Search className="absolute left-4 top-3.5 h-5 w-5 text-slate-400" /><Input className="h-12 rounded-xl bg-white pl-12" placeholder="Search club name or location" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
+            <div
+              className="relative overflow-hidden rounded-3xl p-6 shadow-lg md:flex md:items-center md:justify-between md:gap-8 md:p-8"
+              style={{
+                color: readableText(page.primaryColor),
+                backgroundImage: `linear-gradient(120deg, ${page.primaryColor}, ${page.secondaryColor})`,
+              }}
+              data-testid="create-club-callout"
+            >
+              <div className="pointer-events-none absolute -right-10 -top-16 h-44 w-44 rounded-full border-[24px] border-white/15" />
+              <div className="relative max-w-2xl">
+                <p className="text-xs font-black uppercase tracking-[0.2em] opacity-80">
+                  Don&apos;t see your club?
+                </p>
+                <h2 className="mt-2 text-2xl font-black tracking-tight md:text-3xl">
+                  Create it on Kinectem
+                </h2>
+                <p className="mt-2 text-sm font-semibold leading-relaxed opacity-90 md:text-base">
+                  Set up your club&apos;s page and start building a lasting home
+                  for every team, player, and game day.
+                </p>
+                <p className="mt-3 text-sm leading-relaxed opacity-85">
+                  Questions or need a hand?{" "}
+                  <a
+                    href="mailto:competitions@kinectem.com"
+                    className="font-black underline underline-offset-2 hover:opacity-80"
+                  >
+                    competitions@kinectem.com
+                  </a>{" "}
+                  is here to help.
+                </p>
+              </div>
+              <Link href={createOrganizationHref} className="relative mt-5 block shrink-0 md:mt-0">
+                <Button
+                  className="w-full rounded-xl px-5 font-black md:w-auto"
+                  style={{ background: foreground, color: page.primaryColor }}
+                  data-testid="btn-create-club"
+                >
+                  Create your club <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </Link>
+            </div>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {filtered.map((org) => (
                 <Card key={org.id} className="rounded-2xl border-0 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">

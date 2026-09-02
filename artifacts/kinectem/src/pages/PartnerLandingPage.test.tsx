@@ -1,17 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { screen } from "@testing-library/react";
-import { customFetch } from "@workspace/api-client-react";
+import userEvent from "@testing-library/user-event";
+import { customFetch, useGetLoggedInUser } from "@workspace/api-client-react";
 import { renderWithProviders } from "@/test/renderWithProviders";
 import PartnerLandingPage from "./PartnerLandingPage";
 
 vi.mock("@workspace/api-client-react", () => ({
   customFetch: vi.fn(),
-  useGetLoggedInUser: () => ({ data: null }),
+  useGetLoggedInUser: vi.fn(),
 }));
 
 const mockedFetch = vi.mocked(customFetch);
+const mockedUser = vi.mocked(useGetLoggedInUser);
 
-function partnerResponse(competition: Record<string, unknown> | null) {
+function partnerResponse(
+  competition: Record<string, unknown> | null,
+  organizations: Array<Record<string, unknown>> = [],
+) {
   return {
     data: {
       page: {
@@ -25,7 +30,7 @@ function partnerResponse(competition: Record<string, unknown> | null) {
         secondaryColor: "#06B6D4",
       },
       competition,
-      organizations: [],
+      organizations,
     },
   };
 }
@@ -34,6 +39,7 @@ describe("PartnerLandingPage featured competition", () => {
   beforeEach(() => {
     window.history.pushState({}, "", "/partners/north-stars");
     mockedFetch.mockReset();
+    mockedUser.mockReturnValue({ data: null } as never);
   });
 
   it("shows public competition details and links to the canonical public page", async () => {
@@ -68,5 +74,79 @@ describe("PartnerLandingPage featured competition", () => {
     expect(
       screen.queryByTestId("featured-partner-competition"),
     ).not.toBeInTheDocument();
+  });
+
+  it("shows the create-club callout beside directory results", async () => {
+    mockedFetch.mockResolvedValue(
+      partnerResponse(null, [
+        {
+          id: "org-1",
+          name: "North Stars Soccer",
+          location: "Riverside",
+          city: "Riverside",
+          state: "CA",
+          logoUrl: null,
+          canRequestClaim: false,
+          teams: [],
+        },
+      ]) as never,
+    );
+
+    renderWithProviders(<PartnerLandingPage />);
+    await userEvent.setup().click(
+      await screen.findByRole("button", { name: "Find Your Club" }),
+    );
+
+    const callout = await screen.findByTestId("create-club-callout");
+    expect(callout).toHaveTextContent("Don't see your club?");
+    expect(callout).toHaveTextContent("Create it on Kinectem");
+    expect(callout).toHaveTextContent("Questions or need a hand?");
+    expect(callout.querySelector('a[href="mailto:competitions@kinectem.com"]')).toBeInTheDocument();
+    expect(screen.getByTestId("btn-create-club").closest("a")).toHaveAttribute(
+      "href",
+      "/login?signup=1&returnTo=%2Forganizations%2Fmine%3Fnew%3D1",
+    );
+    expect(screen.getByText("North Stars Soccer")).toBeInTheDocument();
+  });
+
+  it("keeps the create-club callout available when a search has no matches", async () => {
+    mockedFetch.mockResolvedValue(partnerResponse(null) as never);
+
+    renderWithProviders(<PartnerLandingPage />);
+    await userEvent.setup().click(
+      await screen.findByRole("button", { name: "Find Your Club" }),
+    );
+
+    const search = await screen.findByPlaceholderText("Search club name or location");
+    await userEvent.setup().type(search, "does-not-exist");
+
+    expect(screen.getByTestId("create-club-callout")).toBeInTheDocument();
+    expect(screen.getByText("No clubs match that search.")).toBeInTheDocument();
+    expect(screen.getByTestId("btn-create-club").closest("a")).toHaveAttribute(
+      "href",
+      "/login?signup=1&returnTo=%2Forganizations%2Fmine%3Fnew%3D1",
+    );
+    expect(screen.getByRole("link", { name: "competitions@kinectem.com" })).toHaveAttribute(
+      "href",
+      "mailto:competitions@kinectem.com",
+    );
+  });
+
+  it("links signed-in visitors directly to the new organization dialog", async () => {
+    mockedUser.mockReturnValue({
+      data: { id: "user-1", email: "coach@example.com" },
+    } as never);
+    mockedFetch.mockResolvedValue(partnerResponse(null) as never);
+
+    renderWithProviders(<PartnerLandingPage />);
+    await userEvent.setup().click(
+      await screen.findByRole("button", { name: "Find Your Club" }),
+    );
+
+    await screen.findByTestId("create-club-callout");
+    expect(screen.getByTestId("btn-create-club").closest("a")).toHaveAttribute(
+      "href",
+      "/organizations/mine?new=1",
+    );
   });
 });
