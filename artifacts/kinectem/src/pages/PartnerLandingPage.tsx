@@ -214,30 +214,34 @@ export default function PartnerLandingPage() {
             <p className="mb-4 text-xs font-black uppercase tracking-[0.22em] opacity-80 md:text-sm">
               Proud partner with Kinectem
             </p>
-            <div className="flex items-center justify-center gap-3 sm:gap-5">
-              <div className="flex w-32 min-w-0 flex-col items-center text-center md:w-40">
+            <div
+              className="flex flex-col items-center"
+              data-testid="partner-logo-lockup"
+            >
+              <div className="grid grid-cols-[8rem_auto_8rem] items-center justify-center gap-3 sm:gap-5 md:grid-cols-[10rem_auto_10rem]">
                 <div className="grid h-32 w-32 place-items-center rounded-3xl bg-white/95 shadow-xl md:h-40 md:w-40">
                   {page.logoUrl ? <img src={page.logoUrl} alt={`${page.officialName} logo`} className="h-full w-full rounded-3xl object-contain p-3" /> : <Building2 className="h-16 w-16 text-slate-500 md:h-20 md:w-20" />}
                 </div>
-                <div className="mt-3 flex min-h-[3.25rem] max-w-[10rem] flex-col justify-start">
-                  <div className="text-[10px] font-black uppercase tracking-[0.18em] opacity-70">{page.associationLabel}</div>
-                  <div className="mt-1 text-sm font-black leading-tight md:text-base">{page.officialName}</div>
-                </div>
-              </div>
-              <span className="text-3xl font-light opacity-70 md:text-5xl" aria-hidden="true">×</span>
-              <div className="flex w-32 min-w-0 flex-col items-center text-center md:w-40">
+                <span className="text-center text-3xl font-light opacity-70 md:text-5xl" aria-hidden="true" data-testid="partner-logo-separator">×</span>
                 <img
                   src={kinectemIcon}
                   alt="Kinectem logo"
                   className="h-32 w-32 rounded-3xl object-contain shadow-xl md:h-40 md:w-40"
                 />
-                <div className="mt-3 flex min-h-[3.25rem] items-start justify-center text-sm font-black leading-tight md:text-base">Kinectem</div>
+              </div>
+              <div className="mt-3 grid grid-cols-[8rem_auto_8rem] gap-3 text-center sm:gap-5 md:grid-cols-[10rem_auto_10rem]">
+                <div className="flex min-h-[3.25rem] min-w-0 flex-col items-center justify-start">
+                  <div className="text-[10px] font-black uppercase tracking-[0.18em] opacity-70">{page.associationLabel}</div>
+                  <div className="mt-1 text-sm font-black leading-tight md:text-base">{page.officialName}</div>
+                </div>
+                <div aria-hidden="true" />
+                <div className="flex min-h-[3.25rem] min-w-0 items-start justify-center text-sm font-black leading-tight md:text-base">Kinectem</div>
               </div>
             </div>
           </div>
-          <h1 className="max-w-4xl text-4xl font-black leading-[0.98] tracking-tight md:text-7xl">They run your season. Kinectem makes it last.</h1>
+          <h1 className="max-w-4xl text-4xl font-black leading-[0.98] tracking-tight md:text-7xl">{page.officialName} runs the season. Kinectem preserves the story.</h1>
           <p className="mt-6 max-w-3xl text-lg font-semibold leading-relaxed opacity-90 md:text-xl">
-            Kinectem is not another registration, scheduling, or communication app. It complements TeamSnap, Byga, PlayMetrics, GotSport, Stack, and whatever your club already uses.
+            Kinectem preserves the game stories that would otherwise disappear — turning them into lasting recaps, player and team histories, and one connected club story alongside the tools your club already uses.
           </p>
           <Button className="mt-8 rounded-full px-6 font-black" style={{ background: foreground, color: page.primaryColor }} onClick={() => { setTab("clubs"); document.getElementById("partner-content")?.scrollIntoView({ behavior: "smooth" }); }}>
             Find your club <ArrowRight className="ml-2 h-4 w-4" />

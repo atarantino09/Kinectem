@@ -65,6 +65,26 @@ describe("PartnerLandingPage featured competition", () => {
     ).toHaveAttribute("href", "/c/fall-classic-2026");
   });
 
+  it("shows partner-specific post-game messaging and centers the separator between marks", async () => {
+    mockedFetch.mockResolvedValue(partnerResponse(null) as never);
+
+    renderWithProviders(<PartnerLandingPage />);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "North Stars Soccer runs the season. Kinectem preserves the story.",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Kinectem preserves the game stories that would otherwise disappear — turning them into lasting recaps, player and team histories, and one connected club story alongside the tools your club already uses.",
+      ),
+    ).toBeInTheDocument();
+    const lockup = screen.getByTestId("partner-logo-lockup");
+    expect(lockup.querySelector('[data-testid="partner-logo-separator"]')).toBeInTheDocument();
+    expect(lockup.querySelector('[alt="Kinectem logo"]')).toBeInTheDocument();
+  });
+
   it("keeps the existing page unchanged when no competition is linked", async () => {
     mockedFetch.mockResolvedValue(partnerResponse(null) as never);
 
