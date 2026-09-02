@@ -22,6 +22,7 @@ let validatedBody: Record<string, unknown> | null = null;
 let importedBody: Record<string, unknown> | null = null;
 let partnerCreateBody: Record<string, unknown> | null = null;
 let partnerCompetitionBody: Record<string, unknown> | null = null;
+let partnerOrgListBody: Record<string, unknown> | null = null;
 let partnerPages: Array<Record<string, unknown>> = [];
 let partnerPublished = false;
 let claimLinkRows: Array<Record<string, unknown>> = [];
@@ -33,6 +34,7 @@ beforeEach(() => {
   importedBody = null;
   partnerCreateBody = null;
   partnerCompetitionBody = null;
+  partnerOrgListBody = null;
   partnerPages = [];
   partnerPublished = false;
   claimLinkRows = [];
@@ -146,6 +148,20 @@ beforeEach(() => {
             location: "Riverside",
           },
         });
+      }
+      if (
+        method === "POST" &&
+        path === "/api/v1/admin/partner-pages/partner-1/lists/list-1"
+      ) {
+        partnerOrgListBody = JSON.parse(String(init?.body ?? "{}"));
+        return jsonResponse({
+          data: {
+            list: { id: "list-1", name: "Fall Partners" },
+            addedCount: 2,
+            skippedCount: 0,
+            organizationCount: 2,
+          },
+        }, 201);
       }
       if (method === "POST" && path === "/api/v1/admin/partner-pages") {
         partnerCreateBody = JSON.parse(String(init?.body ?? "{}"));
@@ -616,6 +632,44 @@ describe("AdminOrganizations bulk import", () => {
     expect(
       screen.getByRole("button", { name: "Open console" }).closest("a"),
     ).toHaveAttribute("href", "/competitions/competition-1");
+  });
+
+  it("adds all organizations from a saved list to the partner page", async () => {
+    orgLists = [
+      {
+        id: "list-1",
+        name: "Fall Partners",
+        orgCount: 2,
+        createdAt: "2026-09-01T00:00:00.000Z",
+      },
+    ];
+    partnerPages = [
+      {
+        id: "partner-1",
+        slug: "north-stars",
+        officialName: "North Stars",
+        associationLabel: "League / association",
+        published: false,
+        memberCount: 0,
+      },
+    ];
+    const user = userEvent.setup();
+    renderWithProviders(<AdminOrganizations />);
+
+    await user.click(await screen.findByTestId("tab-org-partner"));
+    await user.click(
+      await screen.findByRole("button", { name: /North Stars/ }),
+    );
+    const listSelect = await screen.findByTestId("select-partner-org-list");
+    await user.selectOptions(listSelect, "list-1");
+    await user.click(screen.getByTestId("btn-add-partner-org-list"));
+
+    await waitFor(() =>
+      expect(partnerOrgListBody).toEqual({}),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("btn-add-partner-org-list")).toBeEnabled(),
+    );
   });
 
   it("picks partner branding colors from the uploaded logo", async () => {

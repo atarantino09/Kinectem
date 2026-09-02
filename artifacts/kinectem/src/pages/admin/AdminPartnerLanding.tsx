@@ -39,6 +39,13 @@ type PartnerSummary = {
   memberCount: number;
 };
 
+type OrgList = {
+  id: string;
+  name: string;
+  orgCount: number;
+  createdAt: string;
+};
+
 type PartnerMember = {
   id: string;
   visible: boolean;
@@ -152,6 +159,8 @@ export function AdminPartnerLanding() {
   });
   const [newOrg, setNewOrg] = useState({ name: "", city: "", state: "", teams: "", logoUrl: "" });
   const [search, setSearch] = useState("");
+  const [selectedOrgListId, setSelectedOrgListId] = useState("");
+  const [addingOrgList, setAddingOrgList] = useState(false);
   const [competitionSearch, setCompetitionSearch] = useState("");
   const [selectedCompetition, setSelectedCompetition] = useState<PartnerCompetition | null>(null);
   const [newCompetition, setNewCompetition] = useState({
@@ -170,6 +179,11 @@ export function AdminPartnerLanding() {
   const pages = useQuery<{ data: PartnerSummary[] }>({
     queryKey: ["admin", "partner-pages"],
     queryFn: () => customFetch("/api/v1/admin/partner-pages", { method: "GET" }),
+  });
+  const orgLists = useQuery<{ data: OrgList[] }>({
+    queryKey: ["admin", "org-lists"],
+    queryFn: () =>
+      customFetch("/api/v1/admin/org-lists", { method: "GET" }),
   });
   const detail = useQuery<{ data: PartnerDetail }>({
     queryKey: ["admin", "partner-pages", selectedId],
@@ -191,6 +205,7 @@ export function AdminPartnerLanding() {
 
   const loadDetail = (id: string) => {
     setSelectedId(id);
+    setSelectedOrgListId("");
     const page = pages.data?.data.find((item) => item.id === id);
     if (page) {
       setDraft((current) => ({
@@ -368,6 +383,50 @@ export function AdminPartnerLanding() {
     });
     await refresh();
     toast({ title: "Organization included" });
+  };
+
+  const addOrganizationList = async () => {
+    if (!selectedId || !selectedOrgListId || addingOrgList) return;
+    const selectedList = (orgLists.data?.data ?? []).find(
+      (list) => list.id === selectedOrgListId,
+    );
+    if (!selectedList) return;
+    setAddingOrgList(true);
+    try {
+      const response = await customFetch<{
+        data: {
+          addedCount: number;
+          skippedCount: number;
+          organizationCount: number;
+        };
+      }>(
+        `/api/v1/admin/partner-pages/${selectedId}/lists/${selectedOrgListId}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+      await refresh();
+      const { addedCount, skippedCount } = response.data;
+      toast({
+        title:
+          addedCount === 0
+            ? "All organizations were already included"
+            : `${addedCount} organization${addedCount === 1 ? "" : "s"} added`,
+        description:
+          skippedCount > 0
+            ? `${skippedCount} already included`
+            : `Added from ${selectedList.name}`,
+      });
+    } catch (error) {
+      toast({
+        title: "Couldn't add organization list",
+        description: (error as Error).message,
+        variant: "destructive",
+      });
+    } finally {
+      setAddingOrgList(false);
+    }
   };
 
   const updateFeaturedCompetition = async (competitionId: string) => {
@@ -591,6 +650,68 @@ export function AdminPartnerLanding() {
       </Step>
 
       <Step number={2} title="Import or add organizations" done={members.length > 0}>
+        <div className="rounded-lg border border-primary/25 bg-primary/5 p-3">
+          <div className="font-bold">Add from a saved organization list</div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Add all ownerless organizations in an existing admin list to this
+            partner page. Organizations already included are skipped.
+          </p>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+            <select
+              className="min-h-10 min-w-0 flex-1 rounded-md border bg-background px-3 py-2 text-sm"
+              value={selectedOrgListId}
+              onChange={(event) => setSelectedOrgListId(event.target.value)}
+              aria-label="Saved organization list"
+              data-testid="select-partner-org-list"
+              disabled={orgLists.isLoading || addingOrgList}
+            >
+              <option value="">
+                {orgLists.isLoading
+                  ? "Loading saved lists…"
+                  : orgLists.data?.data.length
+                    ? "Choose a saved list"
+                    : "No saved organization lists"}
+              </option>
+              {(orgLists.data?.data ?? []).map((list) => (
+                <option key={list.id} value={list.id}>
+                  {list.name} · {list.orgCount} organization
+                  {list.orgCount === 1 ? "" : "s"}
+                </option>
+              ))}
+            </select>
+            <Button
+              onClick={() => void addOrganizationList()}
+              disabled={
+                !selectedOrgListId ||
+                addingOrgList ||
+                !(
+                  orgLists.data?.data.find(
+                    (list) => list.id === selectedOrgListId,
+                  )?.orgCount
+                )
+              }
+              data-testid="btn-add-partner-org-list"
+            >
+              {addingOrgList && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Add list
+            </Button>
+          </div>
+          {!orgLists.isLoading &&
+            (orgLists.data?.data ?? []).length === 0 && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Create a list in{" "}
+                <Link
+                  className="font-semibold text-primary underline"
+                  href="/admin/organizations?section=claim-links"
+                >
+                  Organizations → Claim links & setup
+                </Link>
+                .
+              </p>
+            )}
+        </div>
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="space-y-3 rounded-lg border p-3">
             <div className="font-bold">Mass upload</div>

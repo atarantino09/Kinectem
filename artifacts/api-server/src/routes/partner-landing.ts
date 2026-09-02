@@ -4,6 +4,7 @@ import {
   organizations,
   organizationAdmins,
   organizationClaimRequests,
+  orgAdminLists,
   partnerImportOperations,
   partnerLandingPages,
   partnerOrganizationMemberships,
@@ -475,6 +476,70 @@ router.post(
     return res.status(membership ? 201 : 200).json({
       data: membership ?? null,
       alreadyIncluded: !membership,
+    });
+  }),
+);
+
+// Add every current ownerless organization in an admin-created list to the
+// partner page. This is intentionally a membership-only operation: it does
+// not move the organizations between admin lists or change ownership.
+router.post(
+  "/admin/partner-pages/:pageId/lists/:listId",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const pageId = p(req.params.pageId);
+    const listId = p(req.params.listId);
+    const list = await db
+      .select({ id: orgAdminLists.id, name: orgAdminLists.name })
+      .from(orgAdminLists)
+      .where(eq(orgAdminLists.id, listId))
+      .limit(1);
+    if (!list[0]) {
+      apiError(res, 404, "Organization list not found");
+      return;
+    }
+    if (!(await findPage(pageId))) {
+      apiError(res, 404, "Partner page not found");
+      return;
+    }
+
+    const ownerExists = sql`EXISTS (
+      SELECT 1 FROM organization_admins oa
+      WHERE oa.organization_id = ${organizations.id}
+        AND oa.role = 'owner'
+    )`;
+    const listOrganizations = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(and(eq(organizations.adminListId, listId), sql`NOT ${ownerExists}`));
+
+    const result = await db.transaction(async (tx) => {
+      if (listOrganizations.length === 0) {
+        return { addedCount: 0, skippedCount: 0, organizationCount: 0 };
+      }
+      const inserted = await tx
+        .insert(partnerOrganizationMemberships)
+        .values(
+          listOrganizations.map((organization) => ({
+            partnerPageId: pageId,
+            organizationId: organization.id,
+            sourceColumn: `Saved list: ${list[0].name}`,
+          })),
+        )
+        .onConflictDoNothing()
+        .returning({ id: partnerOrganizationMemberships.id });
+      return {
+        addedCount: inserted.length,
+        skippedCount: listOrganizations.length - inserted.length,
+        organizationCount: listOrganizations.length,
+      };
+    });
+
+    res.status(201).json({
+      data: {
+        list: list[0],
+        ...result,
+      },
     });
   }),
 );
