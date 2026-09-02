@@ -131,7 +131,7 @@ export default function PartnerLandingPage() {
         <div className="absolute inset-0 opacity-20" style={{ backgroundImage: "radial-gradient(circle at 80% 10%, white 0, transparent 32%), radial-gradient(circle at 10% 90%, white 0, transparent 26%)" }} />
         <div className="relative mx-auto max-w-6xl">
           <div className="mb-8 flex items-center gap-4">
-            {page.logoUrl ? <img src={page.logoUrl} alt={`${page.officialName} logo`} className="h-20 w-20 rounded-2xl bg-white/95 object-contain p-2 shadow-xl" /> : <div className="grid h-20 w-20 place-items-center rounded-2xl bg-white/20"><Building2 className="h-10 w-10" /></div>}
+            {page.logoUrl ? <img src={page.logoUrl} alt={`${page.officialName} logo`} className="h-32 w-32 rounded-3xl bg-white/95 object-contain p-3 shadow-xl md:h-40 md:w-40" /> : <div className="grid h-32 w-32 place-items-center rounded-3xl bg-white/20 md:h-40 md:w-40"><Building2 className="h-16 w-16 md:h-20 md:w-20" /></div>}
             <div><div className="text-sm font-black uppercase tracking-[0.22em] opacity-80">{page.associationLabel}</div><div className="text-xl font-black md:text-2xl">{page.officialName}</div></div>
           </div>
           <h1 className="max-w-4xl text-4xl font-black leading-[0.98] tracking-tight md:text-7xl">They run your season. Kinectem makes it last.</h1>
