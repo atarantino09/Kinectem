@@ -14,6 +14,7 @@ import kinectemIcon from "@assets/kinectem_icon_1788367110859.png";
 import {
   ArrowRight,
   Building2,
+  CalendarDays,
   CheckCircle2,
   MapPin,
   Pencil,
@@ -287,29 +288,104 @@ export default function PartnerLandingPage() {
 
       {featuredCompetition && (
         <section className="relative z-10 mx-auto -mt-8 max-w-6xl px-5" data-testid="featured-partner-competition">
-          <Card className="rounded-3xl border-0 shadow-xl">
-            <CardContent className="flex min-w-0 flex-col gap-5 p-6 md:flex-row md:items-center md:justify-between md:p-8">
-              <div className="flex min-w-0 items-start gap-4">
-                <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl text-white" style={{ background: page.primaryColor }}>
-                  <Trophy className="h-7 w-7" />
+          <Card
+            className="overflow-hidden rounded-[2rem] border-0 p-1 shadow-[0_24px_70px_-28px_rgba(15,23,42,0.65)]"
+            style={{
+              backgroundImage: `linear-gradient(125deg, ${page.primaryColor}, ${page.secondaryColor})`,
+            }}
+          >
+            <CardContent className="relative isolate overflow-hidden rounded-[1.75rem] bg-white/95 p-5 sm:p-7 md:p-8">
+              <div
+                className="pointer-events-none absolute -right-10 -top-12 h-40 w-40 rounded-full opacity-20 blur-2xl"
+                style={{ background: page.secondaryColor }}
+                aria-hidden="true"
+              />
+              <div
+                className="pointer-events-none absolute -bottom-16 left-1/3 h-36 w-36 rounded-full opacity-15 blur-2xl"
+                style={{ background: page.primaryColor }}
+                aria-hidden="true"
+              />
+              <div className="relative flex min-w-0 flex-col gap-6 md:flex-row md:items-center md:justify-between">
+                <div className="flex min-w-0 items-start gap-4 sm:gap-5">
+                  <div
+                    className="relative grid h-20 w-20 shrink-0 place-items-center rounded-[1.5rem] text-white shadow-lg sm:h-24 sm:w-24"
+                    style={{
+                      background: `linear-gradient(145deg, ${page.primaryColor}, ${page.secondaryColor})`,
+                      color: readableText(page.primaryColor),
+                      boxShadow: `0 14px 28px -12px ${page.primaryColor}`,
+                    }}
+                    aria-hidden="true"
+                  >
+                    <div className="absolute inset-2 rounded-[1rem] border border-current/20" />
+                    <Trophy className="relative h-9 w-9 sm:h-11 sm:w-11" strokeWidth={2.2} />
+                    <Sparkles className="absolute right-2.5 top-2.5 h-3.5 w-3.5 opacity-80" />
+                  </div>
+                  <div className="min-w-0 pt-1">
+                    <div
+                      className="flex flex-wrap items-center gap-2 text-xs font-black uppercase tracking-[0.18em]"
+                      style={{ color: readableBrandInk(page.primaryColor) }}
+                    >
+                      <span>Featured competition</span>
+                      <span
+                        className="rounded-full px-2 py-1 text-[10px] tracking-[0.14em]"
+                        style={{
+                          backgroundColor: `${page.primaryColor}12`,
+                          color: readableBrandInk(page.primaryColor),
+                        }}
+                      >
+                        Event spotlight
+                      </span>
+                    </div>
+                    <h2 className="mt-2 break-words text-3xl font-black leading-tight tracking-tight text-slate-950 sm:text-4xl">
+                      {featuredCompetition.name}
+                    </h2>
+                    <div className="mt-4 flex min-w-0 flex-wrap gap-2 text-xs font-bold text-slate-700 sm:text-sm">
+                      <span
+                        className="inline-flex max-w-full items-center gap-1.5 rounded-full border px-3 py-1.5 capitalize"
+                        style={{
+                          borderColor: `${page.primaryColor}30`,
+                          backgroundColor: `${page.primaryColor}0d`,
+                          color: readableBrandInk(page.primaryColor),
+                        }}
+                        data-testid="featured-competition-type"
+                      >
+                        <Trophy className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                        <span className="break-words">{featuredCompetition.type}</span>
+                      </span>
+                      <span
+                        className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5"
+                        data-testid="featured-competition-dates"
+                      >
+                        <CalendarDays className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                        <span className="break-words">
+                          {competitionDate(featuredCompetition.startDate)} – {competitionDate(featuredCompetition.endDate)}
+                        </span>
+                      </span>
+                      {featuredCompetition.location && (
+                        <span
+                          className="inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5"
+                          data-testid="featured-competition-location"
+                        >
+                          <MapPin className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                          <span className="break-words">{featuredCompetition.location}</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <div className="text-xs font-black uppercase tracking-[0.18em]" style={{ color: page.primaryColor }}>Featured competition</div>
-                  <h2 className="mt-1 break-words text-2xl font-black text-slate-900">{featuredCompetition.name}</h2>
-                  <p className="mt-1 break-words text-sm capitalize text-slate-600">
-                    {featuredCompetition.type} · {competitionDate(featuredCompetition.startDate)} – {competitionDate(featuredCompetition.endDate)}
-                    {featuredCompetition.location ? ` · ${featuredCompetition.location}` : ""}
-                  </p>
-                </div>
+                <Link
+                  href={`/c/${encodeURIComponent(featuredCompetition.slug)}`}
+                  className="w-full shrink-0 md:w-auto md:min-w-[11rem]"
+                >
+                  <Button
+                    className="h-12 w-full rounded-2xl px-5 text-sm font-black shadow-lg transition-transform hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 active:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none md:h-14"
+                    style={{ background: page.primaryColor, color: readableText(page.primaryColor) }}
+                    data-testid="link-featured-partner-competition"
+                  >
+                    View competition <ArrowRight className="ml-1 h-4 w-4" />
+                  </Button>
+                </Link>
               </div>
-              <Link
-                href={`/c/${encodeURIComponent(featuredCompetition.slug)}`}
-                className="w-full shrink-0 md:w-auto"
-              >
-                <Button className="w-full rounded-xl font-black md:w-auto" style={{ background: page.primaryColor }} data-testid="link-featured-partner-competition">
-                  View competition <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              </Link>
             </CardContent>
           </Card>
         </section>

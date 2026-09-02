@@ -60,9 +60,40 @@ describe("PartnerLandingPage featured competition", () => {
     const card = await screen.findByTestId("featured-partner-competition");
     expect(card).toHaveTextContent("Fall Classic");
     expect(card).toHaveTextContent("Riverside Sports Complex");
+    expect(screen.getByText("Featured competition")).toBeInTheDocument();
+    expect(screen.getByText("Event spotlight")).toBeInTheDocument();
+    expect(screen.getByTestId("featured-competition-type")).toHaveTextContent("tournament");
+    expect(screen.getByTestId("featured-competition-dates")).toHaveTextContent("Oct 3, 2026 – Oct 4, 2026");
+    expect(screen.getByTestId("featured-competition-location")).toHaveTextContent("Riverside Sports Complex");
     expect(
       screen.getByTestId("link-featured-partner-competition").closest("a"),
     ).toHaveAttribute("href", "/c/fall-classic-2026");
+  });
+
+  it("keeps the featured layout scannable when the public location is missing", async () => {
+    mockedFetch.mockResolvedValue(
+      partnerResponse({
+        id: "competition-2",
+        slug: "winter-league-2026",
+        name: "Winter League",
+        type: "league",
+        startDate: "2026-12-01",
+        endDate: "2027-01-31",
+        location: null,
+      }) as never,
+    );
+
+    renderWithProviders(<PartnerLandingPage />);
+
+    const card = await screen.findByTestId("featured-partner-competition");
+    expect(card).toHaveTextContent("Winter League");
+    expect(screen.getByTestId("featured-competition-type")).toHaveTextContent("league");
+    expect(screen.getByTestId("featured-competition-dates")).toHaveTextContent("Dec 1, 2026 – Jan 31, 2027");
+    expect(screen.queryByTestId("featured-competition-location")).not.toBeInTheDocument();
+    expect(screen.getByTestId("link-featured-partner-competition").closest("a")).toHaveAttribute(
+      "href",
+      "/c/winter-league-2026",
+    );
   });
 
   it("shows the partner edit console link only to platform admins", async () => {
