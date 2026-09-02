@@ -262,4 +262,57 @@ describe("PartnerLandingPage featured competition", () => {
       "/organizations/mine?new=1",
     );
   });
+
+  it("scrolls the selected access request into view and updates when switching clubs", async () => {
+    mockedFetch.mockResolvedValue(
+      partnerResponse(null, [
+        {
+          id: "org-1",
+          name: "North Stars Soccer",
+          location: "Riverside",
+          city: "Riverside",
+          state: "CA",
+          logoUrl: null,
+          canRequestClaim: true,
+          teams: [],
+        },
+        {
+          id: "org-2",
+          name: "Harbor United",
+          location: "Bayview",
+          city: "Bayview",
+          state: "CA",
+          logoUrl: null,
+          canRequestClaim: true,
+          teams: [],
+        },
+      ]) as never,
+    );
+
+    const scrollIntoView = vi.spyOn(Element.prototype, "scrollIntoView");
+    const user = userEvent.setup();
+
+    try {
+      renderWithProviders(<PartnerLandingPage />);
+      await user.click(await screen.findByRole("button", { name: "Find Your Club" }));
+
+      await user.click(screen.getAllByRole("button", { name: "Request access" })[0]);
+      const requestPanel = await screen.findByTestId("partner-access-request");
+      expect(requestPanel).toHaveTextContent("North Stars Soccer");
+      expect(scrollIntoView).toHaveBeenLastCalledWith({
+        behavior: "smooth",
+        block: "center",
+      });
+
+      await user.click(screen.getAllByRole("button", { name: "Request access" })[1]);
+      expect(requestPanel).toHaveTextContent("Harbor United");
+      expect(scrollIntoView).toHaveBeenLastCalledWith({
+        behavior: "smooth",
+        block: "center",
+      });
+      expect(scrollIntoView).toHaveBeenCalledTimes(2);
+    } finally {
+      scrollIntoView.mockRestore();
+    }
+  });
 });

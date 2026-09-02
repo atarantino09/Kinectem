@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { customFetch, useGetLoggedInUser } from "@workspace/api-client-react";
@@ -136,6 +136,7 @@ export default function PartnerLandingPage() {
   const [form, setForm] = useState({ organizationName: "", fullName: "", title: "", confirmCorrect: false, confirmAuthorized: false });
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const requestPanelRef = useRef<HTMLDivElement>(null);
   const { data: me } = useGetLoggedInUser();
   const partner = useQuery<PartnerResponse>({
     queryKey: ["partner-page", slug],
@@ -144,6 +145,14 @@ export default function PartnerLandingPage() {
     retry: false,
   });
   const data = partner.data?.data;
+  useEffect(() => {
+    if (!selected) return;
+    requestPanelRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  }, [selected?.id]);
+
   // /users/me is the session user's private profile. Platform admins are the
   // only users who should see the edit entry point on this public page.
   const isPlatformAdmin = me?.role === "admin";
@@ -615,7 +624,12 @@ export default function PartnerLandingPage() {
         )}
 
         {selected && (
-          <Card className="mt-10 overflow-hidden rounded-3xl border-2" style={{ borderColor: page.primaryColor }}>
+          <Card
+            ref={requestPanelRef}
+            className="mt-10 overflow-hidden rounded-3xl border-2"
+            style={{ borderColor: page.primaryColor }}
+            data-testid="partner-access-request"
+          >
             <CardContent className="p-6 md:p-9">
               {submitted ? (
                 <div className="text-center">
