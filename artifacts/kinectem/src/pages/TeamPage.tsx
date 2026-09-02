@@ -52,10 +52,31 @@ import { useIsLg } from "@/hooks/use-mobile";
 
 // First-run walkthrough is shown ONCE per user, per browser (the OpenAPI
 // contract is locked, so there's no server-side "seen onboarding" flag). The
-// "seen" flag is a single global key — the first time a manager (coach or org
-// admin) opens any team page they get the walkthrough, and never again on any
-// other team. Bump the key to re-show the tour to everyone after a revision.
+// first time a manager (coach or org admin) opens any team page they get the
+// walkthrough, and never again on any other team. Bump the key to re-show the
+// tour to everyone after a revision.
 const TEAM_TOUR_KEY = "kinectem:team-tour-v1";
+
+function teamTourStorageKey(userId: string) {
+  return `${TEAM_TOUR_KEY}:${userId}`;
+}
+
+function hasSeenTeamTour(storageKey: string) {
+  try {
+    return localStorage.getItem(storageKey) === "1";
+  } catch {
+    // storage blocked (private mode etc.) — treat as not seen
+    return false;
+  }
+}
+
+function markTeamTourSeen(storageKey: string) {
+  try {
+    localStorage.setItem(storageKey, "1");
+  } catch {
+    // Ignore storage failures (private mode etc.) — the tour can still show.
+  }
+}
 
 export default function TeamPage() {
   const params = useParams<{ teamId: string }>();
@@ -251,20 +272,18 @@ export default function TeamPage() {
   // The "seen" flag is scoped per user id — a bare per-browser key meant a
   // brand-new coach signing in on a browser where ANY other account had
   // already dismissed the tour would never see it.
-  const tourStorageKey = me?.id ? `${TEAM_TOUR_KEY}:${me.id}` : null;
+  const tourStorageKey = me?.id ? teamTourStorageKey(me.id) : null;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!canManage || wantsWelcome || wantsTour || tourRequested) return;
     if (tourSteps.length === 0) return;
     if (!teamId || !tourStorageKey) return;
-    let alreadySeen = false;
-    try {
-      alreadySeen = localStorage.getItem(tourStorageKey) === "1";
-    } catch {
-      // storage blocked (private mode etc.) — treat as not seen
-    }
-    if (!alreadySeen) setTourOpen(true);
+    if (hasSeenTeamTour(tourStorageKey)) return;
+    // Mark on open, not only after the last step. Leaving a walkthrough early
+    // should not make it reappear on every later team visit.
+    markTeamTourSeen(tourStorageKey);
+    setTourOpen(true);
   }, [
     canManage,
     wantsWelcome,
@@ -288,7 +307,16 @@ export default function TeamPage() {
     ) {
       return;
     }
+    if (!tourStorageKey) return;
+    // Organization-page links carry showAround=1 as a one-shot handoff. It
+    // must still obey the per-user first-run rule, otherwise every visit from
+    // an organization page reopens the walkthrough.
+    if (hasSeenTeamTour(tourStorageKey)) {
+      setTourRequested(false);
+      return;
+    }
     const timer = window.setTimeout(() => {
+      markTeamTourSeen(tourStorageKey);
       setTourOpen(true);
       setTourRequested(false);
     }, 3000);
@@ -300,14 +328,11 @@ export default function TeamPage() {
     canManage,
     wantsWelcome,
     tourSteps.length,
+    tourStorageKey,
   ]);
 
   const finishTour = () => {
-    try {
-      if (tourStorageKey) localStorage.setItem(tourStorageKey, "1");
-    } catch {
-      // ignore storage failures (private mode etc.) — tour just won't persist
-    }
+    if (tourStorageKey) markTeamTourSeen(tourStorageKey);
     setTourOpen(false);
     setExpanded("posts");
   };

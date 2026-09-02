@@ -56,16 +56,14 @@ instead.
 
 # Partner-directory manager-tour handoff
 
-Partner-directory club links should open the normal organization page, leave it
-visible for about three seconds, then replay the existing six-step organization
-manager tour. Team links on that page should carry the walkthrough forward by
-opening the selected team and replaying its existing manager tour after the same
-delay.
+Partner-directory club links can carry a one-shot `showAround=1` signal that
+opens the normal team manager tour after a short delay, but the signal must
+still obey the per-user first-run flag. It is an entry hint, not a bypass.
 
-**Why:** The partner flow should demonstrate the full management experience using
-the walkthroughs already maintained on organization and team pages, not create
-separate visitor-facing tours with different guidance.
+**Why:** The handoff helps a coach understand the management experience on their
+first team visit, while repeated organization-to-team navigation must not reopen
+the walkthrough.
 
-**How to apply:** Keep both replays role-gated to viewers who can use the controls,
-consume each entry signal so refresh does not replay it, and do not let either
-tour stack with first-run onboarding or post-create dialogs.
+**How to apply:** Keep the handoff role-gated, consume the URL signal, check the
+same per-user storage key before scheduling it, and mark the tour seen when it
+opens so leaving early does not cause repeats.
