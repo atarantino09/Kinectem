@@ -239,9 +239,9 @@ export default function PartnerLandingPage() {
               </div>
             </div>
           </div>
-          <h1 className="max-w-4xl text-4xl font-black leading-[0.98] tracking-tight md:text-7xl">{page.officialName} runs the season. Kinectem preserves the story.</h1>
+          <h1 className="max-w-4xl text-4xl font-black leading-[0.98] tracking-tight md:text-7xl">Kinectem is the youth-sports platform where the story of your season comes to life.</h1>
           <p className="mt-6 max-w-3xl text-lg font-semibold leading-relaxed opacity-90 md:text-xl">
-            Kinectem preserves the game stories that would otherwise disappear — turning them into lasting recaps, player and team histories, and one connected club story alongside the tools your club already uses.
+            Kinectem is not another registration, scheduling, or communication app — it's the layer that sits on top of the one you already use. They run your season. Kinectem makes it last.
           </p>
           <Button className="mt-8 rounded-full px-6 font-black" style={{ background: foreground, color: page.primaryColor }} onClick={() => { setTab("clubs"); document.getElementById("partner-content")?.scrollIntoView({ behavior: "smooth" }); }}>
             Find your club <ArrowRight className="ml-2 h-4 w-4" />
