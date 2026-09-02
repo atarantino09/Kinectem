@@ -56,6 +56,36 @@ function locationOf(org: PartnerOrganization) {
   return [org.city, org.state].filter(Boolean).join(", ") || org.location || "Location coming soon";
 }
 
+const storyPoints = [
+  {
+    title: "You already have software that runs your season.",
+    body: "TeamSnap, Byga, PlayMetrics, GotSport, Stack — whichever one your club uses, it gets you to kickoff. None of that changes when you add Kinectem.",
+  },
+  {
+    title: "Kinectem starts where those platforms stop.",
+    body: "After every game, a coach jots down a few notes. AI Assist turns those notes into a complete game recap, auto-tags the roster, and creates a lasting written history on every team and player page.",
+  },
+  {
+    title: "Your club page brings every team's story together.",
+    body: "Every team, every game recap, and every player appears under your crest. Every game from every team in your club shows up in one place, on its own, as it happens.",
+  },
+];
+
+const valueProps = [
+  {
+    title: "Two-minute game recaps with AI Assist",
+    body: "Turn a coach's quick notes into a story families want to read and share.",
+  },
+  {
+    title: "Permanent player histories that grow every season",
+    body: "Give every athlete a living archive of the moments that made their season.",
+  },
+  {
+    title: "One living club page for every team's story",
+    body: "Bring every team, recap, and player together under one recognizable home.",
+  },
+];
+
 export default function PartnerLandingPage() {
   const [, params] = useRoute("/partners/:slug");
   const slug = params?.slug ?? "";
@@ -144,7 +174,14 @@ export default function PartnerLandingPage() {
         </div>
       </section>
 
-      <section id="partner-content" className="mx-auto max-w-6xl px-5 py-10 md:py-16">
+      <section
+        id="partner-content"
+        className="relative overflow-hidden px-5 py-10 md:py-16"
+        style={{
+          backgroundImage: `radial-gradient(circle at 0% 8%, ${page.primaryColor}16 0, transparent 28%), radial-gradient(circle at 100% 44%, ${page.secondaryColor}18 0, transparent 30%)`,
+        }}
+      >
+        <div className="relative mx-auto max-w-6xl">
         <div className="mb-8 inline-flex w-full rounded-2xl border bg-white p-1 shadow-sm md:w-auto">
           {(["why", "clubs"] as const).map((value) => (
             <button key={value} onClick={() => setTab(value)} className={`flex-1 rounded-xl px-6 py-3 text-sm font-black md:flex-none ${tab === value ? "text-white shadow" : "text-slate-600"}`} style={tab === value ? { background: page.primaryColor } : undefined}>
@@ -154,19 +191,143 @@ export default function PartnerLandingPage() {
         </div>
 
         {tab === "why" ? (
-          <div className="grid gap-6 lg:grid-cols-[1.1fr_.9fr]">
-            <div className="space-y-8 rounded-3xl bg-white p-7 shadow-sm md:p-10">
-              <p className="text-xl font-semibold leading-relaxed text-slate-700">{intro}</p>
-              <div><h2 className="text-2xl font-black">You already have software that runs your season.</h2><p className="mt-3 leading-relaxed text-slate-600">TeamSnap, Byga, PlayMetrics, GotSport, Stack — whichever one your club uses, it gets you to kickoff. None of that changes when you add Kinectem.</p></div>
-              <div><h2 className="text-2xl font-black">Kinectem starts where those platforms stop.</h2><p className="mt-3 leading-relaxed text-slate-600">After every game, a coach jots down a few notes. AI Assist turns those notes into a complete game recap, auto-tags the roster, and creates a lasting written history on every team and player page.</p></div>
-              <div><h2 className="text-2xl font-black">Your club page brings every team's story together.</h2><p className="mt-3 leading-relaxed text-slate-600">Every team, every game recap, and every player appears under your crest. Every game from every team in your club shows up in one place, on its own, as it happens.</p></div>
-              <div className="rounded-2xl p-5 text-white" style={{ background: page.primaryColor }}><h2 className="text-2xl font-black">Your club page is already built.</h2><p className="mt-2 opacity-90">We've built the organization page and every team page for the clubs across {page.officialName}. Yours is sitting there waiting.</p></div>
-            </div>
-            <div className="space-y-4">
-              {["Two-minute game recaps with AI Assist", "Permanent player histories that grow every season", "One living club page for every team's story"].map((text) => (
-                <Card key={text} className="rounded-2xl border-0 shadow-sm"><CardContent className="flex gap-4 p-6"><span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-white" style={{ background: page.secondaryColor }}><Sparkles className="h-5 w-5" /></span><div className="font-black text-slate-800">{text}</div></CardContent></Card>
-              ))}
-              <Button className="w-full rounded-xl font-black" style={{ background: page.primaryColor }} onClick={() => setTab("clubs")}>Find your club</Button>
+          <div
+            className="relative isolate overflow-hidden rounded-[2rem] border p-2 shadow-[0_28px_90px_-42px_rgba(15,23,42,0.55)]"
+            style={{
+              backgroundImage: `linear-gradient(135deg, ${page.primaryColor}30, ${page.secondaryColor}42), linear-gradient(120deg, #ffffff, ${page.secondaryColor}12)`,
+            }}
+          >
+            <div
+              className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full opacity-30 blur-3xl"
+              style={{ backgroundColor: page.primaryColor }}
+            />
+            <div
+              className="pointer-events-none absolute -bottom-32 -right-20 h-80 w-80 rounded-full opacity-25 blur-3xl"
+              style={{ backgroundColor: page.secondaryColor }}
+            />
+            <div className="relative grid gap-5 lg:grid-cols-2 lg:items-stretch">
+              <div className="flex h-full flex-col rounded-[1.6rem] border border-white/80 bg-white/95 p-6 shadow-xl shadow-slate-900/5 backdrop-blur-xl md:p-8">
+                <div className="flex items-center gap-3">
+                  <span
+                    className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-white shadow-lg"
+                    style={{ background: page.primaryColor }}
+                  >
+                    <Sparkles className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-[0.2em]" style={{ color: page.primaryColor }}>
+                      The Kinectem difference
+                    </p>
+                    <p className="mt-1 text-sm font-bold text-slate-500">Built for what happens after kickoff</p>
+                  </div>
+                </div>
+                <p className="mt-7 text-xl font-bold leading-relaxed text-slate-700 md:text-2xl">
+                  {intro}
+                </p>
+                <div className="mt-7 grid gap-3">
+                  {storyPoints.map((point, index) => (
+                    <article
+                      key={point.title}
+                      className="group rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4 transition duration-200 hover:-translate-y-0.5 hover:border-white hover:bg-white hover:shadow-lg md:p-5"
+                    >
+                      <div className="flex items-start gap-3">
+                        <span
+                          className="grid h-8 w-8 shrink-0 place-items-center rounded-xl text-xs font-black"
+                          style={{
+                            color: page.primaryColor,
+                            backgroundColor: `${page.primaryColor}16`,
+                          }}
+                        >
+                          {String(index + 1).padStart(2, "0")}
+                        </span>
+                        <div>
+                          <h2 className="text-lg font-black leading-tight text-slate-900 md:text-xl">
+                            {point.title}
+                          </h2>
+                          <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                            {point.body}
+                          </p>
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex h-full flex-col gap-4">
+                <div className="rounded-[1.6rem] border border-white/80 bg-white/75 p-6 shadow-lg shadow-slate-900/5 backdrop-blur-xl">
+                  <div className="flex items-center justify-between gap-4">
+                    <p className="text-xs font-black uppercase tracking-[0.2em]" style={{ color: page.primaryColor }}>
+                      Why organizations add Kinectem
+                    </p>
+                    <span className="rounded-full bg-white/80 px-3 py-1 text-xs font-black text-slate-500 shadow-sm">
+                      01 — 03
+                    </span>
+                  </div>
+                  <p className="mt-3 text-sm font-semibold leading-relaxed text-slate-600">
+                    Keep the tools your teams already trust — and finally make
+                    every game matter after the final whistle.
+                  </p>
+                </div>
+                {valueProps.map((valueProp, index) => (
+                  <Card
+                    key={valueProp.title}
+                    className="flex-1 rounded-[1.6rem] border border-white/80 bg-white/90 shadow-lg shadow-slate-900/5 transition duration-200 hover:-translate-y-0.5 hover:shadow-xl"
+                  >
+                    <CardContent className="flex h-full items-start gap-4 p-5 md:p-6">
+                      <span
+                        className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-white shadow-md"
+                        style={{
+                          background: `linear-gradient(135deg, ${page.primaryColor}, ${page.secondaryColor})`,
+                        }}
+                      >
+                        <Sparkles className="h-5 w-5" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="mb-2 text-xs font-black uppercase tracking-[0.18em]" style={{ color: page.secondaryColor }}>
+                          {String(index + 1).padStart(2, "0")} / KINECTEM
+                        </div>
+                        <h3 className="text-lg font-black leading-tight text-slate-900">
+                          {valueProp.title}
+                        </h3>
+                        <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                          {valueProp.body}
+                        </p>
+                      </div>
+                      <CheckCircle2 className="h-5 w-5 shrink-0" style={{ color: page.primaryColor }} />
+                    </CardContent>
+                  </Card>
+                ))}
+                <div
+                  className="relative overflow-hidden rounded-[1.6rem] p-6 shadow-xl md:p-7"
+                  style={{
+                    color: foreground,
+                    background: `linear-gradient(135deg, ${page.primaryColor}, ${page.secondaryColor})`,
+                  }}
+                >
+                  <div className="pointer-events-none absolute -right-12 -top-16 h-40 w-40 rounded-full border-[22px] border-white/15" />
+                  <div className="relative">
+                    <p className="text-xs font-black uppercase tracking-[0.2em] opacity-75">
+                      Ready when your next game ends?
+                    </p>
+                    <h2 className="mt-2 text-2xl font-black tracking-tight">
+                      Your club page is already built.
+                    </h2>
+                    <p className="mt-2 max-w-lg text-sm font-semibold leading-relaxed opacity-80">
+                      We&apos;ve built the organization page and every team page
+                      for the clubs across {page.officialName}. Yours is
+                      waiting.
+                    </p>
+                    <Button
+                      className="mt-5 w-full rounded-xl px-5 font-black sm:w-auto"
+                      style={{ background: foreground, color: page.primaryColor }}
+                      onClick={() => setTab("clubs")}
+                    >
+                      Find your club <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         ) : (
@@ -219,6 +380,7 @@ export default function PartnerLandingPage() {
             </CardContent>
           </Card>
         )}
+        </div>
       </section>
     </main>
   );
