@@ -46,10 +46,38 @@ type PartnerResponse = {
   };
 };
 
-function readableText(hex: string) {
-  const n = Number.parseInt(hex.slice(1), 16);
-  const lum = 0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255);
-  return lum > 155 ? "#111827" : "#ffffff";
+function hexRgb(hex: string): [number, number, number] {
+  const match = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!match) return [17, 24, 39];
+  return [
+    Number.parseInt(match[1].slice(0, 2), 16),
+    Number.parseInt(match[1].slice(2, 4), 16),
+    Number.parseInt(match[1].slice(4, 6), 16),
+  ];
+}
+
+function relativeLuminance(hex: string) {
+  return hexRgb(hex).reduce((total, value, index) => {
+    const channel = value / 255;
+    const linear = channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+    return total + linear * [0.2126, 0.7152, 0.0722][index];
+  }, 0);
+}
+
+function contrastRatio(first: string, second: string) {
+  const lighter = Math.max(relativeLuminance(first), relativeLuminance(second));
+  const darker = Math.min(relativeLuminance(first), relativeLuminance(second));
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function readableText(background: string) {
+  const darkText = "#111827";
+  const lightText = "#ffffff";
+  return contrastRatio(background, darkText) >= contrastRatio(background, lightText) ? darkText : lightText;
+}
+
+function readableBrandInk(brandColor: string) {
+  return contrastRatio(brandColor, "#ffffff") >= 4.5 ? brandColor : "#0f172a";
 }
 
 function locationOf(org: PartnerOrganization) {
@@ -152,10 +180,10 @@ export default function PartnerLandingPage() {
       <section
         className="relative overflow-hidden px-5 py-16 md:py-24"
         style={{
-          color: foreground,
+          color: "#ffffff",
           background: page.bannerUrl
-            ? `linear-gradient(110deg, ${page.primaryColor}f2, ${page.secondaryColor}cc), url("${page.bannerUrl}") center/cover`
-            : `linear-gradient(125deg, ${page.primaryColor}, ${page.secondaryColor})`,
+            ? `linear-gradient(110deg, rgba(15,23,42,0.18), rgba(15,23,42,0.52)), linear-gradient(110deg, ${page.primaryColor}f2, ${page.secondaryColor}cc), url("${page.bannerUrl}") center/cover`
+            : `linear-gradient(110deg, rgba(15,23,42,0.18), rgba(15,23,42,0.52)), linear-gradient(125deg, ${page.primaryColor}, ${page.secondaryColor})`,
         }}
       >
         <div className="absolute inset-0 opacity-20" style={{ backgroundImage: "radial-gradient(circle at 80% 10%, white 0, transparent 32%), radial-gradient(circle at 10% 90%, white 0, transparent 26%)" }} />
@@ -184,7 +212,7 @@ export default function PartnerLandingPage() {
         <div className="relative mx-auto max-w-6xl">
         <div className="mb-8 inline-flex w-full rounded-2xl border bg-white p-1 shadow-sm md:w-auto">
           {(["why", "clubs"] as const).map((value) => (
-            <button key={value} onClick={() => setTab(value)} className={`flex-1 rounded-xl px-6 py-3 text-sm font-black md:flex-none ${tab === value ? "text-white shadow" : "text-slate-600"}`} style={tab === value ? { background: page.primaryColor } : undefined}>
+            <button key={value} onClick={() => setTab(value)} className={`flex-1 rounded-xl px-6 py-3 text-sm font-black md:flex-none ${tab === value ? "shadow" : "text-slate-600"}`} style={tab === value ? { background: page.primaryColor, color: readableText(page.primaryColor) } : undefined}>
               {value === "why" ? "Why Kinectem" : "Find Your Club"}
             </button>
           ))}
@@ -215,7 +243,7 @@ export default function PartnerLandingPage() {
                     <Sparkles className="h-5 w-5" />
                   </span>
                   <div>
-                    <p className="text-xs font-black uppercase tracking-[0.2em]" style={{ color: page.primaryColor }}>
+                    <p className="text-xs font-black uppercase tracking-[0.2em]" style={{ color: readableBrandInk(page.primaryColor) }}>
                       The Kinectem difference
                     </p>
                     <p className="mt-1 text-sm font-bold text-slate-500">Built for what happens after kickoff</p>
@@ -234,7 +262,7 @@ export default function PartnerLandingPage() {
                         <span
                           className="grid h-8 w-8 shrink-0 place-items-center rounded-xl text-xs font-black"
                           style={{
-                            color: page.primaryColor,
+                            color: readableBrandInk(page.primaryColor),
                             backgroundColor: `${page.primaryColor}16`,
                           }}
                         >
@@ -257,7 +285,7 @@ export default function PartnerLandingPage() {
               <div className="flex h-full flex-col gap-4">
                 <div className="rounded-[1.6rem] border border-white/80 bg-white/75 p-6 shadow-lg shadow-slate-900/5 backdrop-blur-xl">
                   <div className="flex items-center justify-between gap-4">
-                    <p className="text-xs font-black uppercase tracking-[0.2em]" style={{ color: page.primaryColor }}>
+                    <p className="text-xs font-black uppercase tracking-[0.2em]" style={{ color: readableBrandInk(page.primaryColor) }}>
                       Why organizations add Kinectem
                     </p>
                     <span className="rounded-full bg-white/80 px-3 py-1 text-xs font-black text-slate-500 shadow-sm">
@@ -278,13 +306,14 @@ export default function PartnerLandingPage() {
                       <span
                         className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-white shadow-md"
                         style={{
-                          background: `linear-gradient(135deg, ${page.primaryColor}, ${page.secondaryColor})`,
+                          background: page.secondaryColor,
+                          color: readableText(page.secondaryColor),
                         }}
                       >
                         <Sparkles className="h-5 w-5" />
                       </span>
                       <div className="min-w-0 flex-1">
-                        <div className="mb-2 text-xs font-black uppercase tracking-[0.18em]" style={{ color: page.secondaryColor }}>
+                        <div className="mb-2 text-xs font-black uppercase tracking-[0.18em]" style={{ color: readableBrandInk(page.secondaryColor) }}>
                           {String(index + 1).padStart(2, "0")} / KINECTEM
                         </div>
                         <h3 className="text-lg font-black leading-tight text-slate-900">
@@ -294,15 +323,15 @@ export default function PartnerLandingPage() {
                           {valueProp.body}
                         </p>
                       </div>
-                      <CheckCircle2 className="h-5 w-5 shrink-0" style={{ color: page.primaryColor }} />
+                      <CheckCircle2 className="h-5 w-5 shrink-0" style={{ color: readableBrandInk(page.primaryColor) }} />
                     </CardContent>
                   </Card>
                 ))}
                 <div
                   className="relative overflow-hidden rounded-[1.6rem] p-6 shadow-xl md:p-7"
                   style={{
-                    color: foreground,
-                    background: `linear-gradient(135deg, ${page.primaryColor}, ${page.secondaryColor})`,
+                    color: "#ffffff",
+                    backgroundImage: `linear-gradient(135deg, rgba(15,23,42,0.2), rgba(15,23,42,0.56)), linear-gradient(135deg, ${page.primaryColor}, ${page.secondaryColor})`,
                   }}
                 >
                   <div className="pointer-events-none absolute -right-12 -top-16 h-40 w-40 rounded-full border-[22px] border-white/15" />
