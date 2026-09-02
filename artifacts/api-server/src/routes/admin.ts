@@ -28,6 +28,7 @@ import {
   guardianLinks,
   stagedCoachInvites,
   orgAdminLists,
+  partnerLandingPages,
 } from "@workspace/db";
 import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
@@ -1603,6 +1604,11 @@ router.get(
           email: users.email,
           avatarUrl: users.avatarUrl,
         },
+        partner: {
+          id: partnerLandingPages.id,
+          slug: partnerLandingPages.slug,
+          officialName: partnerLandingPages.officialName,
+        },
       })
       .from(organizationClaimRequests)
       .leftJoin(
@@ -1610,6 +1616,10 @@ router.get(
         eq(organizations.id, organizationClaimRequests.organizationId),
       )
       .leftJoin(users, eq(users.id, organizationClaimRequests.requestedByUserId))
+      .leftJoin(
+        partnerLandingPages,
+        eq(partnerLandingPages.id, organizationClaimRequests.sourcePartnerPageId),
+      )
       .where(filter)
       .orderBy(desc(organizationClaimRequests.createdAt))
       .limit(limit)
@@ -1621,6 +1631,10 @@ router.get(
       decidedAt: r.c.decidedAt?.toISOString() ?? null,
       organization: r.org,
       requester: r.requester,
+      submittedOrganizationName: r.c.submittedOrganizationName,
+      requesterFullName: r.c.requesterFullName,
+      requesterTitle: r.c.requesterTitle,
+      partner: r.c.sourcePartnerPageId ? r.partner : null,
     }));
     res.json({ data: out });
   }),

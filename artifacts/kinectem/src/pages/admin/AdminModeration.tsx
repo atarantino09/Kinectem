@@ -475,6 +475,14 @@ type OrgClaim = {
     email: string | null;
     avatarUrl: string | null;
   } | null;
+  submittedOrganizationName: string | null;
+  requesterFullName: string | null;
+  requesterTitle: string | null;
+  partner: {
+    id: string;
+    slug: string;
+    officialName: string;
+  } | null;
 };
 
 function OrgClaimsPanel() {
@@ -572,6 +580,26 @@ function OrgClaimsPanel() {
                   ? `${c.requester.name} (${c.requester.email ?? "—"})`
                   : "—"}
               </div>
+              {(c.requesterFullName || c.requesterTitle || c.partner) && (
+                <div className="grid gap-1 rounded-md border bg-muted/30 p-3 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Submitted organization:</span>{" "}
+                    <span className="font-medium">{c.submittedOrganizationName ?? "—"}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Identity:</span>{" "}
+                    <span className="font-medium">
+                      {[c.requesterFullName, c.requesterTitle].filter(Boolean).join(" · ") || "—"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Partner source:</span>{" "}
+                    <span className="font-medium">
+                      {c.partner ? `${c.partner.officialName} (/${c.partner.slug})` : "Direct / legacy request"}
+                    </span>
+                  </div>
+                </div>
+              )}
               {c.status === "pending" && (
                 <div className="flex gap-2 pt-2 flex-wrap">
                   <Button

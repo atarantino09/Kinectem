@@ -71,3 +71,4 @@
 - [lib/db project-reference build trap](lib-db-project-reference-build.md) — new schema exports invisible to api-server typecheck until `tsc --build lib/db` reruns; plus an any-typed req.body narrowing gotcha with drizzle eq().
 - [user-event clipboard mocks](user-event-clipboard-mocks.md) — userEvent.setup replaces navigator.clipboard in JSDOM; spy on writeText only after setup or assertions target a stale mock.
 - [Safe Excel schedule imports](safe-excel-schedule-imports.md) — avoid legacy npm xlsx; bound workbook size and canonicalize true Excel dates before passing CSV to legacy APIs.
+- [Partner landing membership](partner-landing-membership.md) — partner directories attach orgs independently of ownership; duplicates stay distinct and direct secret-link claims remain separate.

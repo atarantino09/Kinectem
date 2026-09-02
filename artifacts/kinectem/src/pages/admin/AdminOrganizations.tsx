@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { AdminLayout } from "@/components/AdminLayout";
 import { OrgClaimLinksContent } from "./AdminOrgClaimLinks";
+import { AdminPartnerLanding } from "./AdminPartnerLanding";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -181,10 +182,13 @@ export default function AdminOrganizations() {
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
   const search = useSearch();
+  const sectionParam = new URLSearchParams(search).get("section");
   const activeSection =
-    new URLSearchParams(search).get("section") === "claim-links"
+    sectionParam === "claim-links"
       ? "claim-links"
-      : "overview";
+      : sectionParam === "partner"
+        ? "partner"
+        : "overview";
   const [promoOnly, setPromoOnly] = useState(false);
   const [parseResult, setParseResult] = useState<OrgImportParseResult | null>(
     null,
@@ -202,11 +206,13 @@ export default function AdminOrganizations() {
   >(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const selectSection = (section: "overview" | "claim-links") => {
+  const selectSection = (section: "overview" | "claim-links" | "partner") => {
     setLocation(
       section === "claim-links"
         ? "/admin/organizations?section=claim-links"
-        : "/admin/organizations",
+        : section === "partner"
+          ? "/admin/organizations?section=partner"
+          : "/admin/organizations",
     );
   };
 
@@ -423,9 +429,25 @@ export default function AdminOrganizations() {
           >
             Claim links & setup
           </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeSection === "partner"}
+            onClick={() => selectSection("partner")}
+            className={`rounded-md px-3 py-2 text-sm font-semibold ${
+              activeSection === "partner"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+            data-testid="tab-org-partner"
+          >
+            Partner landing page
+          </button>
         </div>
 
-        {activeSection === "claim-links" ? (
+        {activeSection === "partner" ? (
+          <AdminPartnerLanding />
+        ) : activeSection === "claim-links" ? (
           <OrgClaimLinksContent embedded />
         ) : (
           <div className="space-y-5" data-testid="admin-org-overview">

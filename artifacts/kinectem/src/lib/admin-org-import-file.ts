@@ -177,8 +177,8 @@ export async function parseOrganizationImportFile(
     const key = group.name.toLowerCase();
     const previous = seenOrganizations.get(key);
     if (previous) {
-      errors.push(
-        `Columns ${previous} and ${group.column} use the same organization name (“${group.name}”).`,
+      warnings.push(
+        `Columns ${previous} and ${group.column} use the same organization name (“${group.name}”). They will remain separate organizations unless you explicitly attach an existing match.`,
       );
     } else {
       seenOrganizations.set(key, group.column);

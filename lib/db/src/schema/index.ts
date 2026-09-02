@@ -444,6 +444,50 @@ export const organizations = pgTable("organizations", {
   adminListIdIdx: index("organizations_admin_list_id_idx").on(t.adminListId),
 }));
 
+// Branded partner/association landing pages. This is an independent
+// directory layer: attaching an organization never changes its owner, teams,
+// posts, billing, or claim token.
+export const partnerLandingPages = pgTable("partner_landing_pages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  slug: text("slug").notNull(),
+  officialName: text("official_name").notNull(),
+  associationLabel: text("association_label").notNull(),
+  introduction: text("introduction").notNull().default(""),
+  logoUrl: text("logo_url"),
+  bannerUrl: text("banner_url"),
+  primaryColor: text("primary_color").notNull().default("#155EEF"),
+  secondaryColor: text("secondary_color").notNull().default("#06B6D4"),
+  published: boolean("published").notNull().default(false),
+  createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => ({
+  slugIdx: uniqueIndex("partner_landing_pages_slug_idx").on(sql`lower(${t.slug})`),
+}));
+
+export const partnerOrganizationMemberships = pgTable("partner_organization_memberships", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  partnerPageId: uuid("partner_page_id").references(() => partnerLandingPages.id, { onDelete: "cascade" }).notNull(),
+  organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
+  visible: boolean("visible").notNull().default(true),
+  sourceColumn: text("source_column"),
+  importOperationId: uuid("import_operation_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  pageOrgUnique: uniqueIndex("partner_membership_page_org_idx").on(t.partnerPageId, t.organizationId),
+  pageIdx: index("partner_membership_page_idx").on(t.partnerPageId),
+  orgIdx: index("partner_membership_org_idx").on(t.organizationId),
+}));
+
+export const partnerImportOperations = pgTable("partner_import_operations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  partnerPageId: uuid("partner_page_id").references(() => partnerLandingPages.id, { onDelete: "cascade" }).notNull(),
+  idempotencyKey: text("idempotency_key").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  retryUnique: uniqueIndex("partner_import_retry_unique").on(t.partnerPageId, t.idempotencyKey),
+}));
+
 // Despite the legacy table name, this records every member of an
 // organization — owners and admins (who can manage the org) as well as
 // regular members who joined without manage privileges. The `role`
@@ -1142,6 +1186,10 @@ export const organizationClaimRequests = pgTable("organization_claim_requests", 
   organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   requestedByUserId: uuid("requested_by_user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
   status: orgClaimStatusEnum("status").notNull().default("pending"),
+  submittedOrganizationName: text("submitted_organization_name"),
+  requesterFullName: text("requester_full_name"),
+  requesterTitle: text("requester_title"),
+  sourcePartnerPageId: uuid("source_partner_page_id").references(() => partnerLandingPages.id, { onDelete: "set null" }),
   decidedByUserId: uuid("decided_by_user_id").references(() => users.id, { onDelete: "set null" }),
   decidedAt: timestamp("decided_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

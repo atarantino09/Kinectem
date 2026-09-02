@@ -2444,6 +2444,60 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
       ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'fan';
     `,
   },
+  {
+    name: "2026-09-02-task-975-partner-landing-pages",
+    sql: `
+      CREATE TABLE IF NOT EXISTS partner_landing_pages (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        slug text NOT NULL,
+        official_name text NOT NULL,
+        association_label text NOT NULL,
+        introduction text NOT NULL DEFAULT '',
+        logo_url text,
+        banner_url text,
+        primary_color text NOT NULL DEFAULT '#155EEF',
+        secondary_color text NOT NULL DEFAULT '#06B6D4',
+        published boolean NOT NULL DEFAULT false,
+        created_by_id uuid REFERENCES users(id) ON DELETE SET NULL,
+        created_at timestamp NOT NULL DEFAULT now(),
+        updated_at timestamp NOT NULL DEFAULT now()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS partner_landing_pages_slug_idx
+        ON partner_landing_pages (lower(slug));
+
+      CREATE TABLE IF NOT EXISTS partner_import_operations (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        partner_page_id uuid NOT NULL REFERENCES partner_landing_pages(id) ON DELETE CASCADE,
+        idempotency_key text NOT NULL,
+        created_at timestamp NOT NULL DEFAULT now()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS partner_import_retry_unique
+        ON partner_import_operations (partner_page_id, idempotency_key);
+
+      CREATE TABLE IF NOT EXISTS partner_organization_memberships (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        partner_page_id uuid NOT NULL REFERENCES partner_landing_pages(id) ON DELETE CASCADE,
+        organization_id uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        visible boolean NOT NULL DEFAULT true,
+        source_column text,
+        import_operation_id uuid REFERENCES partner_import_operations(id) ON DELETE SET NULL,
+        created_at timestamp NOT NULL DEFAULT now()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS partner_membership_page_org_idx
+        ON partner_organization_memberships (partner_page_id, organization_id);
+      CREATE INDEX IF NOT EXISTS partner_membership_page_idx
+        ON partner_organization_memberships (partner_page_id);
+      CREATE INDEX IF NOT EXISTS partner_membership_org_idx
+        ON partner_organization_memberships (organization_id);
+
+      ALTER TABLE organization_claim_requests
+        ADD COLUMN IF NOT EXISTS submitted_organization_name text,
+        ADD COLUMN IF NOT EXISTS requester_full_name text,
+        ADD COLUMN IF NOT EXISTS requester_title text,
+        ADD COLUMN IF NOT EXISTS source_partner_page_id uuid
+          REFERENCES partner_landing_pages(id) ON DELETE SET NULL;
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

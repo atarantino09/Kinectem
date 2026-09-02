@@ -84,6 +84,8 @@ app.post("/api/v1/admin/competition-claim-links", imageUploadJson);
 // Task #829 — one-page org quick setup accepts an inline base64 org logo.
 app.post("/api/v1/admin/org-quick-setup", imageUploadJson);
 app.post("/api/v1/admin/org-claim-links", imageUploadJson);
+app.post("/api/v1/admin/partner-pages/:pageId/organizations", imageUploadJson);
+app.patch("/api/v1/admin/partner-pages/:pageId", imageUploadJson);
 app.patch("/api/v1/admin/competition-claim-links/:id/logo", imageUploadJson);
 // Task #692 — game recaps attach photos inline as base64 `data:` URLs in the
 // `POST /posts` and `PATCH /posts/:postId` JSON body (`photoUrls` +

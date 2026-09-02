@@ -42,6 +42,7 @@ const CompetitionPage = lazy(() => import("@/pages/CompetitionPage"));
 const TournamentSignupPage = lazy(() => import("@/pages/TournamentSignupPage"));
 const CompetitionsPage = lazy(() => import("@/pages/CompetitionsPage"));
 const OrganizerPage = lazy(() => import("@/pages/OrganizerPage"));
+const PartnerLandingPage = lazy(() => import("@/pages/PartnerLandingPage"));
 const CompetitionConsolePage = lazy(
   () => import("@/pages/CompetitionConsolePage"),
 );
@@ -137,6 +138,7 @@ function Router() {
         <Route path="/c/:slug" component={CompetitionPage} />
         {/* Public organizer hub (parent company) page — Task #723 */}
         <Route path="/organizers/:slug" component={OrganizerPage} />
+        <Route path="/partners/:slug" component={PartnerLandingPage} />
         {/* Legacy tournament links — redirect /t/* to /c/* */}
         <Route path="/t/:slug/signup">
           {(p) => <Redirect to={`/c/${p.slug}/signup`} replace />}
