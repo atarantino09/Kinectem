@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { parseOrganizationImportFile } from "@/lib/admin-org-import-file";
+import { extractBrandColorsFromDataUrl } from "@/lib/extractBrandColors";
 import {
   canonicalizePartnerSlug,
   isValidPartnerSlug,
@@ -79,6 +80,9 @@ type ImportPreviewRow = {
   possibleMatches: SearchResult[];
 };
 
+const DEFAULT_PARTNER_PRIMARY = "#155EEF";
+const DEFAULT_PARTNER_SECONDARY = "#06B6D4";
+
 function shareUrl(slug: string) {
   const basePath = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
   return `${window.location.origin}${basePath}/partners/${encodeURIComponent(slug)}`;
@@ -114,6 +118,7 @@ export function AdminPartnerLanding() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
+  const logoExtractionSeq = useRef(0);
   const [selectedId, setSelectedId] = useState("");
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -125,8 +130,8 @@ export function AdminPartnerLanding() {
     introduction: "",
     logoUrl: "",
     bannerUrl: "",
-    primaryColor: "#155EEF",
-    secondaryColor: "#06B6D4",
+    primaryColor: DEFAULT_PARTNER_PRIMARY,
+    secondaryColor: DEFAULT_PARTNER_SECONDARY,
     published: false,
   });
   const [newOrg, setNewOrg] = useState({ name: "", city: "", state: "", teams: "", logoUrl: "" });
@@ -166,6 +171,32 @@ export function AdminPartnerLanding() {
     }
   };
 
+  const suggestColorsFromLogo = (logoUrl: string, notify: boolean) => {
+    const extractionSeq = ++logoExtractionSeq.current;
+    if (!logoUrl.startsWith("data:")) return;
+
+    void extractBrandColorsFromDataUrl(logoUrl)
+      .then((colors) => {
+        if (extractionSeq !== logoExtractionSeq.current || !colors) return;
+        setDraft((current) => ({
+          ...current,
+          primaryColor: colors.primary,
+          // A one-color logo gets a solid-color treatment instead of an
+          // invalid/null gradient stop.
+          secondaryColor: colors.secondary ?? colors.primary,
+        }));
+        if (notify) {
+          toast({
+            title: "Brand colors picked from the logo",
+            description: "You can adjust them below.",
+          });
+        }
+      })
+      .catch(() => {
+        // Color extraction is best-effort; the logo itself still uploads.
+      });
+  };
+
   const hydrated = detail.data?.data;
   useEffect(() => {
     if (!hydrated) return;
@@ -180,6 +211,15 @@ export function AdminPartnerLanding() {
       secondaryColor: hydrated.secondaryColor,
       published: hydrated.published,
     });
+    // Existing pages created with the default palette should catch up to the
+    // logo they already have. Custom colors remain untouched.
+    if (
+      hydrated.logoUrl?.startsWith("data:") &&
+      hydrated.primaryColor.toLowerCase() === DEFAULT_PARTNER_PRIMARY.toLowerCase() &&
+      hydrated.secondaryColor.toLowerCase() === DEFAULT_PARTNER_SECONDARY.toLowerCase()
+    ) {
+      suggestColorsFromLogo(hydrated.logoUrl, false);
+    }
   }, [hydrated]);
 
   const refresh = async () => {
@@ -205,6 +245,11 @@ export function AdminPartnerLanding() {
       ...current,
       slug: canonicalizePartnerSlug(current.slug),
     }));
+  };
+
+  const onPartnerLogoChange = (logoUrl: string) => {
+    setDraft((current) => ({ ...current, logoUrl }));
+    suggestColorsFromLogo(logoUrl, true);
   };
   const handleSlugPaste = (event: React.ClipboardEvent<HTMLInputElement>) => {
     const pasted = event.clipboardData.getData("text");
@@ -440,10 +485,10 @@ export function AdminPartnerLanding() {
             {showSlugError && slugError && <p className="mt-1 text-sm text-destructive" role="alert" data-testid="partner-slug-error">{slugError}</p>}
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <div><Label>Primary</Label><Input type="color" value={draft.primaryColor} onChange={(e) => setDraft({ ...draft, primaryColor: e.target.value })} /></div>
-            <div><Label>Secondary</Label><Input type="color" value={draft.secondaryColor} onChange={(e) => setDraft({ ...draft, secondaryColor: e.target.value })} /></div>
+            <div><Label>Primary</Label><Input type="color" value={draft.primaryColor} onChange={(e) => setDraft({ ...draft, primaryColor: e.target.value })} data-testid="input-partner-primary-color" /></div>
+            <div><Label>Secondary</Label><Input type="color" value={draft.secondaryColor} onChange={(e) => setDraft({ ...draft, secondaryColor: e.target.value })} data-testid="input-partner-secondary-color" /></div>
           </div>
-          <BrandImageField label="Partner logo" value={draft.logoUrl} onChange={(logoUrl) => setDraft({ ...draft, logoUrl })} kind="logo" idPrefix="partner-logo" />
+          <BrandImageField label="Partner logo" value={draft.logoUrl} onChange={onPartnerLogoChange} kind="logo" idPrefix="partner-logo" />
           <BrandImageField label="Partner banner" value={draft.bannerUrl} onChange={(bannerUrl) => setDraft({ ...draft, bannerUrl })} kind="banner" idPrefix="partner-banner" />
           <div className="md:col-span-2"><Label>Introduction</Label><Textarea rows={4} value={draft.introduction} onChange={(e) => setDraft({ ...draft, introduction: e.target.value })} /></div>
         </div>

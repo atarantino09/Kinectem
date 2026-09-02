@@ -4,6 +4,13 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test";
 import AdminOrganizations from "./AdminOrganizations";
 
+vi.mock("@/lib/extractBrandColors", () => ({
+  extractBrandColorsFromDataUrl: vi.fn(async () => ({
+    primary: "#e6781e",
+    secondary: "#141414",
+  })),
+}));
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -361,5 +368,37 @@ describe("AdminOrganizations bulk import", () => {
       expect.stringMatching(/\/partners\/north-stars$/),
     );
     expect(screen.getByText(/\/partners\/north-stars$/)).toBeInTheDocument();
+  });
+
+  it("picks partner branding colors from the uploaded logo", async () => {
+    partnerPages = [
+      {
+        id: "partner-1",
+        slug: "north-stars",
+        officialName: "North Stars",
+        associationLabel: "League / association",
+        published: false,
+        memberCount: 0,
+      },
+    ];
+    const user = userEvent.setup();
+    renderWithProviders(<AdminOrganizations />);
+
+    await user.click(await screen.findByTestId("tab-org-partner"));
+    await user.click(
+      await screen.findByRole("button", { name: /North Stars/ }),
+    );
+    const logoUrl = await screen.findByTestId("input-partner-logo-url");
+    await user.click(logoUrl);
+    await user.paste("data:image/png;base64,partner-logo");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("input-partner-primary-color")).toHaveValue(
+        "#e6781e",
+      );
+      expect(screen.getByTestId("input-partner-secondary-color")).toHaveValue(
+        "#141414",
+      );
+    });
   });
 });

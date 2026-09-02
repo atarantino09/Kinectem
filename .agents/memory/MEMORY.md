@@ -72,3 +72,4 @@
 - [user-event clipboard mocks](user-event-clipboard-mocks.md) — userEvent.setup replaces navigator.clipboard in JSDOM; spy on writeText only after setup or assertions target a stale mock.
 - [Safe Excel schedule imports](safe-excel-schedule-imports.md) — avoid legacy npm xlsx; bound workbook size and canonicalize true Excel dates before passing CSV to legacy APIs.
 - [Partner landing membership](partner-landing-membership.md) — partner directories attach orgs independently of ownership; duplicates stay distinct and direct secret-link claims remain separate.
+- [Partner logo palette](partner-logo-palette.md) — partner-page colors come from the logo; preserve manual custom colors and use a solid treatment for one-color marks.
