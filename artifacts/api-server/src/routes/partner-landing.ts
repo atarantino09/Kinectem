@@ -7,10 +7,12 @@ import {
   partnerImportOperations,
   partnerLandingPages,
   partnerOrganizationMemberships,
+  tournaments,
   teams,
   users,
 } from "@workspace/db";
 import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import { z } from "zod";
 import { requireAdmin } from "../lib/auth";
 import { asyncHandler } from "../lib/async-handler";
 import { appBaseUrl, sendEmail } from "../lib/email";
@@ -59,6 +61,61 @@ async function findPage(id: string) {
     .where(eq(partnerLandingPages.id, id))
     .limit(1);
   return page;
+}
+
+type CompetitionMetadata = {
+  id: string;
+  slug: string;
+  name: string;
+  type: string;
+  startDate: string;
+  endDate: string;
+  location: string | null;
+};
+
+function competitionMetadata(row: typeof tournaments.$inferSelect): CompetitionMetadata {
+  return {
+    id: row.id,
+    slug: row.slug,
+    name: row.name,
+    type: row.type,
+    startDate: row.startDate,
+    endDate: row.endDate,
+    location: row.location,
+  };
+}
+
+async function featuredCompetition(pageId: string) {
+  const [row] = await db
+    .select({ competition: tournaments })
+    .from(partnerLandingPages)
+    .leftJoin(tournaments, eq(tournaments.id, partnerLandingPages.competitionId))
+    .where(eq(partnerLandingPages.id, pageId))
+    .limit(1);
+  return row?.competition ? competitionMetadata(row.competition) : null;
+}
+
+const PartnerCompetitionBody = z.object({
+  competitionId: z.string().uuid(),
+});
+
+const PartnerCompetitionCreateBody = z.object({
+  name: z.string().trim().min(1, "Competition name is required").max(200),
+  type: z.enum(["tournament", "league"]).default("tournament"),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "startDate must be YYYY-MM-DD"),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "endDate must be YYYY-MM-DD"),
+  location: z.string().trim().max(200).optional().nullable(),
+  description: z.string().trim().max(2000).optional().nullable(),
+});
+
+function competitionSlug(name: string) {
+  const base = name
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+  return `${base || "competition"}-${generateToken().slice(0, 10)}`;
 }
 
 async function adminMembers(pageId: string) {
@@ -177,7 +234,132 @@ router.get(
   asyncHandler(async (req, res) => {
     const page = await findPage(p(req.params.pageId));
     if (!page) return apiError(res, 404, "Partner page not found");
-    return res.json({ data: { ...page, members: await adminMembers(page.id) } });
+     return res.json({
+       data: {
+         ...page,
+         competition: await featuredCompetition(page.id),
+         members: await adminMembers(page.id),
+       },
+     });
+  }),
+);
+
+router.get(
+  "/admin/partner-pages/:pageId/competition-search",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const pageId = p(req.params.pageId);
+    if (!(await findPage(pageId))) return apiError(res, 404, "Partner page not found");
+    const q = cleanText(req.query.q, 200);
+    if (!q) return res.json({ data: [] });
+    const escaped = q.replace(/[\\%_]/g, "\\$&");
+    const rows = await db
+      .select({
+        id: tournaments.id,
+        slug: tournaments.slug,
+        name: tournaments.name,
+        type: tournaments.type,
+        startDate: tournaments.startDate,
+        endDate: tournaments.endDate,
+        location: tournaments.location,
+        linkedToPage: sql<boolean>`tournaments.id = (
+          SELECT competition_id FROM partner_landing_pages WHERE id = ${pageId}
+        )`,
+      })
+      .from(tournaments)
+      .where(
+        or(
+          ilike(tournaments.name, `%${escaped}%`),
+          ilike(tournaments.location, `%${escaped}%`),
+        ),
+      )
+      .orderBy(desc(tournaments.startDate), asc(tournaments.name))
+      .limit(30);
+    return res.json({ data: rows });
+  }),
+);
+
+router.put(
+  "/admin/partner-pages/:pageId/competition",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const pageId = p(req.params.pageId);
+    const page = await findPage(pageId);
+    if (!page) return apiError(res, 404, "Partner page not found");
+    const parsed = PartnerCompetitionBody.safeParse(req.body);
+    if (!parsed.success) return apiError(res, 400, "A competition is required");
+    const [competition] = await db
+      .select()
+      .from(tournaments)
+      .where(eq(tournaments.id, parsed.data.competitionId))
+      .limit(1);
+    if (!competition) return apiError(res, 404, "Competition not found");
+    const [updated] = await db
+      .update(partnerLandingPages)
+      .set({ competitionId: competition.id, updatedAt: new Date() })
+      .where(eq(partnerLandingPages.id, pageId))
+      .returning();
+    return res.json({ data: updated, competition: competitionMetadata(competition) });
+  }),
+);
+
+router.delete(
+  "/admin/partner-pages/:pageId/competition",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const pageId = p(req.params.pageId);
+    if (!(await findPage(pageId))) return apiError(res, 404, "Partner page not found");
+    const [updated] = await db
+      .update(partnerLandingPages)
+      .set({ competitionId: null, updatedAt: new Date() })
+      .where(eq(partnerLandingPages.id, pageId))
+      .returning();
+    return res.json({ data: updated, competition: null });
+  }),
+);
+
+router.post(
+  "/admin/partner-pages/:pageId/competition",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const pageId = p(req.params.pageId);
+    if (!(await findPage(pageId))) return apiError(res, 404, "Partner page not found");
+    const parsed = PartnerCompetitionCreateBody.safeParse(req.body);
+    if (!parsed.success) {
+      return apiError(res, 400, parsed.error.issues[0]?.message ?? "Invalid competition details");
+    }
+    const body = parsed.data;
+    if (body.endDate < body.startDate) {
+      return apiError(res, 400, "endDate must be on or after startDate");
+    }
+    const adminId = req.realUser!.id;
+    const result = await db.transaction(async (tx) => {
+      const [competition] = await tx
+        .insert(tournaments)
+        .values({
+          slug: competitionSlug(body.name),
+          name: body.name,
+          type: body.type,
+          startDate: body.startDate,
+          endDate: body.endDate,
+          location: body.location ?? null,
+          description: body.description ?? null,
+          createdById: adminId,
+          ownerUserId: adminId,
+        })
+        .returning();
+      const [updatedPage] = await tx
+        .update(partnerLandingPages)
+        .set({ competitionId: competition.id, updatedAt: new Date() })
+        .where(eq(partnerLandingPages.id, pageId))
+        .returning();
+      return { competition, page: updatedPage };
+    });
+    return res.status(201).json({
+      data: result.page,
+      competition: competitionMetadata(result.competition),
+      consolePath: `/competitions/${result.competition.id}`,
+    });
   }),
 );
 
@@ -644,6 +826,7 @@ router.get(
           primaryColor: page.primaryColor,
           secondaryColor: page.secondaryColor,
         },
+        competition: await featuredCompetition(page.id),
         organizations: rows.map((row) => ({
           ...row.organization,
           canRequestClaim: row.canRequestClaim,

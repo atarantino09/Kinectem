@@ -26,6 +26,7 @@ import {
   Plus,
   Search,
   Trash2,
+  Trophy,
   Upload,
 } from "lucide-react";
 
@@ -64,7 +65,22 @@ type PartnerDetail = PartnerSummary & {
   bannerUrl: string | null;
   primaryColor: string;
   secondaryColor: string;
+  competition: PartnerCompetition | null;
   members: PartnerMember[];
+};
+
+type PartnerCompetition = {
+  id: string;
+  slug: string;
+  name: string;
+  type: "tournament" | "league" | string;
+  startDate: string;
+  endDate: string;
+  location: string | null;
+};
+
+type CompetitionSearchResult = PartnerCompetition & {
+  linkedToPage: boolean;
 };
 
 type SearchResult = PartnerMember["organization"] & {
@@ -136,6 +152,16 @@ export function AdminPartnerLanding() {
   });
   const [newOrg, setNewOrg] = useState({ name: "", city: "", state: "", teams: "", logoUrl: "" });
   const [search, setSearch] = useState("");
+  const [competitionSearch, setCompetitionSearch] = useState("");
+  const [selectedCompetition, setSelectedCompetition] = useState<PartnerCompetition | null>(null);
+  const [newCompetition, setNewCompetition] = useState({
+    name: "",
+    type: "tournament" as "tournament" | "league",
+    startDate: "",
+    endDate: "",
+    location: "",
+    description: "",
+  });
   const [importRows, setImportRows] = useState<Array<{ name: string; teams: string[]; sourceColumn: string }>>([]);
   const [previewRows, setPreviewRows] = useState<ImportPreviewRow[]>([]);
   const [rowActions, setRowActions] = useState<Record<number, { action: "create" | "attach" | "skip"; existingOrganizationId?: string }>>({});
@@ -155,6 +181,12 @@ export function AdminPartnerLanding() {
     queryFn: () =>
       customFetch(`/api/v1/admin/partner-pages/${selectedId}/organization-search?q=${encodeURIComponent(search)}`, { method: "GET" }),
     enabled: !!selectedId && search.trim().length >= 2,
+  });
+  const competitionResults = useQuery<{ data: CompetitionSearchResult[] }>({
+    queryKey: ["admin", "partner-competition-search", selectedId, competitionSearch],
+    queryFn: () =>
+      customFetch(`/api/v1/admin/partner-pages/${selectedId}/competition-search?q=${encodeURIComponent(competitionSearch)}`, { method: "GET" }),
+    enabled: !!selectedId && competitionSearch.trim().length >= 2,
   });
 
   const loadDetail = (id: string) => {
@@ -211,6 +243,7 @@ export function AdminPartnerLanding() {
       secondaryColor: hydrated.secondaryColor,
       published: hydrated.published,
     });
+    setSelectedCompetition(hydrated.competition);
     // Existing pages created with the default palette should catch up to the
     // logo they already have. Custom colors remain untouched.
     if (
@@ -335,6 +368,68 @@ export function AdminPartnerLanding() {
     });
     await refresh();
     toast({ title: "Organization included" });
+  };
+
+  const updateFeaturedCompetition = async (competitionId: string) => {
+    try {
+      const response = await customFetch<{ competition: PartnerCompetition }>(
+        `/api/v1/admin/partner-pages/${selectedId}/competition`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ competitionId }),
+        },
+      );
+      setSelectedCompetition(response.competition);
+      setCompetitionSearch("");
+      await refresh();
+      toast({ title: "Featured competition linked" });
+    } catch (error) {
+      toast({ title: "Couldn't link competition", description: (error as Error).message, variant: "destructive" });
+    }
+  };
+
+  const removeFeaturedCompetition = async () => {
+    try {
+      await customFetch(`/api/v1/admin/partner-pages/${selectedId}/competition`, { method: "DELETE" });
+      setSelectedCompetition(null);
+      await refresh();
+      toast({ title: "Featured competition removed" });
+    } catch (error) {
+      toast({ title: "Couldn't remove competition", description: (error as Error).message, variant: "destructive" });
+    }
+  };
+
+  const createFeaturedCompetition = async () => {
+    if (!newCompetition.name.trim() || !newCompetition.startDate || !newCompetition.endDate) return;
+    try {
+      const response = await customFetch<{
+        competition: PartnerCompetition;
+        consolePath: string;
+      }>(`/api/v1/admin/partner-pages/${selectedId}/competition`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...newCompetition,
+          name: newCompetition.name.trim(),
+          location: newCompetition.location.trim() || null,
+          description: newCompetition.description.trim() || null,
+        }),
+      });
+      setSelectedCompetition(response.competition);
+      setNewCompetition({
+        name: "",
+        type: "tournament",
+        startDate: "",
+        endDate: "",
+        location: "",
+        description: "",
+      });
+      await refresh();
+      toast({ title: `${response.competition.type === "league" ? "League" : "Tournament"} created and linked` });
+    } catch (error) {
+      toast({ title: "Couldn't create competition", description: (error as Error).message, variant: "destructive" });
+    }
   };
 
   const parseImport = async (file: File) => {
@@ -557,7 +652,81 @@ export function AdminPartnerLanding() {
         </div>
       </Step>
 
-      <Step number={4} title="Preview, publish, and share" done={draft.published}>
+      <Step number={4} title="Feature a competition" done={!!selectedCompetition}>
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Feature one tournament or league on this partner page. Linking does not change the competition's owner, hub, branding, or schedule.
+          </p>
+          {selectedCompetition ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 p-4" data-testid="featured-competition-current">
+              <div className="flex min-w-0 items-start gap-3">
+                <Trophy className="mt-1 h-5 w-5 shrink-0 text-primary" />
+                <div className="min-w-0">
+                  <div className="font-black">{selectedCompetition.name}</div>
+                  <div className="text-sm capitalize text-muted-foreground">
+                    {selectedCompetition.type} · {selectedCompetition.startDate} – {selectedCompetition.endDate}
+                    {selectedCompetition.location ? ` · ${selectedCompetition.location}` : ""}
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Link href={`/competitions/${selectedCompetition.id}`}>
+                  <Button size="sm" variant="outline" className="font-bold">Open console</Button>
+                </Link>
+                <Button size="sm" variant="ghost" onClick={() => void removeFeaturedCompetition()}>Remove</Button>
+              </div>
+            </div>
+          ) : null}
+          <div className="space-y-2 rounded-lg border p-3">
+            <Label>Search existing competitions</Label>
+            <div className="relative">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                className="pl-9"
+                placeholder="Competition name or location"
+                value={competitionSearch}
+                onChange={(e) => setCompetitionSearch(e.target.value)}
+                data-testid="input-partner-competition-search"
+              />
+            </div>
+            {(competitionResults.data?.data ?? []).map((result) => (
+              <div key={result.id} className="flex items-center justify-between gap-2 rounded border p-2 text-sm" data-testid={`row-partner-competition-${result.id}`}>
+                <div className="min-w-0">
+                  <div className="truncate font-bold">{result.name}</div>
+                  <div className="truncate text-muted-foreground capitalize">
+                    {result.type} · {result.startDate} – {result.endDate}{result.location ? ` · ${result.location}` : ""}
+                  </div>
+                </div>
+                <Button size="sm" variant="outline" disabled={result.linkedToPage} onClick={() => void updateFeaturedCompetition(result.id)}>
+                  {result.linkedToPage ? "Featured" : "Feature"}
+                </Button>
+              </div>
+            ))}
+          </div>
+          <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
+            <div className="font-bold">Create a competition and feature it</div>
+            <div className="flex gap-2">
+              {(["tournament", "league"] as const).map((type) => (
+                <button key={type} type="button" className={`rounded-full border px-3 py-1 text-sm font-bold capitalize ${newCompetition.type === type ? "border-primary bg-primary text-primary-foreground" : ""}`} onClick={() => setNewCompetition({ ...newCompetition, type })}>
+                  {type}
+                </button>
+              ))}
+            </div>
+            <Input aria-label="New competition name" placeholder="Competition name" value={newCompetition.name} onChange={(e) => setNewCompetition({ ...newCompetition, name: e.target.value })} />
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Input aria-label="New competition start date" type="date" value={newCompetition.startDate} onChange={(e) => setNewCompetition({ ...newCompetition, startDate: e.target.value })} />
+              <Input aria-label="New competition end date" type="date" min={newCompetition.startDate || undefined} value={newCompetition.endDate} onChange={(e) => setNewCompetition({ ...newCompetition, endDate: e.target.value })} />
+            </div>
+            <Input aria-label="New competition location" placeholder="Location (optional)" value={newCompetition.location} onChange={(e) => setNewCompetition({ ...newCompetition, location: e.target.value })} />
+            <Textarea aria-label="New competition description" rows={2} placeholder="Description (optional)" value={newCompetition.description} onChange={(e) => setNewCompetition({ ...newCompetition, description: e.target.value })} />
+            <Button onClick={() => void createFeaturedCompetition()} disabled={!newCompetition.name.trim() || !newCompetition.startDate || !newCompetition.endDate || newCompetition.endDate < newCompetition.startDate}>
+              <Plus className="mr-2 h-4 w-4" /> Create and feature
+            </Button>
+          </div>
+        </div>
+      </Step>
+
+      <Step number={5} title="Preview, publish, and share" done={draft.published}>
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2"><Switch checked={draft.published} onCheckedChange={(published) => void savePage(published)} /><span className="font-semibold">{draft.published ? "Published" : "Unpublished"}</span></div>
           <Link href={`/partners/${canonicalSlug}`}><Button variant="outline" disabled={!draft.published || !!slugError}>Preview public page</Button></Link>

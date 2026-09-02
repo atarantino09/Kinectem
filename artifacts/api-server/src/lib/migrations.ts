@@ -2496,6 +2496,17 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
         ADD COLUMN IF NOT EXISTS requester_title text,
         ADD COLUMN IF NOT EXISTS source_partner_page_id uuid
           REFERENCES partner_landing_pages(id) ON DELETE SET NULL;
+
+    `,
+  },
+  {
+    name: "2026-09-02-task-979-partner-featured-competition",
+    sql: `
+      ALTER TABLE partner_landing_pages
+        ADD COLUMN IF NOT EXISTS competition_id uuid
+          REFERENCES tournaments(id) ON DELETE SET NULL;
+      CREATE INDEX IF NOT EXISTS partner_landing_pages_competition_idx
+        ON partner_landing_pages (competition_id);
     `,
   },
 ];

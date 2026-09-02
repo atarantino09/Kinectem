@@ -18,6 +18,7 @@ import {
   MapPin,
   Search,
   Sparkles,
+  Trophy,
 } from "lucide-react";
 
 type PartnerOrganization = {
@@ -43,6 +44,15 @@ type PartnerResponse = {
       primaryColor: string;
       secondaryColor: string;
     };
+    competition: {
+      id: string;
+      slug: string;
+      name: string;
+      type: "tournament" | "league" | string;
+      startDate: string;
+      endDate: string;
+      location: string | null;
+    } | null;
     organizations: PartnerOrganization[];
   };
 };
@@ -148,6 +158,13 @@ export default function PartnerLandingPage() {
   const { page } = data;
   const foreground = readableText(page.primaryColor);
   const intro = page.introduction || "Kinectem is the youth-sports platform where the story of your season comes to life — a lasting home for every club, team, player, and game day.";
+  const featuredCompetition = data.competition;
+  const competitionDate = (value: string) =>
+    new Date(`${value}T00:00:00`).toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
 
   const beginClaim = (org: PartnerOrganization) => {
     setSelected(org);
@@ -223,6 +240,33 @@ export default function PartnerLandingPage() {
           </Button>
         </div>
       </section>
+
+      {featuredCompetition && (
+        <section className="mx-auto -mt-8 max-w-6xl px-5" data-testid="featured-partner-competition">
+          <Card className="overflow-hidden rounded-3xl border-0 shadow-xl">
+            <CardContent className="flex flex-col gap-5 p-6 md:flex-row md:items-center md:justify-between md:p-8">
+              <div className="flex items-start gap-4">
+                <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl text-white" style={{ background: page.primaryColor }}>
+                  <Trophy className="h-7 w-7" />
+                </div>
+                <div>
+                  <div className="text-xs font-black uppercase tracking-[0.18em]" style={{ color: page.primaryColor }}>Featured competition</div>
+                  <h2 className="mt-1 text-2xl font-black text-slate-900">{featuredCompetition.name}</h2>
+                  <p className="mt-1 text-sm capitalize text-slate-600">
+                    {featuredCompetition.type} · {competitionDate(featuredCompetition.startDate)} – {competitionDate(featuredCompetition.endDate)}
+                    {featuredCompetition.location ? ` · ${featuredCompetition.location}` : ""}
+                  </p>
+                </div>
+              </div>
+              <Link href={`/c/${encodeURIComponent(featuredCompetition.slug)}`}>
+                <Button className="w-full rounded-xl font-black md:w-auto" style={{ background: page.primaryColor }} data-testid="link-featured-partner-competition">
+                  View competition <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+        </section>
+      )}
 
       <section
         id="partner-content"

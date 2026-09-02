@@ -21,6 +21,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 let validatedBody: Record<string, unknown> | null = null;
 let importedBody: Record<string, unknown> | null = null;
 let partnerCreateBody: Record<string, unknown> | null = null;
+let partnerCompetitionBody: Record<string, unknown> | null = null;
 let partnerPages: Array<Record<string, unknown>> = [];
 let partnerPublished = false;
 
@@ -28,6 +29,7 @@ beforeEach(() => {
   validatedBody = null;
   importedBody = null;
   partnerCreateBody = null;
+  partnerCompetitionBody = null;
   partnerPages = [];
   partnerPublished = false;
   Object.defineProperties(HTMLElement.prototype, {
@@ -97,7 +99,45 @@ beforeEach(() => {
             secondaryColor: "#06B6D4",
             published: partnerPublished,
             memberCount: 0,
+            competition: null,
             members: [],
+          },
+        });
+      }
+      if (
+        method === "GET" &&
+        path === "/api/v1/admin/partner-pages/partner-1/competition-search"
+      ) {
+        return jsonResponse({
+          data: [
+            {
+              id: "competition-1",
+              slug: "fall-classic",
+              name: "Fall Classic",
+              type: "tournament",
+              startDate: "2026-10-03",
+              endDate: "2026-10-04",
+              location: "Riverside",
+              linkedToPage: false,
+            },
+          ],
+        });
+      }
+      if (
+        method === "PUT" &&
+        path === "/api/v1/admin/partner-pages/partner-1/competition"
+      ) {
+        partnerCompetitionBody = JSON.parse(String(init?.body ?? "{}"));
+        return jsonResponse({
+          data: { id: "partner-1", competitionId: "competition-1" },
+          competition: {
+            id: "competition-1",
+            slug: "fall-classic",
+            name: "Fall Classic",
+            type: "tournament",
+            startDate: "2026-10-03",
+            endDate: "2026-10-04",
+            location: "Riverside",
           },
         });
       }
@@ -368,6 +408,43 @@ describe("AdminOrganizations bulk import", () => {
       expect.stringMatching(/\/partners\/north-stars$/),
     );
     expect(screen.getByText(/\/partners\/north-stars$/)).toBeInTheDocument();
+  });
+
+  it("searches and attaches a featured competition with a path to its console", async () => {
+    partnerPages = [
+      {
+        id: "partner-1",
+        slug: "north-stars",
+        officialName: "North Stars",
+        associationLabel: "League / association",
+        published: false,
+        memberCount: 0,
+      },
+    ];
+    const user = userEvent.setup();
+    renderWithProviders(<AdminOrganizations />);
+
+    await user.click(await screen.findByTestId("tab-org-partner"));
+    await user.click(await screen.findByRole("button", { name: /North Stars/ }));
+    await user.type(
+      await screen.findByTestId("input-partner-competition-search"),
+      "Fall",
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Feature" }),
+    );
+
+    await waitFor(() =>
+      expect(partnerCompetitionBody).toEqual({
+        competitionId: "competition-1",
+      }),
+    );
+    expect(screen.getByTestId("featured-competition-current")).toHaveTextContent(
+      "Fall Classic",
+    );
+    expect(
+      screen.getByRole("button", { name: "Open console" }).closest("a"),
+    ).toHaveAttribute("href", "/competitions/competition-1");
   });
 
   it("picks partner branding colors from the uploaded logo", async () => {

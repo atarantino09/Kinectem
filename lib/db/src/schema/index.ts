@@ -452,6 +452,13 @@ export const partnerLandingPages = pgTable("partner_landing_pages", {
   slug: text("slug").notNull(),
   officialName: text("official_name").notNull(),
   associationLabel: text("association_label").notNull(),
+  // Optional featured competition shown on the public partner page. This is
+  // deliberately independent from competition ownership and hub membership.
+  // Deleting the competition simply removes the featured card.
+  competitionId: uuid("competition_id").references(
+    (): AnyPgColumn => tournaments.id,
+    { onDelete: "set null" },
+  ),
   introduction: text("introduction").notNull().default(""),
   logoUrl: text("logo_url"),
   bannerUrl: text("banner_url"),
