@@ -192,6 +192,17 @@ export default function PartnerLandingPage() {
             {page.logoUrl ? <img src={page.logoUrl} alt={`${page.officialName} logo`} className="h-32 w-32 rounded-3xl bg-white/95 object-contain p-3 shadow-xl md:h-40 md:w-40" /> : <div className="grid h-32 w-32 place-items-center rounded-3xl bg-white/20 md:h-40 md:w-40"><Building2 className="h-16 w-16 md:h-20 md:w-20" /></div>}
             <div><div className="text-sm font-black uppercase tracking-[0.22em] opacity-80">{page.associationLabel}</div><div className="text-xl font-black md:text-2xl">{page.officialName}</div></div>
           </div>
+          <div className="mb-8 inline-flex max-w-full items-center gap-3 rounded-2xl border border-white/25 bg-slate-950/15 px-4 py-3 shadow-lg backdrop-blur-md">
+            <span className="shrink-0 text-[10px] font-black uppercase tracking-[0.18em] opacity-80 md:text-xs">
+              Proud partner with
+            </span>
+            <span className="h-7 w-px bg-white/30" aria-hidden="true" />
+            <img
+              src={`${import.meta.env.BASE_URL}logo-horizontal-mono-white-transparent.png`}
+              alt="Kinectem"
+              className="h-7 w-auto max-w-[9rem] object-contain md:h-9 md:max-w-[12rem]"
+            />
+          </div>
           <h1 className="max-w-4xl text-4xl font-black leading-[0.98] tracking-tight md:text-7xl">They run your season. Kinectem makes it last.</h1>
           <p className="mt-6 max-w-3xl text-lg font-semibold leading-relaxed opacity-90 md:text-xl">
             Kinectem is not another registration, scheduling, or communication app. It complements TeamSnap, Byga, PlayMetrics, GotSport, Stack, and whatever your club already uses.
