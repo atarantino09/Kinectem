@@ -231,7 +231,7 @@ export default function PartnerLandingPage() {
             </div>
           )}
           <div className="mb-8 text-center">
-            <p className="mb-4 text-xs font-black uppercase tracking-[0.22em] opacity-80 md:text-sm">
+            <p className="mb-5 inline-flex rounded-full border border-white/20 bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-white/90 shadow-sm backdrop-blur-sm md:text-sm">
               Proud partner with Kinectem
             </p>
             <div
@@ -259,13 +259,29 @@ export default function PartnerLandingPage() {
               </div>
             </div>
           </div>
-          <h1 className="max-w-4xl text-4xl font-black leading-[0.98] tracking-tight md:text-7xl">Kinectem is the youth-sports platform where the story of your season comes to life.</h1>
-          <p className="mt-6 max-w-3xl text-lg font-semibold leading-relaxed opacity-90 md:text-xl">
-            Kinectem is not another registration, scheduling, or communication app — it's the layer that sits on top of the one you already use. They run your season. Kinectem makes it last.
-          </p>
-          <Button className="mt-8 rounded-full px-6 font-black" style={{ background: foreground, color: page.primaryColor }} onClick={() => { setTab("clubs"); document.getElementById("partner-content")?.scrollIntoView({ behavior: "smooth" }); }}>
-            Find your club <ArrowRight className="ml-2 h-4 w-4" />
-          </Button>
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(18rem,0.7fr)] lg:items-stretch">
+            <div className="rounded-[2rem] border border-white/20 bg-slate-950/20 p-6 shadow-2xl backdrop-blur-[2px] md:p-9">
+              <div className="mb-4 flex items-center gap-3 text-xs font-black uppercase tracking-[0.2em] text-white/65">
+                <span className="h-px w-8 bg-white/50" />
+                Your season, told together
+              </div>
+              <h1 className="max-w-4xl text-4xl font-black leading-[0.98] tracking-tight md:text-6xl lg:text-7xl">
+                <span className="block">Kinectem is the youth-sports platform</span>
+                <span className="mt-3 block text-white/75">where the story of your season comes to life.</span>
+              </h1>
+            </div>
+            <div className="flex flex-col justify-between rounded-[2rem] border border-white/25 bg-white/10 p-6 shadow-xl backdrop-blur-md md:p-8">
+              <div>
+                <div className="text-xs font-black uppercase tracking-[0.2em] text-white/65">Make it last</div>
+                <p className="mt-4 text-base font-semibold leading-relaxed text-white/90 md:text-lg">
+                  Kinectem is not another registration, scheduling, or communication app — it's the layer that sits on top of the one you already use. They run your season. Kinectem makes it last.
+                </p>
+              </div>
+              <Button className="mt-7 w-full rounded-full px-6 font-black md:w-fit" style={{ background: foreground, color: page.primaryColor }} onClick={() => { setTab("clubs"); document.getElementById("partner-content")?.scrollIntoView({ behavior: "smooth" }); }}>
+                Find your club <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
+          </div>
         </div>
       </section>
 
