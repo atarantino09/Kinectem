@@ -167,15 +167,23 @@ function membersFixture(opts: { extraAdmin?: boolean } = {}) {
 function installHandlers({
   role,
   extraAdmin = false,
+  teams = [],
 }: {
   role: Role;
   extraAdmin?: boolean;
+  teams?: Array<{
+    id: string;
+    name: string;
+    sport?: string | null;
+    bannerUrl?: string | null;
+    followerCount?: number | null;
+  }>;
 }) {
   useGetOrganizationByIdMock.mockReturnValue({
     data: organizationFixture(role),
     isLoading: false,
   });
-  useListOrgTeamsMock.mockReturnValue({ data: { data: [] } });
+  useListOrgTeamsMock.mockReturnValue({ data: { data: teams } });
   useListArchivedOrgTeamsMock.mockReturnValue({ data: { data: [] } });
   useListOrgPostsMock.mockReturnValue({ data: { data: [] } });
   useListMembersMock.mockReturnValue({
@@ -318,15 +326,15 @@ describe("OrganizationPage — admin control gating", () => {
     expect(screen.queryByTestId("org-guides-actions")).not.toBeInTheDocument();
   });
 
-  it("shows the visitor tour after arriving from a partner club link", async () => {
+  it("shows the existing six-step manager tour after arriving from a partner club link", async () => {
     vi.useFakeTimers();
     try {
       setMockSearch("showAround=1");
-      installHandlers({ role: null });
+      installHandlers({ role: "owner" });
 
       renderWithProviders(<OrganizationPage />);
 
-      expect(screen.getByTestId("btn-org-community-menu")).toBeInTheDocument();
+      expect(screen.getByTestId("btn-org-manage-menu")).toBeInTheDocument();
       expect(screen.queryByTestId("team-tour")).not.toBeInTheDocument();
 
       act(() => {
@@ -338,9 +346,11 @@ describe("OrganizationPage — admin control gating", () => {
         vi.advanceTimersByTime(1);
       });
       expect(screen.getByTestId("team-tour")).toBeInTheDocument();
-      expect(screen.getByText("This is your club home")).toBeInTheDocument();
+      expect(screen.getByText("Manage admins & members")).toBeInTheDocument();
+      expect(screen.getByText("Step 1 of 6")).toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }
   });
+
 });

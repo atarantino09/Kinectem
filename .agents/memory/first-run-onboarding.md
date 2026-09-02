@@ -54,16 +54,18 @@ route (`/posts/new?...`, the button is a `<Link>`), so spotlighting AI Assist th
 would navigate away and break the tour — the tour explains AI Assist in the tooltip
 instead.
 
-# Partner-directory visitor tour
+# Partner-directory manager-tour handoff
 
 Partner-directory club links should open the normal organization page, leave it
-visible for about three seconds, then run a public-facing spotlight tour. This
-entry tour applies to logged-out and non-manager visitors as well as members.
+visible for about three seconds, then replay the existing six-step organization
+manager tour. Team links on that page should carry the walkthrough forward by
+opening the selected team and replaying its existing manager tour after the same
+delay.
 
-**Why:** Visitors should see the real club page first and then learn how simple it
-is to find teams, follow the club, and read updates. The manager tour cannot serve
-this flow because its controls are intentionally role-gated.
+**Why:** The partner flow should demonstrate the full management experience using
+the walkthroughs already maintained on organization and team pages, not create
+separate visitor-facing tours with different guidance.
 
-**How to apply:** Keep partner-entry steps limited to controls visible to every
-visitor, consume the entry signal so refresh does not replay it, and do not let it
-stack with the role-gated first-run manager tour or post-create dialogs.
+**How to apply:** Keep both replays role-gated to viewers who can use the controls,
+consume each entry signal so refresh does not replay it, and do not let either
+tour stack with first-run onboarding or post-create dialogs.

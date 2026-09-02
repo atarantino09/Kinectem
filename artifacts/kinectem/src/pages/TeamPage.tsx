@@ -68,13 +68,14 @@ export default function TeamPage() {
   // links so a click on the bell lands on the Roster panel (instead of
   // Posts) with the invitee's pending row scrolled into view. A bare
   // `/teams/:id` URL keeps the historical "open Posts" default.
-  const { showRoster, highlightEntryId, wantsWelcome } = useMemo(() => {
+  const { showRoster, highlightEntryId, wantsWelcome, wantsTour } = useMemo(() => {
     const sp = new URLSearchParams(search ?? "");
     const entryId = sp.get("entryId");
     return {
       showRoster: sp.get("roster") === "1" || !!entryId,
       highlightEntryId: entryId,
       wantsWelcome: sp.get("welcome") === "1",
+      wantsTour: sp.get("showAround") === "1",
     };
   }, [search]);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -89,6 +90,7 @@ export default function TeamPage() {
   );
   const [followersOpen, setFollowersOpen] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
+  const [tourRequested, setTourRequested] = useState(wantsTour);
   const isLg = useIsLg();
 
   // Re-evaluate when navigating between team URLs without remounting
@@ -97,6 +99,20 @@ export default function TeamPage() {
   useEffect(() => {
     if (showRoster) setExpanded("roster");
   }, [showRoster, teamId]);
+
+  useEffect(() => {
+    if (wantsTour) setTourRequested(true);
+  }, [wantsTour, teamId]);
+
+  // Team links from the organization tour carry a one-shot tour signal.
+  // Preserve any other query parameters while removing it from the URL.
+  useEffect(() => {
+    if (!wantsTour || typeof window === "undefined") return;
+    const sp = new URLSearchParams(search ?? "");
+    sp.delete("showAround");
+    const qs = sp.toString();
+    navigate(`/teams/${teamId}${qs ? `?${qs}` : ""}`, { replace: true });
+  }, [wantsTour, search, teamId, navigate]);
 
   // Right after a coach claims their team, `submit()` lands them here with
   // `?welcome=1`. Pop the first-run rundown once their manage role resolves so
@@ -239,7 +255,7 @@ export default function TeamPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (!canManage || wantsWelcome) return;
+    if (!canManage || wantsWelcome || wantsTour || tourRequested) return;
     if (tourSteps.length === 0) return;
     if (!teamId || !tourStorageKey) return;
     let alreadySeen = false;
@@ -249,7 +265,42 @@ export default function TeamPage() {
       // storage blocked (private mode etc.) — treat as not seen
     }
     if (!alreadySeen) setTourOpen(true);
-  }, [canManage, wantsWelcome, tourSteps.length, teamId, tourStorageKey]);
+  }, [
+    canManage,
+    wantsWelcome,
+    wantsTour,
+    tourRequested,
+    tourSteps.length,
+    teamId,
+    tourStorageKey,
+  ]);
+
+  // Delay the existing team walkthrough so the team page is visible first
+  // after a visitor selects a team from the organization page.
+  useEffect(() => {
+    if (
+      !tourRequested ||
+      !team ||
+      !teamId ||
+      !canManage ||
+      wantsWelcome ||
+      tourSteps.length === 0
+    ) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setTourOpen(true);
+      setTourRequested(false);
+    }, 3000);
+    return () => window.clearTimeout(timer);
+  }, [
+    tourRequested,
+    team,
+    teamId,
+    canManage,
+    wantsWelcome,
+    tourSteps.length,
+  ]);
 
   const finishTour = () => {
     try {

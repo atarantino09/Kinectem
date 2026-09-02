@@ -143,7 +143,6 @@ export default function OrganizationPage() {
   const [orgTourOpen, setOrgTourOpen] = useState(false);
   const [showAroundRequested, setShowAroundRequested] =
     useState(showAroundQuery);
-  const [isGuidedTour, setIsGuidedTour] = useState(false);
   const [manageMenuOpen, setManageMenuOpen] = useState(false);
   // Gate the first-run tour until the post-create welcome / bulk-add popups
   // have been resolved on mount, so the tour never flashes on top of them.
@@ -382,61 +381,10 @@ export default function OrganizationPage() {
     [],
   );
 
-  const guidedOrgTourSteps = useMemo<TourStep[]>(
-    () => [
-      {
-        targetTestId: "org-header-identity",
-        title: "This is your club home",
-        body: (
-          <>
-            Your organization page brings your club&apos;s identity, teams, and
-            updates together in one simple place.
-          </>
-        ),
-      },
-      {
-        targetTestId: "btn-org-community-menu",
-        title: "Stay connected",
-        body: (
-          <>
-            Open <strong>Community</strong> to follow the club and keep up with
-            everything your organization shares.
-          </>
-        ),
-      },
-      {
-        targetTestId: "rail-teams",
-        onEnter: () => {
-          const toggle = document.querySelector<HTMLButtonElement>(
-            '[data-testid="btn-toggle-teams"][aria-expanded="false"]',
-          );
-          if (toggle) toggle.click();
-        },
-        title: "Find your team",
-        body: (
-          <>
-            Open <strong>Teams</strong> to find your roster and jump into the
-            team page that matters to you.
-          </>
-        ),
-      },
-      {
-        targetTestId: "org-posts",
-        title: "Keep up with the story",
-        body: (
-          <>
-            The latest club updates and game-day stories appear here, so your
-            season stays easy to follow in one place.
-          </>
-        ),
-      },
-    ],
-    [],
-  );
-
-  // Partner landing links include showAround=1 so a first-time visitor gets a
-  // friendly tour after the organization page has had time to render. Remove
-  // the one-shot query from the browser URL so a refresh does not replay it.
+  // Partner landing links include showAround=1 so the existing six-step org
+  // walkthrough starts after the organization page has had time to render.
+  // Remove the one-shot query from the browser URL so a refresh does not
+  // replay it.
   useEffect(() => {
     if (!showAroundQuery || typeof window === "undefined") return;
     const url = new URL(window.location.href);
@@ -455,7 +403,7 @@ export default function OrganizationPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!orgId || !firstRunResolved || !isManagerRole) return;
-    if (showAroundRequested || isGuidedTour) return;
+    if (showAroundRequested) return;
     if (
       welcomeOrgName !== null ||
       createTeamOpen ||
@@ -479,17 +427,19 @@ export default function OrganizationPage() {
     bulkTeamsOpen,
     coachSetupPending,
     showAroundRequested,
-    isGuidedTour,
   ]);
 
   // The partner-page tour is intentionally delayed until the visitor has seen
   // the organization page, rather than opening over the navigation transition.
+  // It reuses the normal six-step manager walkthrough.
   useEffect(() => {
     if (
       !showAroundRequested ||
       !orgId ||
       !organization ||
       !firstRunResolved ||
+      !isManagerRole ||
+      orgTourSteps.length === 0 ||
       welcomeOrgName !== null ||
       createTeamOpen ||
       bulkTeamsOpen ||
@@ -498,7 +448,6 @@ export default function OrganizationPage() {
       return;
     }
     const timer = window.setTimeout(() => {
-      setIsGuidedTour(true);
       setOrgTourOpen(true);
       setShowAroundRequested(false);
     }, 3000);
@@ -508,6 +457,8 @@ export default function OrganizationPage() {
     orgId,
     organization,
     firstRunResolved,
+    isManagerRole,
+    orgTourSteps.length,
     welcomeOrgName,
     createTeamOpen,
     bulkTeamsOpen,
@@ -1272,15 +1223,8 @@ export default function OrganizationPage() {
           </aside>
         )}
       </div>
-      {orgTourOpen &&
-        (isGuidedTour ? guidedOrgTourSteps : orgTourSteps).length > 0 && (
-          <SpotlightTour
-            steps={isGuidedTour ? guidedOrgTourSteps : orgTourSteps}
-            onFinish={() => {
-              setIsGuidedTour(false);
-              finishOrgTour();
-            }}
-          />
+      {orgTourOpen && orgTourSteps.length > 0 && (
+        <SpotlightTour steps={orgTourSteps} onFinish={finishOrgTour} />
       )}
     </>
   );
@@ -1466,7 +1410,7 @@ function TeamsRail({
                     pinnedCount < sortedTeams.length && (
                       <PinnedSectionLabel label="All teams" />
                     )}
-                  <Link href={`/teams/${team.id}`}>
+                  <Link href={`/teams/${team.id}?showAround=1`}>
                     <div
                       className="rounded-lg overflow-hidden border border-border hover:border-primary/40 hover:shadow-md cursor-pointer group transition-all"
                       data-testid={`card-team-${team.id}`}
@@ -1573,7 +1517,7 @@ function ArchivedTeamsCard({
       <CardContent className="p-2">
         <div className="flex flex-col divide-y divide-border">
           {teams.map((t) => (
-            <Link key={t.id} href={`/teams/${t.id}`}>
+            <Link key={t.id} href={`/teams/${t.id}?showAround=1`}>
               <div
                 className="flex items-center justify-between gap-3 px-3 py-2.5 hover:bg-muted/40 rounded-lg cursor-pointer"
                 data-testid={`card-archived-team-${t.id}`}
