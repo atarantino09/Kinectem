@@ -16,6 +16,7 @@ import {
   Building2,
   CheckCircle2,
   MapPin,
+  Pencil,
   Search,
   Sparkles,
   Trophy,
@@ -142,6 +143,9 @@ export default function PartnerLandingPage() {
     retry: false,
   });
   const data = partner.data?.data;
+  // /users/me is the session user's private profile. Platform admins are the
+  // only users who should see the edit entry point on this public page.
+  const isPlatformAdmin = me?.role === "admin";
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return (data?.organizations ?? []).filter((org) =>
@@ -210,6 +214,22 @@ export default function PartnerLandingPage() {
       >
         <div className="absolute inset-0 opacity-20" style={{ backgroundImage: "radial-gradient(circle at 80% 10%, white 0, transparent 32%), radial-gradient(circle at 10% 90%, white 0, transparent 26%)" }} />
         <div className="relative mx-auto max-w-6xl">
+          {isPlatformAdmin && (
+            <div className="mb-5 flex justify-end">
+              <Link
+                href={`/admin/organizations?section=partner&edit=${encodeURIComponent(slug)}`}
+                data-testid="link-edit-partner-page"
+              >
+                <Button
+                  variant="secondary"
+                  className="rounded-full font-black shadow-lg"
+                >
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Edit partner page
+                </Button>
+              </Link>
+            </div>
+          )}
           <div className="mb-8 text-center">
             <p className="mb-4 text-xs font-black uppercase tracking-[0.22em] opacity-80 md:text-sm">
               Proud partner with Kinectem
@@ -250,23 +270,26 @@ export default function PartnerLandingPage() {
       </section>
 
       {featuredCompetition && (
-        <section className="mx-auto -mt-8 max-w-6xl px-5" data-testid="featured-partner-competition">
-          <Card className="overflow-hidden rounded-3xl border-0 shadow-xl">
-            <CardContent className="flex flex-col gap-5 p-6 md:flex-row md:items-center md:justify-between md:p-8">
-              <div className="flex items-start gap-4">
+        <section className="relative z-10 mx-auto -mt-8 max-w-6xl px-5" data-testid="featured-partner-competition">
+          <Card className="rounded-3xl border-0 shadow-xl">
+            <CardContent className="flex min-w-0 flex-col gap-5 p-6 md:flex-row md:items-center md:justify-between md:p-8">
+              <div className="flex min-w-0 items-start gap-4">
                 <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl text-white" style={{ background: page.primaryColor }}>
                   <Trophy className="h-7 w-7" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <div className="text-xs font-black uppercase tracking-[0.18em]" style={{ color: page.primaryColor }}>Featured competition</div>
-                  <h2 className="mt-1 text-2xl font-black text-slate-900">{featuredCompetition.name}</h2>
-                  <p className="mt-1 text-sm capitalize text-slate-600">
+                  <h2 className="mt-1 break-words text-2xl font-black text-slate-900">{featuredCompetition.name}</h2>
+                  <p className="mt-1 break-words text-sm capitalize text-slate-600">
                     {featuredCompetition.type} · {competitionDate(featuredCompetition.startDate)} – {competitionDate(featuredCompetition.endDate)}
                     {featuredCompetition.location ? ` · ${featuredCompetition.location}` : ""}
                   </p>
                 </div>
               </div>
-              <Link href={`/c/${encodeURIComponent(featuredCompetition.slug)}`}>
+              <Link
+                href={`/c/${encodeURIComponent(featuredCompetition.slug)}`}
+                className="w-full shrink-0 md:w-auto"
+              >
                 <Button className="w-full rounded-xl font-black md:w-auto" style={{ background: page.primaryColor }} data-testid="link-featured-partner-competition">
                   View competition <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>

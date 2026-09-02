@@ -65,6 +65,34 @@ describe("PartnerLandingPage featured competition", () => {
     ).toHaveAttribute("href", "/c/fall-classic-2026");
   });
 
+  it("shows the partner edit console link only to platform admins", async () => {
+    mockedUser.mockReturnValue({
+      data: { id: "admin-1", email: "admin@kinectem.com", role: "admin" },
+    } as never);
+    mockedFetch.mockResolvedValue(partnerResponse(null) as never);
+
+    renderWithProviders(<PartnerLandingPage />);
+
+    const editLink = await screen.findByTestId("link-edit-partner-page");
+    expect(editLink).toHaveAttribute(
+      "href",
+      "/admin/organizations?section=partner&edit=north-stars",
+    );
+  });
+
+  it("does not show the partner edit console link to regular visitors", async () => {
+    mockedFetch.mockResolvedValue(partnerResponse(null) as never);
+
+    renderWithProviders(<PartnerLandingPage />);
+
+    await screen.findByRole("heading", {
+      name: "Kinectem is the youth-sports platform where the story of your season comes to life.",
+    });
+    expect(
+      screen.queryByTestId("link-edit-partner-page"),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows the platform hero messaging and centers the separator between marks", async () => {
     mockedFetch.mockResolvedValue(partnerResponse(null) as never);
 

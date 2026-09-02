@@ -183,6 +183,7 @@ export default function AdminOrganizations() {
   const [, setLocation] = useLocation();
   const search = useSearch();
   const sectionParam = new URLSearchParams(search).get("section");
+  const partnerEditSlug = new URLSearchParams(search).get("edit") ?? undefined;
   const activeSection =
     sectionParam === "claim-links"
       ? "claim-links"
@@ -446,7 +447,7 @@ export default function AdminOrganizations() {
         </div>
 
         {activeSection === "partner" ? (
-          <AdminPartnerLanding />
+          <AdminPartnerLanding initialSlug={partnerEditSlug} />
         ) : activeSection === "claim-links" ? (
           <OrgClaimLinksContent embedded />
         ) : (

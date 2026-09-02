@@ -137,7 +137,11 @@ function Step({
   );
 }
 
-export function AdminPartnerLanding() {
+export function AdminPartnerLanding({
+  initialSlug,
+}: {
+  initialSlug?: string;
+}) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -217,6 +221,17 @@ export function AdminPartnerLanding() {
       }));
     }
   };
+
+  useEffect(() => {
+    if (!initialSlug || selectedId || !pages.data?.data) return;
+    const page = pages.data.data.find(
+      (item) => item.slug.toLowerCase() === initialSlug.toLowerCase(),
+    );
+    if (page) {
+      setSelectedOrgListId("");
+      setSelectedId(page.id);
+    }
+  }, [initialSlug, pages.data, selectedId]);
 
   const suggestColorsFromLogo = (logoUrl: string, notify: boolean) => {
     const extractionSeq = ++logoExtractionSeq.current;
