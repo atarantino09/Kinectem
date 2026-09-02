@@ -557,6 +557,79 @@ describe("AdminOrganizations bulk import", () => {
     ).toBeInTheDocument();
   });
 
+  it("filters existing partner pages and keeps the filtered selection workflow", async () => {
+    partnerPages = [
+      {
+        id: "partner-1",
+        slug: "north-stars",
+        officialName: "North Stars",
+        associationLabel: "East Coast Soccer",
+        published: false,
+        memberCount: 4,
+      },
+      {
+        id: "partner-2",
+        slug: "river-city-fc",
+        officialName: "River City FC",
+        associationLabel: "Metro League",
+        published: true,
+        memberCount: 7,
+      },
+    ];
+    const user = userEvent.setup();
+    renderWithProviders(<AdminOrganizations />);
+
+    await user.click(await screen.findByTestId("tab-org-partner"));
+    const searchInput = await screen.findByTestId("input-partner-page-search");
+    expect(
+      screen.getByLabelText("Search existing partner pages"),
+    ).toBe(searchInput);
+    expect(screen.getByRole("button", { name: /North Stars/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /River City FC/ })).toBeInTheDocument();
+
+    await user.type(searchInput, "METRO");
+    expect(screen.getByRole("button", { name: /River City FC/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /North Stars/ })).not.toBeInTheDocument();
+
+    await user.clear(searchInput);
+    await user.type(searchInput, "NORTH");
+    expect(screen.getByRole("button", { name: /North Stars/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /River City FC/ })).not.toBeInTheDocument();
+
+    await user.clear(searchInput);
+    expect(screen.getByRole("button", { name: /North Stars/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /River City FC/ })).toBeInTheDocument();
+
+    await user.type(searchInput, "north-stars");
+    await user.click(screen.getByRole("button", { name: /North Stars/ }));
+    expect(await screen.findByText("Partner identity and branding")).toBeInTheDocument();
+  });
+
+  it("shows a clear empty state when no partner page matches the search", async () => {
+    partnerPages = [
+      {
+        id: "partner-1",
+        slug: "north-stars",
+        officialName: "North Stars",
+        associationLabel: "East Coast Soccer",
+        published: false,
+        memberCount: 0,
+      },
+    ];
+    const user = userEvent.setup();
+    renderWithProviders(<AdminOrganizations />);
+
+    await user.click(await screen.findByTestId("tab-org-partner"));
+    const searchInput = await screen.findByTestId("input-partner-page-search");
+    await user.type(searchInput, "does-not-exist");
+
+    expect(screen.queryByRole("button", { name: /North Stars/ })).not.toBeInTheDocument();
+    expect(screen.getByTestId("partner-page-search-empty")).toHaveTextContent(
+      "No existing partner pages match “does-not-exist”.",
+    );
+    expect(screen.getByRole("button", { name: "Create partner page" })).toBeInTheDocument();
+  });
+
   it("uses the canonical slug for partner preview and clipboard sharing", async () => {
     partnerPublished = true;
     partnerPages = [

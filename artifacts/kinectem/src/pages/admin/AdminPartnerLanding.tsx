@@ -164,6 +164,7 @@ export function AdminPartnerLanding({
   });
   const [newOrg, setNewOrg] = useState({ name: "", city: "", state: "", teams: "", logoUrl: "" });
   const [search, setSearch] = useState("");
+  const [partnerPageSearch, setPartnerPageSearch] = useState("");
   const [selectedOrgListId, setSelectedOrgListId] = useState("");
   const [addingOrgList, setAddingOrgList] = useState(false);
   const [competitionSearch, setCompetitionSearch] = useState("");
@@ -578,18 +579,47 @@ export function AdminPartnerLanding({
     await refresh();
   };
 
+  const partnerPageSummaries = pages.data?.data ?? [];
+  const normalizedPartnerPageSearch = partnerPageSearch.trim().toLowerCase();
+  const filteredPartnerPages = normalizedPartnerPageSearch
+    ? partnerPageSummaries.filter((page) =>
+        [page.officialName, page.slug, page.associationLabel].some((value) =>
+          value.toLowerCase().includes(normalizedPartnerPageSearch),
+        ),
+      )
+    : partnerPageSummaries;
+
   if (!selectedId) {
     return (
       <div className="space-y-4">
         <Step number={1} title="Choose or create the partner page">
+          <div className="space-y-1">
+            <Label htmlFor="partner-page-search">Search existing partner pages</Label>
+            <div className="relative">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                id="partner-page-search"
+                data-testid="input-partner-page-search"
+                className="pl-9"
+                placeholder="Partner name, URL slug, or association"
+                value={partnerPageSearch}
+                onChange={(event) => setPartnerPageSearch(event.target.value)}
+              />
+            </div>
+          </div>
           <div className="grid gap-2 md:grid-cols-2">
-            {(pages.data?.data ?? []).map((page) => (
+            {filteredPartnerPages.map((page) => (
               <button key={page.id} type="button" onClick={() => loadDetail(page.id)} className="rounded-lg border p-4 text-left hover:border-primary">
                 <div className="font-black">{page.officialName}</div>
                 <div className="text-sm text-muted-foreground">/{page.slug} · {page.memberCount} organizations · {page.published ? "Published" : "Draft"}</div>
               </button>
             ))}
           </div>
+          {normalizedPartnerPageSearch && filteredPartnerPages.length === 0 && (
+            <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground" data-testid="partner-page-search-empty">
+              No existing partner pages match “{partnerPageSearch.trim()}”.
+            </p>
+          )}
           <div className="grid gap-3 rounded-lg border bg-muted/20 p-4 md:grid-cols-3">
             <Input aria-label="Official partner name" placeholder="Official partner name" value={draft.officialName} onChange={(e) => setDraft({ ...draft, officialName: e.target.value })} />
             <Input aria-label="League / association label" placeholder="League / association label" value={draft.associationLabel} onChange={(e) => setDraft({ ...draft, associationLabel: e.target.value })} />
