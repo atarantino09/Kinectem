@@ -146,7 +146,7 @@ export default function PartnerLandingPage() {
   }
   const { page } = data;
   const foreground = readableText(page.primaryColor);
-  const intro = page.introduction || `Kinectem is the youth-sports platform where the story of your season comes to life. Explore the clubs across ${page.officialName}.`;
+  const intro = page.introduction || "Kinectem is the youth-sports platform where the story of your season comes to life — a lasting home for every club, team, player, and game day.";
 
   const beginClaim = (org: PartnerOrganization) => {
     setSelected(org);
