@@ -92,7 +92,7 @@ type BulkValidationResponse = {
 type BulkImportResult = {
   data: {
     list: { id: string; name: string };
-    promoCode: string;
+    promoCode: string | null;
     organizationCount: number;
     teamCount: number;
     organizations: Array<{
@@ -297,7 +297,7 @@ export default function AdminOrganizations() {
   };
 
   const validateImport = async () => {
-    if (!parseResult || !listName.trim() || !promoCode) return;
+    if (!parseResult || !listName.trim()) return;
     setCheckingImport(true);
     setServerIssues([]);
     setValidated(false);
@@ -308,7 +308,7 @@ export default function AdminOrganizations() {
           method: "POST",
           body: JSON.stringify({
             listName: listName.trim(),
-            promoCode,
+            promoCode: promoCode || null,
             organizations: payloadOrganizations,
           }),
         },
@@ -342,7 +342,7 @@ export default function AdminOrganizations() {
           method: "POST",
           body: JSON.stringify({
             listName: listName.trim(),
-            promoCode,
+            promoCode: promoCode || null,
             organizations: payloadOrganizations,
           }),
         },
@@ -507,7 +507,7 @@ export default function AdminOrganizations() {
 
                     <div className="space-y-1.5">
                       <Label htmlFor="bulk-promo-code">
-                        Promo code for this batch
+                        Promo code for this batch (optional)
                       </Label>
                       <Select
                         value={promoCode || "__none__"}
@@ -522,11 +522,11 @@ export default function AdminOrganizations() {
                           className="max-w-md"
                           data-testid="select-org-bulk-promo"
                         >
-                          <SelectValue placeholder="Choose an active promo code" />
+                          <SelectValue placeholder="No promo code" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="__none__">
-                            Choose a promo code
+                            No promo code
                           </SelectItem>
                           {availablePromos.map((promo) => (
                             <SelectItem key={promo.id} value={promo.code}>
@@ -539,8 +539,8 @@ export default function AdminOrganizations() {
                         </SelectContent>
                       </Select>
                       <p className="text-xs text-muted-foreground">
-                        The code is staged for each organization and is applied
-                        later when its owner sets up billing.
+                        If selected, the code is staged for each organization
+                        and applied later when its owner sets up billing.
                       </p>
                     </div>
 
@@ -639,8 +639,7 @@ export default function AdminOrganizations() {
                           checkingImport ||
                           !parseResult ||
                           parseResult.errors.length > 0 ||
-                          !listName.trim() ||
-                          !promoCode
+                          !listName.trim()
                         }
                         data-testid="btn-org-bulk-check"
                       >
@@ -682,11 +681,17 @@ export default function AdminOrganizations() {
                         <p className="text-sm text-muted-foreground">
                           {importResult.teamCount} teams were created and every
                           organization was added to “{importResult.list.name}”.
-                          Promo code{" "}
-                          <span className="font-semibold uppercase">
-                            {importResult.promoCode}
-                          </span>{" "}
-                          is staged for each one.
+                          {importResult.promoCode ? (
+                            <>
+                              Promo code{" "}
+                              <span className="font-semibold uppercase">
+                                {importResult.promoCode}
+                              </span>{" "}
+                              is staged for each one.
+                            </>
+                          ) : (
+                            "No promo code was assigned."
+                          )}
                         </p>
                       </div>
                     </div>

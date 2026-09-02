@@ -1974,13 +1974,13 @@ async function bulkImportPreflight(body: unknown, checkExistingNames: boolean) {
   const promoCode =
     typeof raw?.promoCode === "string" ? raw.promoCode.trim() : "";
   const promo = promoCode ? await findRedeemablePromo(promoCode) : null;
-  if (!promo) {
+  if (promoCode && !promo) {
     issues.push({
       scope: "file",
       message:
         "Choose an active promo code that has not expired or reached its redemption limit.",
     });
-  } else if (promo.maxRedemptions != null) {
+  } else if (promo && promo.maxRedemptions != null) {
     const [pending] = await db
       .select({ count: sql<number>`count(*)` })
       .from(organizations)
@@ -2082,7 +2082,7 @@ router.post(
   "/org-bulk-import",
   asyncHandler(async (req, res) => {
     const preflight = await bulkImportPreflight(req.body, false);
-    if (preflight.issues.length > 0 || !preflight.promo) {
+    if (preflight.issues.length > 0) {
       return res.status(400).json({
         error: preflight.issues[0]?.message ?? "Invalid organization import.",
         code: "BULK_IMPORT_INVALID",
@@ -2109,41 +2109,43 @@ router.post(
         max_redemptions: number | null;
         redemption_count: number;
       };
-      const promoResult = await tx.execute<LockedPromo>(
-        sql`SELECT id, active, expires_at, max_redemptions, redemption_count
-            FROM promo_codes
-            WHERE id = ${selectedPromo.id}
-            FOR UPDATE`,
-      );
-      const lockedPromo = (promoResult.rows ?? promoResult)[0] as
-        | LockedPromo
-        | undefined;
-      const promoUnavailable =
-        !lockedPromo ||
-        !lockedPromo.active ||
-        (lockedPromo.expires_at &&
-          new Date(lockedPromo.expires_at).getTime() <= Date.now());
-      if (promoUnavailable) {
-        return {
-          promoConflict:
-            "That promo code was deactivated or expired while this import was being prepared.",
-        } as const;
-      }
-      if (lockedPromo.max_redemptions != null) {
-        const [pending] = await tx
-          .select({ count: sql<number>`count(*)` })
-          .from(organizations)
-          .where(eq(organizations.pendingPromoCodeId, lockedPromo.id));
-        const committedAssignments =
-          lockedPromo.redemption_count + Number(pending?.count ?? 0);
-        if (
-          committedAssignments + preflight.organizations.length >
-          lockedPromo.max_redemptions
-        ) {
+      if (selectedPromo) {
+        const promoResult = await tx.execute<LockedPromo>(
+          sql`SELECT id, active, expires_at, max_redemptions, redemption_count
+              FROM promo_codes
+              WHERE id = ${selectedPromo.id}
+              FOR UPDATE`,
+        );
+        const lockedPromo = (promoResult.rows ?? promoResult)[0] as
+          | LockedPromo
+          | undefined;
+        const promoUnavailable =
+          !lockedPromo ||
+          !lockedPromo.active ||
+          (lockedPromo.expires_at &&
+            new Date(lockedPromo.expires_at).getTime() <= Date.now());
+        if (promoUnavailable) {
           return {
             promoConflict:
-              "That promo code no longer has enough remaining redemptions for this batch.",
+              "That promo code was deactivated or expired while this import was being prepared.",
           } as const;
+        }
+        if (lockedPromo.max_redemptions != null) {
+          const [pending] = await tx
+            .select({ count: sql<number>`count(*)` })
+            .from(organizations)
+            .where(eq(organizations.pendingPromoCodeId, lockedPromo.id));
+          const committedAssignments =
+            lockedPromo.redemption_count + Number(pending?.count ?? 0);
+          if (
+            committedAssignments + preflight.organizations.length >
+            lockedPromo.max_redemptions
+          ) {
+            return {
+              promoConflict:
+                "That promo code no longer has enough remaining redemptions for this batch.",
+            } as const;
+          }
         }
       }
       const duplicateRows = await tx
@@ -2208,7 +2210,7 @@ router.post(
           .values({
             name: organization.name,
             claimToken: token,
-            pendingPromoCodeId: selectedPromo.id,
+            pendingPromoCodeId: selectedPromo?.id ?? null,
             adminListId: list.id,
           })
           .returning({ id: organizations.id, name: organizations.name });
@@ -2270,7 +2272,7 @@ router.post(
     return res.status(201).json({
       data: {
         list: result.list,
-        promoCode: selectedPromo.code,
+        promoCode: selectedPromo?.code ?? null,
         organizations: createdOrganizations,
         organizationCount: createdOrganizations.length,
         teamCount: createdOrganizations.reduce(

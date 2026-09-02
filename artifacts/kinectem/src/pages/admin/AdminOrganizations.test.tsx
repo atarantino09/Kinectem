@@ -89,7 +89,10 @@ beforeEach(() => {
           {
             data: {
               list: { id: "list-1", name: "Fall Partners" },
-              promoCode: "bulk20",
+              promoCode:
+                typeof importedBody?.promoCode === "string"
+                  ? importedBody.promoCode
+                  : null,
               organizationCount: 2,
               teamCount: 3,
               organizations: [
@@ -166,6 +169,41 @@ describe("AdminOrganizations bulk import", () => {
     );
     expect(importedBody).toEqual(validatedBody);
     expect(screen.getByText(/org-claim\/token-north/)).toBeInTheDocument();
+  });
+
+  it("validates and creates an import without a promo code", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AdminOrganizations />);
+
+    await user.upload(
+      await screen.findByTestId("input-org-bulk-file"),
+      new File(["No Promo League\nNo Promo U12"], "no-promo.csv", {
+        type: "text/csv",
+      }),
+    );
+    await user.type(
+      screen.getByTestId("input-org-bulk-list-name"),
+      "No Promo Partners",
+    );
+
+    expect(screen.getByLabelText(/Promo code for this batch/i)).toBeInTheDocument();
+    expect(screen.getByTestId("btn-org-bulk-check")).toBeEnabled();
+    await user.click(screen.getByTestId("btn-org-bulk-check"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("btn-org-bulk-import")).toBeEnabled(),
+    );
+    expect(validatedBody).toMatchObject({
+      listName: "No Promo Partners",
+      promoCode: null,
+      organizations: [{ name: "No Promo League", teams: ["No Promo U12"] }],
+    });
+
+    await user.click(screen.getByTestId("btn-org-bulk-import"));
+    expect(await screen.findByTestId("bulk-import-success")).toHaveTextContent(
+      "No promo code was assigned.",
+    );
+    expect(importedBody?.promoCode).toBeNull();
   });
 
   it("opens the claim links and setup workflow inside Organizations", async () => {

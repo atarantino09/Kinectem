@@ -42,7 +42,7 @@ describe("POST /api/v1/admin/org-bulk-import", () => {
     const preview = await agent
       .post("/api/v1/admin/org-bulk-import/validate")
       .send(payload);
-    expect(preview.status).toBe(200);
+    expect(preview.status, JSON.stringify(preview.body)).toBe(200);
     expect(preview.body.data.valid).toBe(true);
     expect(preview.body.data.list).toBeNull();
 
@@ -184,6 +184,43 @@ describe("POST /api/v1/admin/org-bulk-import", () => {
       .where(eq(organizations.name, shouldNotExist))
       .limit(1);
     expect(rolledBack).toBeUndefined();
+  });
+
+  it("validates and creates organizations without a promo code", async () => {
+    const { agent } = await loginAs((user) => user.email === ADMIN_EMAIL);
+    const suffix = Date.now().toString(36);
+    const listName = `No Promo Batch ${suffix}`;
+    const organizationName = `No Promo Org ${suffix}`;
+    const payload = {
+      listName,
+      organizations: [
+        { name: organizationName, teams: ["No Promo Team"] },
+      ],
+    };
+
+    const preview = await agent
+      .post("/api/v1/admin/org-bulk-import/validate")
+      .send(payload);
+    expect(preview.status, JSON.stringify(preview.body)).toBe(200);
+    expect(preview.body.data.valid).toBe(true);
+    expect(preview.body.data.promo).toBeNull();
+
+    const imported = await agent.post("/api/v1/admin/org-bulk-import").send(payload);
+    expect(imported.status).toBe(201);
+    expect(imported.body.data).toMatchObject({
+      organizationCount: 1,
+      teamCount: 1,
+      promoCode: null,
+      list: { name: listName },
+    });
+
+    const createdOrgId = imported.body.data.organizations[0].id;
+    const [org] = await db
+      .select({ pendingPromoCodeId: organizations.pendingPromoCodeId })
+      .from(organizations)
+      .where(eq(organizations.id, createdOrgId))
+      .limit(1);
+    expect(org?.pendingPromoCodeId).toBeNull();
   });
 
   it("collapses repeated team names into one team per organization", async () => {
