@@ -72,7 +72,7 @@ export function OrgLogo({
         data-testid={dataTestId}
         loading="lazy"
         decoding="async"
-        className={imgClassName ?? className}
+        className={imgClassName ?? cn(className, "object-contain")}
       />
     );
   }

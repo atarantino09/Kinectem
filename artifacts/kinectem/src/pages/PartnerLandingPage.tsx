@@ -250,15 +250,17 @@ export default function PartnerLandingPage() {
               data-testid="partner-logo-lockup"
             >
               <div className="grid grid-cols-[8rem_auto_8rem] items-center justify-center gap-3 sm:gap-5 md:grid-cols-[10rem_auto_10rem]">
-                <div className="grid h-32 w-32 place-items-center rounded-3xl bg-white/95 shadow-xl md:h-40 md:w-40">
-                  {page.logoUrl ? <img src={page.logoUrl} alt={`${page.officialName} logo`} className="h-full w-full rounded-3xl object-contain p-3" /> : <Building2 className="h-16 w-16 text-slate-500 md:h-20 md:w-20" />}
+                <div className="grid h-32 w-32 min-h-0 min-w-0 place-items-center overflow-hidden rounded-3xl bg-white/95 shadow-xl md:h-40 md:w-40">
+                  {page.logoUrl ? <img src={page.logoUrl} alt={`${page.officialName} logo`} className="block max-h-full max-w-full object-contain p-3" /> : <Building2 className="h-16 w-16 text-slate-500 md:h-20 md:w-20" />}
                 </div>
                 <span className="text-center text-3xl font-light opacity-70 md:text-5xl" aria-hidden="true" data-testid="partner-logo-separator">×</span>
-                <img
-                  src={kinectemIcon}
-                  alt="Kinectem logo"
-                  className="h-32 w-32 rounded-3xl object-contain shadow-xl md:h-40 md:w-40"
-                />
+                <div className="grid h-32 w-32 min-h-0 min-w-0 place-items-center overflow-hidden rounded-3xl shadow-xl md:h-40 md:w-40">
+                  <img
+                    src={kinectemIcon}
+                    alt="Kinectem logo"
+                    className="block max-h-full max-w-full object-contain"
+                  />
+                </div>
               </div>
               <div className="mt-2 grid grid-cols-[8rem_auto_8rem] gap-3 text-center sm:gap-5 md:grid-cols-[10rem_auto_10rem]">
                 <div className="flex min-h-[3.25rem] min-w-0 flex-col items-center justify-start">
