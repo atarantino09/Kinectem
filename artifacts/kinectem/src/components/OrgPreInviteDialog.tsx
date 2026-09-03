@@ -19,7 +19,13 @@ export function buildOrganizationPreInviteMessage(
 ): string {
   return `Hello ${organizationName} admins, coaches, players, and parents,
 
-${organizationName} is getting started on Kinectem, a youth-sports platform that brings team updates, schedules, highlights, game recaps, and season memories together in one place.
+${organizationName} is getting started on Kinectem. Kinectem is the youth-sports platform where the story of your season comes to life.
+
+Kinectem is not another registration, scheduling, or communication app — it's the layer that sits on top of the one you already use. They run your season. Kinectem makes it last.
+
+After the final whistle, Kinectem turns quick coach notes into polished recaps, tags every player, and builds a lasting history families can revisit. It gives clubs one living home for the moments that matter — without replacing the tools they already use.
+
+Don't worry coaches- there is an AI Assist tool built in to game recap editor, so it's a couple of minutes, not homework.
 
 Please take a moment to preview our organization page:
 ${pageUrl}

@@ -25,7 +25,21 @@ describe("OrgPreInviteDialog", () => {
     expect(message).toContain("https://example.com/app/organizations/org-1");
     expect(message).toContain("follow-up email from Kinectem");
     expect(message).toContain("specific team invitation");
-    expect(message).toContain("team updates, schedules, highlights, game recaps");
+    expect(message).toContain(
+      "the youth-sports platform where the story of your season comes to life",
+    );
+    expect(message).toContain(
+      "They run your season. Kinectem makes it last.",
+    );
+    expect(message).toContain(
+      "turns quick coach notes into polished recaps, tags every player",
+    );
+    expect(message).toContain(
+      "there is an AI Assist tool built in to game recap editor",
+    );
+    expect(message).not.toContain(
+      "brings team updates, schedules, highlights, game recaps",
+    );
   });
 
   it("copies the complete message and reports success", async () => {
