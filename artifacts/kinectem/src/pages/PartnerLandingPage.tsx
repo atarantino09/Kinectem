@@ -94,6 +94,21 @@ function readableBrandInk(brandColor: string) {
   return contrastRatio(brandColor, "#ffffff") >= 4.5 ? brandColor : "#0f172a";
 }
 
+export function partnerHeroShade(
+  primaryColor: string,
+  secondaryColor: string,
+): { start: number; end: number } {
+  const brightestBrandColor = Math.max(
+    relativeLuminance(primaryColor),
+    relativeLuminance(secondaryColor),
+  );
+
+  if (brightestBrandColor >= 0.7) return { start: 0.16, end: 0.46 };
+  if (brightestBrandColor >= 0.45) return { start: 0.12, end: 0.38 };
+  if (brightestBrandColor >= 0.24) return { start: 0.08, end: 0.3 };
+  return { start: 0.04, end: 0.2 };
+}
+
 function locationOf(org: PartnerOrganization) {
   return [org.city, org.state].filter(Boolean).join(", ") || org.location || "Location coming soon";
 }
@@ -174,6 +189,10 @@ export default function PartnerLandingPage() {
   }
   const { page } = data;
   const foreground = readableText(page.primaryColor);
+  const heroShade = partnerHeroShade(
+    page.primaryColor,
+    page.secondaryColor,
+  );
   const intro = page.introduction || "Kinectem is the youth-sports platform where the story of your season comes to life — a lasting home for every club, team, player, and game day.";
   const featuredCompetition = data.competition;
   const createOrganizationPath = "/organizations/mine?new=1";
@@ -222,8 +241,8 @@ export default function PartnerLandingPage() {
         style={{
           color: "#ffffff",
           background: page.bannerUrl
-            ? `linear-gradient(110deg, rgba(15,23,42,0.18), rgba(15,23,42,0.52)), linear-gradient(110deg, ${page.primaryColor}f2, ${page.secondaryColor}cc), url("${page.bannerUrl}") center/cover`
-            : `linear-gradient(110deg, rgba(15,23,42,0.18), rgba(15,23,42,0.52)), linear-gradient(125deg, ${page.primaryColor}, ${page.secondaryColor})`,
+            ? `linear-gradient(110deg, rgba(15,23,42,${heroShade.start}), rgba(15,23,42,${heroShade.end})), linear-gradient(110deg, ${page.primaryColor}f2, ${page.secondaryColor}cc), url("${page.bannerUrl}") center/cover`
+            : `linear-gradient(110deg, rgba(15,23,42,${heroShade.start}), rgba(15,23,42,${heroShade.end})), linear-gradient(125deg, ${page.primaryColor}, ${page.secondaryColor})`,
         }}
       >
         <div className="absolute inset-0 opacity-20" style={{ backgroundImage: "radial-gradient(circle at 80% 10%, white 0, transparent 32%), radial-gradient(circle at 10% 90%, white 0, transparent 26%)" }} />

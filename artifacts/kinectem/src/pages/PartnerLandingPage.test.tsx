@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { customFetch } from "@workspace/api-client-react";
 import { renderWithProviders } from "@/test/renderWithProviders";
 import { useWhoami } from "@/hooks/useWhoami";
-import PartnerLandingPage from "./PartnerLandingPage";
+import PartnerLandingPage, { partnerHeroShade } from "./PartnerLandingPage";
 
 vi.mock("@workspace/api-client-react", () => ({
   customFetch: vi.fn(),
@@ -57,6 +57,17 @@ describe("PartnerLandingPage featured competition", () => {
     mockedWhoami.mockReturnValue({
       data: { authenticated: false },
     } as never);
+  });
+
+  it("softens the hero shade for medium brand colors while protecting bright palettes", () => {
+    expect(partnerHeroShade("#155EEF", "#06B6D4")).toEqual({
+      start: 0.08,
+      end: 0.3,
+    });
+    expect(partnerHeroShade("#FDE047", "#F8FAFC")).toEqual({
+      start: 0.16,
+      end: 0.46,
+    });
   });
 
   it("shows public competition details and links to the canonical public page", async () => {
