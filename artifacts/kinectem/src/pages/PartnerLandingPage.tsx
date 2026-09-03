@@ -292,6 +292,9 @@ export default function PartnerLandingPage() {
                 <p className="mt-4 text-base font-semibold leading-relaxed text-white/90 md:text-lg">
                   Kinectem is not another registration, scheduling, or communication app — it's the layer that sits on top of the one you already use. They run your season. Kinectem makes it last.
                 </p>
+                <p className="mt-4 text-sm font-medium leading-relaxed text-white/75 md:text-base">
+                  After the final whistle, Kinectem turns quick coach notes into polished recaps, tags every player, and builds a lasting history families can revisit. It gives clubs one living home for the moments that matter — without replacing the tools they already use.
+                </p>
               </div>
               <Button className="mt-7 w-full rounded-full px-6 font-black md:w-fit" style={{ background: foreground, color: page.primaryColor }} onClick={() => { setTab("clubs"); document.getElementById("partner-content")?.scrollIntoView({ behavior: "smooth" }); }}>
                 Find your club <ArrowRight className="ml-2 h-4 w-4" />

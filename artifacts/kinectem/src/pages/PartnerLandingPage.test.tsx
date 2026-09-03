@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { customFetch, useGetLoggedInUser } from "@workspace/api-client-react";
 import { renderWithProviders } from "@/test/renderWithProviders";
@@ -142,6 +142,16 @@ describe("PartnerLandingPage featured competition", () => {
       screen.getByText(
         "Kinectem is not another registration, scheduling, or communication app — it's the layer that sits on top of the one you already use. They run your season. Kinectem makes it last.",
       ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "After the final whistle, Kinectem turns quick coach notes into polished recaps, tags every player, and builds a lasting history families can revisit. It gives clubs one living home for the moments that matter — without replacing the tools they already use.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("partner-hero-opening")).getByRole("button", {
+        name: /find your club/i,
+      }),
     ).toBeInTheDocument();
     const lockup = screen.getByTestId("partner-logo-lockup");
     expect(lockup.querySelector('[data-testid="partner-logo-separator"]')).toBeInTheDocument();
