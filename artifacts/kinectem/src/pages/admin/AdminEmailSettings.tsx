@@ -165,12 +165,17 @@ export default function AdminEmailSettings() {
             encrypted and never shown again.
           </p>
         </div>
-        <Link href="/admin/email-preview">
-          <Button variant="outline" className="shrink-0" data-testid="link-email-preview">
+        <Button
+          asChild
+          variant="outline"
+          className="shrink-0"
+          data-testid="link-email-preview"
+        >
+          <Link href="/admin/email-preview">
             <Eye className="h-4 w-4" />
             Preview coach invite
-          </Button>
-        </Link>
+          </Link>
+        </Button>
       </div>
 
       <Card className="max-w-xl">

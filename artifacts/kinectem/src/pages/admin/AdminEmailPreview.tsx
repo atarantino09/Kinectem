@@ -81,12 +81,12 @@ export default function AdminEmailPreview() {
               invitation delivery, with representative preview data.
             </p>
           </div>
-          <Link href="/admin/email">
-            <Button variant="outline" className="shrink-0">
+          <Button asChild variant="outline" className="shrink-0">
+            <Link href="/admin/email">
               <ArrowLeft className="h-4 w-4" />
               Email settings
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         </div>
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_18rem]">
