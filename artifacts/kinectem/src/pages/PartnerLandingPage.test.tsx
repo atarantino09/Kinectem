@@ -1,21 +1,35 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { screen, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { customFetch, useGetLoggedInUser } from "@workspace/api-client-react";
+import { customFetch } from "@workspace/api-client-react";
 import { renderWithProviders } from "@/test/renderWithProviders";
+import { useWhoami } from "@/hooks/useWhoami";
 import PartnerLandingPage from "./PartnerLandingPage";
 
 vi.mock("@workspace/api-client-react", () => ({
   customFetch: vi.fn(),
-  useGetLoggedInUser: vi.fn(),
+}));
+
+vi.mock("@/hooks/useWhoami", () => ({
+  useWhoami: vi.fn(),
 }));
 
 const mockedFetch = vi.mocked(customFetch);
-const mockedUser = vi.mocked(useGetLoggedInUser);
+const mockedWhoami = vi.mocked(useWhoami);
 
 function partnerResponse(
   competition: Record<string, unknown> | null,
   organizations: Array<Record<string, unknown>> = [],
+  page: Partial<{
+    slug: string;
+    officialName: string;
+    associationLabel: string;
+    introduction: string;
+    logoUrl: string | null;
+    bannerUrl: string | null;
+    primaryColor: string;
+    secondaryColor: string;
+  }> = {},
 ) {
   return {
     data: {
@@ -28,6 +42,7 @@ function partnerResponse(
         bannerUrl: null,
         primaryColor: "#155EEF",
         secondaryColor: "#06B6D4",
+        ...page,
       },
       competition,
       organizations,
@@ -39,7 +54,9 @@ describe("PartnerLandingPage featured competition", () => {
   beforeEach(() => {
     window.history.pushState({}, "", "/partners/north-stars");
     mockedFetch.mockReset();
-    mockedUser.mockReturnValue({ data: null } as never);
+    mockedWhoami.mockReturnValue({
+      data: { authenticated: false },
+    } as never);
   });
 
   it("shows public competition details and links to the canonical public page", async () => {
@@ -97,8 +114,17 @@ describe("PartnerLandingPage featured competition", () => {
   });
 
   it("shows the partner edit console link only to platform admins", async () => {
-    mockedUser.mockReturnValue({
-      data: { id: "admin-1", email: "admin@kinectem.com", role: "admin" },
+    mockedWhoami.mockReturnValue({
+      data: {
+        authenticated: true,
+        realUser: {
+          id: "admin-1",
+          name: "Platform Admin",
+          email: "admin@kinectem.com",
+          role: "admin",
+        },
+        viewingAs: null,
+      },
     } as never);
     mockedFetch.mockResolvedValue(partnerResponse(null) as never);
 
@@ -122,6 +148,124 @@ describe("PartnerLandingPage featured competition", () => {
     expect(
       screen.queryByTestId("link-edit-partner-page"),
     ).not.toBeInTheDocument();
+  });
+
+  it("shows the slug-specific edit link when admin identity resolves after page data", async () => {
+    let whoamiResult: ReturnType<typeof useWhoami> = {
+      data: undefined,
+      isLoading: true,
+    } as never;
+    mockedWhoami.mockImplementation(() => whoamiResult);
+    mockedFetch.mockResolvedValue(partnerResponse(null) as never);
+
+    const view = renderWithProviders(<PartnerLandingPage />);
+
+    await screen.findByRole("heading", {
+      name: "Kinectem is the youth-sports platform where the story of your season comes to life.",
+    });
+    expect(screen.queryByTestId("link-edit-partner-page")).not.toBeInTheDocument();
+
+    whoamiResult = {
+      data: {
+        authenticated: true,
+        realUser: {
+          id: "admin-1",
+          name: "Platform Admin",
+          email: "admin@kinectem.com",
+          role: "admin",
+        },
+        viewingAs: null,
+      },
+      isLoading: false,
+    } as never;
+    view.rerender(<PartnerLandingPage />);
+
+    expect(await screen.findByTestId("link-edit-partner-page")).toHaveAttribute(
+      "href",
+      "/admin/organizations?section=partner&edit=north-stars",
+    );
+  });
+
+  it("updates the admin edit destination when navigating between partner slugs", async () => {
+    mockedWhoami.mockReturnValue({
+      data: {
+        authenticated: true,
+        realUser: {
+          id: "admin-1",
+          name: "Platform Admin",
+          email: "admin@kinectem.com",
+          role: "admin",
+        },
+        viewingAs: null,
+      },
+    } as never);
+    mockedFetch.mockImplementation(async (path) => {
+      const slug = String(path).split("/").pop() ?? "";
+      return partnerResponse(null, [], {
+        slug,
+        officialName: slug === "north-stars" ? "North Stars Soccer" : "Hudson Valley Soccer",
+      }) as never;
+    });
+
+    renderWithProviders(<PartnerLandingPage />);
+
+    expect(await screen.findByTestId("link-edit-partner-page")).toHaveAttribute(
+      "href",
+      "/admin/organizations?section=partner&edit=north-stars",
+    );
+
+    act(() => {
+      window.history.pushState({}, "", "/partners/hudson-valley");
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("link-edit-partner-page")).toHaveAttribute(
+        "href",
+        "/admin/organizations?section=partner&edit=hudson-valley",
+      );
+    });
+  });
+
+  it("never shows the admin edit link to regular users or masquerading admins", async () => {
+    mockedFetch.mockResolvedValue(partnerResponse(null) as never);
+    mockedWhoami.mockReturnValue({
+      data: {
+        authenticated: true,
+        realUser: {
+          id: "coach-1",
+          name: "Regular Coach",
+          email: "coach@example.com",
+          role: "coach",
+        },
+        viewingAs: null,
+      },
+    } as never);
+
+    const view = renderWithProviders(<PartnerLandingPage />);
+    await screen.findByTestId("partner-hero");
+    expect(screen.queryByTestId("link-edit-partner-page")).not.toBeInTheDocument();
+
+    mockedWhoami.mockReturnValue({
+      data: {
+        authenticated: true,
+        isMasquerading: true,
+        realUser: {
+          id: "admin-1",
+          name: "Platform Admin",
+          email: "admin@kinectem.com",
+          role: "admin",
+        },
+        viewingAs: {
+          id: "coach-1",
+          name: "Regular Coach",
+          email: "coach@example.com",
+          role: "coach",
+        },
+      },
+    } as never);
+    view.rerender(<PartnerLandingPage />);
+
+    expect(screen.queryByTestId("link-edit-partner-page")).not.toBeInTheDocument();
   });
 
   it("shows the platform hero messaging and centers the separator between marks", async () => {
@@ -156,6 +300,32 @@ describe("PartnerLandingPage featured competition", () => {
     const lockup = screen.getByTestId("partner-logo-lockup");
     expect(lockup.querySelector('[data-testid="partner-logo-separator"]')).toBeInTheDocument();
     expect(lockup.querySelector('[alt="Kinectem logo"]')).toBeInTheDocument();
+  });
+
+  it("contains edge-reaching partner artwork inside a padded fixed-size tile", async () => {
+    mockedFetch.mockResolvedValue(
+      partnerResponse(null, [], {
+        officialName: "Wide Edge League",
+        logoUrl:
+          "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='120'%3E%3Crect width='400' height='120' fill='navy'/%3E%3C/svg%3E",
+      }) as never,
+    );
+
+    renderWithProviders(<PartnerLandingPage />);
+
+    const tile = await screen.findByTestId("partner-logo-tile");
+    const logo = screen.getByTestId("partner-logo-image");
+    expect(tile).toHaveClass(
+      "h-32",
+      "w-32",
+      "overflow-hidden",
+      "p-4",
+      "md:h-40",
+      "md:w-40",
+      "md:p-5",
+    );
+    expect(logo).toHaveClass("block", "h-full", "w-full", "object-contain");
+    expect(logo).not.toHaveClass("object-cover");
   });
 
   it("adds the guided tour trigger to each club page link", async () => {
@@ -256,8 +426,17 @@ describe("PartnerLandingPage featured competition", () => {
   });
 
   it("links signed-in visitors directly to the new organization dialog", async () => {
-    mockedUser.mockReturnValue({
-      data: { id: "user-1", email: "coach@example.com" },
+    mockedWhoami.mockReturnValue({
+      data: {
+        authenticated: true,
+        realUser: {
+          id: "user-1",
+          name: "Example Coach",
+          email: "coach@example.com",
+          role: "coach",
+        },
+        viewingAs: null,
+      },
     } as never);
     mockedFetch.mockResolvedValue(partnerResponse(null) as never);
 

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { customFetch, useGetLoggedInUser } from "@workspace/api-client-react";
+import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { OrgLogo } from "@/components/OrgLogoFallback";
+import { useWhoami } from "@/hooks/useWhoami";
 import { formatOrgName } from "@/lib/format";
 import kinectemIcon from "@assets/kinectem_icon_1788367110859.png";
 import {
@@ -137,7 +138,8 @@ export default function PartnerLandingPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const requestPanelRef = useRef<HTMLDivElement>(null);
-  const { data: me } = useGetLoggedInUser();
+  const { data: whoami } = useWhoami();
+  const me = whoami?.viewingAs ?? whoami?.realUser;
   const partner = useQuery<PartnerResponse>({
     queryKey: ["partner-page", slug],
     queryFn: () => customFetch(`/api/v1/partner-pages/${encodeURIComponent(slug)}`, { method: "GET" }),
@@ -153,9 +155,10 @@ export default function PartnerLandingPage() {
     });
   }, [selected?.id]);
 
-  // /users/me is the session user's private profile. Platform admins are the
-  // only users who should see the edit entry point on this public page.
-  const isPlatformAdmin = me?.role === "admin";
+  // Match the admin console's capability source. Masquerading admins cannot
+  // access admin endpoints, so do not offer a link that would be rejected.
+  const isPlatformAdmin =
+    whoami?.realUser?.role === "admin" && whoami.isMasquerading !== true;
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return (data?.organizations ?? []).filter((org) =>
@@ -189,7 +192,7 @@ export default function PartnerLandingPage() {
     setSubmitted(false);
     setForm({
       organizationName: "",
-      fullName: me ? [me.firstName, me.lastName].filter(Boolean).join(" ") : "",
+      fullName: me?.name ?? "",
       title: "",
       confirmCorrect: false,
       confirmAuthorized: false,
@@ -250,8 +253,20 @@ export default function PartnerLandingPage() {
               data-testid="partner-logo-lockup"
             >
               <div className="grid grid-cols-[8rem_auto_8rem] items-center justify-center gap-3 sm:gap-5 md:grid-cols-[10rem_auto_10rem]">
-                <div className="grid h-32 w-32 min-h-0 min-w-0 place-items-center overflow-hidden rounded-3xl bg-white/95 shadow-xl md:h-40 md:w-40">
-                  {page.logoUrl ? <img src={page.logoUrl} alt={`${page.officialName} logo`} className="block max-h-full max-w-full object-contain p-3" /> : <Building2 className="h-16 w-16 text-slate-500 md:h-20 md:w-20" />}
+                <div
+                  className="grid h-32 w-32 min-h-0 min-w-0 place-items-center overflow-hidden rounded-3xl bg-white/95 p-4 shadow-xl md:h-40 md:w-40 md:p-5"
+                  data-testid="partner-logo-tile"
+                >
+                  {page.logoUrl ? (
+                    <img
+                      src={page.logoUrl}
+                      alt={`${page.officialName} logo`}
+                      className="block h-full w-full object-contain"
+                      data-testid="partner-logo-image"
+                    />
+                  ) : (
+                    <Building2 className="h-16 w-16 text-slate-500 md:h-20 md:w-20" />
+                  )}
                 </div>
                 <span className="text-center text-3xl font-light opacity-70 md:text-5xl" aria-hidden="true" data-testid="partner-logo-separator">×</span>
                 <div className="grid h-32 w-32 min-h-0 min-w-0 place-items-center overflow-hidden rounded-3xl shadow-xl md:h-40 md:w-40">
