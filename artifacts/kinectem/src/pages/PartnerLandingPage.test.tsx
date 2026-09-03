@@ -298,6 +298,7 @@ describe("PartnerLandingPage featured competition", () => {
       }),
     ).toBeInTheDocument();
     const lockup = screen.getByTestId("partner-logo-lockup");
+    expect(lockup).toHaveClass("mx-auto");
     expect(lockup.querySelector('[data-testid="partner-logo-separator"]')).toBeInTheDocument();
     expect(lockup.querySelector('[alt="Kinectem logo"]')).toBeInTheDocument();
   });

@@ -249,7 +249,7 @@ export default function PartnerLandingPage() {
               Proud partner with Kinectem
             </p>
             <div
-              className="grid w-fit grid-cols-[8rem_1.5rem_8rem] items-center gap-x-3 gap-y-2 sm:gap-x-5 md:grid-cols-[10rem_2.5rem_10rem]"
+              className="mx-auto grid w-fit grid-cols-[8rem_1.5rem_8rem] items-center gap-x-3 gap-y-2 sm:gap-x-5 md:grid-cols-[10rem_2.5rem_10rem]"
               data-testid="partner-logo-lockup"
             >
               <div
