@@ -13,6 +13,7 @@ import {
   sendGuardianLinkInviteEmail,
   sendOrganizationInviteEmail,
   sendStaffInviteEmail,
+  sendEmail,
 } from "../src/lib/email";
 
 type SentEmail = {
@@ -185,7 +186,7 @@ describe("invite email Kinectem context", () => {
         link: buildInviteAcceptUrl("coach-token"),
       }),
     );
-    expect(email.html).toBe(
+    expect(email.html).toContain(
       buildCoachInviteHtml({
         coachName: "Coach <Name>",
         link: buildInviteAcceptUrl("coach-token"),
@@ -210,7 +211,7 @@ describe("invite email Kinectem context", () => {
         link: buildInviteAcceptUrl("staff-token"),
       }),
     );
-    expect(email.html).toBe(
+    expect(email.html).toContain(
       buildStaffInviteHtml({
         inviterName: "Coach <Name>",
         teamName: "Varsity <Team>",
@@ -219,5 +220,33 @@ describe("invite email Kinectem context", () => {
       }),
     );
     expect(email.html).toContain("Varsity &lt;Team&gt;");
+  });
+
+  it("gives text-only sends branded, escaped HTML without changing text or metadata", async () => {
+    const text = [
+      "Organization: <North & South>",
+      "Requester: Ava <Admin>",
+      "Review: https://kinectem.example/app/admin?claim=1&view=review",
+    ].join("\n");
+
+    await sendEmail({
+      to: "operator@example.com",
+      subject: "Partner claim: <North & South>",
+      text,
+      kind: "partner_org_claim_request",
+      contextLabel: "<North & South>",
+      customArgs: { kinectem_claim_id: "claim-id" },
+    });
+
+    const email = lastSentEmail();
+    expect(email.text).toBe(text);
+    expect(email.html).toContain("logo-horizontal.png");
+    expect(email.html).toContain("Partner claim: &lt;North &amp; South&gt;");
+    expect(email.html).toContain("Organization: &lt;North &amp; South&gt;");
+    expect(email.html).not.toContain("Organization: <North & South>");
+    expect(email.html).toContain(
+      'href="https://kinectem.example/app/admin?claim=1&amp;view=review"',
+    );
+    expect(email.customArgs).toEqual({ kinectem_claim_id: "claim-id" });
   });
 });

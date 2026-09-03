@@ -20,6 +20,7 @@
     "@workspace/api-zod": "workspace:*",
     "@workspace/daily-admin-digest": "workspace:*",
     "@workspace/db": "workspace:*",
+    "@workspace/email-template": "workspace:*",
     "@workspace/invite-copy": "workspace:*",
     "@workspace/user-hard-delete": "workspace:*",
     "cookie-parser": "^1.4.7",

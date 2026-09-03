@@ -74,3 +74,4 @@
 - [Partner landing membership](partner-landing-membership.md) — partner directories attach orgs independently of ownership; duplicates stay distinct and direct secret-link claims remain separate.
 - [Partner logo palette](partner-logo-palette.md) — partner-page colors come from the logo; preserve manual custom colors and use a solid treatment for one-color marks.
 - [Unclaimed organization deletion](unclaimed-org-deletion.md) — lock organization rows before the owner check, and explicitly purge polymorphic records that have no foreign keys.
+- [Branded email boundary](branded-email-boundary.md) — API email branding belongs at final delivery; scripts use the shared shell, while plaintext and compliance copy remain caller-owned.

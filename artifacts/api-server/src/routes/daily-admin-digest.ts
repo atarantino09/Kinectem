@@ -81,9 +81,14 @@ router.patch(
   asyncHandler(async (req, res) => {
     const parsed = SettingsBody.safeParse(req.body);
     if (!parsed.success) {
-      apiError(res, 400, parsed.error.errors[0]?.message ?? "Invalid request.", {
-        code: "VALIDATION_FAILED",
-      });
+      apiError(
+        res,
+        400,
+        parsed.error.errors[0]?.message ?? "Invalid request.",
+        {
+          code: "VALIDATION_FAILED",
+        },
+      );
       return;
     }
     const enabled = await setDigestEnabled(
@@ -108,9 +113,14 @@ router.post(
   asyncHandler(async (req, res) => {
     const parsed = CreateBody.safeParse(req.body);
     if (!parsed.success) {
-      apiError(res, 400, parsed.error.errors[0]?.message ?? "Invalid request.", {
-        code: "VALIDATION_FAILED",
-      });
+      apiError(
+        res,
+        400,
+        parsed.error.errors[0]?.message ?? "Invalid request.",
+        {
+          code: "VALIDATION_FAILED",
+        },
+      );
       return;
     }
     const email = parsed.data.email.trim();
@@ -154,9 +164,14 @@ router.patch(
   asyncHandler(async (req, res) => {
     const parsed = UpdateBody.safeParse(req.body);
     if (!parsed.success) {
-      apiError(res, 400, parsed.error.errors[0]?.message ?? "Invalid request.", {
-        code: "VALIDATION_FAILED",
-      });
+      apiError(
+        res,
+        400,
+        parsed.error.errors[0]?.message ?? "Invalid request.",
+        {
+          code: "VALIDATION_FAILED",
+        },
+      );
       return;
     }
     const patch: Partial<typeof dailyAdminDigestRecipients.$inferInsert> = {
@@ -211,9 +226,14 @@ router.post(
   asyncHandler(async (req, res) => {
     const parsed = PreviewBody.safeParse(req.body);
     if (!parsed.success) {
-      apiError(res, 400, parsed.error.errors[0]?.message ?? "Invalid request.", {
-        code: "VALIDATION_FAILED",
-      });
+      apiError(
+        res,
+        400,
+        parsed.error.errors[0]?.message ?? "Invalid request.",
+        {
+          code: "VALIDATION_FAILED",
+        },
+      );
       return;
     }
     const to = parsed.data.to?.trim() || req.realUser?.email;
@@ -240,19 +260,29 @@ router.post(
         text: digest.text,
         html: digest.html,
         kind: "daily_admin_digest_preview",
+        contextLabel: "Operations",
       });
     } catch (err) {
       req.log.error({ err }, "Daily digest preview send failed");
-      apiError(res, 502, "Preview failed to send. Check the email configuration.", {
-        code: "PREVIEW_SEND_FAILED",
-      });
+      apiError(
+        res,
+        502,
+        "Preview failed to send. Check the email configuration.",
+        {
+          code: "PREVIEW_SEND_FAILED",
+        },
+      );
       return;
     }
 
     res.json({
       ok: true,
       sentTo: to,
-      window: { start: window.start.toISOString(), end: window.end.toISOString(), label: window.label },
+      window: {
+        start: window.start.toISOString(),
+        end: window.end.toISOString(),
+        label: window.label,
+      },
       totalEvents: digest.totalEvents,
     });
   }),

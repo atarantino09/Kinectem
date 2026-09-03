@@ -15,6 +15,10 @@ import { eq } from "drizzle-orm";
 import { logger } from "./logger.js";
 import { decryptSecret } from "./secret-crypto.js";
 import type { DispatchBuildContext } from "./notification-email.js";
+import {
+  plainTextToHtml,
+  renderBrandedEmailHtml,
+} from "@workspace/email-template";
 
 // S5 — escape user-controlled values before interpolating them into HTML email
 // bodies. Plain-text parts don't need escaping.
@@ -32,6 +36,7 @@ export type EmailMessage = {
   subject: string;
   text: string;
   html?: string;
+  contextLabel?: string;
   // S12 — a non-PII event key (e.g. "guardian_confirm") used for log
   // triage. The subject itself can embed minor names / post titles, so it
   // must never be logged; this is logged instead.
@@ -48,9 +53,10 @@ const SENDGRID_URL = "https://api.sendgrid.com/v3/mail/send";
 // When a complete row exists (encrypted key + verified sender) it is the
 // source of truth and takes precedence over the env vars / Replit connector.
 // The key is stored encrypted at rest; we decrypt it fresh on every send.
-async function resolveAdminCredentials(): Promise<
-  { apiKey: string; from: string } | null
-> {
+async function resolveAdminCredentials(): Promise<{
+  apiKey: string;
+  from: string;
+} | null> {
   try {
     const [row] = await db
       .select()
@@ -64,7 +70,10 @@ async function resolveAdminCredentials(): Promise<
   } catch (err) {
     // A decrypt failure (e.g. the encryption secret was rotated) or DB error
     // shouldn't brick email — fall through to the env / connector path.
-    logger.warn({ err }, "Failed to resolve admin-configured SendGrid credentials");
+    logger.warn(
+      { err },
+      "Failed to resolve admin-configured SendGrid credentials",
+    );
     return null;
   }
 }
@@ -76,9 +85,10 @@ async function resolveAdminCredentials(): Promise<
 //   3. The Replit "sendgrid" connector.
 // Per the connector docs the proxy-issued token can rotate, so we DO NOT
 // cache — every send resolves fresh credentials.
-async function resolveCredentials(): Promise<
-  { apiKey: string; from: string } | null
-> {
+async function resolveCredentials(): Promise<{
+  apiKey: string;
+  from: string;
+} | null> {
   const admin = await resolveAdminCredentials();
   if (admin) return admin;
 
@@ -97,7 +107,9 @@ async function resolveCredentials(): Promise<
   try {
     const res = await fetch(
       `https://${hostname}/api/v2/connection?include_secrets=true&connector_names=sendgrid`,
-      { headers: { Accept: "application/json", "X-Replit-Token": xReplitToken } },
+      {
+        headers: { Accept: "application/json", "X-Replit-Token": xReplitToken },
+      },
     );
     if (!res.ok) return null;
     const data = (await res.json()) as {
@@ -109,7 +121,10 @@ async function resolveCredentials(): Promise<
     if (!apiKey || !from) return null;
     return { apiKey, from };
   } catch (err) {
-    logger.warn({ err }, "Failed to fetch SendGrid credentials from Replit connector proxy");
+    logger.warn(
+      { err },
+      "Failed to fetch SendGrid credentials from Replit connector proxy",
+    );
     if (envKey && envFrom) return { apiKey: envKey, from: envFrom };
     return null;
   }
@@ -161,6 +176,18 @@ export async function sendEmail(message: EmailMessage): Promise<void> {
     return;
   }
 
+  // Branding is enforced at the last mile so legacy and newly-added call
+  // sites cannot accidentally send bare paragraphs. The plaintext alternative
+  // remains exactly the caller's copy; text-only messages get a safe HTML
+  // rendering rather than being omitted from the HTML MIME part.
+  const bodyHtml = message.html ?? plainTextToHtml(message.text);
+  const html = renderBrandedEmailHtml({
+    bodyHtml,
+    subject: message.subject,
+    baseUrl: appBaseUrl(),
+    contextLabel: message.contextLabel,
+  });
+
   const body = {
     personalizations: [
       {
@@ -174,9 +201,7 @@ export async function sendEmail(message: EmailMessage): Promise<void> {
     subject: message.subject,
     content: [
       { type: "text/plain", value: message.text },
-      ...(message.html
-        ? [{ type: "text/html", value: message.html }]
-        : []),
+      { type: "text/html", value: html },
     ],
   };
 
@@ -221,7 +246,10 @@ export function appBaseUrl(): string {
     }
     return `https://${devDomain}`.replace(/\/+$/, "");
   }
-  return (process.env.APP_BASE_URL ?? "http://localhost:5173").replace(/\/+$/, "");
+  return (process.env.APP_BASE_URL ?? "http://localhost:5173").replace(
+    /\/+$/,
+    "",
+  );
 }
 
 export function buildPasswordResetUrl(token: string): string {
@@ -256,21 +284,32 @@ export async function sendOrganizationInviteEmail(
     inviteId?: string;
   },
 ): Promise<void> {
-  const { organizationName, inviterDisplayName, role, token, note, inviteId } = args;
+  const { organizationName, inviterDisplayName, role, token, note, inviteId } =
+    args;
   const url = buildOrganizationInviteUrl(token);
   const roleLabel = role === "admin" ? "an admin" : "a member";
   // S5 — escape user-controlled values for the HTML body.
   const orgHtml = escapeHtml(organizationName);
   const inviterHtml = escapeHtml(inviterDisplayName);
-  const notePlain = note && note.trim() ? `\n\nNote from ${inviterDisplayName}:\n${note.trim()}\n` : "";
-  const noteHtml = note && note.trim()
-    ? `<p><em>Note from ${inviterHtml}:</em></p><blockquote>${escapeHtml(note.trim()).replace(/\n/g, "<br/>")}</blockquote>`
-    : "";
+  const notePlain =
+    note && note.trim()
+      ? `\n\nNote from ${inviterDisplayName}:\n${note.trim()}\n`
+      : "";
+  const noteHtml =
+    note && note.trim()
+      ? `<p><em>Note from ${inviterHtml}:</em></p><blockquote>${escapeHtml(note.trim()).replace(/\n/g, "<br/>")}</blockquote>`
+      : "";
   await sendEmail({
     to,
     kind: "organization_invite",
+    contextLabel: organizationName,
     ...(inviteId
-      ? { customArgs: { kinectem_invite_id: inviteId, kinectem_invite_kind: "org" } }
+      ? {
+          customArgs: {
+            kinectem_invite_id: inviteId,
+            kinectem_invite_kind: "org",
+          },
+        }
       : {}),
     subject: `${inviterDisplayName} invited you to join ${organizationName} on Kinectem`,
     text: `${inviterDisplayName} invited you to join ${organizationName} on Kinectem as ${roleLabel}.
@@ -285,7 +324,7 @@ If you don't have a Kinectem account yet, you can sign up from the same link.`,
 <p>${escapeHtml(KINECTEM_INVITE_CONTEXT)}</p>
 ${noteHtml}
 <p>Open this link to accept:</p>
-<p><a href="${url}">${url}</a></p>
+<p><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></p>
 <p>If you don't have a Kinectem account yet, you can sign up from the same link.</p>`,
   });
 }
@@ -309,14 +348,14 @@ export async function sendCompetitionAdminInviteEmail(
 ): Promise<void> {
   const { targetName, targetKind, inviterDisplayName, token } = args;
   const url = buildCompetitionAdminInviteUrl(token);
-  const kindLabel =
-    targetKind === "hub" ? "competition hub" : "competition";
+  const kindLabel = targetKind === "hub" ? "competition hub" : "competition";
   // S5 — escape user-controlled values for the HTML body.
   const nameHtml = escapeHtml(targetName);
   const inviterHtml = escapeHtml(inviterDisplayName);
   await sendEmail({
     to,
     kind: "competition_admin_invite",
+    contextLabel: targetName,
     subject: `${inviterDisplayName} invited you to help run ${targetName} on Kinectem`,
     text: `${inviterDisplayName} invited you to be an admin of the ${kindLabel} ${targetName} on Kinectem.
 
@@ -329,7 +368,7 @@ If you don't have a Kinectem account yet, you can sign up from the same link.`,
     html: `<p><strong>${inviterHtml}</strong> invited you to be an admin of the ${kindLabel} <strong>${nameHtml}</strong> on Kinectem.</p>
 <p>${escapeHtml(KINECTEM_INVITE_CONTEXT)}</p>
 <p>Open this link to accept:</p>
-<p><a href="${url}">${url}</a></p>
+<p><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></p>
 <p>If you don't have a Kinectem account yet, you can sign up from the same link.</p>`,
   });
 }
@@ -357,7 +396,12 @@ export async function sendCoachInviteEmail(
     to,
     kind: "coach_invite",
     ...(args.inviteId
-      ? { customArgs: { kinectem_invite_id: args.inviteId, kinectem_invite_kind: "roster" } }
+      ? {
+          customArgs: {
+            kinectem_invite_id: args.inviteId,
+            kinectem_invite_kind: "roster",
+          },
+        }
       : {}),
     subject: COACH_INVITE_SUBJECT,
     text: buildCoachInviteText({ coachName: args.coachName, link }),
@@ -392,8 +436,14 @@ export async function sendStaffInviteEmail(
   await sendEmail({
     to,
     kind: "staff_invite",
+    contextLabel: args.teamName,
     ...(args.inviteId
-      ? { customArgs: { kinectem_invite_id: args.inviteId, kinectem_invite_kind: "roster" } }
+      ? {
+          customArgs: {
+            kinectem_invite_id: args.inviteId,
+            kinectem_invite_kind: "roster",
+          },
+        }
       : {}),
     subject: staffInviteSubject(args.teamName),
     text: buildStaffInviteText(vars),
@@ -423,6 +473,7 @@ export async function sendMultiTeamStaffInviteEmail(
   await sendEmail({
     to,
     kind: "staff_invite_group",
+    contextLabel: args.organizationName,
     ...(args.groupId
       ? {
           customArgs: {
@@ -472,7 +523,7 @@ ${postUrl}
 If you'd rather not see these emails, change tag-consent settings on your Kinectem profile.`,
       html: `<p>Someone tagged you in <strong>${titleHtml}</strong> on Kinectem. Because you (or your guardian) ask to approve tags first, the tag is waiting for your review.</p>
 <p>Open the post to approve or remove the tag:</p>
-<p><a href="${postUrl}">${postUrl}</a></p>
+<p><a href="${escapeHtml(postUrl)}">${escapeHtml(postUrl)}</a></p>
 <p>If you'd rather not see these emails, change tag-consent settings on your Kinectem profile.</p>`,
     });
     return;
@@ -489,7 +540,7 @@ ${postUrl}
 If you'd rather not be tagged, you can remove the tag from the post page.`,
     html: `<p>You were tagged in <strong>${titleHtml}</strong> on Kinectem.</p>
 <p>Open the post to see it:</p>
-<p><a href="${postUrl}">${postUrl}</a></p>
+<p><a href="${escapeHtml(postUrl)}">${escapeHtml(postUrl)}</a></p>
 <p>If you'd rather not be tagged, you can remove the tag from the post page.</p>`,
   });
 }
@@ -511,7 +562,7 @@ ${url}
 If you didn't request this, you can ignore this email and your password will stay the same.`,
     html: `<p>Someone asked to reset the password for your Kinectem account.</p>
 <p>Open this link within the next hour to choose a new password:</p>
-<p><a href="${url}">${url}</a></p>
+<p><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></p>
 <p>If you didn't request this, you can ignore this email and your password will stay the same.</p>`,
   });
 }
@@ -534,7 +585,7 @@ ${url}
 If you don't recognize this signup, you can ignore this email and the account will stay locked.`,
     html: `<p><strong>${escapeHtml(athleteName)}</strong> just signed up for Kinectem and listed you as their parent or guardian.</p>
 <p>Because they are under 13, the account cannot be used until you confirm it. Open this link to confirm:</p>
-<p><a href="${url}">${url}</a></p>
+<p><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></p>
 <p>If you don't recognize this signup, you can ignore this email and the account will stay locked.</p>`,
   });
 }
@@ -574,7 +625,7 @@ If you don't recognize this invitation, you can ignore this email or decline it 
 <p>${escapeHtml(KINECTEM_INVITE_CONTEXT)}</p>
 <p>Once you accept, you'll see ${escapeHtml(args.childName)} on your Family dashboard, follow their teams automatically, and receive updates about their activity.</p>
 <p>To accept or decline, open your Family dashboard:</p>
-<p><a href="${url}">${url}</a></p>
+<p><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></p>
 <p>If you don't have a Kinectem account yet, sign up using this email address (${escapeHtml(to)}) and the invitation will be waiting for you.</p>
 <p>If you don't recognize this invitation, you can ignore this email or decline it in the app.</p>`,
   });
@@ -606,7 +657,7 @@ If you don't recognize this signup, ignore this email and the account will stay 
     html: `<p><strong>${escapeHtml(athleteName)}</strong> listed you as their parent or guardian when signing up for Kinectem.</p>
 <p>Because they are under 13, federal law (COPPA) requires us to get your verifiable consent before we collect personal information from them.</p>
 <p>Please open this link to read the full notice and grant consent:</p>
-<p><a href="${url}">${url}</a></p>
+<p><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></p>
 <p>After you submit consent, we'll email you ONE more time at this address with a &quot;confirm&quot; link. The account stays disabled until you click that second link — that two-step &quot;email plus&quot; pattern is how we verify the consent really came from you.</p>
 <p>If you don't recognize this signup, ignore this email and the account will stay locked.</p>`,
   });
@@ -634,7 +685,7 @@ The account will stay disabled until you click. The link is good for 7 days.
 If you didn't grant consent, do nothing — without this second click the account will not be activated.`,
     html: `<p>Thanks — we received your consent for <strong>${escapeHtml(athleteName)}</strong>'s Kinectem account.</p>
 <p>To finish (and to verify it really came from you), open this link:</p>
-<p><a href="${url}">${url}</a></p>
+<p><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></p>
 <p>The account will stay disabled until you click. The link is good for 7 days.</p>
 <p>If you didn't grant consent, do nothing — without this second click the account will not be activated.</p>`,
   });
@@ -660,7 +711,7 @@ ${revokeUrl}
 You can also manage the account from your Family page after signing in to Kinectem.`,
     html: `<p><strong>${escapeHtml(athleteName)}</strong>'s Kinectem account has been activated.</p>
 <p>You can revoke consent at any time, which will immediately disable the account and stop any further data collection. Keep this link handy for that:</p>
-<p><a href="${revokeUrl}">${revokeUrl}</a></p>
+<p><a href="${escapeHtml(revokeUrl)}">${escapeHtml(revokeUrl)}</a></p>
 <p>You can also manage the account from your Family page after signing in to Kinectem.</p>`,
   });
 }
@@ -713,7 +764,7 @@ ${url}`,
 <p>When: ${whenHtml}</p>
 ${locHtml}
 <p>See the full schedule:</p>
-<p><a href="${url}">${url}</a></p>`,
+<p><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></p>`,
   };
 }
 
@@ -755,7 +806,7 @@ ${url}`,
 ${locHtml}
 ${reasonHtml}
 <p>See the full schedule:</p>
-<p><a href="${url}">${url}</a></p>`,
+<p><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></p>`,
   };
 }
 
@@ -768,6 +819,7 @@ export async function sendScheduleReminderEmail(
   await sendEmail({
     to,
     kind: "schedule_reminder",
+    contextLabel: ev.teamName ?? undefined,
     subject: base.subject,
     text: base.text,
     html: base.html,
@@ -786,6 +838,7 @@ export async function sendScheduleChangeNoticeEmail(
   await sendEmail({
     to,
     kind: "schedule_change_notice",
+    contextLabel: ev.teamName ?? undefined,
     subject: base.subject,
     text: base.text,
     html: base.html,
@@ -825,7 +878,7 @@ function manageFooter(ctx: DispatchBuildContext): {
   const settings = settingsUrl();
   return {
     text: `\n\n—\nManage your email preferences: ${settings}\nUnsubscribe from these emails: ${ctx.unsubscribeUrl}`,
-    html: `<hr style="margin-top:24px;border:none;border-top:1px solid #eee"/><p style="font-size:12px;color:#888;">Manage your email preferences in <a href="${settings}">Settings</a> &middot; <a href="${ctx.unsubscribeUrl}">Unsubscribe</a></p>`,
+    html: `<hr style="margin-top:24px;border:none;border-top:1px solid #eee"/><p style="font-size:12px;color:#888;">Manage your email preferences in <a href="${escapeHtml(settings)}">Settings</a> &middot; <a href="${escapeHtml(ctx.unsubscribeUrl)}">Unsubscribe</a></p>`,
   };
 }
 
@@ -862,7 +915,7 @@ We're glad you're here.
 <li>Complete your profile so teammates can find you</li>
 <li>Check your team's schedule so you never miss a game</li>
 </ul>
-<p><a href="${url}">Jump in →</a></p>
+<p><a href="${escapeHtml(url)}">Jump in →</a></p>
 <p>We're glad you're here.<br/>— The Kinectem Team</p>${foot.html}`,
   };
 }
@@ -894,7 +947,7 @@ Keep them coming — every recap helps families relive the season.
 — The Kinectem Team${foot.text}`,
     html: `<p>Congratulations — ${whoseHtml} first recap is published on Kinectem!</p>
 <p><strong>${titleHtml}</strong></p>
-<p><a href="${args.recapUrl}">See it →</a></p>${ALBUM_INVITE_HTML}
+<p><a href="${escapeHtml(args.recapUrl)}">See it →</a></p>${ALBUM_INVITE_HTML}
 <p>Keep them coming — every recap helps families relive the season.<br/>— The Kinectem Team</p>${foot.html}`,
   };
 }
@@ -920,7 +973,7 @@ export function buildFollowEmail(
 ${args.requested ? "Review the request:" : "See their profile:"}
 ${args.profileUrl}${foot.text}`,
     html: `<p><strong>${actorHtml}</strong> ${verb} ${whoseHtml} Kinectem profile.</p>
-<p><a href="${args.profileUrl}">${args.requested ? "Review the request" : "See their profile"} →</a></p>${foot.html}`,
+<p><a href="${escapeHtml(args.profileUrl)}">${args.requested ? "Review the request" : "See their profile"} →</a></p>${foot.html}`,
   };
 }
 
@@ -946,7 +999,7 @@ export function buildCommentEmail(
 See it:
 ${args.postUrl}${foot.text}`,
     html: `<p><strong>${actorHtml}</strong> ${whatHtml} on Kinectem.</p>
-<p><a href="${args.postUrl}">See it →</a></p>${foot.html}`,
+<p><a href="${escapeHtml(args.postUrl)}">See it →</a></p>${foot.html}`,
   };
 }
 
@@ -966,7 +1019,7 @@ export function buildReactionEmail(
 See it:
 ${args.postUrl}${foot.text}`,
     html: `<p><strong>${actorHtml}</strong> liked ${subjectPossessiveHtml(ctx)} post on Kinectem.</p>
-<p><a href="${args.postUrl}">See it →</a></p>${foot.html}`,
+<p><a href="${escapeHtml(args.postUrl)}">See it →</a></p>${foot.html}`,
   };
 }
 
@@ -1001,7 +1054,7 @@ export function buildTagEmail(
 Open the post:
 ${args.postUrl}${albumText}${foot.text}`,
     html: `<p>${whoHtml} ${wasWere} tagged in <strong>${titleHtml}</strong> on Kinectem.</p>
-<p><a href="${args.postUrl}">Open the post →</a></p>${albumHtml}${foot.html}`,
+<p><a href="${escapeHtml(args.postUrl)}">Open the post →</a></p>${albumHtml}${foot.html}`,
   };
 }
 
@@ -1028,6 +1081,7 @@ export function buildTeamContentEmail(
   return {
     to: ctx.to,
     kind: "team_recap",
+    contextLabel: team,
     subject: `New ${args.contentLabel} for ${team}: "${args.title}"`,
     text: `${args.actorName} posted a new ${args.contentLabel} for ${team} on Kinectem.
 
@@ -1037,7 +1091,7 @@ See it:
 ${args.postUrl}${albumText}${foot.text}`,
     html: `<p><strong>${actorHtml}</strong> posted a new ${escapeHtml(args.contentLabel)} for <strong>${teamHtml}</strong> on Kinectem.</p>
 <p><strong>${titleHtml}</strong></p>
-<p><a href="${args.postUrl}">See it →</a></p>${albumHtml}${foot.html}`,
+<p><a href="${escapeHtml(args.postUrl)}">See it →</a></p>${albumHtml}${foot.html}`,
   };
 }
 
@@ -1057,7 +1111,7 @@ export function buildRosterEmail(
 Open Kinectem:
 ${args.link}${foot.text}`,
     html: `<p>${escapeHtml(args.message)}</p>
-<p><a href="${args.link}">Open Kinectem →</a></p>${foot.html}`,
+<p><a href="${escapeHtml(args.link)}">Open Kinectem →</a></p>${foot.html}`,
   };
 }
 
@@ -1079,6 +1133,7 @@ export function buildBroadcastEmail(
   return {
     to: ctx.to,
     kind: "team_broadcast",
+    contextLabel: scope,
     subject: `New announcement for ${scope}`,
     text: `${args.senderName} posted an announcement for ${scope} on Kinectem:
 
@@ -1088,7 +1143,7 @@ Read it:
 ${args.link}${foot.text}`,
     html: `<p><strong>${senderHtml}</strong> posted an announcement for <strong>${scopeHtml}</strong> on Kinectem:</p>
 <blockquote>${previewHtml}</blockquote>
-<p><a href="${args.link}">Read it →</a></p>${foot.html}`,
+<p><a href="${escapeHtml(args.link)}">Read it →</a></p>${foot.html}`,
   };
 }
 
@@ -1107,13 +1162,14 @@ export function buildGameRecapReminderEmail(
   return {
     to: ctx.to,
     kind: "reminder_game_recap",
+    contextLabel: team,
     subject: `Don't forget to write the recap for ${team}`,
     text: `${team}'s game${opp} has wrapped up — don't forget to write the game recap while it's fresh.
 
 Write it here:
 ${args.teamUrl}${foot.text}`,
     html: `<p><strong>${teamHtml}</strong>'s game${oppHtml} has wrapped up — don't forget to write the game recap while it's fresh.</p>
-<p><a href="${args.teamUrl}">Write it →</a></p>${foot.html}`,
+<p><a href="${escapeHtml(args.teamUrl)}">Write it →</a></p>${foot.html}`,
   };
 }
 
@@ -1127,6 +1183,7 @@ export function buildScheduleReminderMessage(
   return {
     to: ctx.to,
     kind: "schedule_reminder",
+    contextLabel: ev.teamName ?? undefined,
     subject: base.subject,
     text: base.text + foot.text,
     html: base.html + foot.html,
@@ -1146,6 +1203,7 @@ export function buildScheduleChangeMessage(
   return {
     to: ctx.to,
     kind: "schedule_change_notice",
+    contextLabel: ev.teamName ?? undefined,
     subject: base.subject,
     text: base.text + foot.text,
     html: base.html + foot.html,
@@ -1169,7 +1227,7 @@ ${url}
 If you no longer want to confirm this account, you can ignore this email and it will stay locked.`,
     html: `<p>The guardian-confirmation link for <strong>${escapeHtml(athleteName)}</strong>'s Kinectem account has expired before it was confirmed.</p>
 <p>Open your Family page to send ${escapeHtml(athleteName)} a new link so they don't lose access:</p>
-<p><a href="${url}">${url}</a></p>
+<p><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></p>
 <p>If you no longer want to confirm this account, you can ignore this email and it will stay locked.</p>`,
   });
 }

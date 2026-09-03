@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { and, eq } from "drizzle-orm";
-import { db, notifications, rosterEntries, rosterInvites, users } from "@workspace/db";
+import {
+  db,
+  notifications,
+  rosterEntries,
+  rosterInvites,
+  users,
+} from "@workspace/db";
 import {
   COACH_INVITE_SUBJECT,
   buildCoachInviteHtml,
@@ -28,9 +34,7 @@ import { app, loginAs, request } from "./helpers";
 async function getFootballTeamId(): Promise<string> {
   const orgs = await request(app).get("/api/v1/organizations");
   const org = orgs.body.data[0];
-  const teams = await request(app).get(
-    `/api/v1/organizations/${org.id}/teams`,
-  );
+  const teams = await request(app).get(`/api/v1/organizations/${org.id}/teams`);
   const t = teams.body.data.find(
     (x: { name: string }) => x.name === "Varsity Football",
   );
@@ -114,7 +118,9 @@ describe("coach invite email (task #636)", () => {
     const vars = { coachName: "Coach Mike Davis", link };
     expect(sent.subject).toBe(COACH_INVITE_SUBJECT);
     expect(sent.text).toBe(buildCoachInviteText(vars));
-    expect(sent.html).toBe(buildCoachInviteHtml(vars));
+    expect(sent.html).toContain(buildCoachInviteHtml(vars));
+    expect(sent.html).toContain("logo-horizontal.png");
+    expect(sent.html).toContain("email-card");
 
     // The unknown address has no Kinectem account, so no roster entry /
     // notification fan-out happened — only the email went out.
@@ -158,7 +164,7 @@ describe("coach invite email (task #636)", () => {
       };
       expect(sent.subject).toBe(staffInviteSubject("Varsity Football"));
       expect(sent.text).toBe(buildStaffInviteText(vars));
-      expect(sent.html).toBe(buildStaffInviteHtml(vars));
+      expect(sent.html).toContain(buildStaffInviteHtml(vars));
       // Staff copy must speak to the invitee as staff, not a parent.
       expect(sent.text).toContain("Varsity Football");
       expect(sent.text).toContain(roleLabel);
@@ -173,16 +179,16 @@ describe("coach invite email (task #636)", () => {
       );
       expect(sent.text).toContain("hit the AI Assist button");
       expect(sent.text).toContain("Minutes, not hours.");
-      expect(sent.html).toContain(
-        `As ${article} ${roleLabel}, you&#39;ll`,
-      );
+      expect(sent.html).toContain(`As ${article} ${roleLabel}, you&#39;ll`);
       expect(sent.html).toContain("hit the AI Assist button");
       expect(sent.html).toContain("Minutes, not hours.");
       // The pitch sits between the "story of the season" paragraph and the
       // accept line in both variants.
       const textIdx = sent.text.indexOf("hit the AI Assist button");
       expect(textIdx).toBeGreaterThan(sent.text.indexOf("story of the season"));
-      expect(textIdx).toBeLessThan(sent.text.indexOf("Accept the invite below"));
+      expect(textIdx).toBeLessThan(
+        sent.text.indexOf("Accept the invite below"),
+      );
     });
   }
 
@@ -218,7 +224,7 @@ describe("coach invite email (task #636)", () => {
     };
     expect(sent.subject).toBe(staffInviteSubject("Varsity Football"));
     expect(sent.text).toBe(buildStaffInviteText(vars));
-    expect(sent.html).toBe(buildStaffInviteHtml(vars));
+    expect(sent.html).toContain(buildStaffInviteHtml(vars));
   });
 
   it("uses the in-app notification fan-out (and sends no email) for a known address", async () => {

@@ -19,6 +19,9 @@
       "path": "./lib/daily-admin-digest"
     },
     {
+      "path": "./lib/email-template"
+    },
+    {
       "path": "./lib/user-hard-delete"
     }
   ]

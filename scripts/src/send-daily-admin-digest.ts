@@ -33,7 +33,13 @@ import {
 } from "@workspace/daily-admin-digest";
 import { dailyAdminDigestRecipients } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { resolveCredentials, sendEmail, appBaseUrl } from "./lib/email-campaign";
+import {
+  resolveCredentials,
+  sendEmail,
+  appBaseUrl,
+} from "./lib/email-campaign";
+import { renderBrandedEmailHtml } from "@workspace/email-template";
+import { pathToFileURL } from "node:url";
 
 function parseArg(name: string): string | undefined {
   const prefix = `--${name}=`;
@@ -41,12 +47,25 @@ function parseArg(name: string): string | undefined {
   return hit ? hit.slice(prefix.length) : undefined;
 }
 
+export function brandDailyAdminDigest(digest: {
+  subject: string;
+  html: string;
+}): string {
+  return renderBrandedEmailHtml({
+    bodyHtml: digest.html,
+    subject: digest.subject,
+    baseUrl: appBaseUrl(),
+    contextLabel: "Operations",
+  });
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const dryRun = args.includes("--dry-run");
   const toStdout = args.includes("--stdout");
   const day = parseArg("day");
-  const timeZone = process.env.ADMIN_DIGEST_TIME_ZONE || DEFAULT_DIGEST_TIME_ZONE;
+  const timeZone =
+    process.env.ADMIN_DIGEST_TIME_ZONE || DEFAULT_DIGEST_TIME_ZONE;
 
   const window = day
     ? getDigestWindowForDate(day, timeZone)
@@ -106,7 +125,7 @@ async function main() {
         r.email,
         digest.subject,
         digest.text,
-        digest.html,
+        brandDailyAdminDigest(digest),
       );
       await db
         .update(dailyAdminDigestRecipients)
@@ -125,9 +144,14 @@ async function main() {
   );
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch((err) => {
-    console.error(err);
-    process.exit(1);
-  });
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
+  main()
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
+}

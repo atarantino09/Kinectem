@@ -150,7 +150,10 @@ export function getDigestWindowForDate(
   }
   const start = zonedMidnightUtc(y, m, d, timeZone);
   // +26h then re-derive the local date to cross a day boundary DST-safely.
-  const next = tzParts(new Date(start.getTime() + 26 * 60 * 60 * 1000), timeZone);
+  const next = tzParts(
+    new Date(start.getTime() + 26 * 60 * 60 * 1000),
+    timeZone,
+  );
   const end = zonedMidnightUtc(next.y, next.m, next.d, timeZone);
   return { start, end, label: `${pad(y)}-${pad(m)}-${pad(d)}`, timeZone };
 }
@@ -384,7 +387,9 @@ export async function buildDailyAdminDigest(
       database
         .select({ c: count() })
         .from(orgPosts)
-        .where(and(gte(orgPosts.createdAt, start), lt(orgPosts.createdAt, end))),
+        .where(
+          and(gte(orgPosts.createdAt, start), lt(orgPosts.createdAt, end)),
+        ),
     ),
     countIn(database, () =>
       database
@@ -592,16 +597,13 @@ function renderDigest(args: {
         totalEvents === 1 ? "" : "s"
       } yesterday.</p><ul style="list-style:none;padding:0;margin:16px 0">${rows}</ul>`;
 
-  const html = `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:600px;margin:0 auto">
-<h1 style="font-size:20px;margin:0 0 4px">Kinectem daily digest</h1>
-<p style="color:#6b7280;margin:0 0 16px">Activity for ${escapeHtml(label)}</p>
+  const html = `<p style="color:#6b7280;margin:0 0 16px">Activity for ${escapeHtml(label)}</p>
 ${bodyInner}
 <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0" />
 <p style="font-size:13px"><a href="${escapeHtml(
     adminUrl,
   )}">Open the Kinectem admin console →</a></p>
-<p style="font-size:12px;color:#6b7280">You're receiving this operational digest because your address is on the Kinectem admin recipient list. Ask a platform admin to remove you.</p>
-</div>`;
+<p style="font-size:12px;color:#6b7280">You're receiving this operational digest because your address is on the Kinectem admin recipient list. Ask a platform admin to remove you.</p>`;
 
   return { subject, html, text, totals: args.totals, totalEvents };
 }

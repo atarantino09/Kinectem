@@ -21,6 +21,7 @@
 
 import { db, users, sessions } from "@workspace/db";
 import { and, eq, isNull, lt, sql } from "drizzle-orm";
+import { pathToFileURL } from "node:url";
 import {
   resolveCredentials,
   resolveRecipient,
@@ -36,15 +37,13 @@ import {
 const DEFAULT_DAYS = 21;
 
 function parseDays(): number {
-  const arg = process.argv
-    .slice(2)
-    .find((a) => a.startsWith("--days="));
+  const arg = process.argv.slice(2).find((a) => a.startsWith("--days="));
   if (!arg) return DEFAULT_DAYS;
   const n = Number(arg.slice("--days=".length));
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : DEFAULT_DAYS;
 }
 
-function buildNudge(recipient: ResolvedRecipient): {
+export function buildInactivityNudgeEmail(recipient: ResolvedRecipient): {
   subject: string;
   text: string;
   html: string;
@@ -56,22 +55,22 @@ function buildNudge(recipient: ResolvedRecipient): {
     : `We miss you on Kinectem`;
 
   const lead = recipient.isGuardianCopy
-    ? `It's been a little while since ${escapeHtml(recipient.subjectName)}'s family checked in on Kinectem. Their teams have been posting recaps, photos, and updates.`
+    ? `It's been a little while since ${recipient.subjectName}'s family checked in on Kinectem. Their teams have been posting recaps, photos, and updates.`
     : `It's been a little while since you stopped by Kinectem. Your teams have been posting recaps, photos, and updates — come see what you've missed.`;
 
   const text = `Hi ${greeting},
 
-${lead.replace(/<[^>]+>/g, "")}
+${lead}
 
 Jump back in: ${url}
 
 — The Kinectem Team${unsubscribeText(recipient.unsubscribeUrl)}`;
 
   const bodyHtml = `<p>Hi ${escapeHtml(greeting)},</p>
-<p>${lead}</p>
+<p>${escapeHtml(lead)}</p>
 <p><a href="${escapeHtml(url)}">Jump back into Kinectem →</a></p>
 <p>— The Kinectem Team</p>`;
-  const html = wrapHtml(bodyHtml, recipient.unsubscribeUrl);
+  const html = wrapHtml(bodyHtml, recipient.unsubscribeUrl, subject);
 
   return { subject, text, html };
 }
@@ -104,10 +103,7 @@ async function main() {
       and(
         eq(users.accountStatus, "active"),
         isNull(users.deletedAt),
-        lt(
-          sql`coalesce(${lastSession.lastAt}, ${users.createdAt})`,
-          cutoff,
-        ),
+        lt(sql`coalesce(${lastSession.lastAt}, ${users.createdAt})`, cutoff),
       ),
     );
 
@@ -137,7 +133,7 @@ async function main() {
     if (emailedThisRun.has(recipient.to)) continue;
     emailedThisRun.add(recipient.to);
 
-    const email = buildNudge(recipient);
+    const email = buildInactivityNudgeEmail(recipient);
     if (dryRun) {
       console.log(
         `[dry-run] ${recipient.to}${recipient.isGuardianCopy ? " (guardian)" : ""} <- inactive since ${new Date(c.lastActiveAt).toISOString().slice(0, 10)}`,
@@ -166,9 +162,14 @@ async function main() {
   );
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch((err) => {
-    console.error(err);
-    process.exit(1);
-  });
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
+  main()
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
+}

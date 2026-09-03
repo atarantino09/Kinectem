@@ -15,14 +15,9 @@
 // the guardian's own digest covers those teams). Each enabled recipient gets a
 // working unsubscribe link. See lib/email-campaign.ts for the gate.
 
-import {
-  db,
-  teamFollowers,
-  teams,
-  articles,
-  broadcasts,
-} from "@workspace/db";
+import { db, teamFollowers, teams, articles, broadcasts } from "@workspace/db";
 import { and, eq, gte, inArray, desc } from "drizzle-orm";
+import { pathToFileURL } from "node:url";
 import {
   resolveCredentials,
   resolveRecipient,
@@ -44,7 +39,7 @@ interface TeamActivity {
   announcementCount: number;
 }
 
-function buildDigest(args: {
+export function buildWeeklyDigestEmail(args: {
   recipient: ResolvedRecipient;
   activity: TeamActivity[];
 }): { subject: string; text: string; html: string } {
@@ -63,16 +58,18 @@ function buildDigest(args: {
       : `This week's updates from your Kinectem teams`;
 
   const intro = recipient.isGuardianCopy
-    ? `Here's what happened this week with the teams ${escapeHtml(recipient.recipientName)}'s family follows.`
+    ? `Here's what happened this week with the teams ${recipient.recipientName}'s family follows.`
     : `Here's what happened this week with the teams you follow.`;
 
   // Plain text
-  const textLines: string[] = [`Hi ${greeting},`, "", intro.replace(/<[^>]+>/g, ""), ""];
+  const textLines: string[] = [`Hi ${greeting},`, "", intro, ""];
   for (const a of activity) {
     textLines.push(`• ${a.teamName}`);
     for (const t of a.recapTitles) textLines.push(`    - New recap: ${t}`);
     if (a.recapCount > a.recapTitles.length) {
-      textLines.push(`    - +${a.recapCount - a.recapTitles.length} more recap(s)`);
+      textLines.push(
+        `    - +${a.recapCount - a.recapTitles.length} more recap(s)`,
+      );
     }
     if (a.announcementCount > 0) {
       textLines.push(
@@ -101,12 +98,12 @@ function buildDigest(args: {
     })
     .join("");
   const bodyHtml = `<p>Hi ${escapeHtml(greeting)},</p>
-<p>${intro}</p>
+<p>${escapeHtml(intro)}</p>
 <ul>${items}</ul>
 <p><a href="${escapeHtml(feedUrl)}">Catch up on Kinectem →</a></p>
 <p style="color:#6b7280;font-size:13px">${totalRecaps} recap${totalRecaps === 1 ? "" : "s"} and ${totalAnnouncements} announcement${totalAnnouncements === 1 ? "" : "s"} this week.</p>
 <p>— The Kinectem Team</p>`;
-  const html = wrapHtml(bodyHtml, recipient.unsubscribeUrl);
+  const html = wrapHtml(bodyHtml, recipient.unsubscribeUrl, subject);
 
   return { subject, text, html };
 }
@@ -221,7 +218,7 @@ async function main() {
     if (emailedThisRun.has(recipient.to)) continue;
     emailedThisRun.add(recipient.to);
 
-    const email = buildDigest({ recipient, activity });
+    const email = buildWeeklyDigestEmail({ recipient, activity });
     if (dryRun) {
       console.log(
         `[dry-run] ${recipient.to}${recipient.isGuardianCopy ? " (guardian)" : ""} <- ${activity.length} team(s), ${activity.reduce((n, a) => n + a.recapCount, 0)} recap(s)`,
@@ -250,9 +247,14 @@ async function main() {
   );
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch((err) => {
-    console.error(err);
-    process.exit(1);
-  });
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
+  main()
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
+}

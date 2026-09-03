@@ -25,7 +25,7 @@ const HEX = /^#[0-9a-fA-F]{6}$/;
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 function p(value: string | string[] | undefined): string {
-  return Array.isArray(value) ? value[0] ?? "" : value ?? "";
+  return Array.isArray(value) ? (value[0] ?? "") : (value ?? "");
 }
 
 function cleanText(value: unknown, max: number): string {
@@ -45,7 +45,8 @@ function normalizedOrganizationName(value: string): string {
 function validateImage(value: unknown): string | null | undefined {
   if (value === null || value === "") return null;
   if (value === undefined) return undefined;
-  if (typeof value !== "string") throw new Error("Image must be a URL or uploaded image");
+  if (typeof value !== "string")
+    throw new Error("Image must be a URL or uploaded image");
   if (value.startsWith("data:") && value.length > MAX_IMAGE_DATA_URL_LENGTH) {
     throw new Error("That image is too large");
   }
@@ -74,7 +75,9 @@ type CompetitionMetadata = {
   location: string | null;
 };
 
-function competitionMetadata(row: typeof tournaments.$inferSelect): CompetitionMetadata {
+function competitionMetadata(
+  row: typeof tournaments.$inferSelect,
+): CompetitionMetadata {
   return {
     id: row.id,
     slug: row.slug,
@@ -90,7 +93,10 @@ async function featuredCompetition(pageId: string) {
   const [row] = await db
     .select({ competition: tournaments })
     .from(partnerLandingPages)
-    .leftJoin(tournaments, eq(tournaments.id, partnerLandingPages.competitionId))
+    .leftJoin(
+      tournaments,
+      eq(tournaments.id, partnerLandingPages.competitionId),
+    )
     .where(eq(partnerLandingPages.id, pageId))
     .limit(1);
   return row?.competition ? competitionMetadata(row.competition) : null;
@@ -103,8 +109,12 @@ const PartnerCompetitionBody = z.object({
 const PartnerCompetitionCreateBody = z.object({
   name: z.string().trim().min(1, "Competition name is required").max(200),
   type: z.enum(["tournament", "league"]).default("tournament"),
-  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "startDate must be YYYY-MM-DD"),
-  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "endDate must be YYYY-MM-DD"),
+  startDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "startDate must be YYYY-MM-DD"),
+  endDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "endDate must be YYYY-MM-DD"),
   location: z.string().trim().max(200).optional().nullable(),
   description: z.string().trim().max(2000).optional().nullable(),
 });
@@ -154,7 +164,10 @@ async function adminMembers(pageId: string) {
       eq(organizations.id, partnerOrganizationMemberships.organizationId),
     )
     .where(eq(partnerOrganizationMemberships.partnerPageId, pageId))
-    .orderBy(asc(organizations.name), asc(partnerOrganizationMemberships.createdAt));
+    .orderBy(
+      asc(organizations.name),
+      asc(partnerOrganizationMemberships.createdAt),
+    );
   return rows.map((row) => ({
     id: row.membership.id,
     visible: row.membership.visible,
@@ -182,7 +195,10 @@ router.get(
       .from(partnerLandingPages)
       .leftJoin(
         partnerOrganizationMemberships,
-        eq(partnerOrganizationMemberships.partnerPageId, partnerLandingPages.id),
+        eq(
+          partnerOrganizationMemberships.partnerPageId,
+          partnerLandingPages.id,
+        ),
       )
       .groupBy(partnerLandingPages.id)
       .orderBy(desc(partnerLandingPages.updatedAt));
@@ -203,10 +219,18 @@ router.post(
     const associationLabel = cleanText(req.body?.associationLabel, 80);
     const slug = cleanText(req.body?.slug, 80).toLowerCase();
     if (!officialName || !associationLabel || !slug) {
-      return apiError(res, 400, "Official name, label, and URL slug are required");
+      return apiError(
+        res,
+        400,
+        "Official name, label, and URL slug are required",
+      );
     }
     if (!SLUG.test(slug)) {
-      return apiError(res, 400, "Slug may contain lowercase letters, numbers, and hyphens");
+      return apiError(
+        res,
+        400,
+        "Slug may contain lowercase letters, numbers, and hyphens",
+      );
     }
     try {
       const [page] = await db
@@ -235,13 +259,13 @@ router.get(
   asyncHandler(async (req, res) => {
     const page = await findPage(p(req.params.pageId));
     if (!page) return apiError(res, 404, "Partner page not found");
-     return res.json({
-       data: {
-         ...page,
-         competition: await featuredCompetition(page.id),
-         members: await adminMembers(page.id),
-       },
-     });
+    return res.json({
+      data: {
+        ...page,
+        competition: await featuredCompetition(page.id),
+        members: await adminMembers(page.id),
+      },
+    });
   }),
 );
 
@@ -250,7 +274,8 @@ router.get(
   requireAdmin,
   asyncHandler(async (req, res) => {
     const pageId = p(req.params.pageId);
-    if (!(await findPage(pageId))) return apiError(res, 404, "Partner page not found");
+    if (!(await findPage(pageId)))
+      return apiError(res, 404, "Partner page not found");
     const q = cleanText(req.query.q, 200);
     if (!q) return res.json({ data: [] });
     const escaped = q.replace(/[\\%_]/g, "\\$&");
@@ -300,7 +325,10 @@ router.put(
       .set({ competitionId: competition.id, updatedAt: new Date() })
       .where(eq(partnerLandingPages.id, pageId))
       .returning();
-    return res.json({ data: updated, competition: competitionMetadata(competition) });
+    return res.json({
+      data: updated,
+      competition: competitionMetadata(competition),
+    });
   }),
 );
 
@@ -309,7 +337,8 @@ router.delete(
   requireAdmin,
   asyncHandler(async (req, res) => {
     const pageId = p(req.params.pageId);
-    if (!(await findPage(pageId))) return apiError(res, 404, "Partner page not found");
+    if (!(await findPage(pageId)))
+      return apiError(res, 404, "Partner page not found");
     const [updated] = await db
       .update(partnerLandingPages)
       .set({ competitionId: null, updatedAt: new Date() })
@@ -324,10 +353,15 @@ router.post(
   requireAdmin,
   asyncHandler(async (req, res) => {
     const pageId = p(req.params.pageId);
-    if (!(await findPage(pageId))) return apiError(res, 404, "Partner page not found");
+    if (!(await findPage(pageId)))
+      return apiError(res, 404, "Partner page not found");
     const parsed = PartnerCompetitionCreateBody.safeParse(req.body);
     if (!parsed.success) {
-      return apiError(res, 400, parsed.error.issues[0]?.message ?? "Invalid competition details");
+      return apiError(
+        res,
+        400,
+        parsed.error.issues[0]?.message ?? "Invalid competition details",
+      );
     }
     const body = parsed.data;
     if (body.endDate < body.startDate) {
@@ -369,7 +403,8 @@ router.patch(
   requireAdmin,
   asyncHandler(async (req, res) => {
     const pageId = p(req.params.pageId);
-    if (!(await findPage(pageId))) return apiError(res, 404, "Partner page not found");
+    if (!(await findPage(pageId)))
+      return apiError(res, 404, "Partner page not found");
     const patch: Partial<typeof partnerLandingPages.$inferInsert> = {
       updatedAt: new Date(),
     };
@@ -378,7 +413,8 @@ router.patch(
       ["associationLabel", 80],
       ["introduction", 4000],
     ] as const) {
-      if (req.body?.[key] !== undefined) patch[key] = cleanText(req.body[key], max);
+      if (req.body?.[key] !== undefined)
+        patch[key] = cleanText(req.body[key], max);
     }
     if (req.body?.slug !== undefined) {
       const slug = cleanText(req.body.slug, 80).toLowerCase();
@@ -388,17 +424,25 @@ router.patch(
     for (const key of ["primaryColor", "secondaryColor"] as const) {
       if (req.body?.[key] !== undefined) {
         const color = cleanText(req.body[key], 7);
-        if (!HEX.test(color)) return apiError(res, 400, `${key} must be a #rrggbb color`);
+        if (!HEX.test(color))
+          return apiError(res, 400, `${key} must be a #rrggbb color`);
         patch[key] = color.toLowerCase();
       }
     }
     try {
-      if (req.body?.logoUrl !== undefined) patch.logoUrl = validateImage(req.body.logoUrl);
-      if (req.body?.bannerUrl !== undefined) patch.bannerUrl = validateImage(req.body.bannerUrl);
+      if (req.body?.logoUrl !== undefined)
+        patch.logoUrl = validateImage(req.body.logoUrl);
+      if (req.body?.bannerUrl !== undefined)
+        patch.bannerUrl = validateImage(req.body.bannerUrl);
     } catch (err) {
-      return apiError(res, /too large/i.test(String(err)) ? 413 : 400, (err as Error).message);
+      return apiError(
+        res,
+        /too large/i.test(String(err)) ? 413 : 400,
+        (err as Error).message,
+      );
     }
-    if (req.body?.published !== undefined) patch.published = req.body.published === true;
+    if (req.body?.published !== undefined)
+      patch.published = req.body.published === true;
     if (!patch.officialName && req.body?.officialName !== undefined) {
       return apiError(res, 400, "Official name is required");
     }
@@ -457,7 +501,8 @@ router.post(
   asyncHandler(async (req, res) => {
     const pageId = p(req.params.pageId);
     const organizationId = cleanText(req.body?.organizationId, 80);
-    if (!(await findPage(pageId))) return apiError(res, 404, "Partner page not found");
+    if (!(await findPage(pageId)))
+      return apiError(res, 404, "Partner page not found");
     const [org] = await db
       .select({ id: organizations.id })
       .from(organizations)
@@ -469,7 +514,8 @@ router.post(
       .values({
         partnerPageId: pageId,
         organizationId,
-        sourceColumn: cleanText(req.body?.sourceColumn, 200) || "Attached from directory",
+        sourceColumn:
+          cleanText(req.body?.sourceColumn, 200) || "Attached from directory",
       })
       .onConflictDoNothing()
       .returning();
@@ -511,7 +557,9 @@ router.post(
     const listOrganizations = await db
       .select({ id: organizations.id })
       .from(organizations)
-      .where(and(eq(organizations.adminListId, listId), sql`NOT ${ownerExists}`));
+      .where(
+        and(eq(organizations.adminListId, listId), sql`NOT ${ownerExists}`),
+      );
 
     const result = await db.transaction(async (tx) => {
       if (listOrganizations.length === 0) {
@@ -549,17 +597,25 @@ router.post(
   requireAdmin,
   asyncHandler(async (req, res) => {
     const pageId = p(req.params.pageId);
-    if (!(await findPage(pageId))) return apiError(res, 404, "Partner page not found");
+    if (!(await findPage(pageId)))
+      return apiError(res, 404, "Partner page not found");
     const name = cleanText(req.body?.name, 200);
     if (!name) return apiError(res, 400, "Organization name is required");
     let logoUrl: string | null | undefined;
     try {
       logoUrl = validateImage(req.body?.logoUrl);
     } catch (err) {
-      return apiError(res, /too large/i.test(String(err)) ? 413 : 400, (err as Error).message);
+      return apiError(
+        res,
+        /too large/i.test(String(err)) ? 413 : 400,
+        (err as Error).message,
+      );
     }
     const teamNames = Array.isArray(req.body?.teams)
-      ? req.body.teams.map((v: unknown) => cleanText(v, 200)).filter(Boolean).slice(0, 100)
+      ? req.body.teams
+          .map((v: unknown) => cleanText(v, 200))
+          .filter(Boolean)
+          .slice(0, 100)
       : [];
     const result = await db.transaction(async (tx) => {
       const [org] = await tx
@@ -575,7 +631,9 @@ router.post(
         })
         .returning();
       for (const teamName of teamNames) {
-        await tx.insert(teams).values({ organizationId: org.id, name: teamName });
+        await tx
+          .insert(teams)
+          .values({ organizationId: org.id, name: teamName });
       }
       const [membership] = await tx
         .insert(partnerOrganizationMemberships)
@@ -596,9 +654,14 @@ router.post(
   requireAdmin,
   asyncHandler(async (req, res) => {
     const pageId = p(req.params.pageId);
-    if (!(await findPage(pageId))) return apiError(res, 404, "Partner page not found");
-    const input = Array.isArray(req.body?.organizations) ? req.body.organizations.slice(0, 200) : [];
-    const names = input.map((row: unknown) => cleanText((row as { name?: unknown })?.name, 200));
+    if (!(await findPage(pageId)))
+      return apiError(res, 404, "Partner page not found");
+    const input = Array.isArray(req.body?.organizations)
+      ? req.body.organizations.slice(0, 200)
+      : [];
+    const names = input.map((row: unknown) =>
+      cleanText((row as { name?: unknown })?.name, 200),
+    );
     const valid = names.every(Boolean) && input.length > 0;
     const existing =
       names.length > 0
@@ -611,7 +674,14 @@ router.post(
               location: organizations.location,
             })
             .from(organizations)
-            .where(or(...names.map((name: string) => sql`lower(${organizations.name}) = ${name.toLowerCase()}`)))
+            .where(
+              or(
+                ...names.map(
+                  (name: string) =>
+                    sql`lower(${organizations.name}) = ${name.toLowerCase()}`,
+                ),
+              ),
+            )
         : [];
     const seen = new Map<string, number>();
     const rows = input.map((raw: unknown, index: number) => {
@@ -625,9 +695,17 @@ router.post(
         sourceColumn: cleanText(row.sourceColumn, 200) || `Column ${index + 1}`,
         name,
         warnings: [
-          ...(duplicateInFile ? ["This name appears more than once in the upload. A separate organization will be created by default."] : []),
-          ...(existing.some((item) => normalizedOrganizationName(item.name) === key)
-            ? ["Possible existing organization found. Creating a separate record remains the default."]
+          ...(duplicateInFile
+            ? [
+                "This name appears more than once in the upload. A separate organization will be created by default.",
+              ]
+            : []),
+          ...(existing.some(
+            (item) => normalizedOrganizationName(item.name) === key,
+          )
+            ? [
+                "Possible existing organization found. Creating a separate record remains the default.",
+              ]
             : []),
         ],
         possibleMatches: existing.filter(
@@ -651,10 +729,17 @@ router.post(
   asyncHandler(async (req, res) => {
     const pageId = p(req.params.pageId);
     const idempotencyKey = cleanText(req.body?.idempotencyKey, 160);
-    const input = Array.isArray(req.body?.organizations) ? req.body.organizations.slice(0, 200) : [];
-    if (!(await findPage(pageId))) return apiError(res, 404, "Partner page not found");
+    const input = Array.isArray(req.body?.organizations)
+      ? req.body.organizations.slice(0, 200)
+      : [];
+    if (!(await findPage(pageId)))
+      return apiError(res, 404, "Partner page not found");
     if (!idempotencyKey || input.length === 0) {
-      return apiError(res, 400, "Import identity and at least one organization are required");
+      return apiError(
+        res,
+        400,
+        "Import identity and at least one organization are required",
+      );
     }
     const result = await db.transaction(async (tx) => {
       await tx.execute(
@@ -672,10 +757,22 @@ router.post(
         .limit(1);
       if (existingOperation) {
         const memberships = await tx
-          .select({ id: partnerOrganizationMemberships.id, organizationId: partnerOrganizationMemberships.organizationId })
+          .select({
+            id: partnerOrganizationMemberships.id,
+            organizationId: partnerOrganizationMemberships.organizationId,
+          })
           .from(partnerOrganizationMemberships)
-          .where(eq(partnerOrganizationMemberships.importOperationId, existingOperation.id));
-        return { replayed: true, operationId: existingOperation.id, memberships };
+          .where(
+            eq(
+              partnerOrganizationMemberships.importOperationId,
+              existingOperation.id,
+            ),
+          );
+        return {
+          replayed: true,
+          operationId: existingOperation.id,
+          memberships,
+        };
       }
       const [operation] = await tx
         .insert(partnerImportOperations)
@@ -697,7 +794,8 @@ router.post(
         let organizationId = cleanText(row.existingOrganizationId, 80);
         if (row.action !== "attach" || !organizationId) {
           const name = cleanText(row.name, 200);
-          if (!name) throw new Error(`Organization ${index + 1}: name required`);
+          if (!name)
+            throw new Error(`Organization ${index + 1}: name required`);
           const [org] = await tx
             .insert(organizations)
             .values({
@@ -710,7 +808,10 @@ router.post(
             .returning({ id: organizations.id });
           organizationId = org.id;
           const teamNames = Array.isArray(row.teams)
-            ? row.teams.map((v) => cleanText(v, 200)).filter(Boolean).slice(0, 100)
+            ? row.teams
+                .map((v) => cleanText(v, 200))
+                .filter(Boolean)
+                .slice(0, 100)
             : [];
           for (const teamName of teamNames) {
             await tx.insert(teams).values({ organizationId, name: teamName });
@@ -721,18 +822,25 @@ router.post(
             .from(organizations)
             .where(eq(organizations.id, organizationId))
             .limit(1);
-          if (!org) throw new Error(`Organization ${index + 1}: selected match no longer exists`);
+          if (!org)
+            throw new Error(
+              `Organization ${index + 1}: selected match no longer exists`,
+            );
         }
         const [membership] = await tx
           .insert(partnerOrganizationMemberships)
           .values({
             partnerPageId: pageId,
             organizationId,
-            sourceColumn: cleanText(row.sourceColumn, 200) || `Column ${index + 1}`,
+            sourceColumn:
+              cleanText(row.sourceColumn, 200) || `Column ${index + 1}`,
             importOperationId: operation.id,
           })
           .onConflictDoNothing()
-          .returning({ id: partnerOrganizationMemberships.id, organizationId: partnerOrganizationMemberships.organizationId });
+          .returning({
+            id: partnerOrganizationMemberships.id,
+            organizationId: partnerOrganizationMemberships.organizationId,
+          });
         if (membership) memberships.push(membership);
       }
       return { replayed: false, operationId: operation.id, memberships };
@@ -751,7 +859,10 @@ router.patch(
       .where(
         and(
           eq(partnerOrganizationMemberships.id, p(req.params.membershipId)),
-          eq(partnerOrganizationMemberships.partnerPageId, p(req.params.pageId)),
+          eq(
+            partnerOrganizationMemberships.partnerPageId,
+            p(req.params.pageId),
+          ),
         ),
       )
       .returning();
@@ -769,7 +880,10 @@ router.delete(
       .where(
         and(
           eq(partnerOrganizationMemberships.id, p(req.params.membershipId)),
-          eq(partnerOrganizationMemberships.partnerPageId, p(req.params.pageId)),
+          eq(
+            partnerOrganizationMemberships.partnerPageId,
+            p(req.params.pageId),
+          ),
         ),
       )
       .returning({ id: partnerOrganizationMemberships.id });
@@ -807,7 +921,10 @@ router.delete(
         )::int`,
       })
       .from(partnerOrganizationMemberships)
-      .innerJoin(organizations, eq(organizations.id, partnerOrganizationMemberships.organizationId))
+      .innerJoin(
+        organizations,
+        eq(organizations.id, partnerOrganizationMemberships.organizationId),
+      )
       .where(
         and(
           eq(partnerOrganizationMemberships.id, membershipId),
@@ -817,21 +934,43 @@ router.delete(
       .limit(1);
     if (!row) return apiError(res, 404, "Partner membership not found");
     if (!row.importOperationId) {
-      return apiError(res, 409, "Only organizations created by a partner import can be deleted here. Remove it from the page instead.");
+      return apiError(
+        res,
+        409,
+        "Only organizations created by a partner import can be deleted here. Remove it from the page instead.",
+      );
     }
     if (Number(row.otherMembershipCount) > 0) {
-      return apiError(res, 409, "This organization is included on another partner page and cannot be deleted. Remove it from this page instead.");
+      return apiError(
+        res,
+        409,
+        "This organization is included on another partner page and cannot be deleted. Remove it from this page instead.",
+      );
     }
     if (Number(row.pendingClaimCount) > 0) {
-      return apiError(res, 409, "This organization has a pending ownership request and cannot be deleted. Hide or remove it from the page instead.");
+      return apiError(
+        res,
+        409,
+        "This organization has a pending ownership request and cannot be deleted. Hide or remove it from the page instead.",
+      );
     }
     if (Number(row.ownerCount) > 0 || Number(row.contentCount) > 0) {
-      return apiError(res, 409, "Claimed or content-bearing organizations cannot be deleted here. Hide or remove it from the page instead.");
+      return apiError(
+        res,
+        409,
+        "Claimed or content-bearing organizations cannot be deleted here. Hide or remove it from the page instead.",
+      );
     }
     if (cleanText(req.body?.confirmName, 200) !== row.name) {
-      return apiError(res, 400, "Type the organization name exactly to confirm deletion");
+      return apiError(
+        res,
+        400,
+        "Type the organization name exactly to confirm deletion",
+      );
     }
-    await db.delete(organizations).where(eq(organizations.id, row.organizationId));
+    await db
+      .delete(organizations)
+      .where(eq(organizations.id, row.organizationId));
     return res.json({ ok: true });
   }),
 );
@@ -843,7 +982,12 @@ router.get(
     const [page] = await db
       .select()
       .from(partnerLandingPages)
-      .where(and(sql`lower(${partnerLandingPages.slug}) = ${slug}`, eq(partnerLandingPages.published, true)))
+      .where(
+        and(
+          sql`lower(${partnerLandingPages.slug}) = ${slug}`,
+          eq(partnerLandingPages.published, true),
+        ),
+      )
       .limit(1);
     if (!page) return apiError(res, 404, "Partner page not found");
     const rows = await db
@@ -862,7 +1006,10 @@ router.get(
         )`,
       })
       .from(partnerOrganizationMemberships)
-      .innerJoin(organizations, eq(organizations.id, partnerOrganizationMemberships.organizationId))
+      .innerJoin(
+        organizations,
+        eq(organizations.id, partnerOrganizationMemberships.organizationId),
+      )
       .where(
         and(
           eq(partnerOrganizationMemberships.partnerPageId, page.id),
@@ -874,9 +1021,18 @@ router.get(
     const teamRows =
       orgIds.length > 0
         ? await db
-            .select({ id: teams.id, organizationId: teams.organizationId, name: teams.name })
+            .select({
+              id: teams.id,
+              organizationId: teams.organizationId,
+              name: teams.name,
+            })
             .from(teams)
-            .where(and(inArray(teams.organizationId, orgIds), sql`${teams.archivedAt} IS NULL`))
+            .where(
+              and(
+                inArray(teams.organizationId, orgIds),
+                sql`${teams.archivedAt} IS NULL`,
+              ),
+            )
             .orderBy(asc(teams.name))
         : [];
     return res.json({
@@ -911,14 +1067,28 @@ router.post(
     if (!me) return apiError(res, 401, "Sign in before requesting access");
     const slug = p(req.params.slug).toLowerCase();
     const organizationId = cleanText(req.body?.organizationId, 80);
-    const submittedOrganizationName = cleanText(req.body?.organizationName, 200);
+    const submittedOrganizationName = cleanText(
+      req.body?.organizationName,
+      200,
+    );
     const requesterFullName = cleanText(req.body?.fullName, 200);
     const requesterTitle = cleanText(req.body?.title, 200);
     if (!submittedOrganizationName || !requesterFullName || !requesterTitle) {
-      return apiError(res, 400, "Organization name, full name, and title are required");
+      return apiError(
+        res,
+        400,
+        "Organization name, full name, and title are required",
+      );
     }
-    if (req.body?.confirmCorrect !== true || req.body?.confirmAuthorized !== true) {
-      return apiError(res, 400, "Confirm the organization and your authorization before submitting");
+    if (
+      req.body?.confirmCorrect !== true ||
+      req.body?.confirmAuthorized !== true
+    ) {
+      return apiError(
+        res,
+        400,
+        "Confirm the organization and your authorization before submitting",
+      );
     }
     const [target] = await db
       .select({
@@ -932,9 +1102,15 @@ router.post(
       .from(partnerLandingPages)
       .innerJoin(
         partnerOrganizationMemberships,
-        eq(partnerOrganizationMemberships.partnerPageId, partnerLandingPages.id),
+        eq(
+          partnerOrganizationMemberships.partnerPageId,
+          partnerLandingPages.id,
+        ),
       )
-      .innerJoin(organizations, eq(organizations.id, partnerOrganizationMemberships.organizationId))
+      .innerJoin(
+        organizations,
+        eq(organizations.id, partnerOrganizationMemberships.organizationId),
+      )
       .where(
         and(
           sql`lower(${partnerLandingPages.slug}) = ${slug}`,
@@ -944,12 +1120,21 @@ router.post(
         ),
       )
       .limit(1);
-    if (!target) return apiError(res, 404, "Organization is not available on this partner page");
+    if (!target)
+      return apiError(
+        res,
+        404,
+        "Organization is not available on this partner page",
+      );
     if (
       normalizedOrganizationName(submittedOrganizationName) !==
       normalizedOrganizationName(target.organizationName)
     ) {
-      return apiError(res, 400, `Enter "${target.organizationName}" to confirm the selected organization`);
+      return apiError(
+        res,
+        400,
+        `Enter "${target.organizationName}" to confirm the selected organization`,
+      );
     }
     const [owner] = await db
       .select({ userId: organizationAdmins.userId })
@@ -961,7 +1146,8 @@ router.post(
         ),
       )
       .limit(1);
-    if (owner) return apiError(res, 409, "This organization already has an owner");
+    if (owner)
+      return apiError(res, 409, "This organization already has an owner");
     const [existing] = await db
       .select({ id: organizationClaimRequests.id })
       .from(organizationClaimRequests)
@@ -973,7 +1159,12 @@ router.post(
         ),
       )
       .limit(1);
-    if (existing) return apiError(res, 409, "You already have a pending request for this organization");
+    if (existing)
+      return apiError(
+        res,
+        409,
+        "You already have a pending request for this organization",
+      );
     const [claim] = await db
       .insert(organizationClaimRequests)
       .values({
@@ -992,6 +1183,7 @@ router.post(
         to: "competitions@kinectem.com",
         subject: `Partner club claim request: ${target.organizationName}`,
         kind: "partner_org_claim_request",
+        contextLabel: target.organizationName,
         text: [
           `Organization: ${target.organizationName}`,
           `Submitted organization name: ${submittedOrganizationName}`,
@@ -1004,7 +1196,10 @@ router.post(
         ].join("\n"),
       });
     } catch (err) {
-      req.log.error({ err, claimId: claim.id }, "Partner organization claim email failed after durable save");
+      req.log.error(
+        { err, claimId: claim.id },
+        "Partner organization claim email failed after durable save",
+      );
     }
     return res.status(201).json({
       data: {

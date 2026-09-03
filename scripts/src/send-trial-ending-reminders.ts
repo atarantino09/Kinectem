@@ -25,6 +25,8 @@ import {
   users,
 } from "@workspace/db";
 import { and, eq, isNull, isNotNull, inArray, lte, gte } from "drizzle-orm";
+import { renderBrandedEmailHtml } from "@workspace/email-template";
+import { pathToFileURL } from "node:url";
 
 type PlanTier = "starter" | "pro" | "elite";
 
@@ -167,7 +169,7 @@ async function sendEmail(
   }
 }
 
-function buildEmail(args: {
+export function buildTrialEndingReminderEmail(args: {
   adminName: string;
   orgName: string;
   plan: PlanTier;
@@ -200,12 +202,18 @@ If everything looks good, there's nothing to do. Thanks for building your club's
 
 — The Kinectem Team`;
 
-  const html = `<p>Hi ${escapeHtml(greeting)},</p>
+  const bodyHtml = `<p>Hi ${escapeHtml(greeting)},</p>
 <p>Your free period for <strong>${escapeHtml(args.orgName)}</strong> ends soon. On <strong>${escapeHtml(dateLabel)}</strong>, the card on file will be charged <strong>${escapeHtml(charge)}</strong> for your first year on the <strong>${escapeHtml(planName)}</strong> plan.${escapeHtml(promoLine)}</p>
 <p>Want to make a change first? You can switch plans — or cancel billing entirely and pay nothing — any time before ${escapeHtml(dateLabel)}:</p>
 <p><a href="${escapeHtml(url)}">Manage your plan →</a></p>
 <p>If everything looks good, there's nothing to do. Thanks for building your club's story on Kinectem!</p>
 <p>— The Kinectem Team</p>`;
+  const html = renderBrandedEmailHtml({
+    bodyHtml,
+    subject,
+    baseUrl: appBaseUrl(),
+    contextLabel: args.orgName,
+  });
 
   return { subject, text, html };
 }
@@ -248,7 +256,9 @@ async function main() {
     );
 
   if (subs.length === 0) {
-    console.log("No organizations need a trial-ending reminder. Nothing to do.");
+    console.log(
+      "No organizations need a trial-ending reminder. Nothing to do.",
+    );
     return;
   }
 
@@ -290,7 +300,7 @@ async function main() {
 
     let sentForOrg = 0;
     for (const r of recipients) {
-      const email = buildEmail({
+      const email = buildTrialEndingReminderEmail({
         adminName: r.name,
         orgName: sub.orgName,
         plan: sub.plan as PlanTier,
@@ -306,7 +316,13 @@ async function main() {
         continue;
       }
       try {
-        await sendEmail(creds!, r.email!, email.subject, email.text, email.html);
+        await sendEmail(
+          creds!,
+          r.email!,
+          email.subject,
+          email.text,
+          email.html,
+        );
         console.log(`Sent to ${r.email} (${sub.orgName})`);
         sentForOrg++;
       } catch (err) {
@@ -333,9 +349,14 @@ async function main() {
   );
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch((err) => {
-    console.error(err);
-    process.exit(1);
-  });
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
+  main()
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
+}

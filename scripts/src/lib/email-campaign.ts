@@ -11,6 +11,7 @@
 import { db, users, notificationPreferences } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
+import { renderBrandedEmailHtml } from "@workspace/email-template";
 
 // The two engagement categories these scripts send. (The full set lives in
 // notification-prefs.ts; scripts only need the ones they dispatch.)
@@ -222,10 +223,19 @@ export async function resolveRecipient(
 }
 
 // Shared HTML wrapper so campaign emails share the unsubscribe footer styling.
-export function wrapHtml(bodyHtml: string, unsubscribeUrl: string): string {
-  return `${bodyHtml}
-<hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0" />
+export function wrapHtml(
+  bodyHtml: string,
+  unsubscribeUrl: string,
+  subject = "Kinectem update",
+): string {
+  const footerHtml = `<hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0" />
 <p style="font-size:12px;color:#6b7280">You're receiving this because email updates are on for your Kinectem account. <a href="${escapeHtml(unsubscribeUrl)}">Unsubscribe from these emails</a>.</p>`;
+  return renderBrandedEmailHtml({
+    bodyHtml,
+    subject,
+    baseUrl: appBaseUrl(),
+    footerHtml,
+  });
 }
 
 export function unsubscribeText(unsubscribeUrl: string): string {
