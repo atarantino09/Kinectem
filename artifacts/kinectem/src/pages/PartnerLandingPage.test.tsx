@@ -319,10 +319,10 @@ describe("PartnerLandingPage featured competition", () => {
       "h-32",
       "w-32",
       "overflow-hidden",
-      "p-4",
+      "p-5",
       "md:h-40",
       "md:w-40",
-      "md:p-5",
+      "md:p-6",
     );
     expect(logo).toHaveClass("block", "h-full", "w-full", "object-contain");
     expect(logo).not.toHaveClass("object-cover");

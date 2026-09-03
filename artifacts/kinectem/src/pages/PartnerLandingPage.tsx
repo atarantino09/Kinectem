@@ -249,42 +249,38 @@ export default function PartnerLandingPage() {
               Proud partner with Kinectem
             </p>
             <div
-              className="flex flex-col items-center"
+              className="grid w-fit grid-cols-[8rem_1.5rem_8rem] items-center gap-x-3 gap-y-2 sm:gap-x-5 md:grid-cols-[10rem_2.5rem_10rem]"
               data-testid="partner-logo-lockup"
             >
-              <div className="grid grid-cols-[8rem_auto_8rem] items-center justify-center gap-3 sm:gap-5 md:grid-cols-[10rem_auto_10rem]">
-                <div
-                  className="grid h-32 w-32 min-h-0 min-w-0 place-items-center overflow-hidden rounded-3xl bg-white/95 p-4 shadow-xl md:h-40 md:w-40 md:p-5"
-                  data-testid="partner-logo-tile"
-                >
-                  {page.logoUrl ? (
-                    <img
-                      src={page.logoUrl}
-                      alt={`${page.officialName} logo`}
-                      className="block h-full w-full object-contain"
-                      data-testid="partner-logo-image"
-                    />
-                  ) : (
-                    <Building2 className="h-16 w-16 text-slate-500 md:h-20 md:w-20" />
-                  )}
-                </div>
-                <span className="text-center text-3xl font-light opacity-70 md:text-5xl" aria-hidden="true" data-testid="partner-logo-separator">×</span>
-                <div className="grid h-32 w-32 min-h-0 min-w-0 place-items-center overflow-hidden rounded-3xl shadow-xl md:h-40 md:w-40">
+              <div
+                className="grid h-32 w-32 min-h-0 min-w-0 place-items-center overflow-hidden rounded-3xl bg-white/95 p-5 shadow-xl md:h-40 md:w-40 md:p-6"
+                data-testid="partner-logo-tile"
+              >
+                {page.logoUrl ? (
                   <img
-                    src={kinectemIcon}
-                    alt="Kinectem logo"
-                    className="block max-h-full max-w-full object-contain"
+                    src={page.logoUrl}
+                    alt={`${page.officialName} logo`}
+                    className="block h-full w-full object-contain"
+                    data-testid="partner-logo-image"
                   />
-                </div>
+                ) : (
+                  <Building2 className="h-16 w-16 text-slate-500 md:h-20 md:w-20" />
+                )}
               </div>
-              <div className="mt-2 grid grid-cols-[8rem_auto_8rem] gap-3 text-center sm:gap-5 md:grid-cols-[10rem_auto_10rem]">
-                <div className="flex min-h-[3.25rem] min-w-0 flex-col items-center justify-start">
-                  <div className="text-[10px] font-black uppercase tracking-[0.18em] opacity-70">{page.associationLabel}</div>
-                  <div className="mt-1 text-sm font-black leading-tight md:text-base">{page.officialName}</div>
-                </div>
-                <div aria-hidden="true" />
-                <div className="flex min-h-[3.25rem] min-w-0 items-start justify-center text-sm font-black leading-tight md:text-base">Kinectem</div>
+              <span className="text-center text-3xl font-light opacity-70 md:text-5xl" aria-hidden="true" data-testid="partner-logo-separator">×</span>
+              <div className="grid h-32 w-32 min-h-0 min-w-0 place-items-center overflow-hidden rounded-3xl shadow-xl md:h-40 md:w-40">
+                <img
+                  src={kinectemIcon}
+                  alt="Kinectem logo"
+                  className="block max-h-full max-w-full object-contain"
+                />
               </div>
+              <div className="flex min-h-[3.25rem] min-w-0 flex-col items-center justify-start text-center">
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] opacity-70">{page.associationLabel}</div>
+                <div className="mt-1 text-sm font-black leading-tight md:text-base">{page.officialName}</div>
+              </div>
+              <div aria-hidden="true" />
+              <div className="flex min-h-[3.25rem] min-w-0 items-start justify-center text-center text-sm font-black leading-tight md:text-base">Kinectem</div>
             </div>
           </div>
           <div
