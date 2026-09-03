@@ -122,7 +122,7 @@ vi.mock("@workspace/api-client-react", () => ({
 }));
 
 // Now safe to import the component under test.
-import OrganizationPage from "./OrganizationPage";
+import OrganizationPage, { ArchivedTeamsCard } from "./OrganizationPage";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -209,6 +209,33 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("OrganizationPage — admin control gating", () => {
+  it("keeps archived team names tucked away until a manager opens the section", async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(
+      <ArchivedTeamsCard
+        teams={[
+          {
+            id: "archived-team-1",
+            name: "EP3 U17B National 1",
+            sport: "Soccer",
+            bannerUrl: null,
+            followerCount: 0,
+          },
+        ]}
+      />,
+    );
+
+    const toggle = screen.getByTestId("btn-toggle-archived-teams");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("EP3 U17B National 1")).not.toBeInTheDocument();
+
+    await user.click(toggle);
+
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("EP3 U17B National 1")).toBeInTheDocument();
+  });
+
   it("gives the organization identity a full hero row for a prominent name", async () => {
     installHandlers({ role: "owner" });
 

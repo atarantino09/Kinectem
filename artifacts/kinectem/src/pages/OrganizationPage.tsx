@@ -1218,7 +1218,7 @@ export default function OrganizationPage() {
               onBulkAddCoaches={() => setBulkCoachesOpen(true)}
             />
             {isOrgManager && archivedTeams.length > 0 && (
-              <ArchivedTeamsCard teams={archivedTeams} />
+              <ArchivedTeamsCard teams={archivedTeams} defaultOpen={false} />
             )}
           </aside>
         )}
@@ -1475,9 +1475,9 @@ function TeamsRail({
   );
 }
 
-function ArchivedTeamsCard({
+export function ArchivedTeamsCard({
   teams,
-  defaultOpen = true,
+  defaultOpen = false,
 }: {
   teams: TeamRailItem[];
   defaultOpen?: boolean;
