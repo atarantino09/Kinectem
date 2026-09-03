@@ -148,6 +148,7 @@ export default function OrganizationPage() {
   const [showAroundRequested, setShowAroundRequested] =
     useState(showAroundQuery);
   const [manageMenuOpen, setManageMenuOpen] = useState(false);
+  const [communicationMenuOpen, setCommunicationMenuOpen] = useState(false);
   // Gate the first-run tour until the post-create welcome / bulk-add popups
   // have been resolved on mount, so the tour never flashes on top of them.
   const [firstRunResolved, setFirstRunResolved] = useState(false);
@@ -322,7 +323,10 @@ export default function OrganizationPage() {
     () => [
       {
         targetTestId: "btn-org-manage-menu",
-        onEnter: () => setManageMenuOpen(false),
+        onEnter: () => {
+          setManageMenuOpen(false);
+          setCommunicationMenuOpen(false);
+        },
         title: "Manage admins & members",
         body: (
           <>
@@ -334,20 +338,26 @@ export default function OrganizationPage() {
       },
       {
         targetTestId: "btn-org-manage-menu",
-        onEnter: () => setManageMenuOpen(false),
+        onEnter: () => {
+          setManageMenuOpen(false);
+          setCommunicationMenuOpen(false);
+        },
         title: "Manage your organization",
         body: (
           <>
             The <strong>Manage</strong> menu is where you{" "}
-            <strong>edit the organization</strong> (name, logo, details) and{" "}
-            <strong>send an announcement</strong> to everyone in your teams.
+            <strong>edit the organization</strong> (name, logo, details), manage
+            members, review your plan, and handle the admin queue.
           </>
         ),
       },
       {
         targetTestId: "btn-add-team",
         additionalTargetTestIds: ["btn-bulk-add-teams"],
-        onEnter: () => setManageMenuOpen(false),
+        onEnter: () => {
+          setManageMenuOpen(false);
+          setCommunicationMenuOpen(false);
+        },
         title: "Add your teams",
         body: (
           <>
@@ -359,7 +369,10 @@ export default function OrganizationPage() {
       },
       {
         targetTestId: "btn-new-org-post",
-        onEnter: () => setManageMenuOpen(false),
+        onEnter: () => {
+          setManageMenuOpen(false);
+          setCommunicationMenuOpen(false);
+        },
         title: "Post an update",
         body: (
           <>
@@ -370,7 +383,10 @@ export default function OrganizationPage() {
       },
       {
         targetTestId: "btn-org-newsletter",
-        onEnter: () => setManageMenuOpen(false),
+        onEnter: () => {
+          setManageMenuOpen(false);
+          setCommunicationMenuOpen(false);
+        },
         title: "Send a newsletter",
         body: (
           <>
@@ -380,9 +396,12 @@ export default function OrganizationPage() {
         ),
       },
       {
-        targetTestId: "btn-org-manage-menu",
+        targetTestId: "btn-org-communication-menu",
         additionalTargetTestIds: ["btn-org-roster-outreach"],
-        onEnter: () => setManageMenuOpen(true),
+        onEnter: () => {
+          setManageMenuOpen(false);
+          setCommunicationMenuOpen(true);
+        },
         title: "Invite every team",
         body: (
           <>
@@ -493,6 +512,7 @@ export default function OrganizationPage() {
     }
     setOrgTourOpen(false);
     setManageMenuOpen(false);
+    setCommunicationMenuOpen(false);
   };
 
   const onToggleFollow = async () => {
@@ -941,15 +961,20 @@ export default function OrganizationPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-64">
-                            {isUnclaimed && isPlatformAdmin && (
-                              <DropdownMenuItem
-                                onClick={() => setStageCoachesOpen(true)}
-                                data-testid="btn-stage-coaches"
-                              >
-                                <UserPlus className="w-4 h-4 mr-2" />
-                                Stage coaches
-                              </DropdownMenuItem>
-                            )}
+                            <DropdownMenuItem
+                              onClick={() => setEditOpen(true)}
+                              data-testid="btn-edit-org"
+                            >
+                              <Pencil className="w-4 h-4 mr-2" />
+                              Edit organization
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => setManageMembersOpen(true)}
+                              data-testid="btn-manage-admins-hero"
+                            >
+                              <Shield className="w-4 h-4 mr-2" />
+                              Manage members
+                            </DropdownMenuItem>
                             {planUsage && (
                               <DropdownMenuItem
                                 asChild
@@ -974,13 +999,6 @@ export default function OrganizationPage() {
                               </DropdownMenuItem>
                             )}
                             <DropdownMenuItem
-                              onClick={() => setManageMembersOpen(true)}
-                              data-testid="btn-manage-admins-hero"
-                            >
-                              <Shield className="w-4 h-4 mr-2" />
-                              Manage members
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
                               onClick={() => setAdminQueueOpen(true)}
                               data-testid="btn-org-admin-queue"
                             >
@@ -995,20 +1013,37 @@ export default function OrganizationPage() {
                                 </Badge>
                               )}
                             </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => setSharePageOpen(true)}
-                              data-testid="btn-share-org-page"
+                            {isUnclaimed && isPlatformAdmin && (
+                              <DropdownMenuItem
+                                onClick={() => setStageCoachesOpen(true)}
+                                data-testid="btn-stage-coaches"
+                              >
+                                <UserPlus className="w-4 h-4 mr-2" />
+                                Stage coaches
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+
+                      <div data-testid="org-communication-actions">
+                        <DropdownMenu
+                          modal={!orgTourOpen}
+                          open={communicationMenuOpen}
+                          onOpenChange={setCommunicationMenuOpen}
+                        >
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              size="sm"
+                              className="rounded-full border border-blue-800 bg-blue-700 font-bold text-white hover:bg-blue-800 focus-visible:ring-blue-600 dark:border-blue-500 dark:bg-blue-700 dark:hover:bg-blue-600"
+                              data-testid="btn-org-communication-menu"
                             >
-                              <Share2 className="w-4 h-4 mr-2" />
-                              Share page
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => setEditOpen(true)}
-                              data-testid="btn-edit-org"
-                            >
-                              <Pencil className="w-4 h-4 mr-2" />
-                              Edit organization
-                            </DropdownMenuItem>
+                              <Mail className="w-4 h-4" />
+                              Communication
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-64">
                             <DropdownMenuItem
                               onClick={() => {
                                 setPreInviteAutomatic(false);
@@ -1020,6 +1055,22 @@ export default function OrganizationPage() {
                               Pre-invite message
                             </DropdownMenuItem>
                             <DropdownMenuItem
+                              asChild
+                            >
+                              <Link
+                                href={`/organizations/${orgId}/roster-outreach`}
+                                className="flex items-center w-full cursor-pointer"
+                              >
+                                <span
+                                  className="flex items-center"
+                                  data-testid="btn-org-roster-outreach"
+                                >
+                                  <Mail className="w-4 h-4 mr-2" />
+                                  Roster outreach
+                                </span>
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
                               onClick={() => setBroadcastOpen(true)}
                               data-testid="btn-org-broadcast"
                             >
@@ -1027,16 +1078,11 @@ export default function OrganizationPage() {
                               Send announcement
                             </DropdownMenuItem>
                             <DropdownMenuItem
-                              asChild
-                              data-testid="btn-org-roster-outreach"
+                              onClick={() => setSharePageOpen(true)}
+                              data-testid="btn-share-org-page"
                             >
-                              <Link
-                                href={`/organizations/${orgId}/roster-outreach`}
-                                className="flex items-center w-full cursor-pointer"
-                              >
-                                <Mail className="w-4 h-4 mr-2" />
-                                Roster outreach
-                              </Link>
+                              <Share2 className="w-4 h-4 mr-2" />
+                              Share page
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>

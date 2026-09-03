@@ -260,12 +260,14 @@ describe("OrganizationPage — admin control gating", () => {
 
     const communityActions = await screen.findByTestId("org-community-actions");
     const managerActions = screen.getByTestId("org-manager-actions");
+    const communicationActions = screen.getByTestId("org-communication-actions");
     const guidesActions = screen.getByTestId("org-guides-actions");
     const headerActions = screen.getByTestId("org-header-action-menus");
     expect(headerActions).toHaveClass("justify-end");
     expect(headerActions.firstElementChild).toBe(communityActions);
     expect(communityActions.nextElementSibling).toBe(managerActions);
-    expect(managerActions.nextElementSibling).toBe(guidesActions);
+    expect(managerActions.nextElementSibling).toBe(communicationActions);
+    expect(communicationActions.nextElementSibling).toBe(guidesActions);
     expect(within(communityActions).getByTestId("btn-org-community-menu")).toHaveTextContent(
       "Community",
     );
@@ -274,6 +276,10 @@ describe("OrganizationPage — admin control gating", () => {
       "Manage",
     );
     expect(managerActions.innerHTML).toContain("blue");
+    expect(
+      within(communicationActions).getByTestId("btn-org-communication-menu"),
+    ).toHaveTextContent("Communication");
+    expect(communicationActions.innerHTML).toContain("bg-blue-700");
     expect(guidesActions.innerHTML).toContain("purple");
 
     await user.click(screen.getByTestId("btn-org-community-menu"));
@@ -284,10 +290,33 @@ describe("OrganizationPage — admin control gating", () => {
 
     await user.keyboard("{Escape}");
     await user.click(screen.getByTestId("btn-org-manage-menu"));
-    expect(screen.getByTestId("btn-manage-admins-hero")).toBeInTheDocument();
-    expect(screen.getByText("Roster outreach")).toBeInTheDocument();
-    expect(screen.getByTestId("btn-share-org-page")).toBeInTheDocument();
+    const editOrg = screen.getByTestId("btn-edit-org");
+    const manageMembers = screen.getByTestId("btn-manage-admins-hero");
+    const adminQueue = screen.getByTestId("btn-org-admin-queue");
+    expect(editOrg.compareDocumentPosition(manageMembers)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(manageMembers.compareDocumentPosition(adminQueue)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(screen.queryByText("Roster outreach")).not.toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByTestId("btn-org-communication-menu"));
     expect(screen.getByTestId("btn-org-pre-invite")).toBeInTheDocument();
+    const preInvite = screen.getByTestId("btn-org-pre-invite");
+    const rosterOutreach = screen.getByTestId("btn-org-roster-outreach");
+    const announcement = screen.getByTestId("btn-org-broadcast");
+    const sharePage = screen.getByTestId("btn-share-org-page");
+    expect(preInvite.compareDocumentPosition(rosterOutreach)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(rosterOutreach.compareDocumentPosition(announcement)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(announcement.compareDocumentPosition(sharePage)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
 
     await user.keyboard("{Escape}");
     await user.click(screen.getByTestId("btn-org-guides-menu"));
@@ -295,7 +324,7 @@ describe("OrganizationPage — admin control gating", () => {
     expect(screen.getByTestId("link-org-getting-started")).toBeInTheDocument();
   });
 
-  it("shows management and guides menus for an admin viewer", async () => {
+  it("shows management, communication, and guides menus for an admin viewer", async () => {
     installHandlers({ role: "admin", extraAdmin: true });
 
     renderWithProviders(<OrganizationPage />);
@@ -303,10 +332,11 @@ describe("OrganizationPage — admin control gating", () => {
     expect(
       await screen.findByTestId("btn-org-manage-menu"),
     ).toBeInTheDocument();
+    expect(screen.getByTestId("btn-org-communication-menu")).toBeInTheDocument();
     expect(screen.getByTestId("btn-org-guides-menu")).toBeInTheDocument();
   });
 
-  it("ends the manager tour with Roster Outreach open in the Manage menu", async () => {
+  it("ends the manager tour with Roster Outreach open in Communication", async () => {
     const user = userEvent.setup();
     installHandlers({ role: "owner" });
     localStorage.removeItem(ORG_TOUR_STORAGE_KEY);
@@ -320,7 +350,7 @@ describe("OrganizationPage — admin control gating", () => {
 
     expect(await screen.findByText("Invite every team")).toBeInTheDocument();
     await waitFor(() =>
-      expect(screen.getByTestId("btn-org-manage-menu")).toHaveAttribute(
+      expect(screen.getByTestId("btn-org-communication-menu")).toHaveAttribute(
         "aria-expanded",
         "true",
       ),
@@ -328,7 +358,7 @@ describe("OrganizationPage — admin control gating", () => {
 
     await user.click(screen.getByTestId("btn-tour-next"));
     await waitFor(() =>
-      expect(screen.getByTestId("btn-org-manage-menu")).toHaveAttribute(
+      expect(screen.getByTestId("btn-org-communication-menu")).toHaveAttribute(
         "aria-expanded",
         "false",
       ),
@@ -350,6 +380,9 @@ describe("OrganizationPage — admin control gating", () => {
       screen.queryByTestId("btn-manage-admins-hero"),
     ).not.toBeInTheDocument();
     expect(screen.queryByTestId("btn-org-manage-menu")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("btn-org-communication-menu"),
+    ).not.toBeInTheDocument();
     expect(screen.queryByTestId("btn-share-org-page")).not.toBeInTheDocument();
     expect(screen.queryByTestId("btn-org-pre-invite")).not.toBeInTheDocument();
     expect(screen.queryByTestId("org-manager-actions")).not.toBeInTheDocument();
@@ -377,7 +410,7 @@ describe("OrganizationPage — admin control gating", () => {
     installHandlers({ role: "admin" });
     localStorage.setItem(ORG_TOUR_STORAGE_KEY, "1");
     renderWithProviders(<OrganizationPage />);
-    await user.click(await screen.findByTestId("btn-org-manage-menu"));
+    await user.click(await screen.findByTestId("btn-org-communication-menu"));
     await user.click(screen.getByTestId("btn-org-pre-invite"));
     expect(await screen.findByTestId("dialog-org-pre-invite")).toBeInTheDocument();
     expect(
