@@ -29,7 +29,7 @@ describe("OrgPreInviteDialog", () => {
       "the youth-sports platform where the story of your season comes to life",
     );
     expect(message).toContain(
-      "They run your season. Kinectem makes it last.",
+      "the one we already use. They run our season. Kinectem makes it last.",
     );
     expect(message).toContain(
       "turns quick coach notes into polished recaps, tags every player",

@@ -21,7 +21,7 @@ export function buildOrganizationPreInviteMessage(
 
 ${organizationName} is getting started on Kinectem. Kinectem is the youth-sports platform where the story of your season comes to life.
 
-Kinectem is not another registration, scheduling, or communication app — it's the layer that sits on top of the one you already use. They run your season. Kinectem makes it last.
+Kinectem is not another registration, scheduling, or communication app — it's the layer that sits on top of the one we already use. They run our season. Kinectem makes it last.
 
 After the final whistle, Kinectem turns quick coach notes into polished recaps, tags every player, and builds a lasting history families can revisit. It gives clubs one living home for the moments that matter — without replacing the tools they already use.
 
