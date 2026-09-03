@@ -99,6 +99,7 @@ import { useInfiniteScrollSentinel } from "@/hooks/useInfiniteScrollSentinel";
 import { useWhoami } from "@/hooks/useWhoami";
 import { OrgClaimBanner } from "@/components/ClaimTokenBanner";
 import { OrgPageShareDialog } from "@/components/OrgPageShareDialog";
+import { OrgPreInviteDialog } from "@/components/OrgPreInviteDialog";
 
 type TeamRailItem = {
   id: string;
@@ -135,6 +136,9 @@ export default function OrganizationPage() {
   const [adminQueueOpen, setAdminQueueOpen] = useState(false);
   const [broadcastOpen, setBroadcastOpen] = useState(false);
   const [sharePageOpen, setSharePageOpen] = useState(false);
+  const [preInviteOpen, setPreInviteOpen] = useState(false);
+  const [preInviteAutomatic, setPreInviteAutomatic] = useState(false);
+  const [handoffAdvance, setHandoffAdvance] = useState(0);
   // Task #443 — celebratory popup shown once right after a successful
   // org create. CreateOrgDialog stashes the org name under
   // `kinectem:welcome-org:<orgId>` and we consume it on mount so a
@@ -158,6 +162,18 @@ export default function OrganizationPage() {
   const [stageCoachesOpen, setStageCoachesOpen] = useState(false);
   useEffect(() => {
     if (!orgId) return;
+    try {
+      const preInviteKey = `kinectem:pre-invite-org:${orgId}`;
+      if (sessionStorage.getItem(preInviteKey) === "1") {
+        sessionStorage.removeItem(preInviteKey);
+        setPreInviteAutomatic(true);
+        setPreInviteOpen(true);
+        setFirstRunResolved(false);
+        return;
+      }
+    } catch {
+      // sessionStorage unavailable; continue to the existing prompts.
+    }
     try {
       const coachKey = `kinectem:coach-setup:${orgId}`;
       if (sessionStorage.getItem(coachKey) === "1") {
@@ -196,7 +212,7 @@ export default function OrganizationPage() {
     }
     if (name) setWelcomeOrgName(name);
     setFirstRunResolved(true);
-  }, [orgId]);
+  }, [orgId, handoffAdvance]);
   const isLg = useIsLg();
   const { data: me } = useGetLoggedInUser();
   const { data: who } = useWhoami();
@@ -406,6 +422,7 @@ export default function OrganizationPage() {
     if (showAroundRequested) return;
     if (
       welcomeOrgName !== null ||
+      preInviteOpen ||
       createTeamOpen ||
       bulkTeamsOpen ||
       coachSetupPending
@@ -423,6 +440,7 @@ export default function OrganizationPage() {
     firstRunResolved,
     isManagerRole,
     welcomeOrgName,
+    preInviteOpen,
     createTeamOpen,
     bulkTeamsOpen,
     coachSetupPending,
@@ -441,6 +459,7 @@ export default function OrganizationPage() {
       !isManagerRole ||
       orgTourSteps.length === 0 ||
       welcomeOrgName !== null ||
+      preInviteOpen ||
       createTeamOpen ||
       bulkTeamsOpen ||
       coachSetupPending
@@ -460,6 +479,7 @@ export default function OrganizationPage() {
     isManagerRole,
     orgTourSteps.length,
     welcomeOrgName,
+    preInviteOpen,
     createTeamOpen,
     bulkTeamsOpen,
     coachSetupPending,
@@ -691,6 +711,21 @@ export default function OrganizationPage() {
           organizationName={organization.name}
           open={sharePageOpen}
           onOpenChange={setSharePageOpen}
+        />
+      )}
+      {isOrgManager && (
+        <OrgPreInviteDialog
+          orgId={orgId}
+          organizationName={organization.name}
+          open={preInviteOpen}
+          automatic={preInviteAutomatic}
+          onOpenChange={(open) => {
+            setPreInviteOpen(open);
+            if (!open && preInviteAutomatic) {
+              setPreInviteAutomatic(false);
+              setHandoffAdvance((value) => value + 1);
+            }
+          }}
         />
       )}
 
@@ -973,6 +1008,16 @@ export default function OrganizationPage() {
                             >
                               <Pencil className="w-4 h-4 mr-2" />
                               Edit organization
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setPreInviteAutomatic(false);
+                                setPreInviteOpen(true);
+                              }}
+                              data-testid="btn-org-pre-invite"
+                            >
+                              <Megaphone className="w-4 h-4 mr-2" />
+                              Pre-invite message
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => setBroadcastOpen(true)}

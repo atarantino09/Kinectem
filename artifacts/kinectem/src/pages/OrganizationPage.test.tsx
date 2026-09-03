@@ -201,6 +201,7 @@ beforeEach(() => {
 afterEach(() => {
   setMockSearch("");
   localStorage.removeItem(ORG_TOUR_STORAGE_KEY);
+  sessionStorage.clear();
   vi.clearAllMocks();
 });
 
@@ -286,6 +287,7 @@ describe("OrganizationPage — admin control gating", () => {
     expect(screen.getByTestId("btn-manage-admins-hero")).toBeInTheDocument();
     expect(screen.getByText("Roster outreach")).toBeInTheDocument();
     expect(screen.getByTestId("btn-share-org-page")).toBeInTheDocument();
+    expect(screen.getByTestId("btn-org-pre-invite")).toBeInTheDocument();
 
     await user.keyboard("{Escape}");
     await user.click(screen.getByTestId("btn-org-guides-menu"));
@@ -349,8 +351,39 @@ describe("OrganizationPage — admin control gating", () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByTestId("btn-org-manage-menu")).not.toBeInTheDocument();
     expect(screen.queryByTestId("btn-share-org-page")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("btn-org-pre-invite")).not.toBeInTheDocument();
     expect(screen.queryByTestId("org-manager-actions")).not.toBeInTheDocument();
     expect(screen.queryByTestId("org-guides-actions")).not.toBeInTheDocument();
+  });
+
+  it("opens the create/claim pre-invite once, then continues the existing prompt sequence", async () => {
+    const user = userEvent.setup();
+    installHandlers({ role: "owner", teams: [{ id: "team-1", name: "U12 Blue" }] });
+    sessionStorage.setItem(`kinectem:pre-invite-org:${ORG_ID}`, "1");
+    sessionStorage.setItem(`kinectem:coach-setup:${ORG_ID}`, "1");
+
+    renderWithProviders(<OrganizationPage />);
+    expect(await screen.findByTestId("dialog-org-pre-invite")).toBeInTheDocument();
+    expect(screen.queryByTestId("dialog-coach-setup")).not.toBeInTheDocument();
+    expect(sessionStorage.getItem(`kinectem:pre-invite-org:${ORG_ID}`)).toBeNull();
+
+    await user.click(screen.getByTestId("btn-dismiss-org-pre-invite"));
+    await waitFor(() => expect(screen.getByTestId("dialog-coach-setup")).toBeInTheDocument());
+    expect(screen.queryByTestId("dialog-org-pre-invite")).not.toBeInTheDocument();
+  });
+
+  it("lets a manager manually reopen the pre-invite message", async () => {
+    const user = userEvent.setup();
+    installHandlers({ role: "admin" });
+    localStorage.setItem(ORG_TOUR_STORAGE_KEY, "1");
+    renderWithProviders(<OrganizationPage />);
+    await user.click(await screen.findByTestId("btn-org-manage-menu"));
+    await user.click(screen.getByTestId("btn-org-pre-invite"));
+    expect(await screen.findByTestId("dialog-org-pre-invite")).toBeInTheDocument();
+    expect(
+      (screen.getByTestId("text-org-pre-invite-message") as HTMLTextAreaElement)
+        .value,
+    ).toContain("Westfield Athletic Club");
   });
 
   it("shows the existing six-step manager tour after arriving from a partner club link", async () => {

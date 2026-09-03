@@ -257,6 +257,13 @@ export function CreateOrgDialog({
       ]);
       reset();
       onOpenChange(false);
+      // Every successful creation gets the one-shot pre-invite handoff,
+      // including callers that take over navigation through onCreated.
+      try {
+        sessionStorage.setItem(`kinectem:pre-invite-org:${org.id}`, "1");
+      } catch {
+        // sessionStorage unavailable — managers can still open it from Manage.
+      }
       if (onCreated) {
         onCreated({ id: org.id, name: trimmedName });
         return;
