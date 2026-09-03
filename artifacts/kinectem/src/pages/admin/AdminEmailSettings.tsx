@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
+import { Link } from "wouter";
 import { AdminLayout } from "@/components/AdminLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useWhoami } from "@/hooks/useWhoami";
-import { CheckCircle2, KeyRound, Loader2, Mail, Send } from "lucide-react";
+import { CheckCircle2, Eye, KeyRound, Loader2, Mail, Send } from "lucide-react";
 
 type ProviderStatus = {
   provider: string;
@@ -154,14 +155,22 @@ export default function AdminEmailSettings() {
 
   return (
     <AdminLayout>
-      <div className="mb-4">
-        <h1 className="text-2xl font-black">Email</h1>
-        <p className="text-sm text-muted-foreground">
-          Configure the SendGrid account used to send all Kinectem emails. When
-          set here, these credentials take precedence over the Replit connector
-          and environment variables. The API key is stored encrypted and never
-          shown again.
-        </p>
+      <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-black">Email</h1>
+          <p className="text-sm text-muted-foreground">
+            Configure the SendGrid account used to send all Kinectem emails.
+            When set here, these credentials take precedence over the Replit
+            connector and environment variables. The API key is stored
+            encrypted and never shown again.
+          </p>
+        </div>
+        <Link href="/admin/email-preview">
+          <Button variant="outline" className="shrink-0" data-testid="link-email-preview">
+            <Eye className="h-4 w-4" />
+            Preview coach invite
+          </Button>
+        </Link>
       </div>
 
       <Card className="max-w-xl">

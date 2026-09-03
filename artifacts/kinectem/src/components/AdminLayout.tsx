@@ -7,6 +7,7 @@ import {
   Sparkles,
   Bot,
   Mail,
+  Eye,
   Link2,
   Tag,
   Building2,
@@ -37,6 +38,7 @@ const NAV = [
   { href: "/admin/claims", label: "Claims", icon: ClipboardCheck },
   { href: "/admin/ai-keys", label: "AI Assist", icon: Bot },
   { href: "/admin/email", label: "Email", icon: Mail },
+  { href: "/admin/email-preview", label: "Email preview", icon: Eye },
   { href: "/admin/daily-digest", label: "Daily digest", icon: CalendarClock },
   { href: "/admin/promo-codes", label: "Promo codes", icon: Tag },
   { href: "/admin/organizations", label: "Organizations", icon: Building2 },
@@ -115,6 +117,8 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
           const active =
             item.href === "/admin"
               ? location === "/admin" || location === "/admin/"
+              : item.href === "/admin/email"
+                ? location === item.href
               : item.href === "/admin/organizations"
                 ? location.startsWith(item.href) ||
                   location === "/admin/org-quick-setup" ||

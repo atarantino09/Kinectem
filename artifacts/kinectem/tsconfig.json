@@ -20,6 +20,9 @@
     },
     {
       "path": "../../lib/invite-copy"
+    },
+    {
+      "path": "../../lib/email-template"
     }
   ]
 }

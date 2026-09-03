@@ -73,6 +73,9 @@ const AdminDailyDigest = lazy(() => import("@/pages/admin/AdminDailyDigest"));
 const AdminEmailSettings = lazy(
   () => import("@/pages/admin/AdminEmailSettings"),
 );
+const AdminEmailPreview = lazy(
+  () => import("@/pages/admin/AdminEmailPreview"),
+);
 const AdminPromoCodes = lazy(() => import("@/pages/admin/AdminPromoCodes"));
 const AdminSchedule = lazy(() => import("@/pages/admin/AdminSchedule"));
 const AdminTournaments = lazy(() => import("@/pages/admin/AdminTournaments"));
@@ -241,6 +244,10 @@ function Router() {
                   component={AdminDailyDigest}
                 />
                 <Route path="/admin/email" component={AdminEmailSettings} />
+                <Route
+                  path="/admin/email-preview"
+                  component={AdminEmailPreview}
+                />
                 <Route path="/admin/promo-codes" component={AdminPromoCodes} />
                 <Route path="/admin/schedule" component={AdminSchedule} />
                 <Route path="/admin/tournaments" component={AdminTournaments} />
