@@ -179,9 +179,21 @@ describe("coach invite email (task #636)", () => {
       );
       expect(sent.text).toContain("hit the AI Assist button");
       expect(sent.text).toContain("Minutes, not hours.");
+      expect(sent.text).toContain(
+        "Every game recap adds another chapter to the story of the season.",
+      );
+      expect(sent.text).toContain(
+        "permanent, searchable archive of the team's journey",
+      );
       expect(sent.html).toContain(`As ${article} ${roleLabel}, you&#39;ll`);
       expect(sent.html).toContain("hit the AI Assist button");
       expect(sent.html).toContain("Minutes, not hours.");
+      expect(sent.html).toContain(
+        "Every game recap adds another chapter to the story of the season.",
+      );
+      expect(sent.html).toContain(
+        "permanent, searchable archive of the team&#39;s journey",
+      );
       // The pitch sits between the "story of the season" paragraph and the
       // accept line in both variants.
       const textIdx = sent.text.indexOf("hit the AI Assist button");

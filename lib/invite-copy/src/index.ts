@@ -138,6 +138,9 @@ function staffAiAssistParagraph({ roleLabel }: Pick<StaffInviteVars, "roleLabel"
   return `As ${withArticle(roleLabel)}, you'll be the one bringing those stories to life. And it couldn't be easier — jot down a few sentences about the game, hit the AI Assist button, and watch it become a beautifully written recap. You review it, make it yours, and post it. Minutes, not hours.`;
 }
 
+const STAFF_ARCHIVE =
+  "Every game recap adds another chapter to the story of the season. Over time, those chapters become a permanent, searchable archive of the team's journey — something players, families, and coaches can return to long after the final whistle.";
+
 const STAFF_SETUP =
   "Accept the invite below to set up your account and take your spot on the team.";
 
@@ -149,6 +152,7 @@ const STAFF_CTA_LABEL = "Accept your invite →";
 export const STAFF_INVITE_CONTENT = {
   greeting: STAFF_GREETING,
   about: STAFF_ABOUT,
+    archive: STAFF_ARCHIVE,
   setup: STAFF_SETUP,
   learnMore: STAFF_LEARN_MORE,
   ctaLabel: STAFF_CTA_LABEL,
@@ -171,6 +175,7 @@ export function buildStaffInviteText(vars: StaffInviteVars): string {
     staffInviteLine(vars),
     STAFF_ABOUT,
     staffAiAssistParagraph(vars),
+    STAFF_ARCHIVE,
     STAFF_SETUP,
     STAFF_LEARN_MORE,
     `${STAFF_CTA_LABEL} ${vars.link}`,
@@ -190,6 +195,7 @@ export function buildStaffInviteHtml(vars: StaffInviteVars): string {
     `<p>${escapeHtml(staffInviteLine(vars))}</p>`,
     `<p>${escapeHtml(STAFF_ABOUT)}</p>`,
     `<p>${escapeHtml(staffAiAssistParagraph(vars))}</p>`,
+    `<p>${escapeHtml(STAFF_ARCHIVE)}</p>`,
     `<p>${escapeHtml(STAFF_SETUP)}</p>`,
     `<p>Check out <a href="${LEARN_MORE_URL}">www.kinectem.com</a> to learn even more prior to signing up.</p>`,
     `<p><a href="${linkAttr}">${escapeHtml(STAFF_CTA_LABEL)}</a></p>`,
@@ -261,6 +267,7 @@ export function buildMultiTeamStaffInviteHtml(
     `<ul>\n${list}\n</ul>`,
     `<p>${escapeHtml(STAFF_ABOUT)}</p>`,
     `<p>${escapeHtml(staffAiAssistParagraph({ roleLabel: vars.roleLabel }))}</p>`,
+    `<p>${escapeHtml(STAFF_ARCHIVE)}</p>`,
     `<p>${escapeHtml(STAFF_SETUP)}</p>`,
     `<p>Check out <a href="${LEARN_MORE_URL}">www.kinectem.com</a> to learn even more prior to signing up.</p>`,
     `<p><a href="${linkAttr}">${escapeHtml(STAFF_CTA_LABEL)}</a></p>`,
@@ -283,6 +290,7 @@ export function buildMultiTeamStaffInviteText(
     teams,
     STAFF_ABOUT,
     staffAiAssistParagraph({ roleLabel: vars.roleLabel }),
+    STAFF_ARCHIVE,
     STAFF_SETUP,
     STAFF_LEARN_MORE,
     `${STAFF_CTA_LABEL} ${vars.link}`,

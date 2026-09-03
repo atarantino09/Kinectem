@@ -29,6 +29,12 @@ describe("AdminEmailPreview", () => {
     expect(html).toContain("logo-horizontal.png");
     expect(html).toContain("email-card");
     expect(html).toContain("/invites/preview-coach-invite");
+    expect(html).toContain(
+      "Every game recap adds another chapter to the story of the season.",
+    );
+    expect(html).toContain(
+      "permanent, searchable archive of the team&#39;s journey",
+    );
     expect(screen.queryByRole("button", { name: /send/i })).not.toBeInTheDocument();
   });
 
