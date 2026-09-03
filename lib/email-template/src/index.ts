@@ -124,7 +124,7 @@ export function renderBrandedEmailHtml(options: BrandedEmailOptions): string {
             </div>
             <div style="padding:18px 30px 22px;border-top:1px solid #e8edf4;color:#718096;font-size:12px;line-height:1.55;text-align:center;">
               <div style="font-weight:700;color:#53627a;">Kinectem</div>
-              <div>Youth sports stories, shared safely.</div>
+              <div>Where the story of the season comes to life.</div>
             </div>
           </td>
         </tr>

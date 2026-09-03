@@ -24,6 +24,8 @@ describe("Kinectem branded email presentation", () => {
     expect(html).toContain("email-body-copy p > a");
     expect(html).toContain("Join &lt;North &amp; South&gt;");
     expect(html).toContain("Varsity &lt;Team&gt;");
+    expect(html).toContain("Where the story of the season comes to life.");
+    expect(html).not.toContain("Youth sports stories, shared safely.");
     expect(html).not.toContain("Join <North & South>");
     expect(html).toContain('href="https://kinectem.example/app/invites/token"');
   });
