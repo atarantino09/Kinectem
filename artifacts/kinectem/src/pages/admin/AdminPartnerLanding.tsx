@@ -112,6 +112,46 @@ function shareUrl(slug: string) {
   return `${window.location.origin}${basePath}/partners/${encodeURIComponent(slug)}`;
 }
 
+function buildPartnerOutreachMessage(partnerName: string, partnerUrl: string) {
+  const name = partnerName.trim() || "Your association";
+  return `Subject: Your club's page on Kinectem is already built
+
+Hi coaches and club directors,
+
+${name} has partnered with Kinectem — and your club's page, plus a page for every one of your teams, is already built and waiting for you.
+
+Kinectem is the youth-sports platform where the story of your season comes to life. It isn't another registration, scheduling, or communication app — it's the layer that sits on top of the one you already use. Your coaches write a game recap after each game, every rostered player is tagged automatically, and season after season that becomes a permanent record of your teams and every athlete on them.
+
+Find your club here: ${partnerUrl}
+
+That page has the full picture, and your club is on it with your teams already listed underneath. Claim it and you're in.
+
+As a ${name} club you get your first 90 days free and 25% off your first year, already applied to your account — no code to enter. Parents and players are always free.
+
+Questions? competitions@kinectem.com is happy to help.
+
+Thanks,
+The ${name} team`;
+}
+
+async function copyToClipboard(text: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand?.("copy");
+  document.body.removeChild(textarea);
+  if (!copied) throw new Error("Clipboard unavailable");
+}
+
 function Step({
   number,
   title,
@@ -150,6 +190,7 @@ export function AdminPartnerLanding({
   const [selectedId, setSelectedId] = useState("");
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [outreachCopied, setOutreachCopied] = useState(false);
   const [slugTouched, setSlugTouched] = useState(false);
   const [draft, setDraft] = useState({
     officialName: "",
@@ -297,6 +338,10 @@ export function AdminPartnerLanding({
   const canonicalSlug = canonicalizePartnerSlug(draft.slug);
   const slugError = partnerSlugError(draft.slug);
   const showSlugError = slugTouched || !draft.slug || !!selectedId;
+  const outreachUrl = canonicalSlug
+    ? shareUrl(canonicalSlug)
+    : `${window.location.origin}${(import.meta.env.BASE_URL || "/").replace(/\/$/, "")}/partners/[your-slug]`;
+  const outreachMessage = buildPartnerOutreachMessage(draft.officialName, outreachUrl);
   const setSlugFromInput = (value: string) => {
     setSlugTouched(true);
     const trimmed = value.trim();
@@ -934,6 +979,44 @@ export function AdminPartnerLanding({
       </Step>
 
       <Step number={5} title="Preview, publish, and share" done={draft.published}>
+        <Card className="border-primary/25 bg-primary/5" data-testid="partner-outreach-card">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Copy outreach message</CardTitle>
+            <p className="text-sm font-normal text-muted-foreground">
+              This message is personalized for {draft.officialName.trim() || "this partnership"} and includes its current public page link.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Textarea
+              readOnly
+              rows={18}
+              value={outreachMessage}
+              aria-label="Partner outreach message"
+              data-testid="textarea-partner-outreach-message"
+              className="bg-background font-sans leading-6"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!draft.officialName.trim() || !canonicalSlug}
+              onClick={() => {
+                void copyToClipboard(outreachMessage)
+                  .then(() => {
+                    setOutreachCopied(true);
+                    toast({ title: "Outreach message copied", description: "Paste it into your email or messaging app." });
+                    window.setTimeout(() => setOutreachCopied(false), 3000);
+                  })
+                  .catch(() => {
+                    toast({ title: "Couldn't copy outreach message", description: "Select the message above and copy it manually.", variant: "destructive" });
+                  });
+              }}
+              data-testid="btn-copy-partner-outreach-message"
+            >
+              {outreachCopied ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
+              {outreachCopied ? "Copied!" : "Copy outreach message"}
+            </Button>
+          </CardContent>
+        </Card>
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2"><Switch checked={draft.published} onCheckedChange={(published) => void savePage(published)} /><span className="font-semibold">{draft.published ? "Published" : "Unpublished"}</span></div>
           <Link href={`/partners/${canonicalSlug}`}><Button variant="outline" disabled={!draft.published || !!slugError}>Preview public page</Button></Link>

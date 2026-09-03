@@ -670,6 +670,52 @@ describe("AdminOrganizations bulk import", () => {
     expect(screen.getByText(/\/partners\/north-stars$/)).toBeInTheDocument();
   });
 
+  it("generates and copies a partnership-specific outreach message", async () => {
+    partnerPages = [
+      {
+        id: "partner-1",
+        slug: "north-stars",
+        officialName: "North Stars",
+        associationLabel: "East Coast Soccer",
+        published: false,
+        memberCount: 0,
+      },
+    ];
+    const user = userEvent.setup();
+    const clipboardWrite = vi
+      .spyOn(navigator.clipboard, "writeText")
+      .mockResolvedValue(undefined);
+    renderWithProviders(<AdminOrganizations />);
+
+    await user.click(await screen.findByTestId("tab-org-partner"));
+    await user.click(
+      await screen.findByRole("button", { name: /North Stars/ }),
+    );
+
+    const message = await screen.findByTestId(
+      "textarea-partner-outreach-message",
+    );
+    expect((message as HTMLTextAreaElement).value).toContain(
+      "North Stars has partnered with Kinectem",
+    );
+    expect((message as HTMLTextAreaElement).value).toContain(
+      "/partners/north-stars",
+    );
+    expect((message as HTMLTextAreaElement).value).toContain(
+      "As a North Stars club",
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Copy outreach message" }),
+    );
+    expect(clipboardWrite).toHaveBeenCalledWith(
+      expect.stringContaining("The North Stars team"),
+    );
+    expect(
+      screen.getByRole("button", { name: "Copied!" }),
+    ).toBeInTheDocument();
+  });
+
   it("searches and attaches a featured competition with a path to its console", async () => {
     partnerPages = [
       {
