@@ -704,6 +704,9 @@ describe("AdminOrganizations bulk import", () => {
     expect((message as HTMLTextAreaElement).value).toContain(
       "As a North Stars club",
     );
+    expect((message as HTMLTextAreaElement).value).toContain(
+      "AI Assist is built into the game recap composer",
+    );
 
     await user.click(
       screen.getByRole("button", { name: "Copy outreach message" }),

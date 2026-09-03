@@ -122,6 +122,8 @@ ${name} has partnered with Kinectem — and your club's page, plus a page for ev
 
 Kinectem is the youth-sports platform where the story of your season comes to life. It isn't another registration, scheduling, or communication app — it's the layer that sits on top of the one you already use. Your coaches write a game recap after each game, every rostered player is tagged automatically, and season after season that becomes a permanent record of your teams and every athlete on them.
 
+And it's less work than it sounds. AI Assist is built into the game recap composer — a coach types a couple of sentences about how the game went, and it comes back as a full game recap for them to review, edit, and publish. A couple of minutes, not a Sunday night project.
+
 Find your club here: ${partnerUrl}
 
 That page has the full picture, and your club is on it with your teams already listed underneath. Claim it and you're in.
