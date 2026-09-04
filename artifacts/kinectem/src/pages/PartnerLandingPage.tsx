@@ -143,6 +143,16 @@ const valueProps = [
   },
 ];
 
+function normalizedOrganizationName(value: string): string {
+  return value
+    .normalize("NFKC")
+    .toLocaleLowerCase("en-US")
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
 export default function PartnerLandingPage() {
   const [, params] = useRoute("/partners/:slug");
   const slug = params?.slug ?? "";
@@ -152,6 +162,7 @@ export default function PartnerLandingPage() {
   const [form, setForm] = useState({ organizationName: "", fullName: "", title: "", confirmCorrect: false, confirmAuthorized: false });
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [claimError, setClaimError] = useState<string | null>(null);
   const requestPanelRef = useRef<HTMLDivElement>(null);
   const { data: whoami } = useWhoami();
   const me = whoami?.viewingAs ?? whoami?.realUser;
@@ -209,6 +220,7 @@ export default function PartnerLandingPage() {
   const beginClaim = (org: PartnerOrganization) => {
     setSelected(org);
     setSubmitted(false);
+    setClaimError(null);
     setForm({
       organizationName: "",
       fullName: me?.name ?? "",
@@ -220,6 +232,16 @@ export default function PartnerLandingPage() {
 
   const submitClaim = async () => {
     if (!selected) return;
+    if (
+      normalizedOrganizationName(form.organizationName) !==
+      normalizedOrganizationName(selected.name)
+    ) {
+      setClaimError(
+        `The club name doesn't match. Type “${selected.name}” exactly as shown, then submit again.`,
+      );
+      return;
+    }
+    setClaimError(null);
     setSubmitting(true);
     try {
       await customFetch(`/api/v1/partner-pages/${encodeURIComponent(slug)}/claims`, {
@@ -228,6 +250,13 @@ export default function PartnerLandingPage() {
         body: JSON.stringify({ organizationId: selected.id, ...form }),
       });
       setSubmitted(true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      setClaimError(
+        message.includes("to confirm the selected organization")
+          ? `The club name doesn't match. Type “${selected.name}” exactly as shown, then submit again.`
+          : "We couldn't submit your request. Please check the information and try again.",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -680,7 +709,34 @@ export default function PartnerLandingPage() {
                   ) : (
                     <div className="space-y-4">
                       <div className="rounded-xl bg-muted p-3 text-sm">Signed in as <strong>{me.email}</strong>. This account identity will be included in the review.</div>
-                      <div><Label>Organization name</Label><Input value={form.organizationName} onChange={(e) => setForm({ ...form, organizationName: e.target.value })} placeholder={`Type ${selected.name}`} /></div>
+                       <div>
+                         <Label htmlFor="claim-organization-name">Organization name</Label>
+                         <p className="mt-1 text-xs text-muted-foreground">
+                           Type <strong>{selected.name}</strong> to confirm you selected the right club.
+                         </p>
+                         <Input
+                           id="claim-organization-name"
+                           className="mt-2"
+                           value={form.organizationName}
+                           onChange={(e) => {
+                             setForm({ ...form, organizationName: e.target.value });
+                             setClaimError(null);
+                           }}
+                           placeholder={selected.name}
+                           aria-invalid={claimError ? true : undefined}
+                           aria-describedby={claimError ? "claim-organization-error" : undefined}
+                         />
+                         {claimError && (
+                           <div
+                             id="claim-organization-error"
+                             role="alert"
+                             className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700"
+                             data-testid="claim-organization-error"
+                           >
+                             {claimError}
+                           </div>
+                         )}
+                       </div>
                       <div className="grid gap-3 md:grid-cols-2"><div><Label>Full name</Label><Input value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} /></div><div><Label>Title at the organization</Label><Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Club president, director…" /></div></div>
                       <label className="flex gap-3 text-sm"><Checkbox checked={form.confirmCorrect} onCheckedChange={(value) => setForm({ ...form, confirmCorrect: value === true })} />I selected the correct organization: {selected.name}.</label>
                       <label className="flex gap-3 text-sm"><Checkbox checked={form.confirmAuthorized} onCheckedChange={(value) => setForm({ ...form, confirmAuthorized: value === true })} />I am authorized to represent {selected.name} and understand Kinectem will verify this request.</label>

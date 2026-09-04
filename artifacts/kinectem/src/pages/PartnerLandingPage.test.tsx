@@ -516,4 +516,60 @@ describe("PartnerLandingPage featured competition", () => {
       scrollIntoView.mockRestore();
     }
   });
+
+  it("clearly explains when the typed club name does not match", async () => {
+    mockedWhoami.mockReturnValue({
+      data: {
+        authenticated: true,
+        realUser: {
+          id: "coach-1",
+          name: "Andrew Tarantino",
+          email: "coach@example.com",
+          role: "coach",
+        },
+        viewingAs: null,
+      },
+    } as never);
+    mockedFetch.mockResolvedValue(
+      partnerResponse(null, [
+        {
+          id: "org-1",
+          name: "Athletic Soccer Club Saugerties - HV",
+          location: null,
+          city: null,
+          state: null,
+          logoUrl: null,
+          canRequestClaim: true,
+          teams: [],
+        },
+      ]) as never,
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<PartnerLandingPage />);
+
+    await user.click(await screen.findByRole("button", { name: "Find Your Club" }));
+    await user.click(screen.getByRole("button", { name: "Request access" }));
+    await user.type(
+      screen.getByLabelText("Organization name"),
+      "Athletic Soccer Club Saugerties - H",
+    );
+    await user.type(
+      screen.getByPlaceholderText("Club president, director…"),
+      "President",
+    );
+    await user.click(
+      screen.getByText(/I selected the correct organization/),
+    );
+    await user.click(screen.getByText(/I am authorized to represent/));
+    await user.click(
+      screen.getByRole("button", {
+        name: "Submit request for Athletic Soccer Club Saugerties - HV",
+      }),
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "The club name doesn't match. Type “Athletic Soccer Club Saugerties - HV” exactly as shown, then submit again.",
+    );
+    expect(mockedFetch).toHaveBeenCalledTimes(1);
+  });
 });
