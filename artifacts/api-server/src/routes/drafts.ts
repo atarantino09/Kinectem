@@ -19,6 +19,7 @@ import { asyncHandler } from "../lib/async-handler";
 import { sendGuardianConfirmationEmail, sendGuardianExpiredEmail, sendPasswordResetEmail } from "../lib/email";
 import {
   canModerateScope,
+  canManageTeam,
   canManageOrganization,
   computeArticleAuthorRoleMap,
 } from "../lib/permissions";
@@ -95,11 +96,24 @@ router.get(
       .leftJoin(users, eq(articles.authorId, users.id))
       .where(and(eq(articles.status, "draft"), eq(articleAuthors.userId, me.id)));
     const seen = new Set<string>();
-    const all = [...owned, ...coRows].filter((r) => {
+    const candidateDrafts = [...owned, ...coRows].filter((r) => {
       if (seen.has(r.a.id)) return false;
       seen.add(r.a.id);
       return true;
     });
+    // Practice-plan drafts are staff-only even though articles normally allow
+    // authors and co-authors to see their own drafts. This also closes the
+    // stale-author case when a coach is removed from the team.
+    const all = (
+      await Promise.all(
+        candidateDrafts.map(async (r) =>
+          r.a.articleKind !== "practice_plan" ||
+          (await canManageTeam(me.id, r.team))
+            ? r
+            : null,
+        ),
+      )
+    ).filter((r): r is (typeof candidateDrafts)[number] => r !== null);
     const authorRoleMap = await computeArticleAuthorRoleMap(
       all.map((r) => ({
         articleId: r.a.id,
@@ -328,6 +342,11 @@ router.patch(
     if (!a) return notFound(res);
     const [team] = await db.select().from(teams).where(eq(teams.id, a.teamId)).limit(1);
     if (!team) return notFound(res);
+    // Plans deliberately do not inherit the recap author/co-author editing
+    // model: only a current manager of their exact team may change one.
+    if (a.articleKind === "practice_plan" && !(await canManageTeam(me.id, team))) {
+      return apiError(res, 403, "Only authorized team staff can edit practice plans.");
+    }
     // Author + co-authors can always edit. Org admins of the team's
     // org can also edit (so they can fix a coach's recap, including
     // toggling the auto-tag fan-out on/off after publish).
@@ -668,6 +687,11 @@ router.post(
       .where(eq(articles.id, parsed.id))
       .limit(1);
     if (!a) return notFound(res);
+    const [teamRow] = await db.select().from(teams).where(eq(teams.id, a.teamId)).limit(1);
+    if (!teamRow) return notFound(res);
+    if (a.articleKind === "practice_plan" && !(await canManageTeam(me.id, teamRow))) {
+      return apiError(res, 403, "Only authorized team staff can publish practice plans.");
+    }
     const [coAuthor] = a.authorId === me.id
       ? [null]
       : await db
@@ -682,8 +706,6 @@ router.post(
           .limit(1);
     if (a.authorId !== me.id && !coAuthor)
       return apiError(res, 403, "Only the author can publish");
-    const [teamRow] = await db.select().from(teams).where(eq(teams.id, a.teamId)).limit(1);
-    if (!teamRow) return notFound(res);
     const isAdmin = await canManageOrganization(me.id, teamRow.organizationId);
     // Task #801 — recap approval is opt-in per org: non-admin publishes go
     // pending only when the org's "Require recap approval" toggle is ON.
@@ -850,6 +872,9 @@ router.post(
       .where(eq(articles.id, parsed.id))
       .limit(1);
     if (!a) return notFound(res);
+    if (a.articleKind === "practice_plan") {
+      return apiError(res, 403, "Practice plans do not support co-authors.");
+    }
     if (a.authorId !== me.id)
       return apiError(res, 403, "Only the author can add co-authors");
     const userId = String(req.body?.userId ?? "");
@@ -884,6 +909,9 @@ router.delete(
       .where(eq(articles.id, parsed.id))
       .limit(1);
     if (!a) return notFound(res);
+    if (a.articleKind === "practice_plan") {
+      return apiError(res, 403, "Practice plans do not support co-authors.");
+    }
     if (a.authorId !== me.id && me.id !== req.params.userId)
       return apiError(res, 403, "Forbidden");
     await db

@@ -809,6 +809,7 @@ router.get(
     // surfaces instead of resurfacing a deleted card on someone's profile.
     const articleConds = [
       eq(articles.status, "published"),
+      or(isNull(articles.articleKind), eq(articles.articleKind, "recap")),
       isNull(articles.hiddenAt),
     ];
 

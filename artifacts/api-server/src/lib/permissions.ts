@@ -230,6 +230,26 @@ export async function canViewTeamSchedule(
   return Boolean(row);
 }
 
+// Practice plans intentionally have the same private audience as schedules:
+// accepted roster members, their active guardians, and organization/platform
+// administrators. `canManageTeam` is included explicitly for team coaches.
+export async function canViewPracticePlans(userId: string, team: Team): Promise<boolean> {
+  if (await canManageTeam(userId, team)) return true;
+  if (await isTeamMember(userId, team.id)) return true;
+  const [guardian] = await db
+    .select({ id: rosterEntries.id })
+    .from(rosterEntries)
+    .innerJoin(guardianLinks, eq(guardianLinks.childId, rosterEntries.userId))
+    .where(and(
+      eq(rosterEntries.teamId, team.id),
+      eq(rosterEntries.status, "accepted"),
+      eq(guardianLinks.guardianId, userId),
+      eq(guardianLinks.status, "active"),
+    ))
+    .limit(1);
+  return Boolean(guardian);
+}
+
 export async function canCreateRecap(
   userId: string,
   team: Team,

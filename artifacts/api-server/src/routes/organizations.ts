@@ -26,7 +26,7 @@ import {
   teamNewsLinks,
   organizationRosterOutreach,
 } from "@workspace/db";
-import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
@@ -2049,6 +2049,7 @@ router.get(
       .where(
         and(
           eq(articles.status, "published"),
+          or(isNull(articles.articleKind), eq(articles.articleKind, "recap")),
           eq(articles.teamId, req.params.teamId),
           // Soft-deleted recaps must not be served to the team page —
           // matches the home/profile feed behavior so a deleted
@@ -2462,6 +2463,7 @@ router.get(
         .where(
           and(
             eq(articles.status, "published"),
+            or(isNull(articles.articleKind), eq(articles.articleKind, "recap")),
             eq(organizations.id, orgId),
             // Recap deletion is a soft delete (`hiddenAt`). Every public
             // surface must exclude it; without this condition, the org page
@@ -2713,6 +2715,7 @@ async function loadOrgNewsletterRecaps(
   const conds = [
     eq(teams.organizationId, orgId),
     eq(articles.status, "published"),
+    or(isNull(articles.articleKind), eq(articles.articleKind, "recap")),
     isNull(articles.hiddenAt),
   ];
   if (startMs != null) conds.push(sql`${effDate} >= ${new Date(startMs)}`);
@@ -3252,6 +3255,7 @@ async function transitionApproval(
             and(
               eq(articles.authorId, a.authorId),
               eq(articles.status, "published"),
+              or(isNull(articles.articleKind), eq(articles.articleKind, "recap")),
               isNotNull(articles.gameDate),
             ),
           );

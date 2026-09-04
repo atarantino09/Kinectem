@@ -1001,6 +1001,9 @@ export function articleToPost(a: ArticleRow, extras: PostExtras) {
     updatedAt: a.updatedAt.toISOString(),
     gameDate: a.gameDate ? a.gameDate.toISOString() : null,
     recapKind: a.recapKind ?? null,
+    // Extra response field; the locked OpenAPI describes the common post
+    // shape, while clients need this to render private practice plans safely.
+    articleKind: a.articleKind ?? "recap",
     articleStatus: a.status ?? null,
     // Medal marker: operator-featured competition recap.
     competitionFeatured: a.featured === true && a.competitionId != null,
@@ -1127,6 +1130,7 @@ function basePost(p: {
   // Only combined season/tournament recaps set this ("combined"); all
   // other posts omit it and the response serializes null.
   recapKind?: string | null;
+  articleKind?: "recap" | "practice_plan";
   // True when this recap was featured by a competition operator on the
   // competition's public rail. Drives the medal marker on the post card.
   // Extra field beyond the locked spec — recapKind precedent.
@@ -1217,6 +1221,7 @@ function basePost(p: {
     updatedAt: p.updatedAt,
     gameDate: p.gameDate ?? null,
     recapKind: p.recapKind ?? null,
+    articleKind: p.articleKind ?? "recap",
     articleStatus: p.articleStatus ?? null,
     competition: p.extras.competition ?? null,
     newsLink: p.newsLink ?? null,

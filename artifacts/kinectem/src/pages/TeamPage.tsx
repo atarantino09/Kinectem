@@ -28,6 +28,7 @@ import {
   type TeamPanel,
 } from "@/components/team-page/TeamHeaderCard";
 import { TeamPostsSection } from "@/components/team-page/TeamPostsSection";
+import { PracticePlansSection } from "@/components/team-page/PracticePlansSection";
 import {
   TeamRosterTabs,
   type RosterMember,
@@ -554,6 +555,11 @@ export default function TeamPage() {
               isLoadingMorePosts={isFetchingMorePosts}
               loadMorePostsFailed={fetchMorePostsFailed}
               onLoadMorePosts={() => fetchMorePosts()}
+            />
+            <PracticePlansSection
+              teamId={teamId}
+              canManage={canManage}
+              canView={canViewSchedule}
             />
           </>
         )}

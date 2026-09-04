@@ -23,6 +23,7 @@ import {
   isNull,
   isNotNull,
   lte,
+  or,
   sql,
 } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
@@ -1804,6 +1805,7 @@ async function loadTeamSeasonRecaps(
   const conds = [
     eq(articles.teamId, teamId),
     eq(articles.status, "published"),
+    or(isNull(articles.articleKind), eq(articles.articleKind, "recap")),
     isNull(articles.hiddenAt),
   ];
   if (startMs != null) conds.push(sql`${effDate} >= ${new Date(startMs)}`);

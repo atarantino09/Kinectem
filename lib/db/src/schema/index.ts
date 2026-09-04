@@ -5,6 +5,9 @@ export const userRoleEnum = pgEnum("user_role", ["athlete", "coach", "admin", "p
 export const rosterRoleEnum = pgEnum("roster_role", ["player", "coach"]);
 export const rosterStatusEnum = pgEnum("roster_status", ["pending", "accepted", "declined"]);
 export const articleStatusEnum = pgEnum("article_status", ["draft", "pending_approval", "published"]);
+// Articles are normally public-facing recaps. Practice plans deliberately use
+// the same durable article/draft infrastructure but are private to a team.
+export const articleKindEnum = pgEnum("article_kind", ["recap", "practice_plan"]);
 export const inviteStatusEnum = pgEnum("invite_status", ["pending", "accepted", "expired", "revoked"]);
 // Task #666 — last-known email delivery state for an invite, driven by the
 // SendGrid Event Webhook. `unknown` = no email attempted (e.g. the invitee
@@ -845,6 +848,7 @@ export const articles = pgTable("articles", {
   // game recaps) from a normal single-game recap. NULL = single game;
   // "combined" = multi-game recap. Drives a distinct post card pill.
   recapKind: text("recap_kind"),
+  articleKind: articleKindEnum("article_kind").notNull().default("recap"),
   // Competitions (§7) — set when this game recap belongs to a claimed
   // competition game (derivable game → slot → competition, denormalized for
   // the curation queue + featured rail queries). `featured` is toggled by

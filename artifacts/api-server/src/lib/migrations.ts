@@ -2519,6 +2519,25 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
       ALTER TYPE admin_target_type ADD VALUE IF NOT EXISTS 'roster_entry';
     `,
   },
+  {
+    // Practice plans are stored with articles so existing draft/publish
+    // behavior remains available, while an explicit kind keeps them out of
+    // all public article surfaces.
+    name: "2026-09-04-practice-plans-private-article-kind",
+    sql: `
+      DO $migration$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'article_kind') THEN
+          CREATE TYPE article_kind AS ENUM ('recap', 'practice_plan');
+        END IF;
+      END$migration$;
+      ALTER TABLE articles
+        ADD COLUMN IF NOT EXISTS article_kind article_kind NOT NULL DEFAULT 'recap';
+      CREATE INDEX IF NOT EXISTS articles_practice_plan_team_idx
+        ON articles (team_id, created_at DESC)
+        WHERE article_kind = 'practice_plan';
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

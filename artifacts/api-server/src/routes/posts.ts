@@ -67,6 +67,7 @@ import {
   canApproveTeamHighlight,
   canManageOrganization,
   canManageTeam,
+  canViewPracticePlans,
   canModerateScope,
   isSoloTeam,
   soloTeamRecapWindowOpen,
@@ -144,6 +145,30 @@ import {
 } from "../lib/coppa";
 
 const router: IRouter = Router();
+
+async function canAccessPracticePlan(
+  userId: string | null | undefined,
+  article: typeof articles.$inferSelect,
+  team: typeof teams.$inferSelect,
+): Promise<boolean> {
+  return article.articleKind !== "practice_plan" ||
+    (!!userId && await canViewPracticePlans(userId, team));
+}
+
+async function canUsePracticePlanInteractions(
+  parsed: { kind: string; id: string },
+  userId: string | null | undefined,
+): Promise<boolean> {
+  if (parsed.kind !== "article") return true;
+  const [row] = await db.select({ article: articles, team: teams })
+    .from(articles).innerJoin(teams, eq(articles.teamId, teams.id))
+    .where(eq(articles.id, parsed.id)).limit(1);
+  // The practice-plan composer tells staff these social endpoints are off.
+  // Keep that promise server-enforced; returning 404 also avoids revealing an
+  // internal plan to an outsider who probes a reaction/comment URL.
+  if (!row || !(await canAccessPracticePlan(userId, row.article, row.team))) return false;
+  return row.article.articleKind !== "practice_plan";
+}
 
 // Task #367 — COPPA Phase 3 helpers used by GET /posts/:postId.
 //
@@ -301,6 +326,7 @@ router.get(
         .where(
           and(
             eq(articles.status, "published"),
+            or(isNull(articles.articleKind), eq(articles.articleKind, "recap")),
             eq(articles.authorId, me.id),
             isNull(articles.hiddenAt),
             cursorCond(articles.createdAt),
@@ -484,6 +510,7 @@ router.get(
       .where(
         and(
           eq(articles.status, "published"),
+          or(isNull(articles.articleKind), eq(articles.articleKind, "recap")),
           isNull(articles.hiddenAt),
           or(...articleConds),
           cursorCond(articles.createdAt),
@@ -609,6 +636,7 @@ router.get(
             and(
               inArray(articles.id, sharedArticleIds),
               eq(articles.status, "published"),
+              or(isNull(articles.articleKind), eq(articles.articleKind, "recap")),
               isNull(articles.hiddenAt),
             ),
           )
@@ -1198,6 +1226,100 @@ router.get(
   }),
 );
 
+// Practice Plans are deliberately a separate, authenticated team surface.
+// Do not add these to the normal posts query: followers and profile visitors
+// must never discover an internal plan through a public feed.
+router.get(
+  "/teams/:teamId/practice-plans",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return notFound(res);
+    const teamId = String(req.params.teamId);
+    const [team] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
+    if (!team || !(await canViewPracticePlans(me.id, team))) return notFound(res);
+    const viewerCanManage = await canManageTeam(me.id, team);
+    const rows = await db.select({ a: articles, author: users })
+      .from(articles)
+      .leftJoin(users, eq(articles.authorId, users.id))
+      .where(and(
+        eq(articles.teamId, team.id),
+        eq(articles.articleKind, "practice_plan"),
+        isNull(articles.hiddenAt),
+      ))
+      .orderBy(desc(articles.createdAt));
+    res.json({
+      data: rows.filter(({ a }) => a.status === "published" || viewerCanManage).map(({ a, author }) => ({
+        id: articlePostId(a.id),
+        title: a.title,
+        body: a.body,
+        status: a.status,
+        articleKind: "practice_plan" as const,
+        createdAt: a.createdAt.toISOString(),
+        updatedAt: a.updatedAt.toISOString(),
+        author: author ? toPostAuthor(author) : null,
+        canEdit: viewerCanManage,
+      })),
+    });
+  }),
+);
+
+router.post(
+  "/teams/:teamId/practice-plans",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const teamId = String(req.params.teamId);
+    const [team] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
+    if (!team) return notFound(res);
+    if (!(await canManageTeam(me.id, team))) {
+      return apiError(res, 403, "Only authorized team staff can create practice plans.");
+    }
+    const title = String(req.body?.title ?? "").trim();
+    const body = String(req.body?.body ?? "").trim();
+    if (!title || !body) return apiError(res, 400, "A practice plan title and details are required.");
+    const status = req.body?.status === "draft" ? "draft" : "published";
+    const [plan] = await db.insert(articles).values({
+      teamId: team.id, authorId: me.id, title, body,
+      summary: typeof req.body?.description === "string" ? req.body.description : null,
+      articleKind: "practice_plan", status,
+      publishedAt: status === "published" ? new Date() : null,
+    }).returning();
+    res.status(201).json({
+      ...articleToPost(plan, { team, org: null, author: me, canEdit: true, canDelete: true }),
+      articleKind: "practice_plan",
+    });
+  }),
+);
+
+router.patch(
+  "/teams/:teamId/practice-plans/:planId",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const teamId = String(req.params.teamId);
+    const planId = String(req.params.planId).replace(/^article-/, "");
+    const [team] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
+    if (!team) return notFound(res);
+    if (!(await canManageTeam(me.id, team))) {
+      return apiError(res, 403, "Only authorized team staff can edit practice plans.");
+    }
+    const [plan] = await db.select().from(articles).where(and(
+      eq(articles.id, planId), eq(articles.teamId, team.id),
+      eq(articles.articleKind, "practice_plan"),
+    )).limit(1);
+    if (!plan) return notFound(res);
+    const title = typeof req.body?.title === "string" ? req.body.title.trim() : plan.title;
+    const body = typeof req.body?.body === "string" ? req.body.body.trim() : plan.body;
+    if (!title || !body) return apiError(res, 400, "A practice plan title and details are required.");
+    const status = req.body?.status === "draft" ? "draft" : req.body?.status === "published" ? "published" : plan.status;
+    const [updated] = await db.update(articles).set({
+      title, body, status, updatedAt: new Date(),
+      publishedAt: status === "published" ? (plan.publishedAt ?? new Date()) : null,
+    }).where(eq(articles.id, plan.id)).returning();
+    res.json({ ...articleToPost(updated, { team, org: null, author: me, canEdit: true, canDelete: true }), articleKind: "practice_plan" });
+  }),
+);
+
 router.get(
   "/posts/:postId",
   asyncHandler(async (req, res) => {
@@ -1218,6 +1340,19 @@ router.get(
         .limit(1);
       if (!row) return notFound(res);
       if (row.a.hiddenAt && !isAdmin) return notFound(res);
+      // 404 rather than 403 prevents the private plan's existence leaking
+      // through a copied detail URL.
+      if (!(await canAccessPracticePlan(me?.id, row.a, row.team))) return notFound(res);
+      // Published plans are available to the private team audience, but
+      // drafts are a staff work surface. In particular, do not let the
+      // original author retain draft access after losing their team role.
+      if (
+        row.a.articleKind === "practice_plan" &&
+        (!me || !(await canManageTeam(me.id, row.team))) &&
+        row.a.status !== "published"
+      ) {
+        return notFound(res);
+      }
       const isAuthor = !!me && row.a.authorId === me.id;
       const isOrgAdmin =
         !!me && !!row.org && (await canManageOrganization(me.id, row.org.id));
@@ -1630,10 +1765,14 @@ router.delete(
       .from(teams)
       .where(eq(teams.id, a.teamId))
       .limit(1);
+    if (!team) return notFound(res);
+    if (a.articleKind === "practice_plan" && !(await canManageTeam(me.id, team))) {
+      return apiError(res, 403, "Only authorized team staff can delete practice plans.");
+    }
     const isAuthor = a.authorId === me.id;
     const canModerate = await canModerateScope(me.id, {
-      organizationId: team?.organizationId ?? null,
-      team: team ?? null,
+      organizationId: team.organizationId,
+      team,
     });
     if (!isAuthor && !canModerate)
       return apiError(res, 403, "Only the original author or a scoped manager can delete a post");
@@ -1660,7 +1799,7 @@ router.delete(
         await tx.insert(adminActivityLog).values({
           adminUserId: me.id, actionType: "moderation_remove", targetType: "article",
           targetId: a.id,
-          metadata: JSON.stringify({ organizationId: team?.organizationId ?? null, teamId: a.teamId }),
+          metadata: JSON.stringify({ organizationId: team.organizationId, teamId: a.teamId }),
         });
       }
     });
@@ -1715,6 +1854,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const parsed = parsePostId(req.params.postId);
     if (!parsed) return notFound(res);
+    if (!(await canUsePracticePlanInteractions(parsed, req.sessionUser?.id))) return notFound(res);
     const isAdmin = req.realUser?.role === "admin" && !req.isMasquerading;
     const conds = [
       eq(postComments.postKind, parsed.kind),
@@ -1802,6 +1942,7 @@ router.post(
     }
     const parsed = parsePostId(req.params.postId);
     if (!parsed) return notFound(res);
+    if (!(await canUsePracticePlanInteractions(parsed, me.id))) return notFound(res);
     // Task #363 — COPPA Phase 2. Comments on a minor-owned post now
     // land as `pending` instead of being hard-blocked, so the linked
     // guardian can review and approve / decline from the family
@@ -1885,6 +2026,7 @@ router.delete(
     if (!me) return apiError(res, 401, "Not authenticated");
     const parsed = parsePostId(req.params.postId);
     if (!parsed) return notFound(res);
+    if (!(await canUsePracticePlanInteractions(parsed, me.id))) return notFound(res);
     const [c] = await db
       .select()
       .from(postComments)
@@ -1964,6 +2106,7 @@ async function loadShareableTarget(
       .limit(1);
     if (!row) return { ok: false };
     if (row.a.hiddenAt && !isAdmin) return { ok: false };
+    if (row.a.articleKind === "practice_plan") return { ok: false };
     const isAuthor = !!meId && row.a.authorId === meId;
     const isOrgAdmin =
       !!meId && !!row.org && (await canManageOrganization(meId, row.org.id));
@@ -2087,6 +2230,7 @@ const addPostReactionHandler = asyncHandler(async (req, res) => {
   if (!me) return apiError(res, 401, "Not authenticated");
   const parsed = parsePostId(req.params.postId);
   if (!parsed) return notFound(res);
+  if (!(await canUsePracticePlanInteractions(parsed, me.id))) return notFound(res);
   const inserted = await db
     .insert(postReactions)
     .values({
@@ -2143,6 +2287,7 @@ router.delete(
     if (!me) return apiError(res, 401, "Not authenticated");
     const parsed = parsePostId(req.params.postId);
     if (!parsed) return notFound(res);
+    if (!(await canUsePracticePlanInteractions(parsed, me.id))) return notFound(res);
     await db
       .delete(postReactions)
       .where(

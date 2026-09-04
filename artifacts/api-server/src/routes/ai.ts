@@ -1,12 +1,12 @@
 import { Router, type IRouter } from "express";
-import { db, aiProviderKeys } from "@workspace/db";
+import { db, aiProviderKeys, teams } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { asyncHandler } from "../lib/async-handler";
 import { rateLimit, ipKey } from "../middlewares/rate-limit";
 import { requireAuth, requireAdmin } from "../middlewares/auth";
 import { apiError } from "../lib/spec-helpers";
-import { canAuthorRecapAnywhere } from "../lib/permissions";
+import { canAuthorRecapAnywhere, canManageTeam } from "../lib/permissions";
 import { encryptSecret } from "../lib/secret-crypto";
 import {
   generatePostText,
@@ -46,6 +46,8 @@ const AssistBody = z
     title: z.string().trim().max(200).optional(),
     teamName: z.string().trim().max(200).optional(),
     gameDate: z.string().trim().max(40).optional(),
+    practicePlan: z.boolean().optional(),
+    teamId: z.string().uuid().optional(),
   })
   .refine((v) => (v.mode === "draft" ? !!v.notes : !!v.body), {
     message: "Provide notes to draft from, or existing text to polish.",
@@ -67,7 +69,20 @@ router.post(
       apiError(res, 401, "Not authenticated", { code: "UNAUTHENTICATED" });
       return;
     }
-    if (!(await canAuthorRecapAnywhere(me.id))) {
+    // Practice-plan generation is scoped to a real team and is staff-only;
+    // do not let an otherwise-authorized coach generate for another team.
+    if (req.body?.practicePlan === true) {
+      const teamId = typeof req.body?.teamId === "string" ? req.body.teamId : "";
+      const [team] = teamId
+        ? await db.select().from(teams).where(eq(teams.id, teamId)).limit(1)
+        : [];
+      if (!team || !(await canManageTeam(me.id, team))) {
+        apiError(res, 403, "You don't have permission to use AI Assist for this practice plan.", {
+          code: "AI_FORBIDDEN",
+        });
+        return;
+      }
+    } else if (!(await canAuthorRecapAnywhere(me.id))) {
       apiError(res, 403, "You don't have permission to use AI Assist.", {
         code: "AI_FORBIDDEN",
       });

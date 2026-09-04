@@ -64,17 +64,23 @@ export interface AssistInput {
   title?: string;
   teamName?: string;
   gameDate?: string;
+  practicePlan?: boolean;
 }
 
 function buildPrompt(input: AssistInput): { system: string; user: string } {
   const kind =
+    input.practicePlan
+      ? "private youth-sports practice plan for the coaching staff, players, and parents"
+      :
     input.postType === "short"
       ? "short social highlight caption"
       : "youth-sports game recap";
   const system = [
     "You are an assistant that helps youth-sports coaches and team admins write posts for the Kinectem platform.",
     `Write a ${kind}.`,
-    "Audience: players, parents, and fans. Tone: positive, energetic, encouraging, and age-appropriate for youth sports.",
+    input.practicePlan
+      ? "Audience: accepted team players, their active guardians, and team staff only. Include a clear, practical sequence, timing or drills when supplied, equipment, and safety reminders. This content is internal, never public."
+      : "Audience: players, parents, and fans. Tone: positive, energetic, encouraging, and age-appropriate for youth sports.",
     "Celebrate effort and teamwork. Never criticize or negatively single out a child.",
     "Do not invent specific scores, stats, or player names that were not provided.",
     // Mentions: the composer converts "@First Last" back into tagged,
