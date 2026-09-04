@@ -28,6 +28,7 @@ import {
   competitionBrackets,
   guardianLinks,
   assets,
+  adminActivityLog,
 } from "@workspace/db";
 import {
   and,
@@ -66,6 +67,7 @@ import {
   canApproveTeamHighlight,
   canManageOrganization,
   canManageTeam,
+  canModerateScope,
   isSoloTeam,
   soloTeamRecapWindowOpen,
   computeArticleCanEditMap,
@@ -1257,10 +1259,13 @@ router.get(
         isCoAuthor = !!coRow;
       }
       const canEdit = isAuthor || isCoAuthor || isOrgAdmin;
-      // Deletion is reserved for the original author. Co-authors,
-      // coaches, and org admins who can still edit are intentionally
-      // not given the delete affordance.
-      const canDelete = isAuthor;
+      const canDelete =
+        isAuthor ||
+        (!!me &&
+          (await canModerateScope(me.id, {
+            organizationId: row.team.organizationId,
+            team: row.team,
+          })));
       const [stats, shareStats, authorRoleMap, currentUserTags] = await Promise.all([
         loadPostStats(me?.id ?? null, [{ kind: "article", refId: row.a.id }]),
         loadPostShareStats(me?.id ?? null, [{ kind: "article", refId: row.a.id }]),
@@ -1362,9 +1367,15 @@ router.get(
       if (row.p.status !== "published" && !isAuthor && !isOrgAdmin) {
         return notFound(res);
       }
-      // Author or org admin can edit; only the author can delete.
+      // Author/org admins can edit; scoped managers may also remove.
       const canEdit = isAuthor || isOrgAdmin;
-      const canDelete = isAuthor;
+      const canDelete =
+        isAuthor ||
+        (!!me &&
+          (await canModerateScope(me.id, {
+            organizationId: row.org.id,
+            team: null,
+          })));
       const stats = await loadPostStats(me?.id ?? null, [
         { kind: "org_post", refId: row.p.id },
       ]);
@@ -1465,8 +1476,15 @@ router.get(
     ) {
       res.setHeader("X-Robots-Tag", "noindex, nofollow, noimageindex");
     }
-    // Uploader-only edit + delete on highlights.
+    // Uploader-only edit; scoped managers can also remove highlights.
     const isUploader = !!me && row.h.uploaderId === me.id;
+    const canDelete =
+      isUploader ||
+      (!!me &&
+        (await canModerateScope(me.id, {
+          organizationId: row.team?.organizationId ?? null,
+          team: row.team,
+        })));
     // Task #414 — gather uploader + tagged minors for masking.
     const hlTaggedMinorIds = (
       await db
@@ -1507,7 +1525,7 @@ router.get(
         org: row.org,
         author: row.uploader,
         canEdit: isUploader,
-        canDelete: isUploader,
+        canDelete,
         ...statsFor(stats, "highlight", row.h.id),
         ...shareStatsFor(shareStats, "highlight", row.h.id),
         taggedUsers: tagViews.get(row.h.id) ?? [],
@@ -1520,9 +1538,9 @@ router.get(
   }),
 );
 
-// DELETE /posts/:postId — soft-delete via `hiddenAt`.
-// Author-only (article / org_post) or uploader-only (highlight); org
-// admins keep PATCH access but never get the delete affordance.
+// DELETE /posts/:postId — soft-delete via `hiddenAt`. Authors retain their
+// self-delete right; the shared moderation policy also permits appropriately
+// scoped organization/team managers to remove content.
 router.delete(
   "/posts/:postId",
   asyncHandler(async (req, res) => {
@@ -1537,17 +1555,34 @@ router.delete(
         .where(eq(highlights.id, parsed.id))
         .limit(1);
       if (!h) return notFound(res);
-      if (h.uploaderId !== me.id)
+      const [team] = h.teamId
+        ? await db.select().from(teams).where(eq(teams.id, h.teamId)).limit(1)
+        : [null];
+      const isAuthor = h.uploaderId === me.id;
+      const canModerate = await canModerateScope(me.id, {
+        organizationId: team?.organizationId ?? null,
+        team,
+      });
+      if (!isAuthor && !canModerate)
         return apiError(
           res,
           403,
-          "Only the original uploader can delete a highlight",
+          "Only the original uploader or a scoped manager can delete a highlight",
         );
       if (h.hiddenAt) return res.status(204).end();
-      await db
-        .update(highlights)
-        .set({ hiddenAt: new Date(), hiddenByUserId: me.id })
-        .where(eq(highlights.id, h.id));
+      await db.transaction(async (tx) => {
+        await tx
+          .update(highlights)
+          .set({ hiddenAt: new Date(), hiddenByUserId: me.id })
+          .where(eq(highlights.id, h.id));
+        if (!isAuthor) {
+          await tx.insert(adminActivityLog).values({
+            adminUserId: me.id, actionType: "moderation_remove", targetType: "highlight",
+            targetId: h.id,
+            metadata: JSON.stringify({ organizationId: team?.organizationId ?? null, teamId: h.teamId }),
+          });
+        }
+      });
       return res.status(204).end();
     }
     if (parsed.kind === "org_post") {
@@ -1557,17 +1592,31 @@ router.delete(
         .where(eq(orgPosts.id, parsed.id))
         .limit(1);
       if (!p) return notFound(res);
-      if (p.authorId !== me.id)
+      const isAuthor = p.authorId === me.id;
+      const canModerate = await canModerateScope(me.id, {
+        organizationId: p.organizationId,
+        team: null,
+      });
+      if (!isAuthor && !canModerate)
         return apiError(
           res,
           403,
-          "Only the original author can delete a post",
+          "Only the original author or an organization manager can delete a post",
         );
       if (p.hiddenAt) return res.status(204).end();
-      await db
-        .update(orgPosts)
-        .set({ hiddenAt: new Date(), hiddenByUserId: me.id })
-        .where(eq(orgPosts.id, p.id));
+      await db.transaction(async (tx) => {
+        await tx
+          .update(orgPosts)
+          .set({ hiddenAt: new Date(), hiddenByUserId: me.id })
+          .where(eq(orgPosts.id, p.id));
+        if (!isAuthor) {
+          await tx.insert(adminActivityLog).values({
+            adminUserId: me.id, actionType: "moderation_remove", targetType: "org_post",
+            targetId: p.id,
+            metadata: JSON.stringify({ organizationId: p.organizationId }),
+          });
+        }
+      });
       return res.status(204).end();
     }
     const [a] = await db
@@ -1576,8 +1625,18 @@ router.delete(
       .where(eq(articles.id, parsed.id))
       .limit(1);
     if (!a) return notFound(res);
-    if (a.authorId !== me.id)
-      return apiError(res, 403, "Only the original author can delete a post");
+    const [team] = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.id, a.teamId))
+      .limit(1);
+    const isAuthor = a.authorId === me.id;
+    const canModerate = await canModerateScope(me.id, {
+      organizationId: team?.organizationId ?? null,
+      team: team ?? null,
+    });
+    if (!isAuthor && !canModerate)
+      return apiError(res, 403, "Only the original author or a scoped manager can delete a post");
     if (a.hiddenAt) {
       // Already removed — treat as idempotent so a stale double-click
       // doesn't surface a confusing error.
@@ -1597,10 +1656,59 @@ router.delete(
         .update(scheduleEvents)
         .set({ gameRecapId: null, recapReminderSentAt: new Date() })
         .where(eq(scheduleEvents.gameRecapId, a.id));
+      if (!isAuthor) {
+        await tx.insert(adminActivityLog).values({
+          adminUserId: me.id, actionType: "moderation_remove", targetType: "article",
+          targetId: a.id,
+          metadata: JSON.stringify({ organizationId: team?.organizationId ?? null, teamId: a.teamId }),
+        });
+      }
     });
     res.status(204).end();
   }),
 );
+
+// Resolve moderation context from the persisted post, rather than any route
+// parameter supplied by the caller. `null` means the target post no longer
+// exists (or has no team/org scope, such as a profile-only highlight).
+async function loadPostModerationScope(parsed: {
+  kind: "article" | "highlight" | "org_post" | "news";
+  id: string;
+}): Promise<{ organizationId: string | null; team: typeof teams.$inferSelect | null } | null> {
+  if (parsed.kind === "org_post") {
+    const [post] = await db
+      .select({ organizationId: orgPosts.organizationId })
+      .from(orgPosts)
+      .where(eq(orgPosts.id, parsed.id))
+      .limit(1);
+    return post ? { organizationId: post.organizationId, team: null } : null;
+  }
+  if (parsed.kind === "article") {
+    const [row] = await db
+      .select({ team: teams })
+      .from(articles)
+      .innerJoin(teams, eq(articles.teamId, teams.id))
+      .where(eq(articles.id, parsed.id))
+      .limit(1);
+    return row ? { organizationId: row.team.organizationId, team: row.team } : null;
+  }
+  if (parsed.kind === "highlight") {
+    const [row] = await db
+      .select({ team: teams })
+      .from(highlights)
+      .leftJoin(teams, eq(highlights.teamId, teams.id))
+      .where(eq(highlights.id, parsed.id))
+      .limit(1);
+    return row ? { organizationId: row.team?.organizationId ?? null, team: row.team } : null;
+  }
+  const [row] = await db
+    .select({ team: teams })
+    .from(teamNewsLinks)
+    .innerJoin(teams, eq(teamNewsLinks.teamId, teams.id))
+    .where(eq(teamNewsLinks.id, parsed.id))
+    .limit(1);
+  return row ? { organizationId: row.team.organizationId, team: row.team } : null;
+}
 
 router.get(
   "/posts/:postId/comments",
@@ -1657,8 +1765,23 @@ router.get(
       { id: me?.id ?? null, role: req.realUser?.role ?? null },
       rows.map((r) => r.author?.id).filter((x): x is string => !!x),
     );
+    const moderationScope = me ? await loadPostModerationScope(parsed) : null;
+    const canModerate = me && moderationScope
+      ? await canModerateScope(me.id, moderationScope)
+      : false;
     res.json(
-      paginate(rows.map((r) => toComment(r.c, r.author, 0, false, commentMinorCtx))),
+      paginate(rows.map((r) => ({
+        ...toComment(
+          r.c,
+          r.author,
+          0,
+          false,
+          commentMinorCtx,
+          // Extra response field (like post.canDelete): author self-delete
+          // or server-authorized content moderation only.
+          !!me && (r.c.authorId === me.id || canModerate),
+        ),
+      }))),
     );
   }),
 );
@@ -1749,7 +1872,9 @@ router.post(
     // echo, so default (no-mask) ctx is correct here.
     // Task #414 — write-time POST echo: comment author = me = viewer.
     // Bypass minor-name masking explicitly.
-    res.status(201).json(toComment(c, me, 0, false, TRUSTED_MINOR_NAME_CONTEXT));
+    res.status(201).json(
+      toComment(c, me, 0, false, TRUSTED_MINOR_NAME_CONTEXT, true),
+    );
   }),
 );
 
@@ -1758,18 +1883,40 @@ router.delete(
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
     if (!me) return apiError(res, 401, "Not authenticated");
+    const parsed = parsePostId(req.params.postId);
+    if (!parsed) return notFound(res);
     const [c] = await db
       .select()
       .from(postComments)
       .where(eq(postComments.id, req.params.commentId))
       .limit(1);
     if (!c) return notFound(res);
-    if (c.authorId !== me.id)
-      return apiError(res, 403, "Only the author can delete this comment");
-    await db
-      .update(postComments)
-      .set({ deletedAt: new Date() })
-      .where(eq(postComments.id, c.id));
+    // Never allow a comment id from one post to be deleted through another
+    // post's URL (and avoid leaking its actual parent).
+    if (c.postKind !== parsed.kind || c.postRefId !== parsed.id) return notFound(res);
+    const isAuthor = c.authorId === me.id;
+    const scope = await loadPostModerationScope(parsed);
+    const canModerate = scope ? await canModerateScope(me.id, scope) : false;
+    if (!isAuthor && !canModerate)
+      return apiError(res, 403, "Only the author or a scoped manager can delete this comment");
+    if (c.deletedAt) return res.status(204).end();
+    await db.transaction(async (tx) => {
+      await tx
+        .update(postComments)
+        .set({ deletedAt: new Date() })
+        .where(eq(postComments.id, c.id));
+      if (!isAuthor) {
+        await tx.insert(adminActivityLog).values({
+          adminUserId: me.id, actionType: "moderation_remove", targetType: "comment",
+          targetId: c.id,
+          metadata: JSON.stringify({
+            organizationId: scope?.organizationId ?? null,
+            teamId: scope?.team?.id ?? null,
+            postKind: c.postKind,
+          }),
+        });
+      }
+    });
     res.status(204).end();
   }),
 );

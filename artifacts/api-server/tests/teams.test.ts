@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { db, guardianLinks } from "@workspace/db";
+import { and, eq } from "drizzle-orm";
 import { app, loginAs, request } from "./helpers";
 
 async function getOrgAndTeams() {
@@ -377,6 +379,20 @@ describe("teams", () => {
       `/api/v1/teams/${teamId}/members/${playerMemberId}`,
     );
     expect(del.status).toBe(204);
+
+    // An accepted coach's authority is constrained to their rostered team.
+    const otherTeam = await samAgent
+      .post(`/api/v1/organizations/${(await getOrgAndTeams()).org.id}/teams`)
+      .send({ name: "Coach Cross-Team Denial", sport: "Soccer" });
+    expect(otherTeam.status).toBe(201);
+    const otherPlayer = await samAgent
+      .post(`/api/v1/teams/${otherTeam.body.id}/members`)
+      .send({ userId: danielaId, position: "player" });
+    expect(otherPlayer.status).toBe(201);
+    const crossTeam = await marcusAgent.delete(
+      `/api/v1/teams/${otherTeam.body.id}/members/${otherPlayer.body.id}`,
+    );
+    expect(crossTeam.status).toBe(403);
   });
 
   it("forbids accepted non-coach staff (e.g. team manager) from PATCH/DELETE", async () => {
@@ -444,6 +460,11 @@ describe("teams", () => {
       (m) => m.id === memberId,
     );
     expect(stillThere).toBe(false);
+    // Manager-targeted removals are not idempotent: a stale member id should
+    // clearly tell the caller the roster entry is no longer present.
+    expect(
+      (await agent.delete(`/api/v1/teams/${teamId}/members/${memberId}`)).status,
+    ).toBe(404);
   });
 
   it("forbids non-managers from editing or removing a member", async () => {
@@ -527,6 +548,29 @@ describe("teams", () => {
       `/api/v1/teams/${teamId}/members/${samEntry!.id}`,
     );
     expect(removeOriginal.status).toBe(204);
+  });
+
+  it("does not remove guardian relationships when removing a roster entry", async () => {
+    const { agent, teamId } = await freshTeam("Guardian Link Preservation Team");
+    const { user: child } = await loginAs((u) => u.email === "samira@kinectem.demo");
+    const [link] = await db
+      .select()
+      .from(guardianLinks)
+      .where(and(eq(guardianLinks.childId, child.id), eq(guardianLinks.status, "active")))
+      .limit(1);
+    expect(link).toBeDefined();
+    const add = await agent
+      .post(`/api/v1/teams/${teamId}/members`)
+      .send({ userId: child.id, position: "player" });
+    expect(add.status).toBe(201);
+    expect((await agent.delete(`/api/v1/teams/${teamId}/members/${add.body.id}`)).status)
+      .toBe(204);
+    const [after] = await db
+      .select({ id: guardianLinks.id })
+      .from(guardianLinks)
+      .where(eq(guardianLinks.id, link!.id))
+      .limit(1);
+    expect(after).toBeDefined();
   });
 
   it("lets the invited player accept their own roster entry", async () => {

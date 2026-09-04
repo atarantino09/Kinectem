@@ -138,6 +138,28 @@ export async function canManageOrganization(
   return Boolean(row);
 }
 
+// Shared content-moderation policy. Platform administrators have global
+// authority; organization owners/admins may moderate anything in their
+// organization; and an accepted coach may moderate only content on their own
+// team. Callers must pass the content's canonical team/org context, never
+// client-supplied ids.
+export async function canModerateScope(
+  userId: string,
+  scope: { organizationId: string | null; team: Team | null },
+): Promise<boolean> {
+  if (await isPlatformAdmin(userId)) return true;
+  if (
+    scope.organizationId &&
+    (await canManageOrganization(userId, scope.organizationId))
+  ) {
+    return true;
+  }
+  // `canManageTeam` intentionally recognizes only accepted coach entries
+  // (plus the org/platform paths handled above), so staff labels such as
+  // author/manager cannot moderate a team's content.
+  return scope.team ? canManageTeam(userId, scope.team) : false;
+}
+
 // Returns the caller's stored role in the org, or null if they are not a
 // member at all. Distinct from `canManageOrganization`, which collapses
 // owner+admin into a single boolean — callers that need to check whether

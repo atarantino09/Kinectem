@@ -2509,6 +2509,16 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
         ON partner_landing_pages (competition_id);
     `,
   },
+  {
+    // Task #1008 — moderation removals use explicit audit labels while
+    // retaining the existing admin_activity_log table.
+    name: "2026-09-03-task-1008-moderation-audit",
+    sql: `
+      ALTER TYPE admin_action_type ADD VALUE IF NOT EXISTS 'moderation_remove';
+      ALTER TYPE admin_target_type ADD VALUE IF NOT EXISTS 'follower';
+      ALTER TYPE admin_target_type ADD VALUE IF NOT EXISTS 'roster_entry';
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

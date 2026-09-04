@@ -6,6 +6,8 @@ import {
   organizationFollowers,
   userFollowers,
   teamFollowers,
+  teams,
+  adminActivityLog,
 } from "@workspace/db";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
@@ -375,6 +377,87 @@ router.get(
       })),
       pagination: { nextCursor, hasMore, totalCount: 0 },
     });
+  }),
+);
+
+// Manager-only follower removal. These routes intentionally differ from the
+// self-service `/follow` DELETE paths: managers supply the follower id and
+// their authority is derived from the persisted org/team context.
+router.delete(
+  "/organizations/:orgId/followers/:userId",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const [org] = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(eq(organizations.id, req.params.orgId))
+      .limit(1);
+    if (!org) return apiError(res, 404, "Not found");
+    if (!(await canManageOrganization(me.id, org.id))) {
+      return apiError(res, 403, "Organization managers only");
+    }
+    const deleted = await db.transaction(async (tx) => {
+      const rows = await tx
+        .delete(organizationFollowers)
+        .where(and(
+          eq(organizationFollowers.organizationId, org.id),
+          eq(organizationFollowers.userId, req.params.userId),
+        ))
+        .returning({ userId: organizationFollowers.userId });
+      if (!rows.length) return false;
+      await tx.insert(adminActivityLog).values({
+        adminUserId: me.id,
+        actionType: "moderation_remove",
+        targetType: "follower",
+        targetId: req.params.userId,
+        metadata: JSON.stringify({ organizationId: org.id, followType: "organization" }),
+      });
+      return true;
+    });
+    if (!deleted) return apiError(res, 404, "Follower relationship not found");
+    return res.status(204).end();
+  }),
+);
+
+router.delete(
+  "/teams/:teamId/followers/:userId",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const [team] = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.id, req.params.teamId))
+      .limit(1);
+    if (!team) return apiError(res, 404, "Not found");
+    if (!(await canManageTeam(me.id, team))) {
+      return apiError(res, 403, "Team coaches or organization managers only");
+    }
+    const deleted = await db.transaction(async (tx) => {
+      const rows = await tx
+        .delete(teamFollowers)
+        .where(and(
+          eq(teamFollowers.teamId, team.id),
+          eq(teamFollowers.userId, req.params.userId),
+        ))
+        .returning({ userId: teamFollowers.userId });
+      if (!rows.length) return false;
+      await tx.insert(adminActivityLog).values({
+        adminUserId: me.id,
+        actionType: "moderation_remove",
+        targetType: "follower",
+        targetId: req.params.userId,
+        metadata: JSON.stringify({
+          organizationId: team.organizationId,
+          teamId: team.id,
+          followType: "team",
+        }),
+      });
+      return true;
+    });
+    if (!deleted) return apiError(res, 404, "Follower relationship not found");
+    return res.status(204).end();
   }),
 );
 

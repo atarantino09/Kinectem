@@ -745,6 +745,7 @@ export default function OrganizationPage() {
         onOpenChange={setFollowersOpen}
         title={formatOrgName(organization.name)}
         variant={{ kind: "org-followers", orgId }}
+        canManageFollowers={isOrgManager}
         members={members.map((m) => ({
           userId: m.userId,
           displayName: m.displayName,

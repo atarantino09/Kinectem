@@ -511,6 +511,7 @@ export default function TeamPage() {
           onOpenChange={setFollowersOpen}
           title={`${team.name} followers`}
           variant={{ kind: "team-followers", teamId }}
+          canManageFollowers={canManage}
         />
 
         {/* Roster rail: inline above sections on mobile/tablet, in

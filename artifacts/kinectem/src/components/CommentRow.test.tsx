@@ -58,4 +58,25 @@ describe("CommentRow", () => {
     await user.click(link);
     expect(parentClick).not.toHaveBeenCalled();
   });
+
+  it("requires confirmation before deleting a server-authorized comment", async () => {
+    const user = userEvent.setup();
+    const onDelete = vi.fn();
+    render(
+      <CommentRow
+        comment={makeComment("Please remove this")}
+        canDelete
+        onDelete={onDelete}
+      />,
+    );
+
+    await user.click(screen.getByTestId("button-delete-comment-comment-1"));
+    expect(screen.getByTestId("dialog-delete-comment-comment-1")).toBeInTheDocument();
+    expect(onDelete).not.toHaveBeenCalled();
+
+    await user.click(
+      screen.getByTestId("button-confirm-delete-comment-comment-1"),
+    );
+    expect(onDelete).toHaveBeenCalledOnce();
+  });
 });

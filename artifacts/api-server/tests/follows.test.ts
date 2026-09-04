@@ -110,4 +110,110 @@ describe("follow lists", () => {
     expect(res.body.pagination).toHaveProperty("nextCursor");
     expect(res.body.pagination).toHaveProperty("hasMore");
   });
+
+  it("lets scoped managers remove followers, but rejects strangers and missing edges", async () => {
+    const { org, team } = await pickOrgAndTeam();
+    const { agent: follower, user: followerUser } = await loginAs(
+      (u) => u.email === "marcus@kinectem.demo",
+    );
+    const { agent: manager } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+    const { agent: stranger } = await loginAs(
+      (u) => u.email === "daniela@kinectem.demo",
+    );
+
+    expect((await follower.post(`/api/v1/organizations/${org.id}/follow`)).status)
+      .toBeLessThan(300);
+    const denied = await stranger.delete(
+      `/api/v1/organizations/${org.id}/followers/${followerUser.id}`,
+    );
+    expect(denied.status).toBe(403);
+    const removedOrg = await manager.delete(
+      `/api/v1/organizations/${org.id}/followers/${followerUser.id}`,
+    );
+    expect(removedOrg.status).toBe(204);
+    const missingOrg = await manager.delete(
+      `/api/v1/organizations/${org.id}/followers/${followerUser.id}`,
+    );
+    expect(missingOrg.status).toBe(404);
+
+    expect((await follower.post(`/api/v1/teams/${team.id}/follow`)).status)
+      .toBeLessThan(300);
+    const removedTeam = await manager.delete(
+      `/api/v1/teams/${team.id}/followers/${followerUser.id}`,
+    );
+    expect(removedTeam.status).toBe(204);
+  });
+
+  it("enforces global, organization, staff, and team-only follower-removal boundaries", async () => {
+    const { org, team } = await pickOrgAndTeam();
+    const orgManager = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const platformAdmin = await loginAs((u) => u.email === "sam@kinectem.demo");
+    const staff = await loginAs((u) => u.email === "marcus@kinectem.demo");
+    const follower = await loginAs((u) => u.email === "daniela@kinectem.demo");
+
+    // Build a genuinely unrelated organization/team owned by Daniela so Sam's
+    // success can only come from platform-global authority.
+    const otherOrg = await follower.agent.post("/api/v1/organizations").send({
+      name: `T1008 Other Org ${Date.now()}`,
+      city: "Newark",
+      state: "NJ",
+      zipCode: "07102",
+    });
+    expect(otherOrg.status).toBe(201);
+    const otherTeam = await follower.agent
+      .post(`/api/v1/organizations/${otherOrg.body.id}/teams`)
+      .send({ name: "T1008 Platform Scope Team", sport: "Soccer" });
+    expect(otherTeam.status).toBe(201);
+    expect((await staff.agent.post(`/api/v1/teams/${otherTeam.body.id}/follow`)).status)
+      .toBeLessThan(300);
+    expect((await platformAdmin.agent.delete(
+      `/api/v1/teams/${otherTeam.body.id}/followers/${staff.user.id}`,
+    )).status).toBe(204);
+
+    // A manager of Westfield cannot remove a follower from Daniela's org.
+    expect((await staff.agent.post(`/api/v1/organizations/${otherOrg.body.id}/follow`)).status)
+      .toBeLessThan(300);
+    expect((await orgManager.agent.delete(
+      `/api/v1/organizations/${otherOrg.body.id}/followers/${staff.user.id}`,
+    )).status).toBe(403);
+
+    // Accepted author/manager staff are deliberately not moderation-capable.
+    const authorEntry = await orgManager.agent.post(`/api/v1/teams/${team.id}/members`)
+      .send({ userId: staff.user.id, position: "author" });
+    expect(authorEntry.status).toBe(201);
+    expect((await staff.agent.post(
+      `/api/v1/teams/${team.id}/members/${authorEntry.body.id}/accept`,
+    )).status).toBe(200);
+    expect((await follower.agent.post(`/api/v1/organizations/${org.id}/follow`)).status)
+      .toBeLessThan(300);
+    expect((await staff.agent.delete(
+      `/api/v1/organizations/${org.id}/followers/${follower.user.id}`,
+    )).status).toBe(403);
+
+    // A coach's scope is their accepted team only: it does not confer
+    // organization-wide follower removal or removal on another team.
+    const managedTeam = await orgManager.agent.post(`/api/v1/organizations/${org.id}/teams`)
+      .send({ name: `T1008 Coach Team ${Date.now()}`, sport: "Soccer" });
+    const unrelatedTeam = await orgManager.agent.post(`/api/v1/organizations/${org.id}/teams`)
+      .send({ name: `T1008 Other Team ${Date.now()}`, sport: "Soccer" });
+    expect(managedTeam.status).toBe(201);
+    expect(unrelatedTeam.status).toBe(201);
+    const coachEntry = await orgManager.agent
+      .post(`/api/v1/teams/${managedTeam.body.id}/members`)
+      .send({ userId: staff.user.id, position: "coach" });
+    expect(coachEntry.status).toBe(201);
+    expect((await staff.agent.post(
+      `/api/v1/teams/${managedTeam.body.id}/members/${coachEntry.body.id}/accept`,
+    )).status).toBe(200);
+    expect((await follower.agent.post(`/api/v1/teams/${unrelatedTeam.body.id}/follow`)).status)
+      .toBeLessThan(300);
+    expect((await staff.agent.delete(
+      `/api/v1/organizations/${org.id}/followers/${follower.user.id}`,
+    )).status).toBe(403);
+    expect((await staff.agent.delete(
+      `/api/v1/teams/${unrelatedTeam.body.id}/followers/${follower.user.id}`,
+    )).status).toBe(403);
+  });
 });

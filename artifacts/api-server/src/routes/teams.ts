@@ -846,8 +846,7 @@ router.delete(
       )
       .limit(1);
     if (!entry) {
-      // Idempotent: nothing to do, the row is already gone.
-      return res.status(204).end();
+      return notFound(res);
     }
     // Same "last Admin" guard as the PATCH path — removing the last
     // accepted Admin would leave the team with no one able to manage it.
@@ -861,7 +860,23 @@ router.delete(
         );
       }
     }
-    await db.delete(rosterEntries).where(eq(rosterEntries.id, entry.id));
+    await db.transaction(async (tx) => {
+      // Deliberately remove only the roster row. Guardian links describe a
+      // family relationship, not team membership, and must survive removal.
+      await tx.delete(rosterEntries).where(eq(rosterEntries.id, entry.id));
+      await tx.insert(adminActivityLog).values({
+        adminUserId: me.id,
+        actionType: "moderation_remove",
+        targetType: "roster_entry",
+        targetId: entry.id,
+        metadata: JSON.stringify({
+          organizationId: t.organizationId,
+          teamId: t.id,
+          // No name/email/body is retained in moderation metadata.
+          memberUserId: entry.userId,
+        }),
+      });
+    });
     res.status(204).end();
   }),
 );

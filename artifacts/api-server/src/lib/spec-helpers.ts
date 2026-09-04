@@ -1368,6 +1368,7 @@ export function toComment(
   reactionCount = 0,
   hasReacted = false,
   minorNameCtx?: MinorNameViewerContext,
+  canDelete = false,
 ) {
   return {
     id: c.id,
@@ -1391,6 +1392,9 @@ export function toComment(
     // UI can render an "awaiting parental review" badge on pending rows.
     moderationStatus: (c as { moderationStatus?: string | null })
       .moderationStatus ?? "approved",
+    // Extra field beyond the locked spec, derived by the route from author
+    // ownership and moderation scope.
+    canDelete,
   };
 }
 

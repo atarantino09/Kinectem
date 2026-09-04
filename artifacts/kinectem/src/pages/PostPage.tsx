@@ -779,7 +779,7 @@ export default function PostPage() {
               Edit
             </Button>
           )
-        ) : post.canEdit && (
+        ) : post.canEdit ? (
           post.canDelete ? (
             // Original author: Edit + chevron dropdown that includes
             // "Delete post". Co-authors / coaches / org admins (who
@@ -844,7 +844,18 @@ export default function PostPage() {
               </Button>
             </Link>
           )
-        )}
+        ) : post.canDelete && !isNews ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="font-bold rounded-full text-destructive hover:text-destructive"
+            onClick={() => setConfirmDelete(true)}
+            data-testid="button-delete-post"
+          >
+            <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+            Delete post
+          </Button>
+        ) : null}
       </div>
 
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
@@ -904,10 +915,10 @@ export default function PostPage() {
                         ? `/organizations/${post.context.id}`
                         : "/",
                   );
-                } catch {
+                } catch (err) {
                   toast({
                     title: "Couldn't delete post",
-                    description: "Please try again.",
+                    description: apiErrorMessage(err) ?? "Please try again.",
                     variant: "destructive",
                   });
                 }

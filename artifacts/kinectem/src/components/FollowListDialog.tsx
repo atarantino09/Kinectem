@@ -1,9 +1,13 @@
+import { useState } from "react";
 import { Link } from "wouter";
 import {
   useListUserFollowers,
   useListUserFollowing,
   useListTeamFollowers,
   useListOrgFollowers,
+  customFetch,
+  getListOrgFollowersQueryKey,
+  getListTeamFollowersQueryKey,
   queryOpts,
 } from "@workspace/api-client-react";
 import {
@@ -15,7 +19,21 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { UserAvatar } from "@/components/UserAvatar";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users } from "lucide-react";
+import { Trash2, Users } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
+import { apiErrorMessage } from "@/lib/api-errors";
 
 type Variant =
   | { kind: "user-followers"; userId: string }
@@ -41,6 +59,8 @@ interface Props {
    * the members list into the followers button.
    */
   members?: MemberItem[];
+  /** Set only by pages which have already established manager permissions. */
+  canManageFollowers?: boolean;
 }
 
 interface Item {
@@ -57,9 +77,56 @@ export function FollowListDialog({
   title,
   variant,
   members,
+  canManageFollowers = false,
 }: Props) {
   const items = useFollowItems(variant, open);
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [removing, setRemoving] = useState<Item | null>(null);
+  const [removingPending, setRemovingPending] = useState(false);
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => new Set());
   const hasMembers = members != null;
+  const canRemove =
+    canManageFollowers &&
+    (variant.kind === "team-followers" || variant.kind === "org-followers");
+  const visibleItems = items.data.filter((item) => !hiddenIds.has(item.id));
+
+  const removeFollower = async () => {
+    if (!removing || !canRemove) return;
+    const target = removing;
+    const route =
+      variant.kind === "team-followers"
+        ? `/api/v1/teams/${variant.teamId}/followers/${target.id}`
+        : `/api/v1/organizations/${(variant as Extract<Variant, { kind: "org-followers" }>).orgId}/followers/${target.id}`;
+    setRemovingPending(true);
+    setHiddenIds((ids) => new Set(ids).add(target.id));
+    try {
+      await customFetch(route, { method: "DELETE" });
+      toast({ title: `${target.displayName} removed from followers` });
+      await qc.invalidateQueries({
+        queryKey:
+          variant.kind === "team-followers"
+            ? getListTeamFollowersQueryKey(variant.teamId)
+            : getListOrgFollowersQueryKey(
+                (variant as Extract<Variant, { kind: "org-followers" }>).orgId,
+              ),
+      });
+      setRemoving(null);
+    } catch (err) {
+      setHiddenIds((ids) => {
+        const next = new Set(ids);
+        next.delete(target.id);
+        return next;
+      });
+      toast({
+        title: "Couldn't remove follower",
+        description: apiErrorMessage(err) ?? "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setRemovingPending(false);
+    }
+  };
 
   const memberItems: Item[] = (members ?? []).map((m) => ({
     id: m.userId,
@@ -110,19 +177,50 @@ export function FollowListDialog({
             <TabsContent value="followers" className="mt-0">
               <ItemList
                 isLoading={items.isLoading}
-                data={items.data}
+                data={visibleItems}
                 onNavigate={() => onOpenChange(false)}
+                onRemove={canRemove ? setRemoving : undefined}
               />
             </TabsContent>
           </Tabs>
         ) : (
           <ItemList
             isLoading={items.isLoading}
-            data={items.data}
+            data={visibleItems}
             onNavigate={() => onOpenChange(false)}
+            onRemove={canRemove ? setRemoving : undefined}
           />
         )}
       </DialogContent>
+      <AlertDialog
+        open={removing !== null}
+        onOpenChange={(isOpen) => !isOpen && !removingPending && setRemoving(null)}
+      >
+        <AlertDialogContent data-testid="dialog-remove-follower-confirm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove follower?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {removing
+                ? `${removing.displayName} will no longer follow this ${variant.kind === "team-followers" ? "team" : "organization"}.`
+                : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={removingPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={removingPending}
+              onClick={(event) => {
+                event.preventDefault();
+                void removeFollower();
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-confirm-remove-follower"
+            >
+              {removingPending ? "Removing…" : "Remove follower"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }
@@ -131,10 +229,12 @@ function ItemList({
   isLoading,
   data,
   onNavigate,
+  onRemove,
 }: {
   isLoading: boolean;
   data: Item[];
   onNavigate: () => void;
+  onRemove?: (item: Item) => void;
 }) {
   return (
     <div className="max-h-[60vh] overflow-y-auto px-2 py-2">
@@ -175,6 +275,23 @@ function ItemList({
                       </p>
                     )}
                   </div>
+                  {onRemove && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                      aria-label={`Remove ${it.displayName} from followers`}
+                      data-testid={`button-remove-follower-${it.id}`}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        onRemove(it);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
               </Link>
             </li>

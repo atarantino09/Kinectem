@@ -25,6 +25,17 @@ import { linkify } from "@/lib/linkify";
 import { ReportDialog } from "@/components/ReportDialog";
 import { ShareConfirmDialog } from "@/components/ShareConfirmDialog";
 import { useToast } from "@/hooks/use-toast";
+import { apiErrorMessage } from "@/lib/api-errors";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export function PostInteractions({ post }: { post: PostResponse }) {
   const qc = useQueryClient();
@@ -53,14 +64,10 @@ export function PostInteractions({ post }: { post: PostResponse }) {
       },
     },
   });
-  const deleteComment = useDeletePostComment({
-    mutation: {
-      onSuccess: () => {
-        invalidatePost();
-        invalidateComments();
-      },
-    },
-  });
+  const deleteComment = useDeletePostComment();
+  const [hiddenCommentIds, setHiddenCommentIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const invalidateShareSurfaces = () => {
     invalidatePost();
     qc.invalidateQueries({ queryKey: getListFeedQueryKey() });
@@ -156,6 +163,27 @@ export function PostInteractions({ post }: { post: PostResponse }) {
     createComment.mutate({ postId: post.id, data: { body: trimmed } });
   };
 
+  const onDeleteComment = async (commentId: string) => {
+    setHiddenCommentIds((current) => new Set(current).add(commentId));
+    try {
+      await deleteComment.mutateAsync({ postId: post.id, commentId });
+      invalidatePost();
+      invalidateComments();
+      toast({ title: "Comment deleted" });
+    } catch (err) {
+      setHiddenCommentIds((current) => {
+        const next = new Set(current);
+        next.delete(commentId);
+        return next;
+      });
+      toast({
+        title: "Couldn't delete comment",
+        description: apiErrorMessage(err) ?? "Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="space-y-4 pt-2">
       <div className="flex items-center gap-2 border-y border-border py-3">
@@ -220,16 +248,17 @@ export function PostInteractions({ post }: { post: PostResponse }) {
             Be the first to comment.
           </p>
         ) : (
-          comments.data.map((c: CommentResponse) => (
+          comments.data
+            .filter((c: CommentResponse) => !hiddenCommentIds.has(c.id))
+            .map((c: CommentResponse) => (
             <CommentRow
               key={c.id}
               comment={c}
-              canDelete={!!me && c.author.id === me.id}
-              onDelete={() =>
-                deleteComment.mutate({ postId: post.id, commentId: c.id })
-              }
+              canDelete={(c as CommentResponse & { canDelete?: boolean }).canDelete === true}
+              onDelete={() => onDeleteComment(c.id)}
+              deleting={deleteComment.isPending}
             />
-          ))
+            ))
         )}
       </div>
 
@@ -283,12 +312,15 @@ export function CommentRow({
   comment,
   canDelete,
   onDelete,
+  deleting = false,
 }: {
   comment: CommentResponse;
   canDelete: boolean;
-  onDelete: () => void;
+  onDelete: () => Promise<void> | void;
+  deleting?: boolean;
 }) {
   const [reportOpen, setReportOpen] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   return (
     <Card className="rounded-xl border border-border">
       <CardContent className="p-3">
@@ -314,7 +346,7 @@ export function CommentRow({
             <Button
               variant="ghost"
               size="icon"
-              onClick={onDelete}
+              onClick={() => setConfirmDeleteOpen(true)}
               className="w-7 h-7 text-muted-foreground hover:text-destructive"
               data-testid={`button-delete-comment-${comment.id}`}
             >
@@ -339,6 +371,31 @@ export function CommentRow({
           contentType="comment"
           contentId={comment.id}
         />
+        <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+          <AlertDialogContent data-testid={`dialog-delete-comment-${comment.id}`}>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete this comment?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This comment will be permanently removed and cannot be restored.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={deleting}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                data-testid={`button-confirm-delete-comment-${comment.id}`}
+                onClick={async (event) => {
+                  event.preventDefault();
+                  await onDelete();
+                  setConfirmDeleteOpen(false);
+                }}
+              >
+                {deleting ? "Deleting…" : "Delete comment"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </CardContent>
     </Card>
   );

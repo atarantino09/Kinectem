@@ -52,6 +52,9 @@ export const adminActionTypeEnum = pgEnum("admin_action_type", [
   // writes the row inline (logAdminAction is admin-typed only).
   "archive_team",
   "unarchive_team",
+  // Task #1008 — organization/team moderation actions (post/comment,
+  // follower, and roster removals) share the existing audit trail.
+  "moderation_remove",
 ]);
 export const adminTargetTypeEnum = pgEnum("admin_target_type", [
   "user",
@@ -62,6 +65,8 @@ export const adminTargetTypeEnum = pgEnum("admin_target_type", [
   "report",
   // Task #472 — target_type for archive/unarchive_team rows.
   "team",
+  "follower",
+  "roster_entry",
 ]);
 
 // Task #359 — COPPA Phase 1. Phase 2 (#363) adds `pending_revocation`

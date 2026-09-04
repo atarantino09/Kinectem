@@ -1623,7 +1623,7 @@ describe("posts", () => {
     ).toBe(false);
   });
 
-  it("DELETE /posts/:postId returns 403 when the caller is not the original author", async () => {
+  it("DELETE /posts/:postId gives platform admins global moderation authority", async () => {
     const coachLogin = await loginAs((u) => u.email === "coach@kinectem.demo");
     const { org } = await getOrgAndTeam();
     const create = await coachLogin.agent.post("/api/v1/posts").send({
@@ -1635,22 +1635,19 @@ describe("posts", () => {
     expect(create.status).toBe(201);
     const articleId: string = create.body.id;
 
-    // A different user (org admin) cannot delete the coach's recap
-    // even though they can edit/hide it through the admin flow.
+    // Sam is a platform admin, not merely this organization's owner,
+    // and may moderate content in every organization.
     const adminLogin = await loginAs((u) => u.email === "sam@kinectem.demo");
+    const commenter = await loginAs((u) => u.email === "marcus@kinectem.demo");
+    const comment = await commenter.agent.post(`/api/v1/posts/${articleId}/comments`)
+      .send({ body: "Platform-admin moderation boundary" });
+    expect(comment.status).toBe(201);
+    expect((await adminLogin.agent.delete(
+      `/api/v1/posts/${articleId}/comments/${comment.body.id}`,
+    )).status).toBe(204);
     const del = await adminLogin.agent.delete(`/api/v1/posts/${articleId}`);
-    expect(del.status).toBe(403);
-
-    // Recap is still reachable.
-    const detail = await coachLogin.agent.get(`/api/v1/posts/${articleId}`);
-    expect(detail.status).toBe(200);
-    expect(detail.body.canDelete).toBe(true);
-    // Admin sees it but cannot delete it.
-    const adminDetail = await adminLogin.agent.get(
-      `/api/v1/posts/${articleId}`,
-    );
-    expect(adminDetail.status).toBe(200);
-    expect(adminDetail.body.canDelete).toBe(false);
+    expect(del.status).toBe(204);
+    expect((await coachLogin.agent.get(`/api/v1/posts/${articleId}`)).status).toBe(404);
   });
 
   it("DELETE /posts/:postId returns 404 for a missing highlight (post #296)", async () => {
@@ -1690,14 +1687,14 @@ describe("posts", () => {
     expect(asAuthor.body.canEdit).toBe(true);
     expect(asAuthor.body.canDelete).toBe(true);
 
-    // Org admin: can edit, cannot delete.
+    // Platform admin: can edit and has global moderation/delete authority.
     const { agent: adminAgent } = await loginAs(
       (u) => u.email === "sam@kinectem.demo",
     );
     const asAdmin = await adminAgent.get(`/api/v1/posts/${orgPostId}`);
     expect(asAdmin.status).toBe(200);
     expect(asAdmin.body.canEdit).toBe(true);
-    expect(asAdmin.body.canDelete).toBe(false);
+    expect(asAdmin.body.canDelete).toBe(true);
 
     // Non-admin viewer: cannot edit, cannot delete.
     const { agent: viewerAgent } = await loginAs(
@@ -1744,7 +1741,7 @@ describe("posts", () => {
     expect(res.status).toBe(403);
   });
 
-  it("PATCH /posts/:postId lets the org admin edit an org_post but not delete it (post #296)", async () => {
+  it("PATCH /posts/:postId lets the platform admin edit and delete an org_post (post #296)", async () => {
     const { agent: coachAgent } = await loginAs(
       (u) => u.email === "coach@kinectem.demo",
     );
@@ -1765,13 +1762,44 @@ describe("posts", () => {
     expect(patch.status).toBe(200);
     expect(patch.body.title).toBe("Edited by admin");
     expect(patch.body.canEdit).toBe(true);
-    expect(patch.body.canDelete).toBe(false);
+    expect(patch.body.canDelete).toBe(true);
 
     const del = await adminAgent.delete(`/api/v1/posts/${orgPostId}`);
-    expect(del.status).toBe(403);
+    expect(del.status).toBe(204);
+    expect((await coachAgent.get(`/api/v1/posts/${orgPostId}`)).status).toBe(404);
+  });
 
-    const get = await coachAgent.get(`/api/v1/posts/${orgPostId}`);
-    expect(get.body.canDelete).toBe(true);
+  it("PATCH /posts/:postId preserves delete authority for non-author org and platform moderators", async () => {
+    const { agent: orgManager } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+    const { agent: platformAdmin } = await loginAs(
+      (u) => u.email === "sam@kinectem.demo",
+    );
+    const { org, team } = await getOrgAndTeam();
+
+    const adminAuthoredOrgPost = await platformAdmin
+      .post(`/api/v1/organizations/${org.id}/posts`)
+      .send({ title: "Admin-authored update", body: "Body" });
+    expect(adminAuthoredOrgPost.status).toBe(201);
+    const orgPatch = await orgManager
+      .patch(`/api/v1/posts/${adminAuthoredOrgPost.body.id}`)
+      .send({ title: "Edited by organization manager" });
+    expect(orgPatch.status).toBe(200);
+    expect(orgPatch.body.canDelete).toBe(true);
+
+    const managerAuthoredArticle = await orgManager.post("/api/v1/posts").send({
+      postType: "long",
+      teamId: team.id,
+      title: "Manager-authored recap",
+      body: "Body",
+    });
+    expect(managerAuthoredArticle.status).toBe(201);
+    const articlePatch = await platformAdmin
+      .patch(`/api/v1/posts/${managerAuthoredArticle.body.id}`)
+      .send({ title: "Edited by platform admin" });
+    expect(articlePatch.status).toBe(200);
+    expect(articlePatch.body.canDelete).toBe(true);
   });
 
   it("DELETE /posts/:postId hides an org_post from the org-page list (post #296)", async () => {
@@ -2878,6 +2906,175 @@ describe("posts", () => {
           "https://example.com/b.jpg",
         ]),
       ).toBeNull();
+    });
+  });
+
+  describe("task 1008 moderation deletion", () => {
+    it("keeps author self-delete, lets an org manager moderate, and validates a comment parent", async () => {
+      const { org } = await getOrgAndTeam();
+      const coach = await loginAs((u) => u.email === "coach@kinectem.demo");
+      const marcus = await loginAs((u) => u.email === "marcus@kinectem.demo");
+      const first = await coach.agent.post(`/api/v1/organizations/${org.id}/posts`).send({
+        title: "T1008 comment parent one",
+        body: "First post",
+      });
+      const second = await coach.agent.post(`/api/v1/organizations/${org.id}/posts`).send({
+        title: "T1008 comment parent two",
+        body: "Second post",
+      });
+      expect(first.status).toBe(201);
+      expect(second.status).toBe(201);
+
+      const comment = await marcus.agent
+        .post(`/api/v1/posts/${first.body.id}/comments`)
+        .send({ body: "remove me" });
+      expect(comment.status).toBe(201);
+      expect(comment.body.canDelete).toBe(true);
+      const wrongParent = await marcus.agent.delete(
+        `/api/v1/posts/${second.body.id}/comments/${comment.body.id}`,
+      );
+      expect(wrongParent.status).toBe(404);
+
+      const managerRemoval = await coach.agent.delete(
+        `/api/v1/posts/${first.body.id}/comments/${comment.body.id}`,
+      );
+      expect(managerRemoval.status).toBe(204);
+
+      const owned = await coach.agent.post(`/api/v1/organizations/${org.id}/posts`).send({
+        title: "T1008 self delete",
+        body: "Self authored",
+      });
+      expect(owned.status).toBe(201);
+      expect((await coach.agent.delete(`/api/v1/posts/${owned.body.id}`)).status).toBe(204);
+    });
+
+    it("allows an accepted coach to moderate only their own team's content", async () => {
+      const { org } = await getOrgAndTeam();
+      const owner = await loginAs((u) => u.email === "coach@kinectem.demo");
+      const coach = await loginAs((u) => u.email === "marcus@kinectem.demo");
+      const player = await loginAs((u) => u.email === "daniela@kinectem.demo");
+      const makeTeam = async (name: string) => {
+        const created = await owner.agent.post(`/api/v1/organizations/${org.id}/teams`)
+          .send({ name, sport: "Soccer" });
+        expect(created.status).toBe(201);
+        return created.body.id as string;
+      };
+      const managedTeam = await makeTeam("T1008 Coach Managed");
+      const coachEntry = await owner.agent.post(`/api/v1/teams/${managedTeam}/members`)
+        .send({ userId: coach.user.id, position: "coach" });
+      expect(coachEntry.status).toBe(201);
+      expect((await coach.agent.post(
+        `/api/v1/teams/${managedTeam}/members/${coachEntry.body.id}/accept`,
+      )).status).toBe(200);
+      const playerEntry = await owner.agent.post(`/api/v1/teams/${managedTeam}/members`)
+        .send({ userId: player.user.id, position: "player" });
+      expect((await player.agent.post(
+        `/api/v1/teams/${managedTeam}/members/${playerEntry.body.id}/accept`,
+      )).status).toBe(200);
+      const managedPost = await player.agent.post("/api/v1/posts").send({
+        postType: "short", teamId: managedTeam, title: "T1008 coach removal",
+        assets: [{ fileType: "video/mp4", url: "https://example.com/t1008.mp4" }],
+      });
+      expect(managedPost.status).toBe(201);
+
+      const otherTeam = await makeTeam("T1008 Not Coach Managed");
+      const otherEntry = await owner.agent.post(`/api/v1/teams/${otherTeam}/members`)
+        .send({ userId: player.user.id, position: "player" });
+      expect((await player.agent.post(
+        `/api/v1/teams/${otherTeam}/members/${otherEntry.body.id}/accept`,
+      )).status).toBe(200);
+      const otherPost = await player.agent.post("/api/v1/posts").send({
+        postType: "short", teamId: otherTeam, title: "T1008 denied cross team",
+        assets: [{ fileType: "video/mp4", url: "https://example.com/t1008-other.mp4" }],
+      });
+      expect(otherPost.status).toBe(201);
+      expect((await coach.agent.delete(`/api/v1/posts/${otherPost.body.id}`)).status).toBe(403);
+
+      const managedComment = await owner.agent.post(`/api/v1/posts/${managedPost.body.id}/comments`)
+        .send({ body: "T1008 own-team comment" });
+      expect(managedComment.status).toBe(201);
+      expect((await coach.agent.delete(
+        `/api/v1/posts/${managedPost.body.id}/comments/${managedComment.body.id}`,
+      )).status).toBe(204);
+      expect((await coach.agent.delete(`/api/v1/posts/${managedPost.body.id}`)).status).toBe(204);
+      const otherComment = await owner.agent.post(`/api/v1/posts/${otherPost.body.id}/comments`)
+        .send({ body: "T1008 cross-team comment" });
+      expect(otherComment.status).toBe(201);
+      expect((await coach.agent.delete(
+        `/api/v1/posts/${otherPost.body.id}/comments/${otherComment.body.id}`,
+      )).status).toBe(403);
+    });
+
+    it("keeps organization managers isolated and denies accepted non-coach staff post/comment moderation", async () => {
+      const manager = await loginAs((u) => u.email === "coach@kinectem.demo");
+      const otherOwner = await loginAs((u) => u.email === "daniela@kinectem.demo");
+      const staff = await loginAs((u) => u.email === "marcus@kinectem.demo");
+      const commenter = await loginAs((u) => u.email === "jordan@kinectem.demo");
+      const otherOrg = await otherOwner.agent.post("/api/v1/organizations").send({
+        name: `T1008 Isolation ${Date.now()}`, city: "Trenton", state: "NJ", zipCode: "08608",
+      });
+      expect(otherOrg.status).toBe(201);
+      const otherTeam = await otherOwner.agent
+        .post(`/api/v1/organizations/${otherOrg.body.id}/teams`)
+        .send({ name: "T1008 Isolation Team", sport: "Soccer" });
+      expect(otherTeam.status).toBe(201);
+      const staffEntry = await otherOwner.agent
+        .post(`/api/v1/teams/${otherTeam.body.id}/members`)
+        .send({ userId: staff.user.id, position: "author" });
+      expect(staffEntry.status).toBe(201);
+      expect((await staff.agent.post(
+        `/api/v1/teams/${otherTeam.body.id}/members/${staffEntry.body.id}/accept`,
+      )).status).toBe(200);
+
+      const post = await otherOwner.agent.post(`/api/v1/organizations/${otherOrg.body.id}/posts`)
+        .send({ title: "T1008 isolated post", body: "No cross-org moderation" });
+      expect(post.status).toBe(201);
+      expect((await manager.agent.delete(`/api/v1/posts/${post.body.id}`)).status).toBe(403);
+      expect((await staff.agent.delete(`/api/v1/posts/${post.body.id}`)).status).toBe(403);
+
+      const comment = await commenter.agent.post(`/api/v1/posts/${post.body.id}/comments`)
+        .send({ body: "T1008 boundary comment" });
+      expect(comment.status).toBe(201);
+      expect((await manager.agent.delete(
+        `/api/v1/posts/${post.body.id}/comments/${comment.body.id}`,
+      )).status).toBe(403);
+      // An accepted author/manager staff position may create recaps but is
+      // never a moderator; the post owner remains able to remove the comment.
+      expect((await staff.agent.delete(
+        `/api/v1/posts/${post.body.id}/comments/${comment.body.id}`,
+      )).status).toBe(403);
+      expect((await otherOwner.agent.delete(
+        `/api/v1/posts/${post.body.id}/comments/${comment.body.id}`,
+      )).status).toBe(204);
+    });
+
+    it("lets a platform admin moderate posts and comments in an unrelated organization", async () => {
+      const platformAdmin = await loginAs((u) => u.email === "sam@kinectem.demo");
+      const owner = await loginAs((u) => u.email === "daniela@kinectem.demo");
+      const commenter = await loginAs((u) => u.email === "jordan@kinectem.demo");
+      const otherOrg = await owner.agent.post("/api/v1/organizations").send({
+        name: `T1008 Platform Post Scope ${Date.now()}`,
+        city: "Newark",
+        state: "NJ",
+        zipCode: "07102",
+      });
+      expect(otherOrg.status).toBe(201);
+
+      const post = await owner.agent
+        .post(`/api/v1/organizations/${otherOrg.body.id}/posts`)
+        .send({ title: "T1008 platform moderation", body: "Global scope" });
+      expect(post.status).toBe(201);
+      const comment = await commenter.agent
+        .post(`/api/v1/posts/${post.body.id}/comments`)
+        .send({ body: "Platform-removable comment" });
+      expect(comment.status).toBe(201);
+
+      expect((await platformAdmin.agent.delete(
+        `/api/v1/posts/${post.body.id}/comments/${comment.body.id}`,
+      )).status).toBe(204);
+      expect((await platformAdmin.agent.delete(
+        `/api/v1/posts/${post.body.id}`,
+      )).status).toBe(204);
     });
   });
 });

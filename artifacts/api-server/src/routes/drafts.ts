@@ -18,6 +18,7 @@ import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
 import { sendGuardianConfirmationEmail, sendGuardianExpiredEmail, sendPasswordResetEmail } from "../lib/email";
 import {
+  canModerateScope,
   canManageOrganization,
   computeArticleAuthorRoleMap,
 } from "../lib/permissions";
@@ -276,6 +277,12 @@ async function patchOrgPost(
     ? await db.select().from(users).where(eq(users.id, updated.authorId)).limit(1)
     : [null];
   if (!org) return notFound(res);
+  const canDelete =
+    updated.authorId === me.id ||
+    (await canModerateScope(me.id, {
+      organizationId: updated.organizationId,
+      team: null,
+    }));
   // Task #414 — write-time PATCH echo for an org_post; the caller is
   // either the author or an org admin, both privileged. Bypass.
   return res.json(
@@ -283,7 +290,7 @@ async function patchOrgPost(
       org,
       author,
       canEdit: true,
-      canDelete: updated.authorId === me.id,
+      canDelete,
       minorNameCtx: TRUSTED_MINOR_NAME_CONTEXT,
     }),
   );
@@ -624,18 +631,21 @@ router.patch(
         orgId: org.id,
       },
     ]);
+    const canDelete =
+      updated.authorId === me.id ||
+      (await canModerateScope(me.id, {
+        organizationId: org.id,
+        team,
+      }));
     res.json(
       articleToPost(updated, {
         team,
         org,
         author,
         canEdit: true,
-        // Mirror GET /posts/:id: only the original author gets the
-        // delete affordance. Co-authors and org admins (who can also
-        // hit this PATCH endpoint) keep `canDelete: false` so any
-        // client that consumes the PATCH response stays consistent
-        // with the per-viewer rule the read path enforces.
-        canDelete: updated.authorId === me.id,
+        // Keep the PATCH echo aligned with GET /posts/:id so clients do
+        // not lose a scoped moderator's delete affordance after editing.
+        canDelete,
         authorRole: authorRoleMap.get(updated.id) ?? null,
         // Task #414 — PATCH echo: viewer is the author or an org
         // admin (both privileged), so bypass minor-name masking.
