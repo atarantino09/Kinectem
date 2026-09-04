@@ -33,8 +33,8 @@ vi.mock("@/components/OrgAdminPanel", () => ({
   OrgAdminPanel: () => null,
 }));
 vi.mock("@/components/OrgSetupChecklist", () => ({
-  OrgSetupChecklist: () => null,
-  RolesPermissionsCard: () => null,
+  OrgSetupChecklist: () => <div data-testid="mock-org-setup-checklist" />,
+  RolesPermissionsCard: () => <div data-testid="mock-roles-permissions" />,
 }));
 vi.mock("@/components/ManageMembersDialog", () => ({
   ManageMembersDialog: () => null,
@@ -326,8 +326,17 @@ describe("OrganizationPage — admin control gating", () => {
 
     await user.keyboard("{Escape}");
     await user.click(screen.getByTestId("btn-org-guides-menu"));
+    expect(screen.getByTestId("btn-org-setup-guide")).toBeInTheDocument();
+    expect(screen.getByTestId("btn-org-roles-guide")).toBeInTheDocument();
     expect(screen.getByTestId("btn-org-replay-tour")).toBeInTheDocument();
     expect(screen.getByTestId("link-org-getting-started")).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("btn-org-setup-guide"));
+    expect(screen.getByTestId("dialog-org-setup-guide")).toBeInTheDocument();
+    expect(screen.getByTestId("mock-org-setup-checklist")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("card-org-setup-checklist"),
+    ).not.toBeInTheDocument();
   });
 
   it("shows management, communication, and guides menus for an admin viewer", async () => {

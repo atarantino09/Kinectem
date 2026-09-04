@@ -140,6 +140,8 @@ export default function OrganizationPage() {
   const [sharePageOpen, setSharePageOpen] = useState(false);
   const [preInviteOpen, setPreInviteOpen] = useState(false);
   const [preInviteAutomatic, setPreInviteAutomatic] = useState(false);
+  const [setupGuideOpen, setSetupGuideOpen] = useState(false);
+  const [rolesGuideOpen, setRolesGuideOpen] = useState(false);
   const [handoffAdvance, setHandoffAdvance] = useState(0);
   // Task #443 — celebratory popup shown once right after a successful
   // org create. CreateOrgDialog stashes the org name under
@@ -818,6 +820,73 @@ export default function OrganizationPage() {
           }}
         />
       )}
+      {isOrgManager && (
+        <Dialog open={setupGuideOpen} onOpenChange={setSetupGuideOpen}>
+          <DialogContent
+            className="sm:max-w-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto"
+            data-testid="dialog-org-setup-guide"
+          >
+            <DialogHeader>
+              <DialogTitle className="font-black tracking-tight">
+                Get your org set up
+              </DialogTitle>
+              <DialogDescription>
+                Complete the recommended launch steps for your organization.
+              </DialogDescription>
+            </DialogHeader>
+            <OrgSetupChecklist
+              orgId={orgId}
+              showRolesPermissions={false}
+              actions={{
+                onEditLogo: () => {
+                  setSetupGuideOpen(false);
+                  setEditOpen(true);
+                },
+                onCreateTeam: () => {
+                  setSetupGuideOpen(false);
+                  setCreateTeamOpen(true);
+                },
+                onManageMembers: () => {
+                  setSetupGuideOpen(false);
+                  setManageMembersOpen(true);
+                },
+                onPromoteAdmin: () => {
+                  setSetupGuideOpen(false);
+                  setManageMembersOpen(true);
+                },
+                onGoToTeams: () => {
+                  setSetupGuideOpen(false);
+                  const toggle = document.querySelector<HTMLButtonElement>(
+                    '[data-testid="btn-toggle-teams"][aria-expanded="false"]',
+                  );
+                  if (toggle) toggle.click();
+                  document
+                    .querySelector('[data-testid="rail-teams"]')
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                },
+              }}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
+      {!!organization.role && (
+        <Dialog open={rolesGuideOpen} onOpenChange={setRolesGuideOpen}>
+          <DialogContent
+            className="sm:max-w-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto"
+            data-testid="dialog-org-roles-guide"
+          >
+            <DialogHeader>
+              <DialogTitle className="font-black tracking-tight">
+                Roles &amp; permissions
+              </DialogTitle>
+              <DialogDescription>
+                See what organization, team, competition, and family roles can do.
+              </DialogDescription>
+            </DialogHeader>
+            <RolesPermissionsCard />
+          </DialogContent>
+        </Dialog>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">
         {/* Main column */}
@@ -1010,8 +1079,7 @@ export default function OrganizationPage() {
                     </DropdownMenu>
                   </div>
 
-                  {isOrgManager && (
-                    <>
+                  {!!organization.role && (
                       <div data-testid="org-guides-actions">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -1027,6 +1095,22 @@ export default function OrganizationPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-56">
+                            {isOrgManager && (
+                              <DropdownMenuItem
+                                onClick={() => setSetupGuideOpen(true)}
+                                data-testid="btn-org-setup-guide"
+                              >
+                                <ListPlus className="w-4 h-4 mr-2" />
+                                Get your org set up
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem
+                              onClick={() => setRolesGuideOpen(true)}
+                              data-testid="btn-org-roles-guide"
+                            >
+                              <Shield className="w-4 h-4 mr-2" />
+                              Roles &amp; permissions
+                            </DropdownMenuItem>
                             {orgTourSteps.length > 0 && (
                               <DropdownMenuItem
                                 onClick={() => setOrgTourOpen(true)}
@@ -1052,7 +1136,10 @@ export default function OrganizationPage() {
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
+                  )}
 
+                  {isOrgManager && (
+                    <>
                       <div data-testid="org-manager-actions">
                         <DropdownMenu
                           modal={!orgTourOpen}
@@ -1227,30 +1314,6 @@ export default function OrganizationPage() {
             )}
           </div>
 
-          {isOrgManager && (
-            <OrgSetupChecklist
-              orgId={orgId}
-              actions={{
-                onEditLogo: () => setEditOpen(true),
-                onCreateTeam: () => setCreateTeamOpen(true),
-                onManageMembers: () => setManageMembersOpen(true),
-                onPromoteAdmin: () => setManageMembersOpen(true),
-                onGoToTeams: () => {
-                  // Scroll the teams rail / inline teams section into view,
-                  // expanding it first if it's collapsed (mobile default).
-                  const toggle = document.querySelector<HTMLButtonElement>(
-                    '[data-testid="btn-toggle-teams"][aria-expanded="false"]',
-                  );
-                  if (toggle) toggle.click();
-                  const el = document.querySelector(
-                    '[data-testid="rail-teams"]',
-                  );
-                  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-                },
-              }}
-            />
-          )}
-
           {/* Teams + archived: inline on mobile, in rail on lg+. The
               hook ensures only one instance mounts at a time so testids
               stay unique. */}
@@ -1270,12 +1333,6 @@ export default function OrganizationPage() {
               )}
             </div>
           )}
-
-          {/* Task #548 — Roles & permissions reference, visible to any
-              org member (the checklist card already includes the same
-              accordion for owners/admins, so this only renders for
-              non-managers to avoid duplication). */}
-          {!isOrgManager && organization.role && <RolesPermissionsCard />}
 
           {/* Posts */}
           <section data-testid="org-posts">

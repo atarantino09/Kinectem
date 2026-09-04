@@ -120,9 +120,11 @@ export type OrgSetupChecklistActions = {
 export function OrgSetupChecklist({
   orgId,
   actions,
+  showRolesPermissions = true,
 }: {
   orgId: string;
   actions: OrgSetupChecklistActions;
+  showRolesPermissions?: boolean;
 }) {
   const qc = useQueryClient();
   const [expanded, setExpanded] = useState(false);
@@ -305,7 +307,7 @@ export function OrgSetupChecklist({
         </CollapsibleContent>
       </Collapsible>
 
-      <RolesPermissionsAccordion />
+      {showRolesPermissions && <RolesPermissionsAccordion />}
     </Card>
   );
 }
