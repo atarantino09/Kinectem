@@ -12,7 +12,7 @@ import { useToastMock } from "@/test/mocks/toast";
 // ---------------------------------------------------------------------------
 
 const ORG_ID = "org-1";
-const ORG_TOUR_STORAGE_KEY = "kinectem:org-tour-v2";
+const ORG_TOUR_STORAGE_KEY = "kinectem:org-tour-v3";
 
 vi.mock("wouter", () => ({
   ...wouterMock,
@@ -336,7 +336,7 @@ describe("OrganizationPage — admin control gating", () => {
     expect(screen.getByTestId("btn-org-guides-menu")).toBeInTheDocument();
   });
 
-  it("ends the manager tour with Roster Outreach open in Communication", async () => {
+  it("ends the manager tour with pre-invite, bulk coaches, then roster outreach", async () => {
     const user = userEvent.setup();
     installHandlers({ role: "owner" });
     localStorage.removeItem(ORG_TOUR_STORAGE_KEY);
@@ -348,6 +348,26 @@ describe("OrganizationPage — admin control gating", () => {
       await user.click(screen.getByTestId("btn-tour-next"));
     }
 
+    expect(
+      await screen.findByText("Prepare your pre-invite message"),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByTestId("btn-org-communication-menu")).toHaveAttribute(
+        "aria-expanded",
+        "true",
+      ),
+    );
+
+    await user.click(screen.getByTestId("btn-tour-next"));
+    expect(await screen.findByText("Bulk add coaches")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByTestId("btn-org-communication-menu")).toHaveAttribute(
+        "aria-expanded",
+        "false",
+      ),
+    );
+
+    await user.click(screen.getByTestId("btn-tour-next"));
     expect(await screen.findByText("Invite every team")).toBeInTheDocument();
     await waitFor(() =>
       expect(screen.getByTestId("btn-org-communication-menu")).toHaveAttribute(
@@ -419,7 +439,7 @@ describe("OrganizationPage — admin control gating", () => {
     ).toContain("Westfield Athletic Club");
   });
 
-  it("shows the existing six-step manager tour after arriving from a partner club link", async () => {
+  it("shows the existing eight-step manager tour after arriving from a partner club link", async () => {
     vi.useFakeTimers();
     try {
       setMockSearch("showAround=1");
@@ -440,7 +460,7 @@ describe("OrganizationPage — admin control gating", () => {
       });
       expect(screen.getByTestId("team-tour")).toBeInTheDocument();
       expect(screen.getByText("Manage admins & members")).toBeInTheDocument();
-      expect(screen.getByText("Step 1 of 6")).toBeInTheDocument();
+      expect(screen.getByText("Step 1 of 8")).toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }

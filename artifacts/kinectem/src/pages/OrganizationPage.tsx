@@ -115,7 +115,7 @@ type TeamRailItem = {
 // "seen" flag is a single global key — the first time an owner/admin lands on
 // any org page they get the tour, and never again on any other org. Bump the
 // key to re-show the tour to everyone after a meaningful revision.
-const ORG_TOUR_KEY = "kinectem:org-tour-v2";
+const ORG_TOUR_KEY = "kinectem:org-tour-v3";
 
 export default function OrganizationPage() {
   const params = useParams<{ orgId: string }>();
@@ -397,6 +397,35 @@ export default function OrganizationPage() {
       },
       {
         targetTestId: "btn-org-communication-menu",
+        additionalTargetTestIds: ["btn-org-pre-invite"],
+        onEnter: () => {
+          setManageMenuOpen(false);
+          setCommunicationMenuOpen(true);
+        },
+        title: "Prepare your pre-invite message",
+        body: (
+          <>
+            Open <strong>Pre-invite message</strong> for ready-to-send language
+            that introduces Kinectem before you invite coaches and teams.
+          </>
+        ),
+      },
+      {
+        targetTestId: "btn-bulk-add-coaches",
+        onEnter: () => {
+          setManageMenuOpen(false);
+          setCommunicationMenuOpen(false);
+        },
+        title: "Bulk add coaches",
+        body: (
+          <>
+            Use <strong>Bulk add coach</strong> to invite coaches across your
+            organization’s teams in one pass.
+          </>
+        ),
+      },
+      {
+        targetTestId: "btn-org-communication-menu",
         additionalTargetTestIds: ["btn-org-roster-outreach"],
         onEnter: () => {
           setManageMenuOpen(false);
@@ -416,7 +445,7 @@ export default function OrganizationPage() {
     [],
   );
 
-  // Partner landing links include showAround=1 so the existing six-step org
+  // Partner landing links include showAround=1 so the existing eight-step org
   // walkthrough starts after the organization page has had time to render.
   // Remove the one-shot query from the browser URL so a refresh does not
   // replay it.
