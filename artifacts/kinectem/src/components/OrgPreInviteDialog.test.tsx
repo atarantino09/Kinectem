@@ -52,9 +52,15 @@ describe("OrgPreInviteDialog", () => {
       <OrgPreInviteDialog orgId="org-1" organizationName="Westfield Athletic Club" open onOpenChange={vi.fn()} />,
     );
     const message = (screen.getByTestId("text-org-pre-invite-message") as HTMLTextAreaElement).value;
+    expect(
+      screen.getByText(/BYGA, PlayMetrics, TeamSnap, 360 Player, email/i),
+    ).toBeInTheDocument();
     await user.click(screen.getByTestId("btn-copy-org-pre-invite"));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(message));
-    expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ title: "Pre-invite message copied" }));
+    expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({
+      title: "Pre-invite message copied",
+      description: expect.stringContaining("360 Player"),
+    }));
   });
 
   it("falls back to the browser copy command when Clipboard API is unavailable", async () => {

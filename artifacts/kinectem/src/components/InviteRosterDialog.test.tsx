@@ -66,6 +66,9 @@ describe("InviteRosterDialog role-specific copy", () => {
     expect(roleNotice).toHaveTextContent(
       "Parent/player invitations use family setup wording; coach and staff invitations use staff wording.",
     );
+    expect(
+      screen.getByText(/a group text, GroupMe, TeamSnap, or 360 Player/i),
+    ).toBeInTheDocument();
     expect(message).toHaveTextContent("Set up your player's account");
 
     await user.click(screen.getByTestId("select-existing-invite-position"));

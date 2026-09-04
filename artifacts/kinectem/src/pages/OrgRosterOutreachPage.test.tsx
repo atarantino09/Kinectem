@@ -121,6 +121,9 @@ describe("OrgRosterOutreachPage", () => {
       screen.getByText(/Invite coaches from the individual team page/i),
     ).toBeInTheDocument();
     expect(
+      screen.getByText(/TeamSnap, LeagueApps, PlayMetrics, 360 Player, or your other team tool/i),
+    ).toBeInTheDocument();
+    expect(
       screen.getByTestId("btn-view-roster-message-team-blue"),
     ).toHaveTextContent("View message");
 
@@ -183,7 +186,9 @@ describe("OrgRosterOutreachPage", () => {
       "Hi there,\n\nSet up your player's account → https://kinectem.test/app/invites/join-blue",
     );
     expect(
-      screen.getByText(/Open the roster message for this team in TeamSnap/),
+      screen.getByText(
+        /Open the roster message for this team in TeamSnap, LeagueApps, PlayMetrics, 360 Player/i,
+      ),
     ).toBeInTheDocument();
 
     await user.keyboard("{Escape}");

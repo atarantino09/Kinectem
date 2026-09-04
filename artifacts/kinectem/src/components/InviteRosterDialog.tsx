@@ -783,8 +783,8 @@ export function InviteRosterDialog({
                     </div>
                     <p className="text-[11px] text-muted-foreground">
                       Sharing the link somewhere else (a group text, GroupMe,
-                      TeamSnap)? Paste this message too — it already has your name
-                      and the join link.
+                      TeamSnap, or 360 Player)? Paste this message too — it already
+                      has your name and the join link.
                       {" "}If the destination changes spacing, use “Paste as plain
                       text” or the Copy button above.
                     </p>

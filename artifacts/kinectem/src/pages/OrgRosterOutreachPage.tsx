@@ -176,7 +176,7 @@ export default function OrgRosterOutreachPage() {
             </div>
             <div className="border-t border-primary/15 pt-4 text-sm font-medium leading-relaxed text-muted-foreground lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
               <p>
-                Before you send, double-check that the team named in the message matches the team you selected in TeamSnap, LeagueApps, PlayMetrics, or your other team tool.
+                Before you send, double-check that the team named in the message matches the team you selected in TeamSnap, LeagueApps, PlayMetrics, 360 Player, or your other team tool.
               </p>
               <p className="mt-2">
                 Invite coaches from the individual team page so they receive the right coach invitation.
@@ -468,7 +468,7 @@ function MessageDialog({ team, orgId, onClose }: { team: OutreachTeam, orgId: st
           <section className="rounded-xl border border-primary/15 bg-primary/[0.035] p-4">
             <h3 className="text-sm font-black tracking-tight">Send it in your team tool</h3>
             <ol className="mt-2 list-decimal space-y-1.5 pl-4 text-sm text-muted-foreground">
-              <li>Open the roster message for this team in TeamSnap, LeagueApps, PlayMetrics, or your usual team tool.</li>
+              <li>Open the roster message for this team in TeamSnap, LeagueApps, PlayMetrics, 360 Player, or your usual team tool.</li>
               <li>Paste the full message above to the parents and players you intend to invite.</li>
               <li>If the tool changes spacing, use “Paste as plain text” or the Copy message button above.</li>
               <li>Send it there, then return here and mark this team as sent.</li>

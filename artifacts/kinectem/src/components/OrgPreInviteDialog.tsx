@@ -80,7 +80,7 @@ export function OrgPreInviteDialog({
       window.setTimeout(() => setCopied(false), 1800);
       toast({
         title: "Pre-invite message copied",
-        description: "Paste it into BYGA, PlayMetrics, TeamSnap, email, or your usual club channel.",
+        description: "Paste it into BYGA, PlayMetrics, TeamSnap, 360 Player, email, or your usual club channel.",
       });
     } catch {
       toast({
@@ -115,8 +115,8 @@ export function OrgPreInviteDialog({
           <DialogDescription>
             Share this organization-wide heads-up first. Next, bulk-add coaches,
             then mass-add players and parents to each team. This is plain text
-            so it pastes cleanly into BYGA, PlayMetrics, TeamSnap, email, and
-            similar tools.
+            so it pastes cleanly into BYGA, PlayMetrics, TeamSnap, 360 Player,
+            email, and similar tools.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
