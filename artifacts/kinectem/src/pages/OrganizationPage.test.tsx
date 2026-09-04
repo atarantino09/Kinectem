@@ -306,6 +306,7 @@ describe("OrganizationPage — admin control gating", () => {
     expect(screen.getByTestId("btn-org-pre-invite")).toBeInTheDocument();
     const preInvite = screen.getByTestId("btn-org-pre-invite");
     const rosterOutreach = screen.getByTestId("btn-org-roster-outreach");
+    expect(rosterOutreach).toHaveClass("gap-2");
     const announcement = screen.getByTestId("btn-org-broadcast");
     const sharePage = screen.getByTestId("btn-share-org-page");
     expect(preInvite.compareDocumentPosition(rosterOutreach)).toBe(

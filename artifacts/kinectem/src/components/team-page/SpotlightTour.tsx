@@ -71,7 +71,7 @@ function boundsFor(rects: Rect[]): Rect | null {
 }
 
 /**
- * A forced, numbered "spotlight" walkthrough. It dims the page, rings the
+ * A numbered "spotlight" walkthrough. It dims the page, rings the
  * current target element(s), and shows a tooltip card with Back / Next. Only
  * the tour controls are interactive (a transparent full-screen layer blocks
  * page clicks) so users can't wander off mid-tour. Steps whose targets never
@@ -218,8 +218,13 @@ export function SpotlightTour({
 
   return createPortal(
     <div className="fixed inset-0 z-[9999]" data-testid="team-tour">
-      {/* Transparent click-blocker so only the tour controls are usable. */}
-      <div className="absolute inset-0" style={{ pointerEvents: "auto" }} />
+      {/* The backdrop blocks page controls and dismisses the tour when clicked. */}
+      <div
+        className="absolute inset-0"
+        style={{ pointerEvents: "auto" }}
+        onClick={onFinish}
+        data-testid="tour-backdrop"
+      />
       {rects.length > 0 ? (
         <svg
           className="absolute inset-0 h-full w-full pointer-events-none"

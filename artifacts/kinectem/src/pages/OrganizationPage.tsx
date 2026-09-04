@@ -1132,7 +1132,7 @@ export default function OrganizationPage() {
                                 className="flex items-center w-full cursor-pointer"
                               >
                                 <span
-                                  className="flex items-center"
+                                  className="flex items-center gap-2"
                                   data-testid="btn-org-roster-outreach"
                                 >
                                   <Mail className="w-4 h-4 mr-2" />

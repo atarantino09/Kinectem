@@ -17,6 +17,7 @@ function rect(left: number, top: number, width: number, height: number): DOMRect
 }
 
 function renderTour(step: TourStep, visibleTargetIds: string[]) {
+  const onFinish = vi.fn();
   render(
     <>
       {visibleTargetIds.map((targetId) => (
@@ -24,7 +25,7 @@ function renderTour(step: TourStep, visibleTargetIds: string[]) {
           {targetId}
         </button>
       ))}
-      <SpotlightTour steps={[step]} onFinish={vi.fn()} />
+      <SpotlightTour steps={[step]} onFinish={onFinish} />
     </>,
   );
 
@@ -36,7 +37,7 @@ function renderTour(step: TourStep, visibleTargetIds: string[]) {
     rectSpies.set(targetId, spy);
   });
 
-  return { rectSpies };
+  return { rectSpies, onFinish };
 }
 
 function setLayoutViewport(width: number, height: number): () => void {
@@ -67,6 +68,23 @@ function setLayoutViewport(width: number, height: number): () => void {
 }
 
 describe("SpotlightTour", () => {
+  it("dismisses when the backdrop is clicked but not when the tour card is clicked", () => {
+    const { onFinish } = renderTour(
+      {
+        targetTestId: "btn-target",
+        title: "Tour step",
+        body: "Tour details",
+      },
+      ["btn-target"],
+    );
+
+    fireEvent.click(screen.getByTestId("team-tour-card"));
+    expect(onFinish).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId("tour-backdrop"));
+    expect(onFinish).toHaveBeenCalledTimes(1);
+  });
+
   it("renders a separate undimmed spotlight ring for every visible control in a grouped step", async () => {
     renderTour(
       {
