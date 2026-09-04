@@ -145,6 +145,30 @@ describe("private practice plans", () => {
     expect(row.practiceDates).toEqual(["2026-09-08", "2026-09-10"]);
   });
 
+  it("accepts private photos and YouTube links but rejects other video links", async () => {
+    const { team } = await footballTeam();
+    const { agent } = await loginAs("coach@kinectem.demo");
+    const photo = "data:image/png;base64,iVBORw0KGgo=";
+    const created = await agent.post(`/api/v1/teams/${team.id}/practice-plans`).send({
+      title: "Practice media",
+      body: "Watch before practice.",
+      practiceDates: ["2026-09-08"],
+      photoUrls: [photo],
+      videoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.photoUrls).toEqual([photo]);
+    expect(created.body.videoUrl).toContain("youtube.com/watch");
+
+    const rejected = await agent.post(`/api/v1/teams/${team.id}/practice-plans`).send({
+      title: "Bad link",
+      body: "Details",
+      practiceDates: ["2026-09-08"],
+      videoUrl: "https://example.com/video",
+    });
+    expect(rejected.status).toBe(400);
+  });
+
   it("requires management of the exact team for AI practice-plan assistance", async () => {
     const { user: marcus } = await loginAs("marcus@kinectem.demo");
     const [unmanagedTeam] = await db.insert(teams).values({

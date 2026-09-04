@@ -12,11 +12,16 @@ import { customFetch } from "@workspace/api-client-react";
 import { toast } from "@/hooks/use-toast";
 import { useListPracticePlans, useCreatePracticePlan, useUpdatePracticePlan, PracticePlan } from "@/hooks/use-practice-plans";
 import { Skeleton } from "@/components/ui/skeleton";
+import { MediaSection } from "@/components/new-post/MediaSection";
+import { VideoEmbed } from "@/components/VideoEmbed";
 
 const planSchema = z.object({
   title: z.string().min(1, "A title is required"),
   body: z.string().min(1, "Practice details are required"),
   practiceDates: z.array(z.string().min(1, "Choose a practice date")).min(1),
+  photoUrls: z.array(z.string()),
+  videoUrl: z.string(),
+  videoAssetId: z.string(),
 });
 
 type PlanValues = z.infer<typeof planSchema>;
@@ -141,6 +146,9 @@ function PracticePlanComposer({
       title: plan?.title ?? "",
       body: plan?.body ?? "",
       practiceDates: plan?.practiceDates?.length ? plan.practiceDates : [""],
+      photoUrls: plan?.photoUrls ?? [],
+      videoUrl: plan?.videoUrl ?? "",
+      videoAssetId: "",
     },
   });
 
@@ -313,6 +321,21 @@ function PracticePlanComposer({
                 </FormItem>
               )}
             />
+            <MediaSection
+              photos={form.watch("photoUrls")}
+              onPhotosChange={(photos) =>
+                form.setValue("photoUrls", photos, { shouldDirty: true })
+              }
+              videoUrl={form.watch("videoUrl")}
+              onVideoUrlChange={(url) =>
+                form.setValue("videoUrl", url, { shouldDirty: true })
+              }
+              videoAssetId={form.watch("videoAssetId")}
+              onVideoAssetIdChange={(assetId) =>
+                form.setValue("videoAssetId", assetId, { shouldDirty: true })
+              }
+              allowVideoUpload
+            />
             <div className="flex flex-col sm:flex-row gap-2 pt-2">
               <Button 
                 type="button" 
@@ -437,6 +460,19 @@ function PracticePlanCard({
                 ))}
               </div>
             )}
+            {plan.photoUrls?.length ? (
+              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {plan.photoUrls.map((url, index) => (
+                  <img
+                    key={`${index}-${url.slice(0, 24)}`}
+                    src={url}
+                    alt={`${plan.title} photo ${index + 1}`}
+                    className="aspect-video w-full rounded-lg border object-cover"
+                  />
+                ))}
+              </div>
+            ) : null}
+            {plan.videoUrl ? <VideoEmbed url={plan.videoUrl} /> : null}
           </div>
           {canManage && (
             <Button

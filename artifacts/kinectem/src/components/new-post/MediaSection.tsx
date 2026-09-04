@@ -42,6 +42,7 @@ export function MediaSection({
   isHighlight = false,
   videoAssetId,
   onVideoAssetIdChange,
+  allowVideoUpload = false,
 }: {
   photos: string[];
   onPhotosChange: (next: string[]) => void;
@@ -50,8 +51,10 @@ export function MediaSection({
   isHighlight?: boolean;
   videoAssetId?: string;
   onVideoAssetIdChange?: (next: string) => void;
+  allowVideoUpload?: boolean;
 }) {
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
+  const videoInputRef = useRef<HTMLInputElement | null>(null);
   const { toast } = useToast();
   // Index currently being dragged. Tracked in state so the source tile
   // can show a faded "lifted" appearance while it's en route. Touch
@@ -228,7 +231,7 @@ export function MediaSection({
         Media
       </Label>
 
-      {!isHighlight && <div>
+      {(!isHighlight || allowVideoUpload) && <div>
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm font-bold flex items-center gap-1.5">
             <ImagePlus className="w-4 h-4" /> Photos
@@ -238,13 +241,13 @@ export function MediaSection({
             size="sm"
             variant="outline"
             className="font-bold rounded-full"
-            onClick={() => inputRef.current?.click()}
+            onClick={() => photoInputRef.current?.click()}
             data-testid="button-add-photos"
           >
             <ImagePlus className="w-3.5 h-3.5 mr-1.5" /> Add Photos
           </Button>
           <input
-            ref={inputRef}
+            ref={photoInputRef}
             type="file"
             accept="image/*"
             multiple
@@ -361,7 +364,7 @@ export function MediaSection({
         )}
       </div>}
 
-      {isHighlight && (
+      {(isHighlight || allowVideoUpload) && (
         <div className="space-y-2" data-testid="highlight-video-upload">
           <div className="flex items-center justify-between gap-3">
             <span className="text-sm font-bold flex items-center gap-1.5">
@@ -373,14 +376,14 @@ export function MediaSection({
               variant="outline"
               className="font-bold rounded-full"
               disabled={uploadingVideo}
-              onClick={() => inputRef.current?.click()}
+              onClick={() => videoInputRef.current?.click()}
               data-testid="button-add-video"
             >
               <Video className="w-3.5 h-3.5 mr-1.5" />
               {uploadingVideo ? "Uploading…" : videoAssetId ? "Replace Video" : "Add Video"}
             </Button>
             <input
-              ref={inputRef}
+              ref={videoInputRef}
               type="file"
               accept={HIGHLIGHT_VIDEO_ACCEPT}
               className="hidden"
@@ -424,7 +427,7 @@ export function MediaSection({
           htmlFor="videoUrl"
           className="text-sm font-bold flex items-center gap-1.5"
         >
-          <Video className="w-4 h-4" /> {isHighlight ? "Or Add a Video Link" : "Video Highlight Link"}
+          <Video className="w-4 h-4" /> {(isHighlight || allowVideoUpload) ? "Or Add a YouTube Link" : "Video Highlight Link"}
         </Label>
         <Input
           id="videoUrl"
@@ -454,7 +457,8 @@ export function MediaSection({
 function VideoUrlPreview({ url }: { url: string }) {
   const trimmed = url.trim();
   if (!trimmed) return null;
-  const embeddable = getEmbedSrc(trimmed) !== null;
+  const embeddable =
+    trimmed.startsWith("data:video/") || getEmbedSrc(trimmed) !== null;
   return (
     <div className="mt-3" data-testid="video-url-preview">
       <p className="text-[11px] text-muted-foreground font-semibold mb-2">

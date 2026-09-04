@@ -84,6 +84,9 @@ describe("PracticePlansSection", () => {
           title: "Defense Day",
           body: "Drill 1, Drill 2",
           practiceDates: ["2026-09-08", "2026-09-10"],
+          photoUrls: [],
+          videoUrl: "",
+          videoAssetId: "",
           status: "draft",
         }
       });
@@ -148,7 +151,15 @@ describe("PracticePlansSection", () => {
       expect(updateMutate).toHaveBeenCalledWith({
         teamId: "t1",
         planId: "p1",
-        data: { title: "New Title", body: "Old Body", practiceDates: ["2026-09-08"], status: "published" }
+        data: {
+          title: "New Title",
+          body: "Old Body",
+          practiceDates: ["2026-09-08"],
+          photoUrls: [],
+          videoUrl: "",
+          videoAssetId: "",
+          status: "published",
+        }
       });
     });
   });

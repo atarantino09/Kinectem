@@ -1247,6 +1247,48 @@ function parsePracticeDates(value: unknown): string[] | null {
   return dates;
 }
 
+function parsePracticePlanYoutubeUrl(value: unknown): string | null {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    const host = url.hostname.toLowerCase();
+    return host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com")
+      ? url.toString()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+async function practicePlanVideoUrl(
+  ownerId: string,
+  videoAssetId: unknown,
+  rawVideoUrl: unknown,
+  allowedExistingUrl?: string | null,
+): Promise<string | null | undefined> {
+  if (typeof videoAssetId === "string" && videoAssetId) {
+    const [asset] = await db.select().from(assets).where(and(
+      eq(assets.id, videoAssetId),
+      eq(assets.ownerId, ownerId),
+      eq(assets.status, "confirmed"),
+    )).limit(1);
+    if (!asset?.url || !["video/mp4", "video/quicktime"].includes(asset.fileType.toLowerCase())) {
+      return undefined;
+    }
+    return asset.url;
+  }
+  if (
+    typeof rawVideoUrl === "string" &&
+    rawVideoUrl !== "" &&
+    rawVideoUrl === allowedExistingUrl
+  ) {
+    return rawVideoUrl;
+  }
+  const youtubeUrl = parsePracticePlanYoutubeUrl(rawVideoUrl);
+  return youtubeUrl === null ? undefined : youtubeUrl;
+}
+
 router.get(
   "/teams/:teamId/practice-plans",
   asyncHandler(async (req, res) => {
@@ -1273,6 +1315,8 @@ router.get(
         status: a.status,
         articleKind: "practice_plan" as const,
         practiceDates: a.practiceDates ?? [],
+        photoUrls: a.photoUrls ?? [],
+        videoUrl: a.videoUrl,
         createdAt: a.createdAt.toISOString(),
         updatedAt: a.updatedAt.toISOString(),
         author: author ? toPostAuthor(author) : null,
@@ -1298,17 +1342,30 @@ router.post(
     if (!title || !body) return apiError(res, 400, "A practice plan title and details are required.");
     const practiceDates = parsePracticeDates(req.body?.practiceDates);
     if (!practiceDates) return apiError(res, 400, "At least one valid practice date is required.");
+    const imgErr = checkPostImagePayload(undefined, req.body?.photoUrls);
+    if (imgErr) return apiError(res, 413, imgErr);
+    const photoUrls = Array.isArray(req.body?.photoUrls)
+      ? req.body.photoUrls.filter((url: unknown) => typeof url === "string")
+      : [];
+    const videoUrl = await practicePlanVideoUrl(me.id, req.body?.videoAssetId, req.body?.videoUrl);
+    if (videoUrl === undefined) return apiError(res, 400, "Choose a valid uploaded video or YouTube link.");
     const status = req.body?.status === "draft" ? "draft" : "published";
     const [plan] = await db.insert(articles).values({
       teamId: team.id, authorId: me.id, title, body,
       summary: typeof req.body?.description === "string" ? req.body.description : null,
-      articleKind: "practice_plan", practiceDates, status,
+      articleKind: "practice_plan", practiceDates,
+      photoUrls: photoUrls.length ? photoUrls : null,
+      coverImageUrl: photoUrls[0] ?? null,
+      videoUrl: videoUrl || null,
+      status,
       publishedAt: status === "published" ? new Date() : null,
     }).returning();
     res.status(201).json({
       ...articleToPost(plan, { team, org: null, author: me, canEdit: true, canDelete: true }),
       articleKind: "practice_plan",
       practiceDates: plan.practiceDates ?? [],
+      photoUrls: plan.photoUrls ?? [],
+      videoUrl: plan.videoUrl,
     });
   }),
 );
@@ -1337,15 +1394,37 @@ router.patch(
       ? (plan.practiceDates ?? [])
       : parsePracticeDates(req.body.practiceDates);
     if (!practiceDates?.length) return apiError(res, 400, "At least one valid practice date is required.");
+    const imgErr = checkPostImagePayload(undefined, req.body?.photoUrls);
+    if (imgErr) return apiError(res, 413, imgErr);
+    const photoUrls = req.body?.photoUrls === undefined
+      ? (plan.photoUrls ?? [])
+      : Array.isArray(req.body.photoUrls)
+        ? req.body.photoUrls.filter((url: unknown) => typeof url === "string")
+        : [];
+    const nextVideoUrl = req.body?.videoAssetId || req.body?.videoUrl !== undefined
+      ? await practicePlanVideoUrl(
+          me.id,
+          req.body?.videoAssetId,
+          req.body?.videoUrl,
+          plan.videoUrl,
+        )
+      : plan.videoUrl;
+    if (nextVideoUrl === undefined) return apiError(res, 400, "Choose a valid uploaded video or YouTube link.");
     const status = req.body?.status === "draft" ? "draft" : req.body?.status === "published" ? "published" : plan.status;
     const [updated] = await db.update(articles).set({
-      title, body, practiceDates, status, updatedAt: new Date(),
+      title, body, practiceDates,
+      photoUrls: photoUrls.length ? photoUrls : null,
+      coverImageUrl: photoUrls[0] ?? null,
+      videoUrl: nextVideoUrl || null,
+      status, updatedAt: new Date(),
       publishedAt: status === "published" ? (plan.publishedAt ?? new Date()) : null,
     }).where(eq(articles.id, plan.id)).returning();
     res.json({
       ...articleToPost(updated, { team, org: null, author: me, canEdit: true, canDelete: true }),
       articleKind: "practice_plan",
       practiceDates: updated.practiceDates ?? [],
+      photoUrls: updated.photoUrls ?? [],
+      videoUrl: updated.videoUrl,
     });
   }),
 );

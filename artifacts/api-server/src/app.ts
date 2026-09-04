@@ -99,6 +99,8 @@ app.patch("/api/v1/admin/competition-claim-links/:id/logo", imageUploadJson);
 const postImageUploadJson = express.json({ limit: "25mb" });
 app.post("/api/v1/posts", postImageUploadJson);
 app.patch("/api/v1/posts/:postId", postImageUploadJson);
+app.post("/api/v1/teams/:teamId/practice-plans", postImageUploadJson);
+app.patch("/api/v1/teams/:teamId/practice-plans/:planId", postImageUploadJson);
 // Task #938 — league competition schedules can contain up to 25,000 games.
 // Their CSV JSON body is capped at 10 MB in tournaments.ts; allow modest JSON
 // encoding overhead on ONLY the two schedule-import aliases. Keep this before

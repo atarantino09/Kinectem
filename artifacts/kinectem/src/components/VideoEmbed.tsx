@@ -54,6 +54,17 @@ export function VideoEmbed({
   /** Wrapper class for the fallback clickable-link variant. */
   fallbackClassName?: string;
 }) {
+  if (url.startsWith("data:video/")) {
+    return (
+      <video
+        src={url}
+        controls
+        playsInline
+        preload="metadata"
+        className={className ?? "mt-3 max-h-96 w-full rounded-lg border bg-black"}
+      />
+    );
+  }
   const embedSrc = getEmbedSrc(url);
 
   if (embedSrc) {
