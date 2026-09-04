@@ -71,6 +71,8 @@ import {
 } from "../lib/spec-helpers";
 import {
   buildOrgClaimApprovedEmail,
+  buildOrgOwnerInvitationEmail,
+  isEmailConfiguredAsync,
   sendEmail,
 } from "../lib/email";
 
@@ -3742,6 +3744,81 @@ router.patch(
         messagedAt: org.messagedAt ? org.messagedAt.toISOString() : null,
       },
     });
+  }),
+);
+
+router.post(
+  "/org-claim-links/:id/email-owner-invite",
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const parsed = z
+      .object({ email: z.string().trim().email().max(320) })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: "Enter a valid recipient email address",
+        code: "INVALID_EMAIL",
+      });
+    }
+    if (!(await isEmailConfiguredAsync())) {
+      return res.status(503).json({
+        error:
+          "Email is not configured. Add the SendGrid key and sender address in Admin Email settings first.",
+        code: "EMAIL_NOT_CONFIGURED",
+      });
+    }
+
+    const [org] = await db
+      .select({
+        id: organizations.id,
+        name: organizations.name,
+        claimToken: organizations.claimToken,
+      })
+      .from(organizations)
+      .where(eq(organizations.id, id))
+      .limit(1);
+    if (!org) {
+      return res
+        .status(404)
+        .json({ error: "Organization not found", code: "ORG_NOT_FOUND" });
+    }
+    const [owner] = await db
+      .select({ userId: organizationAdmins.userId })
+      .from(organizationAdmins)
+      .where(
+        and(
+          eq(organizationAdmins.organizationId, id),
+          eq(organizationAdmins.role, "owner"),
+        ),
+      )
+      .limit(1);
+    if (owner) {
+      return res.status(409).json({
+        error: "This organization already has an owner",
+        code: "ALREADY_CLAIMED",
+      });
+    }
+
+    const token = org.claimToken ?? generateToken();
+    if (!org.claimToken) {
+      await db
+        .update(organizations)
+        .set({ claimToken: token })
+        .where(eq(organizations.id, id));
+    }
+    await sendEmail(
+      buildOrgOwnerInvitationEmail({
+        to: parsed.data.email,
+        organizationName: org.name,
+        claimToken: token,
+      }),
+    );
+    const sentAt = new Date();
+    await db
+      .update(organizations)
+      .set({ outreachMessagedAt: sentAt })
+      .where(eq(organizations.id, id));
+    return res.json({ data: { sent: true, sentAt: sentAt.toISOString() } });
   }),
 );
 

@@ -281,6 +281,38 @@ export function buildOrgClaimApprovedEmail(input: {
   };
 }
 
+export function buildOrgOwnerInvitationEmail(input: {
+  to: string;
+  organizationName: string;
+  claimToken: string;
+}): EmailMessage {
+  const claimUrl = `${appBaseUrl()}/app/org-claim-links/${input.claimToken}`;
+  return {
+    to: input.to,
+    subject: `Become the owner of ${input.organizationName} on Kinectem`,
+    contextLabel: input.organizationName,
+    kind: "org_owner_invitation",
+    text: [
+      `You've been invited to become the owner of ${input.organizationName} on Kinectem.`,
+      "",
+      "Kinectem is the youth-sports platform where the story of your season comes to life. It turns quick coach notes into polished game recaps, builds lasting player histories, and gives every team one recognizable home without replacing the registration, scheduling, or communication tools your club already uses.",
+      "",
+      "Use this secure link to claim your organization:",
+      claimUrl,
+      "",
+      "How to finish setting up your organization:",
+      "1. Open the link and sign in or create your Kinectem profile.",
+      `2. Confirm that you want to become the owner of ${input.organizationName}.`,
+      "3. Review and share the pre-invite message with your club.",
+      "4. Bulk add coaches across your teams.",
+      "5. Add players and parents through Roster outreach using each team's secure invitation.",
+      "6. Complete any remaining items in the organization setup checklist.",
+      "",
+      "This link is a private invitation. Please do not forward it. It stops working after the organization has an owner.",
+    ].join("\n"),
+  };
+}
+
 export function buildPasswordResetUrl(token: string): string {
   return `${appBaseUrl()}/app/reset-password/${token}`;
 }

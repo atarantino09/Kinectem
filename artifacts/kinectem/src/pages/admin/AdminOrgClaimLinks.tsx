@@ -33,6 +33,7 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
+  Mail,
 } from "lucide-react";
 import {
   Select,
@@ -51,6 +52,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 // Task #610 — Admin screen listing every ownerless org page with its secret
 // claim link. The operator copies each link to the corresponding org so a
@@ -220,6 +229,11 @@ export function OrgClaimLinksContent({
   >(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [deletingOrganizations, setDeletingOrganizations] = useState(false);
+  const [emailInviteOrg, setEmailInviteOrg] = useState<ClaimLinkRow | null>(
+    null,
+  );
+  const [ownerEmail, setOwnerEmail] = useState("");
+  const [sendingOwnerEmail, setSendingOwnerEmail] = useState(false);
   // Sort rows by their assigned list — click the "List" column header to
   // cycle asc → desc → off. Unlisted orgs always sort to the end so a
   // partially-sorted list doesn't scatter them through the middle.
@@ -645,6 +659,37 @@ export function OrgClaimLinksContent({
         title: "Couldn't copy — select and copy manually",
         variant: "destructive",
       });
+    }
+  };
+
+  const sendOwnerInvite = async () => {
+    if (!emailInviteOrg || !ownerEmail.trim() || sendingOwnerEmail) return;
+    setSendingOwnerEmail(true);
+    try {
+      await customFetch(
+        `/api/v1/admin/org-claim-links/${emailInviteOrg.id}/email-owner-invite`,
+        {
+          method: "POST",
+          body: JSON.stringify({ email: ownerEmail.trim() }),
+        },
+      );
+      await queryClient.invalidateQueries({
+        queryKey: ["admin", "org-claim-links"],
+      });
+      toast({
+        title: `Owner invitation sent to ${ownerEmail.trim()}`,
+        description: `The email explains Kinectem, includes the secure claim link, and walks through setting up ${emailInviteOrg.name}.`,
+      });
+      setEmailInviteOrg(null);
+      setOwnerEmail("");
+    } catch (err) {
+      toast({
+        title: "Couldn't send owner invitation",
+        description: err instanceof Error ? err.message : undefined,
+        variant: "destructive",
+      });
+    } finally {
+      setSendingOwnerEmail(false);
     }
   };
 
@@ -1243,6 +1288,68 @@ export function OrgClaimLinksContent({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <Dialog
+        open={emailInviteOrg !== null}
+        onOpenChange={(open) => {
+          if (!open && !sendingOwnerEmail) {
+            setEmailInviteOrg(null);
+            setOwnerEmail("");
+          }
+        }}
+      >
+        <DialogContent
+          className="sm:max-w-md"
+          data-testid="dialog-email-owner-invite"
+        >
+          <DialogHeader>
+            <DialogTitle className="font-black">
+              Invite the organization owner
+            </DialogTitle>
+            <DialogDescription>
+              Kinectem will email the secure claim link and explain how to claim
+              and finish setting up {emailInviteOrg?.name}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="owner-invite-email">Owner email address</Label>
+            <Input
+              id="owner-invite-email"
+              type="email"
+              value={ownerEmail}
+              onChange={(event) => setOwnerEmail(event.target.value)}
+              placeholder="owner@club.org"
+              autoComplete="email"
+              onKeyDown={(event) => {
+                if (event.key === "Enter") void sendOwnerInvite();
+              }}
+            />
+            <p className="text-xs text-muted-foreground">
+              This sends a private link that grants ownership after the
+              recipient signs in and confirms the claim.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEmailInviteOrg(null);
+                setOwnerEmail("");
+              }}
+              disabled={sendingOwnerEmail}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={sendOwnerInvite}
+              disabled={!ownerEmail.trim() || sendingOwnerEmail}
+              data-testid="btn-send-owner-invite"
+            >
+              <Mail className="mr-2 h-4 w-4" />
+              {sendingOwnerEmail ? "Sending…" : "Send owner invitation"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {(() => {
         const renderRow = (r: ClaimLinkRow) => {
           const location = [r.city, r.state].filter(Boolean).join(", ");
@@ -1306,6 +1413,19 @@ export function OrgClaimLinksContent({
                     data-testid={`btn-copy-claim-link-${r.id}`}
                   >
                     <Copy className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="ml-1 h-7 shrink-0 gap-1.5 px-2 text-xs font-bold"
+                    onClick={() => {
+                      setEmailInviteOrg(r);
+                      setOwnerEmail("");
+                    }}
+                    data-testid={`btn-email-owner-invite-${r.id}`}
+                  >
+                    <Mail className="h-3.5 w-3.5" />
+                    Email
                   </Button>
                 </div>
               </TableCell>

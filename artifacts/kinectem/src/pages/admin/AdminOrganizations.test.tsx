@@ -28,6 +28,7 @@ let partnerPublished = false;
 let claimLinkRows: Array<Record<string, unknown>> = [];
 let orgLists: Array<Record<string, unknown>> = [];
 let bulkDeleteBody: Record<string, unknown> | null = null;
+let ownerInviteBody: Record<string, unknown> | null = null;
 
 beforeEach(() => {
   validatedBody = null;
@@ -40,6 +41,7 @@ beforeEach(() => {
   claimLinkRows = [];
   orgLists = [];
   bulkDeleteBody = null;
+  ownerInviteBody = null;
   Object.defineProperties(HTMLElement.prototype, {
     hasPointerCapture: { configurable: true, value: () => false },
     setPointerCapture: { configurable: true, value: () => undefined },
@@ -86,6 +88,15 @@ beforeEach(() => {
       }
       if (method === "GET" && path === "/api/v1/admin/org-name-check") {
         return jsonResponse({ data: [] });
+      }
+      if (
+        method === "POST" &&
+        path === "/api/v1/admin/org-claim-links/org-1/email-owner-invite"
+      ) {
+        ownerInviteBody = JSON.parse(String(init?.body ?? "{}"));
+        return jsonResponse({
+          data: { sent: true, sentAt: "2026-09-04T13:00:00.000Z" },
+        });
       }
       if (method === "GET" && path === "/api/v1/admin/partner-pages") {
         return jsonResponse({ data: partnerPages });
@@ -372,6 +383,46 @@ describe("AdminOrganizations bulk import", () => {
     expect(screen.getByTestId("claim-links-count")).toHaveTextContent(
       "0 ownerless pages",
     );
+  });
+
+  it("emails an unclaimed organization's secure owner invitation", async () => {
+    claimLinkRows = [
+      {
+        id: "org-1",
+        name: "North League",
+        city: "Northville",
+        state: "NY",
+        logoUrl: null,
+        token: "north-token",
+        messagedAt: null,
+        facebookAddedAt: null,
+        quickSetupAt: null,
+        listId: null,
+        listName: null,
+      },
+    ];
+    const user = userEvent.setup();
+    renderWithProviders(<AdminOrganizations />);
+    await user.click(await screen.findByTestId("tab-org-claim-links"));
+
+    await user.click(screen.getByTestId("btn-email-owner-invite-org-1"));
+    expect(screen.getByTestId("dialog-email-owner-invite")).toHaveTextContent(
+      "North League",
+    );
+    await user.type(
+      screen.getByLabelText("Owner email address"),
+      "director@northleague.org",
+    );
+    await user.click(screen.getByTestId("btn-send-owner-invite"));
+
+    await waitFor(() =>
+      expect(ownerInviteBody).toEqual({
+        email: "director@northleague.org",
+      }),
+    );
+    expect(
+      screen.queryByTestId("dialog-email-owner-invite"),
+    ).not.toBeInTheDocument();
   });
 
   it("selects individual and all visible rows and requires typed bulk confirmation", async () => {
