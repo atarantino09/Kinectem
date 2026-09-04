@@ -125,7 +125,7 @@ export function OrgSetupChecklist({
   actions: OrgSetupChecklistActions;
 }) {
   const qc = useQueryClient();
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const { data, isLoading } = useGetOrgSetupStatus(orgId);
   const invalidate = () =>
     qc.invalidateQueries({ queryKey: getGetOrgSetupStatusQueryKey(orgId) });

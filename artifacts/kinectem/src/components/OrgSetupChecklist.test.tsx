@@ -131,12 +131,14 @@ beforeEach(() => {
 describe("OrgSetupChecklist (Task #548 / verified by Task #550)", () => {
   it("renders all five steps with an action button when nothing is done", async () => {
     const actions = makeActions();
+    const user = userEvent.setup();
     renderWithProviders(
       <OrgSetupChecklist orgId={ORG_ID} actions={actions} />,
     );
 
     // Card shell + progress badge.
     await screen.findByTestId("card-org-setup-checklist");
+    await user.click(screen.getByTestId("btn-org-setup-checklist-toggle"));
     expect(screen.getByTestId("badge-org-setup-progress")).toHaveTextContent(
       `0 of ${UI_TOTAL} done`,
     );
@@ -155,6 +157,7 @@ describe("OrgSetupChecklist (Task #548 / verified by Task #550)", () => {
   });
 
   it("renders completed rows with the done icon and no action button", async () => {
+    const user = userEvent.setup();
     currentStatus = buildStatus({
       done: { logoSet: true, hasTeam: true },
     });
@@ -163,6 +166,7 @@ describe("OrgSetupChecklist (Task #548 / verified by Task #550)", () => {
     );
 
     await screen.findByTestId("card-org-setup-checklist");
+    await user.click(screen.getByTestId("btn-org-setup-checklist-toggle"));
 
     expect(screen.getByTestId("badge-org-setup-progress")).toHaveTextContent(
       `2 of ${UI_TOTAL} done`,
@@ -178,6 +182,7 @@ describe("OrgSetupChecklist (Task #548 / verified by Task #550)", () => {
   });
 
   it("shows the 'Setup complete' confirmation when every step is done", async () => {
+    const user = userEvent.setup();
     currentStatus = buildStatus({
       done: Object.fromEntries(ALL_STEPS.map((k) => [k, true])) as Record<
         StepKey,
@@ -188,6 +193,8 @@ describe("OrgSetupChecklist (Task #548 / verified by Task #550)", () => {
       <OrgSetupChecklist orgId={ORG_ID} actions={makeActions()} />,
     );
 
+    await screen.findByTestId("card-org-setup-checklist");
+    await user.click(screen.getByTestId("btn-org-setup-checklist-toggle"));
     await screen.findByTestId("text-org-setup-complete");
     // The all-complete view replaces the per-step list entirely.
     expect(
@@ -263,6 +270,7 @@ describe("OrgSetupChecklist (Task #548 / verified by Task #550)", () => {
     );
 
     await screen.findByTestId("card-org-setup-checklist");
+    await user.click(screen.getByTestId("btn-org-setup-checklist-toggle"));
 
     await user.click(screen.getByTestId("btn-org-setup-action-logoSet"));
     expect(actions.onEditLogo).toHaveBeenCalledTimes(1);
@@ -285,6 +293,7 @@ describe("OrgSetupChecklist (Task #548 / verified by Task #550)", () => {
   });
 
   it("marks the merged players/parents step done when either boolean is set", async () => {
+    const user = userEvent.setup();
     // Guardian invite sent but no accepted roster entry yet — the merged
     // step must still read as done.
     currentStatus = buildStatus({
@@ -295,6 +304,7 @@ describe("OrgSetupChecklist (Task #548 / verified by Task #550)", () => {
     );
 
     await screen.findByTestId("card-org-setup-checklist");
+    await user.click(screen.getByTestId("btn-org-setup-checklist-toggle"));
     expect(
       screen.getByTestId("icon-org-setup-done-addPlayersAndParents"),
     ).toBeInTheDocument();
@@ -313,21 +323,22 @@ describe("OrgSetupChecklist (Task #548 / verified by Task #550)", () => {
     );
 
     await screen.findByTestId("card-org-setup-checklist");
-    // Expanded by default.
-    expect(screen.getByTestId("row-org-setup-logoSet")).toBeVisible();
+    // Collapsed by default.
+    expect(
+      screen.queryByTestId("row-org-setup-logoSet"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("badge-org-setup-progress")).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("btn-org-setup-checklist-toggle"));
+    await waitFor(() => {
+      expect(screen.getByTestId("row-org-setup-logoSet")).toBeVisible();
+    });
 
     await user.click(screen.getByTestId("btn-org-setup-checklist-toggle"));
     await waitFor(() => {
       expect(
         screen.queryByTestId("row-org-setup-logoSet"),
       ).not.toBeInTheDocument();
-    });
-    // Header (title + progress badge) stays visible while collapsed.
-    expect(screen.getByTestId("badge-org-setup-progress")).toBeInTheDocument();
-
-    await user.click(screen.getByTestId("btn-org-setup-checklist-toggle"));
-    await waitFor(() => {
-      expect(screen.getByTestId("row-org-setup-logoSet")).toBeVisible();
     });
   });
 

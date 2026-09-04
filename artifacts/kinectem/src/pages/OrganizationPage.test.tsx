@@ -265,9 +265,9 @@ describe("OrganizationPage — admin control gating", () => {
     const headerActions = screen.getByTestId("org-header-action-menus");
     expect(headerActions).toHaveClass("justify-end");
     expect(headerActions.firstElementChild).toBe(communityActions);
-    expect(communityActions.nextElementSibling).toBe(managerActions);
+    expect(communityActions.nextElementSibling).toBe(guidesActions);
+    expect(guidesActions.nextElementSibling).toBe(managerActions);
     expect(managerActions.nextElementSibling).toBe(communicationActions);
-    expect(communicationActions.nextElementSibling).toBe(guidesActions);
     expect(within(communityActions).getByTestId("btn-org-community-menu")).toHaveTextContent(
       "Community",
     );
@@ -275,12 +275,12 @@ describe("OrganizationPage — admin control gating", () => {
     expect(within(managerActions).getByTestId("btn-org-manage-menu")).toHaveTextContent(
       "Manage",
     );
-    expect(managerActions.innerHTML).toContain("blue");
+    expect(managerActions.innerHTML).toContain("purple");
     expect(
       within(communicationActions).getByTestId("btn-org-communication-menu"),
     ).toHaveTextContent("Communication");
     expect(communicationActions.innerHTML).toContain("bg-blue-700");
-    expect(guidesActions.innerHTML).toContain("purple");
+    expect(guidesActions.innerHTML).toContain("blue");
 
     await user.click(screen.getByTestId("btn-org-community-menu"));
     expect(screen.getByTestId("btn-follow-org")).toBeInTheDocument();
