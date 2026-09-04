@@ -35,6 +35,9 @@ describe("OrgPreInviteDialog", () => {
       "turns quick coach notes into polished recaps, tags every player",
     );
     expect(message).toContain(
+      "It gives our club one living home for the moments that matter — without replacing the tools we already use.",
+    );
+    expect(message).toContain(
       "there is an AI Assist tool built in to game recap editor",
     );
     expect(message).not.toContain(

@@ -23,7 +23,7 @@ ${organizationName} is getting started on Kinectem. Kinectem is the youth-sports
 
 Kinectem is not another registration, scheduling, or communication app — it's the layer that sits on top of the one we already use. They run our season. Kinectem makes it last.
 
-After the final whistle, Kinectem turns quick coach notes into polished recaps, tags every player, and builds a lasting history families can revisit. It gives clubs one living home for the moments that matter — without replacing the tools they already use.
+After the final whistle, Kinectem turns quick coach notes into polished recaps, tags every player, and builds a lasting history families can revisit. It gives our club one living home for the moments that matter — without replacing the tools we already use.
 
 Don't worry coaches- there is an AI Assist tool built in to game recap editor, so it's a couple of minutes, not homework.
 
