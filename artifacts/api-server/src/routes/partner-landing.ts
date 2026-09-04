@@ -1177,7 +1177,7 @@ router.post(
       })
       .returning();
     const submittedAt = claim.createdAt.toISOString();
-    const reviewUrl = `${appBaseUrl()}/app/admin/moderation?claimId=${claim.id}`;
+    const reviewUrl = `${appBaseUrl()}/app/admin/moderation?tab=org-claims&claimId=${claim.id}`;
     try {
       await sendEmail({
         to: "competitions@kinectem.com",

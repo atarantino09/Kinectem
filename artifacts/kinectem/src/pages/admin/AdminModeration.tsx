@@ -50,11 +50,39 @@ type Report = {
   content: { title: string | null; body: string | null; hidden: boolean } | null;
 };
 
+type ModerationTab =
+  | "reports"
+  | "content"
+  | "takedowns"
+  | "org-claims"
+  | "competitions";
+
+export function moderationTabFromSearch(search: string): ModerationTab {
+  const params = new URLSearchParams(search);
+  // Existing claim-review emails only carry claimId, so keep those links
+  // working while newer emails also identify the tab explicitly.
+  if (params.has("claimId")) return "org-claims";
+
+  const requested = params.get("tab");
+  if (
+    requested === "reports" ||
+    requested === "content" ||
+    requested === "takedowns" ||
+    requested === "org-claims" ||
+    requested === "competitions"
+  ) {
+    return requested;
+  }
+  return "reports";
+}
+
 export default function AdminModeration() {
+  const initialTab = moderationTabFromSearch(window.location.search);
+
   return (
     <AdminLayout>
       <h1 className="text-2xl font-black mb-4">Moderation</h1>
-      <Tabs defaultValue="reports">
+      <Tabs defaultValue={initialTab}>
         <TabsList>
           <TabsTrigger value="reports" data-testid="tab-reports">Reports</TabsTrigger>
           <TabsTrigger value="content" data-testid="tab-content">Content</TabsTrigger>
