@@ -305,6 +305,11 @@ describe("OrganizationPage — admin control gating", () => {
     await user.click(screen.getByTestId("btn-org-communication-menu"));
     expect(screen.getByTestId("btn-org-pre-invite")).toBeInTheDocument();
     const preInvite = screen.getByTestId("btn-org-pre-invite");
+    expect(preInvite).toHaveClass(
+      "hover:bg-purple-100",
+      "focus:bg-purple-100",
+      "data-[highlighted]:bg-purple-100",
+    );
     const rosterOutreach = screen.getByTestId("btn-org-roster-outreach");
     expect(rosterOutreach).toHaveClass("gap-2");
     const announcement = screen.getByTestId("btn-org-broadcast");
