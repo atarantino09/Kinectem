@@ -849,6 +849,7 @@ export const articles = pgTable("articles", {
   // "combined" = multi-game recap. Drives a distinct post card pill.
   recapKind: text("recap_kind"),
   articleKind: articleKindEnum("article_kind").notNull().default("recap"),
+  practiceDates: date("practice_dates").array(),
   // Competitions (§7) — set when this game recap belongs to a claimed
   // competition game (derivable game → slot → competition, denormalized for
   // the curation queue + featured rail queries). `featured` is toggled by

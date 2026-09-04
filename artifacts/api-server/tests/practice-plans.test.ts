@@ -19,6 +19,7 @@ async function createPlan(status: "draft" | "published" = "published") {
   const response = await agent.post(`/api/v1/teams/${team.id}/practice-plans`).send({
     title: `Practice plan ${Date.now()}`,
     body: "Warmup, drills, then film review.",
+    practiceDates: ["2026-09-08", "2026-09-10"],
     status,
   });
   expect(response.status).toBe(201);
@@ -120,6 +121,28 @@ describe("private practice plans", () => {
     const { agent } = await loginAs("coach@kinectem.demo");
     const detail = await agent.get(`/api/v1/posts/${postId}`);
     expect(detail.body.articleKind).toBe("practice_plan");
+  });
+
+  it("requires and persists one or more valid practice dates", async () => {
+    const { team } = await footballTeam();
+    const { agent } = await loginAs("coach@kinectem.demo");
+    const missing = await agent.post(`/api/v1/teams/${team.id}/practice-plans`).send({
+      title: "No date",
+      body: "Details",
+    });
+    expect(missing.status).toBe(400);
+
+    const created = await agent.post(`/api/v1/teams/${team.id}/practice-plans`).send({
+      title: "Two sessions",
+      body: "Details",
+      practiceDates: ["2026-09-10", "2026-09-08"],
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.practiceDates).toEqual(["2026-09-08", "2026-09-10"]);
+
+    const list = await agent.get(`/api/v1/teams/${team.id}/practice-plans`);
+    const row = list.body.data.find((plan: { id: string }) => plan.id === created.body.id);
+    expect(row.practiceDates).toEqual(["2026-09-08", "2026-09-10"]);
   });
 
   it("requires management of the exact team for AI practice-plan assistance", async () => {

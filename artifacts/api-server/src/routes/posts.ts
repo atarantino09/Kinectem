@@ -1229,6 +1229,24 @@ router.get(
 // Practice Plans are deliberately a separate, authenticated team surface.
 // Do not add these to the normal posts query: followers and profile visitors
 // must never discover an internal plan through a public feed.
+function parsePracticeDates(value: unknown): string[] | null {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 20) return null;
+  const dates = [...new Set(value.map((item) => String(item)))].sort();
+  if (
+    dates.some((value) => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return true;
+      const [year, month, day] = value.split("-").map(Number);
+      const parsed = new Date(Date.UTC(year, month - 1, day));
+      return (
+        parsed.getUTCFullYear() !== year ||
+        parsed.getUTCMonth() !== month - 1 ||
+        parsed.getUTCDate() !== day
+      );
+    })
+  ) return null;
+  return dates;
+}
+
 router.get(
   "/teams/:teamId/practice-plans",
   asyncHandler(async (req, res) => {
@@ -1254,6 +1272,7 @@ router.get(
         body: a.body,
         status: a.status,
         articleKind: "practice_plan" as const,
+        practiceDates: a.practiceDates ?? [],
         createdAt: a.createdAt.toISOString(),
         updatedAt: a.updatedAt.toISOString(),
         author: author ? toPostAuthor(author) : null,
@@ -1277,16 +1296,19 @@ router.post(
     const title = String(req.body?.title ?? "").trim();
     const body = String(req.body?.body ?? "").trim();
     if (!title || !body) return apiError(res, 400, "A practice plan title and details are required.");
+    const practiceDates = parsePracticeDates(req.body?.practiceDates);
+    if (!practiceDates) return apiError(res, 400, "At least one valid practice date is required.");
     const status = req.body?.status === "draft" ? "draft" : "published";
     const [plan] = await db.insert(articles).values({
       teamId: team.id, authorId: me.id, title, body,
       summary: typeof req.body?.description === "string" ? req.body.description : null,
-      articleKind: "practice_plan", status,
+      articleKind: "practice_plan", practiceDates, status,
       publishedAt: status === "published" ? new Date() : null,
     }).returning();
     res.status(201).json({
       ...articleToPost(plan, { team, org: null, author: me, canEdit: true, canDelete: true }),
       articleKind: "practice_plan",
+      practiceDates: plan.practiceDates ?? [],
     });
   }),
 );
@@ -1311,12 +1333,20 @@ router.patch(
     const title = typeof req.body?.title === "string" ? req.body.title.trim() : plan.title;
     const body = typeof req.body?.body === "string" ? req.body.body.trim() : plan.body;
     if (!title || !body) return apiError(res, 400, "A practice plan title and details are required.");
+    const practiceDates = req.body?.practiceDates === undefined
+      ? (plan.practiceDates ?? [])
+      : parsePracticeDates(req.body.practiceDates);
+    if (!practiceDates?.length) return apiError(res, 400, "At least one valid practice date is required.");
     const status = req.body?.status === "draft" ? "draft" : req.body?.status === "published" ? "published" : plan.status;
     const [updated] = await db.update(articles).set({
-      title, body, status, updatedAt: new Date(),
+      title, body, practiceDates, status, updatedAt: new Date(),
       publishedAt: status === "published" ? (plan.publishedAt ?? new Date()) : null,
     }).where(eq(articles.id, plan.id)).returning();
-    res.json({ ...articleToPost(updated, { team, org: null, author: me, canEdit: true, canDelete: true }), articleKind: "practice_plan" });
+    res.json({
+      ...articleToPost(updated, { team, org: null, author: me, canEdit: true, canDelete: true }),
+      articleKind: "practice_plan",
+      practiceDates: updated.practiceDates ?? [],
+    });
   }),
 );
 

@@ -6,6 +6,7 @@ export type PracticePlan = {
   title: string;
   body: string;
   status: "draft" | "published";
+  practiceDates: string[];
   createdAt: string;
   author?: {
     displayName?: string;
@@ -28,7 +29,7 @@ export function useListPracticePlans(teamId: string, enabled: boolean) {
 export function useCreatePracticePlan() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ teamId, data }: { teamId: string; data: { title: string; body: string; status: "draft" | "published" } }) => {
+    mutationFn: async ({ teamId, data }: { teamId: string; data: { title: string; body: string; practiceDates: string[]; status: "draft" | "published" } }) => {
       const res = await customFetch<{ data: PracticePlan }>(`/api/v1/teams/${teamId}/practice-plans`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -45,7 +46,7 @@ export function useCreatePracticePlan() {
 export function useUpdatePracticePlan() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ teamId, planId, data }: { teamId: string; planId: string; data: { title?: string; body?: string; status?: "draft" | "published" } }) => {
+    mutationFn: async ({ teamId, planId, data }: { teamId: string; planId: string; data: { title?: string; body?: string; practiceDates?: string[]; status?: "draft" | "published" } }) => {
       const res = await customFetch<{ data: PracticePlan }>(`/api/v1/teams/${teamId}/practice-plans/${planId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },

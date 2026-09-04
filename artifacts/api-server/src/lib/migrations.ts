@@ -2538,6 +2538,16 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
         WHERE article_kind = 'practice_plan';
     `,
   },
+  {
+    // A single internal plan may cover one or several scheduled practices.
+    // DATE values preserve the coach's chosen calendar days without timezone
+    // shifts.
+    name: "2026-09-04-practice-plan-dates",
+    sql: `
+      ALTER TABLE articles
+        ADD COLUMN IF NOT EXISTS practice_dates date[];
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

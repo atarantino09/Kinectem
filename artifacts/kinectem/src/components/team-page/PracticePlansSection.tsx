@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { ClipboardList, Sparkles, Lock, Pencil, Loader2, Plus, Clock } from "lucide-react";
+import { ClipboardList, Sparkles, Lock, Pencil, Loader2, Plus, Clock, CalendarDays, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 const planSchema = z.object({
   title: z.string().min(1, "A title is required"),
   body: z.string().min(1, "Practice details are required"),
+  practiceDates: z.array(z.string().min(1, "Choose a practice date")).min(1),
 });
 
 type PlanValues = z.infer<typeof planSchema>;
@@ -139,6 +140,7 @@ function PracticePlanComposer({
     defaultValues: {
       title: plan?.title ?? "",
       body: plan?.body ?? "",
+      practiceDates: plan?.practiceDates?.length ? plan.practiceDates : [""],
     },
   });
 
@@ -217,6 +219,64 @@ function PracticePlanComposer({
       <CardContent className="p-4">
         <Form {...form}>
           <form className="space-y-3" onSubmit={(e) => e.preventDefault()}>
+            <FormField
+              control={form.control}
+              name="practiceDates"
+              render={({ field }) => (
+                <FormItem>
+                  <div className="space-y-2 rounded-lg border bg-background/70 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 text-sm font-bold">
+                        <CalendarDays className="h-4 w-4 text-primary" />
+                        Practice date{field.value.length > 1 ? "s" : ""}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => field.onChange([...field.value, ""])}
+                        disabled={isSaving || isAiGenerating || field.value.length >= 20}
+                        data-testid="practice-plan-add-date"
+                      >
+                        <Plus className="mr-1.5 h-3.5 w-3.5" />
+                        Add another date
+                      </Button>
+                    </div>
+                    {field.value.map((date, index) => (
+                      <div key={index} className="flex items-center gap-2">
+                        <Input
+                          type="date"
+                          value={date}
+                          onChange={(event) => {
+                            const next = [...field.value];
+                            next[index] = event.target.value;
+                            field.onChange(next);
+                          }}
+                          disabled={isSaving || isAiGenerating}
+                          aria-label={`Practice date ${index + 1}`}
+                          data-testid={`practice-plan-date-${index}`}
+                        />
+                        {field.value.length > 1 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            aria-label={`Remove practice date ${index + 1}`}
+                            onClick={() =>
+                              field.onChange(field.value.filter((_, itemIndex) => itemIndex !== index))
+                            }
+                            disabled={isSaving || isAiGenerating}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <FormField
               control={form.control}
               name="title"
@@ -336,6 +396,13 @@ function PracticePlanCard({
   }
 
   const isDraft = plan.status === "draft";
+  const formatPracticeDate = (value: string) =>
+    new Date(`${value}T00:00:00`).toLocaleDateString(undefined, {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
 
   return (
     <Card className={isDraft ? "border-amber-200 bg-amber-50/30" : "bg-card"}>
@@ -360,6 +427,16 @@ function PracticePlanCard({
                 By {plan.author?.displayName || "Staff"} on {new Date(plan.createdAt).toLocaleDateString()}
               </span>
             </div>
+            {plan.practiceDates?.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5" data-testid={`practice-plan-dates-${plan.id}`}>
+                {plan.practiceDates.map((date) => (
+                  <span key={date} className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
+                    <CalendarDays className="h-3 w-3" />
+                    {formatPracticeDate(date)}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
           {canManage && (
             <Button

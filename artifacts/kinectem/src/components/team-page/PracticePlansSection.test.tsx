@@ -71,13 +71,21 @@ describe("PracticePlansSection", () => {
     
     await user.type(screen.getByTestId("practice-plan-title"), "Defense Day");
     await user.type(screen.getByTestId("practice-plan-body"), "Drill 1, Drill 2");
+    await user.type(screen.getByTestId("practice-plan-date-0"), "2026-09-08");
+    await user.click(screen.getByTestId("practice-plan-add-date"));
+    await user.type(screen.getByTestId("practice-plan-date-1"), "2026-09-10");
     
     await user.click(screen.getByTestId("practice-plan-save-draft"));
 
     await waitFor(() => {
       expect(createMutate).toHaveBeenCalledWith({
         teamId: "t1",
-        data: { title: "Defense Day", body: "Drill 1, Drill 2", status: "draft" }
+        data: {
+          title: "Defense Day",
+          body: "Drill 1, Drill 2",
+          practiceDates: ["2026-09-08", "2026-09-10"],
+          status: "draft",
+        }
       });
     });
   });
@@ -117,7 +125,7 @@ describe("PracticePlansSection", () => {
     const user = userEvent.setup();
     mockUseList.mockReturnValue({ 
       isLoading: false, 
-      data: [{ id: "p1", title: "Old Title", body: "Old Body", status: "draft", createdAt: new Date().toISOString() }], 
+      data: [{ id: "p1", title: "Old Title", body: "Old Body", practiceDates: ["2026-09-08"], status: "draft", createdAt: new Date().toISOString() }],
       isError: false, 
       refetch: vi.fn() 
     } as any);
@@ -140,7 +148,7 @@ describe("PracticePlansSection", () => {
       expect(updateMutate).toHaveBeenCalledWith({
         teamId: "t1",
         planId: "p1",
-        data: { title: "New Title", body: "Old Body", status: "published" }
+        data: { title: "New Title", body: "Old Body", practiceDates: ["2026-09-08"], status: "published" }
       });
     });
   });
