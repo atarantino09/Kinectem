@@ -431,6 +431,20 @@ describe("OrganizationPage — admin control gating", () => {
     expect(screen.queryByTestId("dialog-org-pre-invite")).not.toBeInTheDocument();
   });
 
+  it("starts the approved-owner handoff from its email link", async () => {
+    installHandlers({ role: "owner" });
+    localStorage.setItem(ORG_TOUR_STORAGE_KEY, "1");
+    setMockSearch("ownerSetup=1");
+
+    renderWithProviders(<OrganizationPage />);
+
+    expect(await screen.findByTestId("dialog-org-pre-invite")).toBeInTheDocument();
+    expect(localStorage.getItem(ORG_TOUR_STORAGE_KEY)).toBeNull();
+    expect(
+      sessionStorage.getItem(`kinectem:coach-setup:${ORG_ID}`),
+    ).toBe("1");
+  });
+
   it("lets a manager manually reopen the pre-invite message", async () => {
     const user = userEvent.setup();
     installHandlers({ role: "admin" });

@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { useParams, Link, useSearch } from "wouter";
+import { useParams, Link, useLocation, useSearch } from "wouter";
 import { useQueryClient, useQuery, useInfiniteQuery } from "@tanstack/react-query";
 import {
   useGetOrganizationById,
@@ -121,8 +121,10 @@ export default function OrganizationPage() {
   const params = useParams<{ orgId: string }>();
   const orgId = params.orgId;
   const search = useSearch();
-  const showAroundQuery =
-    new URLSearchParams(search.replace(/^\?/, "")).get("showAround") === "1";
+  const searchParams = new URLSearchParams(search.replace(/^\?/, ""));
+  const showAroundQuery = searchParams.get("showAround") === "1";
+  const ownerSetupQuery = searchParams.get("ownerSetup") === "1";
+  const [, navigate] = useLocation();
   const qc = useQueryClient();
   const { toast } = useToast();
   const [createTeamOpen, setCreateTeamOpen] = useState(false);
@@ -216,7 +218,7 @@ export default function OrganizationPage() {
   }, [orgId, handoffAdvance]);
   const isLg = useIsLg();
   const { data: me } = useGetLoggedInUser();
-  const { data: who } = useWhoami();
+  const { data: who, isLoading: whoamiLoading } = useWhoami();
   // Platform admins manage every org — mirrors the server's
   // canManageOrganization bypass. Session-user semantics: during
   // masquerade the viewed user's role applies, matching the server.
@@ -295,6 +297,45 @@ export default function OrganizationPage() {
     isPlatformAdmin ||
     organization?.role === "owner" ||
     organization?.role === "admin";
+  useEffect(() => {
+    if (!ownerSetupQuery || whoamiLoading) return;
+    const returnTo = `/organizations/${orgId}?ownerSetup=1`;
+    if (!who?.authenticated && !who?.realUser && !me?.id) {
+      navigate(`/login?returnTo=${encodeURIComponent(returnTo)}`);
+      return;
+    }
+    if (!organization || !isManagerRole) return;
+
+    try {
+      sessionStorage.setItem(`kinectem:pre-invite-org:${orgId}`, "1");
+      sessionStorage.setItem(`kinectem:coach-setup:${orgId}`, "1");
+      // Approval is a new-owner milestone even if this browser previously
+      // completed a tour on another organization.
+      localStorage.removeItem(ORG_TOUR_KEY);
+    } catch {
+      // Storage can be unavailable in private browsing; the page still loads.
+    }
+
+    const url = new URL(window.location.href);
+    url.searchParams.delete("ownerSetup");
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${url.pathname}${url.search}${url.hash}`,
+    );
+    setFirstRunResolved(false);
+    setHandoffAdvance((value) => value + 1);
+  }, [
+    isManagerRole,
+    me?.id,
+    navigate,
+    orgId,
+    organization,
+    ownerSetupQuery,
+    who?.authenticated,
+    who?.realUser,
+    whoamiLoading,
+  ]);
   // Task #836 — staged coaches persist until invited or removed; managers
   // see a persistent banner to reopen the coach setup dialog while any
   // staged entries remain.

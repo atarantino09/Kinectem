@@ -252,6 +252,35 @@ export function appBaseUrl(): string {
   );
 }
 
+export function buildOrgClaimApprovedEmail(input: {
+  to: string;
+  organizationId: string;
+  organizationName: string;
+}): EmailMessage {
+  const setupUrl = `${appBaseUrl()}/app/organizations/${input.organizationId}?ownerSetup=1`;
+  return {
+    to: input.to,
+    subject: `You're now the owner of ${input.organizationName} on Kinectem`,
+    contextLabel: input.organizationName,
+    kind: "org_claim_approved",
+    text: [
+      `Your organization claim for ${input.organizationName} has been approved.`,
+      "",
+      `You are now the owner of the ${input.organizationName} page on Kinectem. You can update the page, add teams, invite coaches, and bring players and parents into the right rosters.`,
+      "",
+      "Finish setting up your organization:",
+      setupUrl,
+      "",
+      "Kinectem will guide you through the recommended launch order:",
+      "1. Review and share the pre-invite message with your club.",
+      "2. Bulk add coaches across your teams.",
+      "3. Add players and parents through Roster outreach using each team's secure invitation.",
+      "",
+      "Your organization setup checklist and page tour will remain available on the organization page if you want to return to any step later.",
+    ].join("\n"),
+  };
+}
+
 export function buildPasswordResetUrl(token: string): string {
   return `${appBaseUrl()}/app/reset-password/${token}`;
 }

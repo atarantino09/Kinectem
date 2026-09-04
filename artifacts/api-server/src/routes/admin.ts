@@ -69,6 +69,10 @@ import {
   MAX_AVATAR_DATA_URL_LENGTH,
   MAX_IMAGE_DATA_URL_LENGTH,
 } from "../lib/spec-helpers";
+import {
+  buildOrgClaimApprovedEmail,
+  sendEmail,
+} from "../lib/email";
 
 const router: IRouter = Router();
 router.use(requireAdmin);
@@ -1998,8 +2002,12 @@ async function notifyOrgClaimDecision(
   decision: "approved" | "declined",
 ) {
   const [org] = await db
-    .select({ name: organizations.name })
+    .select({
+      name: organizations.name,
+      requesterEmail: users.email,
+    })
     .from(organizations)
+    .leftJoin(users, eq(users.id, claim.requestedByUserId))
     .where(eq(organizations.id, claim.organizationId))
     .limit(1);
   const orgName = org?.name ?? "the organization";
@@ -2017,6 +2025,23 @@ async function notifyOrgClaimDecision(
     });
   } catch (err) {
     req.log.error({ err }, "Failed to write org-claim decision notification");
+  }
+  if (decision === "approved" && org?.requesterEmail) {
+    try {
+      await sendEmail(
+        buildOrgClaimApprovedEmail({
+          to: org.requesterEmail,
+          organizationId: claim.organizationId,
+          organizationName: orgName,
+        }),
+      );
+    } catch (err) {
+      // Ownership is already committed; email delivery must never roll it back.
+      req.log.error(
+        { err, organizationId: claim.organizationId },
+        "Failed to send org-claim approval email",
+      );
+    }
   }
 }
 
