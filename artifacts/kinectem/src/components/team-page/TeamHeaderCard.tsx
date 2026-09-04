@@ -41,9 +41,15 @@ import {
   Compass,
   ExternalLink,
   Megaphone,
+  ClipboardList,
 } from "lucide-react";
 
-export type TeamPanel = "posts" | "roster" | "schedule" | "admin";
+export type TeamPanel =
+  | "posts"
+  | "practice-plans"
+  | "roster"
+  | "schedule"
+  | "admin";
 
 interface Team {
   id: string;
@@ -73,6 +79,7 @@ interface TeamHeaderCardProps {
   staffCount: number;
   followPending: boolean;
   canViewSchedule?: boolean;
+  canViewPracticePlans?: boolean;
   onSetExpanded: (p: TeamPanel) => void;
   onToggleFollow: () => void;
   onEdit: () => void;
@@ -93,6 +100,7 @@ export function TeamHeaderCard({
   staffCount,
   followPending,
   canViewSchedule = false,
+  canViewPracticePlans = false,
   onSetExpanded,
   onToggleFollow,
   onEdit,
@@ -548,6 +556,20 @@ export function TeamHeaderCard({
                   <Newspaper className="w-3.5 h-3.5 mr-1.5" />
                   Recent Posts
                 </Button>
+                {canViewPracticePlans && (
+                  <Button
+                    size="sm"
+                    variant={
+                      expanded === "practice-plans" ? "default" : "outline"
+                    }
+                    className="font-bold rounded-full"
+                    onClick={() => onSetExpanded("practice-plans")}
+                    data-testid="btn-toggle-practice-plans"
+                  >
+                    <ClipboardList className="w-3.5 h-3.5 mr-1.5" />
+                    Practice Plans
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   variant={expanded === "roster" ? "default" : "outline"}

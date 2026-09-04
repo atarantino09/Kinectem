@@ -38,9 +38,10 @@ export function PracticePlansSection({
     if (!canManage || createRequestToken === 0) return;
     setIsComposing(true);
     requestAnimationFrame(() => {
-      document
-        .getElementById("practice-plans")
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document.getElementById("practice-plans")?.scrollIntoView?.({
+        behavior: "smooth",
+        block: "start",
+      });
     });
   }, [canManage, createRequestToken]);
 

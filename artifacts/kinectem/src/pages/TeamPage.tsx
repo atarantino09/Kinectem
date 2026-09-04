@@ -493,6 +493,7 @@ export default function TeamPage() {
           staffCount={staff.length}
           followPending={followTeam.isPending || unfollowTeam.isPending}
           canViewSchedule={canViewSchedule}
+          canViewPracticePlans={canViewSchedule}
           onSetExpanded={setExpanded}
           onToggleFollow={onToggleFollow}
           onEdit={() => setEditOpen(true)}
@@ -556,17 +557,21 @@ export default function TeamPage() {
               isLoadingMorePosts={isFetchingMorePosts}
               loadMorePostsFailed={fetchMorePostsFailed}
               onLoadMorePosts={() => fetchMorePosts()}
-              onCreatePracticePlan={() =>
-                setPracticePlanCreateRequest((request) => request + 1)
-              }
-            />
-            <PracticePlansSection
-              teamId={teamId}
-              canManage={canManage}
-              canView={canViewSchedule}
-              createRequestToken={practicePlanCreateRequest}
+              onCreatePracticePlan={() => {
+                setExpanded("practice-plans");
+                setPracticePlanCreateRequest((request) => request + 1);
+              }}
             />
           </>
+        )}
+
+        {expanded === "practice-plans" && canViewSchedule && (
+          <PracticePlansSection
+            teamId={teamId}
+            canManage={canManage}
+            canView
+            createRequestToken={practicePlanCreateRequest}
+          />
         )}
 
         {expanded === "schedule" && canViewSchedule && (
