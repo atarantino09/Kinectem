@@ -250,6 +250,7 @@ export default function TeamPage() {
   const canPostRecap = !!team?.canAuthorRecaps;
   // Mirrors TeamPostsSection's own gate for the "Post Highlight" CTA.
   const canPostHighlight = isAdmin || isTeamMember;
+  const [practicePlanCreateRequest, setPracticePlanCreateRequest] = useState(0);
 
   // First-run guided walkthrough. Built only from the buttons this viewer can
   // actually see (org admins get "Edit team"; coaches get the manage steps),
@@ -555,11 +556,15 @@ export default function TeamPage() {
               isLoadingMorePosts={isFetchingMorePosts}
               loadMorePostsFailed={fetchMorePostsFailed}
               onLoadMorePosts={() => fetchMorePosts()}
+              onCreatePracticePlan={() =>
+                setPracticePlanCreateRequest((request) => request + 1)
+              }
             />
             <PracticePlansSection
               teamId={teamId}
               canManage={canManage}
               canView={canViewSchedule}
+              createRequestToken={practicePlanCreateRequest}
             />
           </>
         )}

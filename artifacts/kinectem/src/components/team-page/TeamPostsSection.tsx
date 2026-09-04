@@ -39,6 +39,7 @@ import { useInfiniteScrollSentinel } from "@/hooks/useInfiniteScrollSentinel";
 import {
   Newspaper,
   FileText,
+  ClipboardList,
   Clapperboard,
   Clock,
   Pencil,
@@ -78,6 +79,7 @@ interface TeamPostsSectionProps {
   // auto-load sentinel and shows a manual retry button instead.
   loadMorePostsFailed?: boolean;
   onLoadMorePosts: () => void;
+  onCreatePracticePlan?: () => void;
 }
 
 function shortExcerpt(p: PostResponse): string {
@@ -113,6 +115,7 @@ export function TeamPostsSection({
   isLoadingMorePosts,
   loadMorePostsFailed = false,
   onLoadMorePosts,
+  onCreatePracticePlan,
 }: TeamPostsSectionProps) {
   // Task #785 — infinite scroll: auto-fetch the next cursor page when
   // the sentinel below the last post scrolls into view. On fetch
@@ -124,7 +127,7 @@ export function TeamPostsSection({
     onLoadMore: onLoadMorePosts,
   });
   const canPostHighlight = isAdmin || isTeamMember;
-  const hasPostOptions = canPostRecap || (canPostHighlight && canManage);
+  const hasPostOptions = canPostRecap || canManage;
   const [seasonRecapOpen, setSeasonRecapOpen] = useState(false);
   // "In the News" — paste a newspaper article's link; the server fetches
   // the headline/source/photo and posts a read-only news card.
@@ -298,7 +301,18 @@ export function TeamPostsSection({
                       Combined Recap
                     </DropdownMenuItem>
                   )}
-                  {canManage && canPostRecap && <DropdownMenuSeparator />}
+                  {canManage && (
+                    <>
+                      {canPostRecap && <DropdownMenuSeparator />}
+                      <DropdownMenuItem
+                        onSelect={onCreatePracticePlan}
+                        data-testid="btn-create-practice-plan"
+                      >
+                        <ClipboardList className="w-4 h-4 mr-2" />
+                        Practice Plan
+                      </DropdownMenuItem>
+                    </>
+                  )}
                   {canManage && (
                     <DropdownMenuItem
                       onSelect={() => setAddNewsOpen(true)}
@@ -310,18 +324,6 @@ export function TeamPostsSection({
                   )}
                 </DropdownMenuContent>
               </DropdownMenu>
-            )}
-            {!canPostHighlight && !canPostRecap && canManage && (
-              <Button
-                variant="brand"
-                size="sm"
-                className="w-full font-bold sm:w-auto"
-                onClick={() => setAddNewsOpen(true)}
-                data-testid="btn-add-news"
-              >
-                <Newspaper className="w-3.5 h-3.5 mr-1.5" />
-                Add News Article
-              </Button>
             )}
           </div>
         )}

@@ -28,6 +28,7 @@ import { TeamPostsSection } from "./TeamPostsSection";
 describe("TeamPostsSection action hierarchy", () => {
   it("keeps the game recap primary and places the other options in one menu", async () => {
     const user = userEvent.setup();
+    const onCreatePracticePlan = vi.fn();
 
     renderWithProviders(
       <TeamPostsSection
@@ -41,6 +42,7 @@ describe("TeamPostsSection action hierarchy", () => {
         hasMorePosts={false}
         isLoadingMorePosts={false}
         onLoadMorePosts={vi.fn()}
+        onCreatePracticePlan={onCreatePracticePlan}
       />,
     );
 
@@ -57,7 +59,11 @@ describe("TeamPostsSection action hierarchy", () => {
 
     expect(screen.getByTestId("btn-create-highlight")).toBeInTheDocument();
     expect(screen.getByTestId("btn-season-recap")).toBeInTheDocument();
+    expect(screen.getByTestId("btn-create-practice-plan")).toBeInTheDocument();
     expect(screen.getByTestId("btn-add-news")).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("btn-create-practice-plan"));
+    expect(onCreatePracticePlan).toHaveBeenCalledOnce();
   });
 
   it("keeps a member's single highlight action direct", () => {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -24,18 +24,30 @@ export function PracticePlansSection({
   teamId,
   canManage,
   canView,
+  createRequestToken = 0,
 }: {
   teamId: string;
   canManage: boolean;
   canView: boolean;
+  createRequestToken?: number;
 }) {
   const { data: plans, isLoading, isError, refetch } = useListPracticePlans(teamId, canView);
   const [isComposing, setIsComposing] = useState(false);
 
+  useEffect(() => {
+    if (!canManage || createRequestToken === 0) return;
+    setIsComposing(true);
+    requestAnimationFrame(() => {
+      document
+        .getElementById("practice-plans")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, [canManage, createRequestToken]);
+
   if (!canView) return null;
 
   return (
-    <section className="space-y-4" data-testid="practice-plans-section">
+    <section id="practice-plans" className="space-y-4 scroll-mt-24" data-testid="practice-plans-section">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <ClipboardList className="w-5 h-5" />
