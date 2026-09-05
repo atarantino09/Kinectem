@@ -45,6 +45,7 @@ import {
   orgHeroGradient,
   orgStripGradient,
 } from "@/lib/orgBrand";
+import { SPORTS } from "@/lib/sports";
 
 // Starting swatches shown when no brand colors are set yet (matches
 // EditOrgDialog defaults).
@@ -78,6 +79,7 @@ export function CreateOrgDialog({
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [description, setDescription] = useState("");
+  const [sport, setSport] = useState("");
   const [website, setWebsite] = useState("");
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
@@ -104,6 +106,7 @@ export function CreateOrgDialog({
     setName("");
     setSlug("");
     setDescription("");
+    setSport("");
     setWebsite("");
     setCity("");
     setState("");
@@ -227,6 +230,7 @@ export function CreateOrgDialog({
           name: trimmedName,
           slug: finalSlug,
           description: description.trim() || undefined,
+          sport: sport || undefined,
           website: normalizedWebsite || undefined,
           city: trimmedCity,
           state: state as CreateOrganizationRequestState,
@@ -568,6 +572,40 @@ export function CreateOrgDialog({
                     {errors.zipCode}
                   </p>
                 )}
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="font-bold">Organization sport (optional)</Label>
+              <Select
+                value={sport || "multiple"}
+                onValueChange={(value) =>
+                  setSport(value === "multiple" ? "" : value)
+                }
+              >
+                <SelectTrigger data-testid="select-org-sport">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent
+                  position="popper"
+                  className="max-h-[min(var(--radix-select-content-available-height),24rem)]"
+                >
+                  <SelectItem value="multiple">
+                    No organization-wide sport
+                  </SelectItem>
+                  {SPORTS.map((item) => (
+                    <SelectItem key={item} value={item}>
+                      {item}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs leading-relaxed text-amber-950">
+                <strong>
+                  Selecting a sport here applies that label to every team in
+                  this organization.
+                </strong>{" "}
+                Schools and other multi-sport organizations should leave this
+                blank and select a sport on each individual team page.
               </div>
             </div>
             <div className="space-y-1.5">

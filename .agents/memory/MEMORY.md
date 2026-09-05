@@ -78,3 +78,4 @@
 - [Organization handoff prompt queue](organization-handoff-prompt-queue.md) — one-shot create/claim prompts must be consumed in priority order without deleting later onboarding signals.
 - [Moderation scope and audit atomicity](moderation-scope-audit.md) — derive scope from persisted targets; destructive moderation and its audit record commit or roll back together.
 - [Private practice plans](private-practice-plans.md) — explicit private article kind; server-gate every read path to team members, active guardians, team staff, and org admins.
+- [Organization sport inheritance](organization-sport-inheritance.md) — a selected org sport is authoritative for all teams; clearing it preserves team labels and restores per-team editing.

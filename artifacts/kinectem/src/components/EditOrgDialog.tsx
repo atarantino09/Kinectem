@@ -42,6 +42,7 @@ import {
   orgHeroGradient,
   orgStripGradient,
 } from "@/lib/orgBrand";
+import { SPORTS } from "@/lib/sports";
 
 // Task #733 — starting swatches shown when an org has no branding yet and
 // the admin clicks a picker for the first time. Deliberately generic; they
@@ -53,6 +54,7 @@ type OrgLike = {
   id: string;
   name: string;
   description?: string | null;
+  sport?: string | null;
   website?: string | null;
   city?: string | null;
   state?: string | null;
@@ -80,6 +82,7 @@ export function EditOrgDialog({
   const { toast } = useToast();
   const [name, setName] = useState(organization.name);
   const [description, setDescription] = useState(organization.description ?? "");
+  const [sport, setSport] = useState(organization.sport ?? "");
   const [website, setWebsite] = useState(organization.website ?? "");
   const [city, setCity] = useState(organization.city ?? "");
   const [state, setState] = useState(organization.state ?? "");
@@ -124,6 +127,7 @@ export function EditOrgDialog({
     if (open) {
       setName(organization.name);
       setDescription(organization.description ?? "");
+      setSport(organization.sport ?? "");
       setWebsite(organization.website ?? "");
       setCity(organization.city ?? "");
       setState(organization.state ?? "");
@@ -270,6 +274,7 @@ export function EditOrgDialog({
       const payload: Record<string, string | boolean | null> = {
         name: trimmedName,
         description,
+        sport: sport || null,
       };
       // The server rejects empty-string location values (absent = unchanged),
       // so only include the ones that are filled in. Non-admins always have
@@ -389,6 +394,44 @@ export function EditOrgDialog({
                   {errors.name}
                 </p>
               )}
+            </div>
+            <div className="space-y-1.5">
+              <Label className="font-bold">Organization sport (optional)</Label>
+              <Select
+                value={sport || "multiple"}
+                onValueChange={(value) =>
+                  setSport(value === "multiple" ? "" : value)
+                }
+              >
+                <SelectTrigger data-testid="select-edit-org-sport">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent
+                  position="popper"
+                  className="max-h-[min(var(--radix-select-content-available-height),24rem)]"
+                >
+                  <SelectItem value="multiple">
+                    No organization-wide sport
+                  </SelectItem>
+                  {sport && !SPORTS.includes(sport) && (
+                    <SelectItem value={sport}>{sport}</SelectItem>
+                  )}
+                  {SPORTS.map((item) => (
+                    <SelectItem key={item} value={item}>
+                      {item}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs leading-relaxed text-amber-950">
+                <strong>
+                  Selecting or changing this sport updates the label on every
+                  team in this organization.
+                </strong>{" "}
+                Schools and other multi-sport organizations should choose “No
+                organization-wide sport” and set the sport on each team page
+                instead.
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="edit-org-desc" className="font-bold">

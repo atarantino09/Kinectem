@@ -43,6 +43,7 @@ type TeamLike = {
   level?: string | null;
   gender?: "boys" | "girls" | "coed" | null;
   bannerUrl?: string | null;
+  organizationSport?: string | null;
 };
 
 export function EditTeamDialog({
@@ -262,7 +263,11 @@ export function EditTeamDialog({
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1.5">
                 <Label className="font-bold">Sport</Label>
-                <Select value={sport} onValueChange={setSport}>
+                 <Select
+                   value={team.organizationSport || sport}
+                   onValueChange={setSport}
+                   disabled={!!team.organizationSport}
+                 >
                   <SelectTrigger data-testid="select-edit-team-sport">
                     <SelectValue placeholder="Pick sport" />
                   </SelectTrigger>
@@ -284,6 +289,11 @@ export function EditTeamDialog({
                     ))}
                   </SelectContent>
                 </Select>
+                 {team.organizationSport && (
+                   <p className="text-xs text-muted-foreground">
+                     Set to {team.organizationSport} by the organization. Change it from the organization edit page.
+                   </p>
+                 )}
               </div>
               <div className="space-y-1.5">
                 <Label className="font-bold">Gender</Label>

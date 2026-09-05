@@ -266,6 +266,10 @@ router.post(
     if (!me) return reject(401, "session", "Not authenticated");
     const name = String(req.body?.name ?? "").trim();
     if (!name) return reject(400, "name", "name required");
+    const sport =
+      typeof req.body?.sport === "string" && req.body.sport.trim()
+        ? req.body.sport.trim()
+        : null;
     const city = String(req.body?.city ?? "").trim();
     if (!city) return reject(400, "city", "city required");
     const stateRaw = String(req.body?.state ?? "").trim().toUpperCase();
@@ -324,6 +328,7 @@ router.post(
         .insert(organizations)
         .values({
           name,
+           sport,
           description: req.body?.description ?? undefined,
           city,
           state: stateRaw,
@@ -1085,6 +1090,21 @@ router.patch(
     const patch: Record<string, unknown> = {};
     if (typeof body.name === "string") patch.name = body.name;
     if (typeof body.description === "string") patch.description = body.description;
+    let selectedOrgSport: string | null | undefined;
+    if (body.sport === null || body.sport === "") {
+      selectedOrgSport = null;
+      patch.sport = null;
+    } else if (typeof body.sport === "string") {
+      selectedOrgSport = body.sport.trim();
+      if (!selectedOrgSport) {
+        selectedOrgSport = null;
+        patch.sport = null;
+      } else {
+        patch.sport = selectedOrgSport;
+      }
+    } else if (body.sport !== undefined) {
+      return apiError(res, 400, "sport must be a string or null");
+    }
     if (typeof body.website === "string") {
       // Task #290 — bare domains like `example.com` are accepted and
       // normalized to a full `https://…` URL. An explicit empty string
@@ -1186,11 +1206,24 @@ router.patch(
     if (Object.keys(patch).length === 0) {
       return res.json(toOrganization(existing, { isMember: true, role: myRole }));
     }
-    const [updated] = await db
-      .update(organizations)
-      .set(patch)
-      .where(eq(organizations.id, req.params.orgId))
-      .returning();
+    const [updated] = await db.transaction(async (tx) => {
+      const rows = await tx
+        .update(organizations)
+        .set(patch)
+        .where(eq(organizations.id, req.params.orgId))
+        .returning();
+      // A selected organization sport is authoritative for every team in
+      // that organization. Clearing it deliberately does not erase team
+      // labels, allowing schools and other multi-sport organizations to
+      // manage each team's sport individually.
+      if (selectedOrgSport) {
+        await tx
+          .update(teams)
+          .set({ sport: selectedOrgSport })
+          .where(eq(teams.organizationId, req.params.orgId));
+      }
+      return rows;
+    });
     if (!updated) return notFound(res);
     res.json(toOrganization(updated, { isMember: true, role: myRole }));
   }),

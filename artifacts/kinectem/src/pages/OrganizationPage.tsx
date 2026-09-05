@@ -637,6 +637,7 @@ export default function OrganizationPage() {
     <>
       <CreateTeamDialog
         orgId={orgId}
+        orgSport={(organization as { sport?: string | null }).sport}
         open={createTeamOpen}
         onOpenChange={setCreateTeamOpen}
         usage={planUsage}

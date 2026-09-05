@@ -681,6 +681,7 @@ export function toOrganization(
   return {
     id: o.id,
     name: o.name,
+    sport: o.sport ?? null,
     slug: slugify(o.name),
     description: o.description ?? null,
     website: o.website ?? null,
@@ -719,6 +720,7 @@ export function toOrganizationEmbed(o: OrgRow) {
     name: o.name,
     slug: slugify(o.name),
     avatarUrl: o.logoUrl ?? null,
+    sport: o.sport ?? null,
     // Task #733 — parent-org brand colors ride on the team's org embed so
     // team pages can render the org brand strip without an extra fetch.
     // Extra fields beyond the locked spec (recapKind precedent).

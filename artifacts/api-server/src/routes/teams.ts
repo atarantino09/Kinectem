@@ -184,7 +184,7 @@ router.post(
         .values({
           organizationId: org.id,
           name,
-          sport: req.body?.sport ?? undefined,
+          sport: org.sport ?? req.body?.sport ?? undefined,
           level: req.body?.level ?? undefined,
           gender: gender ?? undefined,
           website: website ?? undefined,
@@ -313,7 +313,18 @@ router.patch(
     const body = req.body ?? {};
     const patch: Record<string, unknown> = {};
     if (typeof body.name === "string") patch.name = body.name.trim();
-    if (typeof body.sport === "string") patch.sport = body.sport;
+    if (typeof body.sport === "string") {
+      if (existing.organizationId) {
+        const [parentOrg] = await db
+          .select({ sport: organizations.sport })
+          .from(organizations)
+          .where(eq(organizations.id, existing.organizationId))
+          .limit(1);
+        patch.sport = parentOrg?.sport ?? body.sport;
+      } else {
+        patch.sport = body.sport;
+      }
+    }
     if (typeof body.level === "string") patch.level = body.level;
     if (typeof body.description === "string") patch.description = body.description;
     // Task #293 — Team website. Mirrors the org-website behavior added in

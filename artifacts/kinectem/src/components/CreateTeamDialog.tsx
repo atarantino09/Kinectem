@@ -51,11 +51,13 @@ export function CreateTeamDialog({
   open,
   onOpenChange,
   usage,
+  orgSport,
 }: {
   orgId: string;
   open: boolean;
   onOpenChange: (v: boolean) => void;
   usage?: OrgPlanUsage | null;
+  orgSport?: string | null;
 }) {
   const [, setLocation] = useLocation();
   const qc = useQueryClient();
@@ -164,7 +166,7 @@ export function CreateTeamDialog({
           name: name.trim(),
           slug: finalSlug,
           description: description.trim() || undefined,
-          sport: sport || undefined,
+          sport: orgSport || sport || undefined,
           gender: gender || undefined,
           level: league.trim() || undefined,
           bannerUrl: bannerDataUrl ?? undefined,
@@ -272,7 +274,11 @@ export function CreateTeamDialog({
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1.5">
                 <Label className="font-bold">Sport</Label>
-                <Select value={sport} onValueChange={setSport}>
+                <Select
+                  value={orgSport || sport}
+                  onValueChange={setSport}
+                  disabled={!!orgSport}
+                >
                   <SelectTrigger data-testid="select-team-sport">
                     <SelectValue placeholder="Pick sport" />
                   </SelectTrigger>
@@ -289,6 +295,11 @@ export function CreateTeamDialog({
                     ))}
                   </SelectContent>
                 </Select>
+                {orgSport && (
+                  <p className="text-xs text-muted-foreground">
+                    Set to {orgSport} by the organization.
+                  </p>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label className="font-bold">Gender</Label>

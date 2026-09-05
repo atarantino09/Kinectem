@@ -68,6 +68,57 @@ describe("organizations", () => {
     ).toBeDefined();
   });
 
+  it("applies an optional organization sport to every team while blank orgs keep team-level sports", async () => {
+    const { agent } = await loginAs((u) => u.role === "parent");
+    const created = await agent.post("/api/v1/organizations").send({
+      name: "Sport Inheritance Org",
+      city: "Westfield",
+      state: "NJ",
+      zipCode: "07090",
+      sport: "Soccer",
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.sport).toBe("Soccer");
+
+    // An organization-wide sport wins even if a caller tries to supply a
+    // different label while creating a team.
+    const team = await agent
+      .post(`/api/v1/organizations/${created.body.id}/teams`)
+      .send({ name: "Inherited Sport Team", sport: "Baseball" });
+    expect(team.status).toBe(201);
+    expect(team.body.sport).toBe("Soccer");
+
+    // Changing the org sport relabels every existing team.
+    const changed = await agent
+      .patch(`/api/v1/organizations/${created.body.id}`)
+      .send({ sport: "Basketball" });
+    expect(changed.status).toBe(200);
+    expect(changed.body.sport).toBe("Basketball");
+    const inheritedDetail = await agent.get(`/api/v1/teams/${team.body.id}`);
+    expect(inheritedDetail.body.sport).toBe("Basketball");
+    expect(inheritedDetail.body.organization.sport).toBe("Basketball");
+
+    // Team edits cannot override an active organization-wide sport.
+    const ignoredOverride = await agent
+      .patch(`/api/v1/teams/${team.body.id}`)
+      .send({ sport: "Volleyball (indoor)" });
+    expect(ignoredOverride.status).toBe(200);
+    expect(ignoredOverride.body.sport).toBe("Basketball");
+
+    // Clearing the org sport keeps the team's current label, then restores
+    // independent team-level sport selection for multi-sport organizations.
+    const cleared = await agent
+      .patch(`/api/v1/organizations/${created.body.id}`)
+      .send({ sport: null });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.sport).toBeNull();
+    const independentlyChanged = await agent
+      .patch(`/api/v1/teams/${team.body.id}`)
+      .send({ sport: "Volleyball (indoor)" });
+    expect(independentlyChanged.status).toBe(200);
+    expect(independentlyChanged.body.sport).toBe("Volleyball (indoor)");
+  });
+
   it("setup-status works on an org with teams and roster rows (ambiguous-column regression)", async () => {
     // Regression: drizzle renders ${table.column} UNQUALIFIED inside raw
     // sql`` templates, so the setup-status count subqueries 500ed with

@@ -645,6 +645,11 @@ export default function TeamPage() {
           name: team.name,
           description: team.description,
           sport: team.sport,
+           organizationSport: (
+             team as typeof team & {
+               organization?: { sport?: string | null } | null;
+             }
+           ).organization?.sport,
           level: team.level,
           gender: team.gender,
           bannerUrl: team.bannerUrl,
