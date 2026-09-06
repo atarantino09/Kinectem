@@ -111,6 +111,168 @@ async function setupClubAndCompetition(autoApproveClaims = true) {
 }
 
 describe("organization admin competition claims", () => {
+  it("matches multiple club teams in one request", async () => {
+    const { admin, organization, clubTeams, slots, slug } =
+      await setupClubAndCompetition();
+
+    const response = await admin.agent
+      .post(`/api/v1/competitions/${slug}/claims/bulk`)
+      .send({
+        organizationId: organization.id,
+        assignments: clubTeams.map((team, index) => ({
+          teamId: team.id,
+          participantId: slots[index].id,
+        })),
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        ok: true,
+        succeeded: 2,
+        failed: 0,
+      }),
+    );
+    expect(response.body.results).toEqual([
+      expect.objectContaining({
+        ok: true,
+        teamId: clubTeams[0].id,
+        participantId: slots[0].id,
+        pendingApproval: false,
+      }),
+      expect.objectContaining({
+        ok: true,
+        teamId: clubTeams[1].id,
+        participantId: slots[1].id,
+        pendingApproval: false,
+      }),
+    ]);
+  });
+
+  it("requires mismatch acknowledgement and keeps successful bulk matches", async () => {
+    const { admin, organization, clubTeams, slots, slug } =
+      await setupClubAndCompetition();
+
+    const response = await admin.agent
+      .post(`/api/v1/competitions/${slug}/claims/bulk`)
+      .send({
+        organizationId: organization.id,
+        assignments: [
+          {
+            teamId: clubTeams[0].id,
+            participantId: slots[0].id,
+          },
+          {
+            teamId: clubTeams[1].id,
+            participantId: slots[2].id,
+          },
+        ],
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        ok: false,
+        succeeded: 1,
+        failed: 1,
+      }),
+    );
+    expect(response.body.results[0]).toEqual(
+      expect.objectContaining({ ok: true, teamId: clubTeams[0].id }),
+    );
+    expect(response.body.results[1]).toEqual(
+      expect.objectContaining({
+        ok: false,
+        teamId: clubTeams[1].id,
+        code: "NAME_MISMATCH_ACKNOWLEDGEMENT_REQUIRED",
+      }),
+    );
+
+    const retry = await admin.agent
+      .post(`/api/v1/competitions/${slug}/claims/bulk`)
+      .send({
+        organizationId: organization.id,
+        assignments: [
+          {
+            teamId: clubTeams[1].id,
+            participantId: slots[2].id,
+            nameMismatchAcknowledged: true,
+          },
+        ],
+      });
+    expect(retry.status).toBe(200);
+    expect(retry.body).toEqual(
+      expect.objectContaining({ ok: true, succeeded: 1, failed: 0 }),
+    );
+  });
+
+  it("preserves pending approval and rejects non-admin bulk access", async () => {
+    const { admin, outsider, organization, clubTeams, slots, slug } =
+      await setupClubAndCompetition(false);
+    const body = {
+      organizationId: organization.id,
+      assignments: [
+        {
+          teamId: clubTeams[0].id,
+          participantId: slots[0].id,
+        },
+      ],
+    };
+
+    const forbidden = await outsider.agent
+      .post(`/api/v1/competitions/${slug}/claims/bulk`)
+      .send(body);
+    expect(forbidden.status).toBe(403);
+
+    const response = await admin.agent
+      .post(`/api/v1/competitions/${slug}/claims/bulk`)
+      .send(body);
+    expect(response.status).toBe(200);
+    expect(response.body.results[0]).toEqual(
+      expect.objectContaining({ ok: true, pendingApproval: true }),
+    );
+
+    const [pending] = await db
+      .select()
+      .from(tournamentParticipants)
+      .where(eq(tournamentParticipants.id, slots[0].id));
+    expect(pending.teamId).toBeNull();
+    expect(pending.pendingTeamId).toBe(clubTeams[0].id);
+
+    const refreshedCompetition = await admin.agent.get(
+      `/api/v1/competitions/${slug}`,
+    );
+    expect(refreshedCompetition.status).toBe(200);
+    expect(refreshedCompetition.body.participants).toContainEqual(
+      expect.objectContaining({
+        id: slots[0].id,
+        claimed: false,
+        pending: true,
+      }),
+    );
+  });
+
+  it("rejects duplicate teams or slots before applying any matches", async () => {
+    const { admin, organization, clubTeams, slots, slug } =
+      await setupClubAndCompetition();
+    const response = await admin.agent
+      .post(`/api/v1/competitions/${slug}/claims/bulk`)
+      .send({
+        organizationId: organization.id,
+        assignments: [
+          { teamId: clubTeams[0].id, participantId: slots[0].id },
+          { teamId: clubTeams[0].id, participantId: slots[1].id },
+        ],
+      });
+    expect(response.status).toBe(400);
+
+    const unchanged = await db
+      .select()
+      .from(tournamentParticipants)
+      .where(inArray(tournamentParticipants.id, [slots[0].id, slots[1].id]));
+    expect(unchanged.every((slot) => slot.teamId == null)).toBe(true);
+  });
+
   it("lists the full club and lets a non-coach org admin claim sibling teams", async () => {
     const { admin, organization, clubTeams, slots, slug } =
       await setupClubAndCompetition();

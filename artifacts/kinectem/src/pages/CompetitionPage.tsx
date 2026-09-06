@@ -74,6 +74,7 @@ export type CompetitionParticipant = {
   age: string | null;
   gender: string | null;
   claimed: boolean;
+  pending: boolean;
   teamId: string | null;
   // Task #865 — sorting bracket this team belongs to (null = "Other").
   bracketId?: string | null;
@@ -2356,6 +2357,10 @@ export default function CompetitionPage() {
                         {p.claimed ? (
                           <Badge variant="secondary" className="shrink-0 font-bold px-2.5">
                             Taken
+                          </Badge>
+                        ) : p.pending ? (
+                          <Badge variant="outline" className="shrink-0 font-bold px-2.5">
+                            Approval pending
                           </Badge>
                         ) : p.hidden ? null : (
                           <Link

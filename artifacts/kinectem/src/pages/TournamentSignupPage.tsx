@@ -8,6 +8,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { namesRoughlyMatch } from "@/lib/name-match";
 
@@ -23,6 +30,7 @@ type Participant = {
   division: string;
   bracket: string;
   claimed: boolean;
+  pending: boolean;
 };
 
 type TournamentResponse = {
@@ -44,6 +52,16 @@ type ManageableTeam = {
   sport: string | null;
   organizationId: string | null;
   organizationName: string | null;
+  canManageOrganization: boolean;
+};
+
+type BulkClaimResult = {
+  participantId: string;
+  teamId: string;
+  ok: boolean;
+  pendingApproval?: boolean;
+  code?: string;
+  error?: string;
 };
 
 function groupLabel(division: string, bracket: string): string {
@@ -76,6 +94,15 @@ export default function TournamentSignupPage() {
   // Coach-confirmed name-mismatch gate: when the slot name and the chosen
   // team's name don't roughly match, an explicit acknowledgement is required.
   const [mismatchConfirmed, setMismatchConfirmed] = useState(false);
+  const [bulkOrganizationId, setBulkOrganizationId] = useState("");
+  const [bulkAssignments, setBulkAssignments] = useState<Record<string, string>>(
+    {},
+  );
+  const [bulkMismatchConfirmed, setBulkMismatchConfirmed] = useState<
+    Record<string, boolean>
+  >({});
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+  const [bulkResults, setBulkResults] = useState<BulkClaimResult[]>([]);
 
   const q = useQuery<TournamentResponse>({
     queryKey: ["tournament", slug],
@@ -114,7 +141,8 @@ export default function TournamentSignupPage() {
   }, [meLoading, me, navigate, slug, preselectedId]);
 
   const unclaimed = useMemo(
-    () => (q.data?.participants ?? []).filter((p) => !p.claimed),
+    () =>
+      (q.data?.participants ?? []).filter((p) => !p.claimed && !p.pending),
     [q.data],
   );
 
@@ -123,7 +151,7 @@ export default function TournamentSignupPage() {
   const preselectedTaken = useMemo(() => {
     if (!preselectedId || !q.data) return false;
     const row = q.data.participants.find((p) => p.id === preselectedId);
-    return !!row && row.claimed;
+    return !!row && (row.claimed || row.pending);
   }, [preselectedId, q.data]);
   const preselectedSlot = useMemo(
     () => unclaimed.find((p) => p.id === preselectedId) ?? null,
@@ -159,6 +187,42 @@ export default function TournamentSignupPage() {
       .map(([key, group]) => ({ key, ...group }))
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [myTeams]);
+  const clubOrganizations = useMemo(
+    () =>
+      teamsByOrganization.filter(
+        (group) =>
+          !group.key.startsWith("solo:") &&
+          group.teams.some((team) => team.canManageOrganization),
+      ),
+    [teamsByOrganization],
+  );
+  const bulkClub = useMemo(
+    () =>
+      clubOrganizations.find((group) => group.key === bulkOrganizationId) ??
+      null,
+    [clubOrganizations, bulkOrganizationId],
+  );
+  const bulkRows = useMemo(
+    () =>
+      (bulkClub?.teams ?? [])
+        .map((team) => {
+          const participantId = bulkAssignments[team.id];
+          const participant =
+            unclaimed.find((slot) => slot.id === participantId) ?? null;
+          return {
+            team,
+            participant,
+            mismatch:
+              !!participant &&
+              !namesRoughlyMatch(participant.name, team.name),
+          };
+        })
+        .filter((row) => row.participant != null),
+    [bulkClub, bulkAssignments, unclaimed],
+  );
+  const bulkHasUnconfirmedMismatch = bulkRows.some(
+    (row) => row.mismatch && !bulkMismatchConfirmed[row.team.id],
+  );
   const nameMismatch =
     !!selectedSlot &&
     !!chosenTeam &&
@@ -239,6 +303,74 @@ export default function TournamentSignupPage() {
     }
   }
 
+  async function submitBulkClaims() {
+    if (!bulkOrganizationId || bulkRows.length === 0) {
+      toast({
+        title: "Match at least one club team to a competition slot.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (bulkHasUnconfirmedMismatch) {
+      toast({
+        title: "Confirm every name mismatch before submitting.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setBulkSubmitting(true);
+    setBulkResults([]);
+    try {
+      const response = await customFetch<{
+        ok: boolean;
+        succeeded: number;
+        failed: number;
+        results: BulkClaimResult[];
+      }>(`/api/v1/competitions/${encodeURIComponent(slug)}/claims/bulk`, {
+        method: "POST",
+        body: JSON.stringify({
+          organizationId: bulkOrganizationId,
+          assignments: bulkRows.map((row) => ({
+            participantId: row.participant!.id,
+            teamId: row.team.id,
+            nameMismatchAcknowledged:
+              bulkMismatchConfirmed[row.team.id] === true,
+          })),
+        }),
+      });
+      setBulkResults(response.results);
+      const successfulTeamIds = new Set(
+        response.results
+          .filter((result) => result.ok)
+          .map((result) => result.teamId),
+      );
+      if (successfulTeamIds.size > 0) {
+        setBulkAssignments((current) =>
+          Object.fromEntries(
+            Object.entries(current).filter(
+              ([teamId]) => !successfulTeamIds.has(teamId),
+            ),
+          ),
+        );
+      }
+      toast({
+        title:
+          response.failed === 0
+            ? `${response.succeeded} team${response.succeeded === 1 ? "" : "s"} matched successfully.`
+            : `${response.succeeded} matched; ${response.failed} need attention.`,
+        variant: response.succeeded === 0 ? "destructive" : "default",
+      });
+      await q.refetch();
+    } catch (error) {
+      toast({
+        title: (error as Error)?.message ?? "Couldn't submit club matches.",
+        variant: "destructive",
+      });
+    } finally {
+      setBulkSubmitting(false);
+    }
+  }
+
   if (q.isLoading || meLoading || !me) {
     return (
       <div className="min-h-screen max-w-2xl mx-auto p-6 space-y-4">
@@ -296,6 +428,188 @@ export default function TournamentSignupPage() {
         </p>
       </div>
 
+      {clubOrganizations.length > 0 && !preselectedSlot ? (
+        <Card className="rounded-xl border-primary/30" data-testid="card-bulk-club-match">
+          <CardContent className="p-6 space-y-5">
+            <div>
+              <h2 className="text-lg font-black tracking-tight">
+                Match a whole club
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Choose a club, pair as many of its teams as you want, then
+                review every assignment before submitting.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Managed organization</Label>
+              <Select
+                value={bulkOrganizationId}
+                onValueChange={(value) => {
+                  setBulkOrganizationId(value);
+                  setBulkAssignments({});
+                  setBulkMismatchConfirmed({});
+                  setBulkResults([]);
+                }}
+              >
+                <SelectTrigger data-testid="select-bulk-organization">
+                  <SelectValue placeholder="Choose a club" />
+                </SelectTrigger>
+                <SelectContent>
+                  {clubOrganizations.map((organization) => (
+                    <SelectItem
+                      key={organization.key}
+                      value={organization.key}
+                      data-testid={`option-bulk-organization-${organization.key}`}
+                    >
+                      {organization.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {bulkClub ? (
+              <div className="space-y-3" data-testid="list-bulk-team-matches">
+                {bulkClub.teams.map((team) => {
+                  const selectedParticipantId =
+                    bulkAssignments[team.id] ?? "__none__";
+                  const usedByAnotherTeam = new Set(
+                    Object.entries(bulkAssignments)
+                      .filter(([teamId]) => teamId !== team.id)
+                      .map(([, participantId]) => participantId),
+                  );
+                  return (
+                    <div
+                      key={team.id}
+                      className="grid gap-2 rounded-lg border border-border p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] sm:items-center"
+                      data-testid={`row-bulk-team-${team.id}`}
+                    >
+                      <div className="min-w-0">
+                        <p className="font-bold truncate">{team.name}</p>
+                        {team.sport ? (
+                          <p className="text-xs text-muted-foreground truncate">
+                            {team.sport}
+                          </p>
+                        ) : null}
+                      </div>
+                      <Select
+                        value={selectedParticipantId}
+                        onValueChange={(value) => {
+                          setBulkAssignments((current) => {
+                            if (value === "__none__") {
+                              const next = { ...current };
+                              delete next[team.id];
+                              return next;
+                            }
+                            return { ...current, [team.id]: value };
+                          });
+                          setBulkMismatchConfirmed((current) => ({
+                            ...current,
+                            [team.id]: false,
+                          }));
+                        }}
+                      >
+                        <SelectTrigger data-testid={`select-bulk-slot-${team.id}`}>
+                          <SelectValue placeholder="Choose competition slot" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Not matching now</SelectItem>
+                          {unclaimed.map((slot) => (
+                            <SelectItem
+                              key={slot.id}
+                              value={slot.id}
+                              disabled={usedByAnotherTeam.has(slot.id)}
+                            >
+                              {slot.name} · {groupLabel(slot.division, slot.bracket)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+
+            {bulkRows.length > 0 ? (
+              <div className="space-y-3 rounded-lg bg-muted/50 p-4" data-testid="review-bulk-matches">
+                <p className="text-sm font-black">Review assignments</p>
+                {bulkRows.map(({ team, participant, mismatch }) => (
+                  <div key={team.id} className="space-y-2 text-sm">
+                    <p data-testid={`text-bulk-review-${team.id}`}>
+                      <span className="font-bold">{team.name}</span>
+                      {" → "}
+                      <span className="font-bold">{participant!.name}</span>
+                    </p>
+                    {mismatch ? (
+                      <label className="flex items-start gap-2 text-xs cursor-pointer">
+                        <Checkbox
+                          checked={bulkMismatchConfirmed[team.id] === true}
+                          onCheckedChange={(checked) =>
+                            setBulkMismatchConfirmed((current) => ({
+                              ...current,
+                              [team.id]: checked === true,
+                            }))
+                          }
+                          data-testid={`checkbox-bulk-mismatch-${team.id}`}
+                        />
+                        <span>
+                          These names differ. I confirm this is the correct
+                          competition slot for {team.name}.
+                        </span>
+                      </label>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            {bulkResults.length > 0 ? (
+              <div className="space-y-2" data-testid="status-bulk-results">
+                {bulkResults.map((result) => {
+                  const team = myTeams.find((item) => item.id === result.teamId);
+                  const slot = q.data?.participants.find(
+                    (item) => item.id === result.participantId,
+                  );
+                  return (
+                    <p
+                      key={`${result.teamId}:${result.participantId}`}
+                      className={`text-sm font-bold ${result.ok ? "text-primary" : "text-destructive"}`}
+                      data-testid={`status-bulk-result-${result.teamId}`}
+                    >
+                      {team?.name ?? "Team"} → {slot?.name ?? "slot"}:{" "}
+                      {result.ok
+                        ? result.pendingApproval
+                          ? "Submitted for organizer approval"
+                          : "Matched"
+                        : result.error ?? "Needs attention"}
+                    </p>
+                  );
+                })}
+              </div>
+            ) : null}
+
+            <Button
+              className="w-full font-bold"
+              disabled={
+                bulkSubmitting ||
+                bulkRows.length === 0 ||
+                bulkHasUnconfirmedMismatch
+              }
+              onClick={submitBulkClaims}
+              data-testid="btn-submit-bulk-claims"
+            >
+              {bulkSubmitting
+                ? "Submitting club matches…"
+                : t.autoApproveClaims
+                  ? `Match ${bulkRows.length} team${bulkRows.length === 1 ? "" : "s"}`
+                  : `Submit ${bulkRows.length} claim${bulkRows.length === 1 ? "" : "s"} for approval`}
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
+
       {/* Deep-linked claim from the competition page — show WHICH slot is
           being claimed up top instead of making the coach re-pick it. */}
       {preselectedSlot ? (
@@ -335,8 +649,8 @@ export default function TournamentSignupPage() {
             </h2>
             {preselectedTaken ? (
               <p className="text-sm font-bold text-destructive">
-                The team you clicked has already been claimed — pick another
-                name below.
+                The team you clicked is already taken or awaiting organizer
+                approval — pick another name below.
               </p>
             ) : null}
             <p className="text-sm text-muted-foreground">

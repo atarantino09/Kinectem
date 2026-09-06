@@ -729,6 +729,18 @@ router.get(
         organization.name,
       ]),
     );
+    const manageableOrganizationIds = new Set(
+      (
+        await Promise.all(
+          organizationIds.map(async (organizationId) => ({
+            organizationId,
+            canManage: await canManageOrganization(me.id, organizationId),
+          })),
+        )
+      )
+        .filter((organization) => organization.canManage)
+        .map((organization) => organization.organizationId),
+    );
 
     const data = Array.from(byId.values())
       .sort((a, b) => a.name.localeCompare(b.name))
@@ -740,6 +752,9 @@ router.get(
         organizationName: t.organizationId
           ? (organizationNames.get(t.organizationId) ?? null)
           : null,
+        canManageOrganization: t.organizationId
+          ? manageableOrganizationIds.has(t.organizationId)
+          : false,
       }));
     res.json({ data });
   }),
@@ -1251,6 +1266,7 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
         age: p.age,
         gender: p.gender,
         claimed: p.teamId != null,
+        pending: p.teamId == null && p.pendingTeamId != null,
         teamId: p.teamId,
         // Operators only — public viewers never receive hidden slots at all.
         ...(canManage && p.hiddenAt != null ? { hidden: true } : {}),
@@ -2837,6 +2853,156 @@ const ClaimBody = z
 
 class AlreadyClaimedError extends Error {}
 
+const BulkClaimBody = z.object({
+  organizationId: z.string().uuid("Invalid organization"),
+  assignments: z
+    .array(
+      z.object({
+        participantId: z.string().uuid("Invalid participant"),
+        teamId: z.string().uuid("Invalid team"),
+        nameMismatchAcknowledged: z.boolean().optional().default(false),
+      }),
+    )
+    .min(1, "Choose at least one team-slot match.")
+    .max(100, "You can match at most 100 teams at once.")
+    .superRefine((assignments, ctx) => {
+      const participantIds = new Set<string>();
+      const teamIds = new Set<string>();
+      assignments.forEach((assignment, index) => {
+        if (participantIds.has(assignment.participantId)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [index, "participantId"],
+            message: "Each competition slot can only be matched once.",
+          });
+        }
+        if (teamIds.has(assignment.teamId)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [index, "teamId"],
+            message: "Each club team can only be matched once.",
+          });
+        }
+        participantIds.add(assignment.participantId);
+        teamIds.add(assignment.teamId);
+      });
+    }),
+});
+
+function competitionNamesRoughlyMatch(a: string, b: string): boolean {
+  const norm = (value: string) =>
+    value.toLowerCase().replace(/\s+/g, " ").trim();
+  const normalizedA = norm(a);
+  const normalizedB = norm(b);
+  return (
+    normalizedA === normalizedB ||
+    normalizedA.includes(normalizedB) ||
+    normalizedB.includes(normalizedA)
+  );
+}
+
+class BulkClaimError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+async function claimExistingTeamSlot(input: {
+  tournament: typeof tournaments.$inferSelect;
+  participantId: string;
+  participantName: string;
+  team: typeof teams.$inferSelect;
+  userId: string;
+  nameMismatchAcknowledged?: boolean;
+}) {
+  const {
+    tournament,
+    participantId,
+    participantName,
+    team,
+    userId,
+    nameMismatchAcknowledged = true,
+  } = input;
+  if (
+    !competitionNamesRoughlyMatch(participantName, team.name) &&
+    !nameMismatchAcknowledged
+  ) {
+    throw new BulkClaimError(
+      400,
+      "NAME_MISMATCH_ACKNOWLEDGEMENT_REQUIRED",
+      `Confirm that ${participantName} is the competition slot for ${team.name}.`,
+    );
+  }
+
+  const claimed = await db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${tournament.id}), hashtext(${team.id}))`,
+      );
+      const [alreadyIn] = await tx
+        .select({ id: tournamentParticipants.id })
+        .from(tournamentParticipants)
+        .where(
+          and(
+            eq(tournamentParticipants.tournamentId, tournament.id),
+            or(
+              eq(tournamentParticipants.teamId, team.id),
+              eq(tournamentParticipants.pendingTeamId, team.id),
+            ),
+          ),
+        )
+        .limit(1);
+      if (alreadyIn) {
+        throw new BulkClaimError(
+          409,
+          "TEAM_ALREADY_IN_COMPETITION",
+          "That team already holds (or has a pending claim on) a slot in this competition.",
+        );
+      }
+      const updated = await tx
+        .update(tournamentParticipants)
+        .set(
+          tournament.autoApproveClaims
+            ? {
+                teamId: team.id,
+                claimedByUserId: userId,
+                claimedAt: new Date(),
+              }
+            : {
+                pendingTeamId: team.id,
+                pendingClaimedByUserId: userId,
+                pendingClaimedAt: new Date(),
+              },
+        )
+        .where(
+          and(
+            eq(tournamentParticipants.id, participantId),
+            eq(tournamentParticipants.tournamentId, tournament.id),
+            isNull(tournamentParticipants.teamId),
+            isNull(tournamentParticipants.pendingTeamId),
+            isNull(tournamentParticipants.hiddenAt),
+          ),
+        )
+        .returning();
+      if (updated.length === 0) {
+        throw new BulkClaimError(
+          409,
+          "ALREADY_CLAIMED",
+          "That team slot was just claimed by someone else.",
+        );
+      }
+      await tx
+        .insert(competitionFollowers)
+        .values({ competitionId: tournament.id, userId })
+        .onConflictDoNothing();
+      return updated[0];
+  });
+  return claimed;
+}
+
 const claimSlotHandler = asyncHandler(async (req, res) => {
     const me = req.sessionUser;
     if (!me) return apiError(res, 401, "Not authenticated");
@@ -3081,6 +3247,128 @@ router.post(
   requireAuth,
   tournamentWriteLimiter,
   claimSlotHandler,
+);
+
+router.post(
+  "/competitions/:slug/claims/bulk",
+  requireAuth,
+  tournamentWriteLimiter,
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const parsed = BulkClaimBody.safeParse(req.body);
+    if (!parsed.success) {
+      const first = parsed.error.errors[0];
+      return apiError(res, 400, first?.message ?? "Invalid club matches.", {
+        code: "VALIDATION_FAILED",
+        extras: { fields: parsed.error.flatten().fieldErrors },
+      });
+    }
+
+    const [tournament] = await db
+      .select()
+      .from(tournaments)
+      .where(eq(tournaments.slug, req.params.slug))
+      .limit(1);
+    if (!tournament) return apiError(res, 404, "Competition not found");
+    if (!(await canManageOrganization(me.id, parsed.data.organizationId))) {
+      return apiError(
+        res,
+        403,
+        "Only an owner or admin of this organization can match its teams.",
+        { code: "FORBIDDEN" },
+      );
+    }
+
+    const teamIds = parsed.data.assignments.map((item) => item.teamId);
+    const participantIds = parsed.data.assignments.map(
+      (item) => item.participantId,
+    );
+    const [teamRows, participantRows] = await Promise.all([
+      db.select().from(teams).where(inArray(teams.id, teamIds)),
+      db
+        .select()
+        .from(tournamentParticipants)
+        .where(
+          and(
+            eq(tournamentParticipants.tournamentId, tournament.id),
+            inArray(tournamentParticipants.id, participantIds),
+          ),
+        ),
+    ]);
+    const teamsById = new Map(teamRows.map((team) => [team.id, team]));
+    const participantsById = new Map(
+      participantRows.map((participant) => [participant.id, participant]),
+    );
+
+    const results = [];
+    for (const assignment of parsed.data.assignments) {
+      const team = teamsById.get(assignment.teamId);
+      const participant = participantsById.get(assignment.participantId);
+      try {
+        if (!team || team.organizationId !== parsed.data.organizationId) {
+          throw new BulkClaimError(
+            403,
+            "TEAM_NOT_IN_ORGANIZATION",
+            "That team does not belong to the selected organization.",
+          );
+        }
+        if (!participant || participant.hiddenAt != null) {
+          throw new BulkClaimError(
+            404,
+            "SLOT_NOT_FOUND",
+            "That competition slot is no longer available.",
+          );
+        }
+        if (participant.teamId) {
+          throw new BulkClaimError(
+            409,
+            "ALREADY_CLAIMED",
+            "That team slot has already been claimed.",
+          );
+        }
+        if (participant.pendingTeamId) {
+          throw new BulkClaimError(
+            409,
+            "CLAIM_PENDING",
+            "A claim for that team slot is already awaiting organizer approval.",
+          );
+        }
+        await claimExistingTeamSlot({
+          tournament,
+          participantId: participant.id,
+          participantName: participant.name,
+          team,
+          userId: me.id,
+          nameMismatchAcknowledged: assignment.nameMismatchAcknowledged,
+        });
+        results.push({
+          participantId: assignment.participantId,
+          teamId: assignment.teamId,
+          ok: true as const,
+          pendingApproval: !tournament.autoApproveClaims,
+        });
+      } catch (error) {
+        if (!(error instanceof BulkClaimError)) throw error;
+        results.push({
+          participantId: assignment.participantId,
+          teamId: assignment.teamId,
+          ok: false as const,
+          status: error.status,
+          code: error.code,
+          error: error.message,
+        });
+      }
+    }
+
+    const succeeded = results.filter((result) => result.ok).length;
+    res.json({
+      ok: succeeded === results.length,
+      succeeded,
+      failed: results.length - succeeded,
+      results,
+    });
+  }),
 );
 
 // ---------------------------------------------------------------------------
