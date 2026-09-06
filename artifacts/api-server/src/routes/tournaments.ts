@@ -18,6 +18,7 @@ import {
   tournamentMatches,
   competitionBrackets,
   teams,
+  organizations,
   rosterEntries,
   articles,
   organizationAdmins,
@@ -708,6 +709,27 @@ router.get(
     for (const { t } of [...coachRows, ...createdRows, ...orgAdminRows]) {
       byId.set(t.id, t);
     }
+    const organizationIds = Array.from(
+      new Set(
+        Array.from(byId.values())
+          .map((team) => team.organizationId)
+          .filter((id): id is string => id != null),
+      ),
+    );
+    const organizationRows =
+      organizationIds.length > 0
+        ? await db
+            .select({ id: organizations.id, name: organizations.name })
+            .from(organizations)
+            .where(inArray(organizations.id, organizationIds))
+        : [];
+    const organizationNames = new Map(
+      organizationRows.map((organization) => [
+        organization.id,
+        organization.name,
+      ]),
+    );
+
     const data = Array.from(byId.values())
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((t) => ({
@@ -715,6 +737,9 @@ router.get(
         name: t.name,
         sport: t.sport ?? null,
         organizationId: t.organizationId ?? null,
+        organizationName: t.organizationId
+          ? (organizationNames.get(t.organizationId) ?? null)
+          : null,
       }));
     res.json({ data });
   }),
@@ -2780,8 +2805,10 @@ router.delete(
 );
 
 // ---------------------------------------------------------------------------
-// POST /tournaments/:slug/claim — a signed-in visiting coach creates a SOLO
-// team (no organization) and claims an unclaimed participant slot in one
+// POST /tournaments/:slug/claim — a signed-in team manager creates a SOLO
+// team (no organization) or links a team they manage. Organization owners and
+// admins may coordinate claims for every team in their club without being
+// rostered as a coach on each team.
 // step. Race-safe: the claim is a conditional UPDATE ... WHERE team_id IS
 // NULL inside the same transaction that created the team, so a lost race
 // rolls the team back and returns 409 (mirrors the org one-owner pattern).
@@ -2880,7 +2907,7 @@ const claimSlotHandler = asyncHandler(async (req, res) => {
         return apiError(
           res,
           403,
-          "Only a coach or admin of that team can claim a slot for it.",
+          "Only a team coach or an admin of its organization can claim a slot for it.",
           { code: "FORBIDDEN" },
         );
       }

@@ -17,7 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { namesRoughlyMatch } from "@/lib/name-match";
 
 // Team-side entry point for claiming a competition slot TO this existing
-// team (no new team created). The coach pastes the competition link (or
+// team (no new team created). A team coach or organization admin pastes the competition link (or
 // slug) the organizer shared, picks their team's slot from the schedule,
 // confirms, and the competition's games appear on the team page.
 
@@ -156,7 +156,9 @@ export function ClaimCompetitionDialog({
           <DialogDescription>
             Paste the competition link the organizer shared, then pick your
             team's name in its schedule. Its games will show on this team's
-            page.
+            page. Organization admins can repeat this from each team page to
+            coordinate claims for their whole club, even if they do not coach
+            every team.
           </DialogDescription>
         </DialogHeader>
 

@@ -43,6 +43,7 @@ type ManageableTeam = {
   name: string;
   sport: string | null;
   organizationId: string | null;
+  organizationName: string | null;
 };
 
 function groupLabel(division: string, bracket: string): string {
@@ -96,7 +97,7 @@ export default function TournamentSignupPage() {
   });
   const myTeams = myTeamsQ.data?.data ?? [];
 
-  // Default to the existing-team branch for coaches who already have a team.
+  // Default to the existing-team branch for anyone who already manages a team.
   useEffect(() => {
     if (myTeams.length > 0) setMode("existing");
   }, [myTeams.length]);
@@ -145,6 +146,19 @@ export default function TournamentSignupPage() {
     () => myTeams.find((t) => t.id === existingTeamId) ?? null,
     [myTeams, existingTeamId],
   );
+  const teamsByOrganization = useMemo(() => {
+    const groups = new Map<string, { label: string; teams: ManageableTeam[] }>();
+    for (const team of myTeams) {
+      const key = team.organizationId ?? `solo:${team.id}`;
+      const label = team.organizationName ?? "Independent teams";
+      const existing = groups.get(key);
+      if (existing) existing.teams.push(team);
+      else groups.set(key, { label, teams: [team] });
+    }
+    return Array.from(groups.entries())
+      .map(([key, group]) => ({ key, ...group }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [myTeams]);
   const nameMismatch =
     !!selectedSlot &&
     !!chosenTeam &&
@@ -267,9 +281,13 @@ export default function TournamentSignupPage() {
             ← Back to {t.name}
           </span>
         </Link>
-        <h1 className="text-2xl font-black tracking-tight">Sign up your team</h1>
+        <h1 className="text-2xl font-black tracking-tight">
+          Claim competition teams
+        </h1>
         <p className="text-sm text-muted-foreground">
-          Claim your team name so your games and recaps live on Kinectem.{" "}
+          Coaches can claim their own team. Organization admins can coordinate
+          claims for every team in their club, even when they do not coach each
+          team.{" "}
           <span data-testid="text-signup-approval-mode">
             {t.autoApproveClaims
               ? "Claims are instant — your spot is locked in as soon as you claim it."
@@ -357,7 +375,9 @@ export default function TournamentSignupPage() {
 
       <Card className="rounded-xl border-border" data-testid="card-team-details">
         <CardContent className="p-6 space-y-4">
-          <h2 className="text-lg font-black tracking-tight">Your team</h2>
+          <h2 className="text-lg font-black tracking-tight">
+            Choose the Kinectem team
+          </h2>
 
           {myTeams.length > 0 && (
             <div className="grid gap-2 sm:grid-cols-2">
@@ -371,9 +391,9 @@ export default function TournamentSignupPage() {
                 }`}
                 data-testid="btn-mode-existing"
               >
-                <p className="text-sm font-bold">Use one of my teams</p>
+                <p className="text-sm font-bold">Use an existing team</p>
                 <p className="text-xs text-muted-foreground">
-                  Link this slot to a team you already manage on Kinectem.
+                  Club admins can choose any team in organizations they manage.
                 </p>
               </button>
               <button
@@ -396,27 +416,42 @@ export default function TournamentSignupPage() {
 
           {mode === "existing" && myTeams.length > 0 ? (
             <div className="space-y-3">
-              <Label>Which team is this?</Label>
-              <div className="grid gap-2">
-                {myTeams.map((tm) => (
-                  <button
-                    key={tm.id}
-                    type="button"
-                    onClick={() => setExistingTeamId(tm.id)}
-                    className={`text-left rounded-lg border px-3 py-2 transition-colors ${
-                      existingTeamId === tm.id
-                        ? "border-primary ring-2 ring-primary/30"
-                        : "border-border hover:border-primary/50"
-                    }`}
-                    data-testid={`btn-pick-team-${tm.id}`}
-                  >
-                    <p className="text-sm font-bold truncate">{tm.name}</p>
-                    {tm.sport && (
-                      <p className="text-xs text-muted-foreground truncate">
-                        {tm.sport}
-                      </p>
-                    )}
-                  </button>
+              <div>
+                <Label>Which team should this slot link to?</Label>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Organization admins see the full team list for each club they
+                  manage, not only teams they personally coach.
+                </p>
+              </div>
+              <div className="space-y-4" data-testid="list-manageable-teams">
+                {teamsByOrganization.map((group) => (
+                  <section key={group.key} className="space-y-2">
+                    <p className="text-xs font-black uppercase tracking-wider text-muted-foreground">
+                      {group.label}
+                    </p>
+                    <div className="grid gap-2">
+                      {group.teams.map((tm) => (
+                        <button
+                          key={tm.id}
+                          type="button"
+                          onClick={() => setExistingTeamId(tm.id)}
+                          className={`text-left rounded-lg border px-3 py-2 transition-colors ${
+                            existingTeamId === tm.id
+                              ? "border-primary ring-2 ring-primary/30"
+                              : "border-border hover:border-primary/50"
+                          }`}
+                          data-testid={`btn-pick-team-${tm.id}`}
+                        >
+                          <p className="text-sm font-bold truncate">{tm.name}</p>
+                          {tm.sport && (
+                            <p className="text-xs text-muted-foreground truncate">
+                              {tm.sport}
+                            </p>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </section>
                 ))}
               </div>
               {selectedSlot && chosenTeam && (
@@ -478,7 +513,7 @@ export default function TournamentSignupPage() {
                 {submitting
                   ? "Claiming…"
                   : t.autoApproveClaims
-                    ? "Claim slot for my team"
+                    ? "Claim slot for this team"
                     : "Submit claim for approval"}
               </Button>
             </div>
