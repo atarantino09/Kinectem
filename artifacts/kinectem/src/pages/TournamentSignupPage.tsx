@@ -16,7 +16,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { namesRoughlyMatch } from "@/lib/name-match";
+import {
+  namesRoughlyMatch,
+  suggestDistinctNameMatches,
+} from "@/lib/name-match";
 
 // Task #628 — Solo-team signup + participant claim (`/t/<slug>/signup`). A
 // signed-in visiting coach picks an unclaimed team-name slot, then EITHER
@@ -447,7 +450,15 @@ export default function TournamentSignupPage() {
                 value={bulkOrganizationId}
                 onValueChange={(value) => {
                   setBulkOrganizationId(value);
-                  setBulkAssignments({});
+                  const organization = clubOrganizations.find(
+                    (group) => group.key === value,
+                  );
+                  setBulkAssignments(
+                    suggestDistinctNameMatches(
+                      organization?.teams ?? [],
+                      unclaimed,
+                    ),
+                  );
                   setBulkMismatchConfirmed({});
                   setBulkResults([]);
                 }}
