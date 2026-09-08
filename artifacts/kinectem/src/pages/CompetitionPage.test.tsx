@@ -586,6 +586,88 @@ describe("competition Teams ordering", () => {
   });
 });
 
+describe("competition claimed-team visibility", () => {
+  beforeEach(() => {
+    window.history.pushState({}, "", "/c/claimed-team-cup");
+    mockedFetch.mockReset();
+    mockedFetch.mockResolvedValue({
+      competition: {
+        id: "competition-claimed",
+        slug: "claimed-team-cup",
+        name: "Claimed Team Cup",
+        type: "tournament",
+        startDate: "2099-01-01",
+        endDate: "2099-01-02",
+        location: "Riverside",
+        description: null,
+        isActive: false,
+        isEnded: false,
+        autoApproveClaims: true,
+        logoUrl: null,
+        brandColor: "#2457a7",
+        secondaryColor: null,
+        tertiaryColor: null,
+        bannerUrl: null,
+        websiteUrl: null,
+        claimedCount: 1,
+        participantCount: 2,
+        isFollowing: false,
+        canManage: false,
+      },
+      participants: [
+        {
+          id: "claimed-slot",
+          name: "Already United",
+          division: "Gold",
+          bracket: "A",
+          bracketId: null,
+          age: "U10",
+          gender: "Boys",
+          claimed: true,
+          pending: false,
+          teamId: "team-claimed",
+        },
+        {
+          id: "open-slot",
+          name: "Open City",
+          division: "Gold",
+          bracket: "A",
+          bracketId: null,
+          age: "U10",
+          gender: "Boys",
+          claimed: false,
+          pending: false,
+          teamId: null,
+        },
+      ],
+      matches: [],
+      featuredRecaps: [],
+      brackets: [],
+    } as never);
+  });
+
+  it("keeps claimed teams listed but removes their claim action", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<CompetitionPage />);
+
+    await user.click(await screen.findByTestId("btn-toggle-participants"));
+
+    expect(screen.getByTestId("row-participant-claimed-slot")).toHaveTextContent(
+      "Already United",
+    );
+    expect(screen.getByTestId("badge-claimed-claimed-slot")).toHaveTextContent(
+      "Claimed",
+    );
+    expect(screen.queryByTestId("btn-claim-claimed-slot")).not.toBeInTheDocument();
+
+    expect(screen.getByTestId("row-participant-open-slot")).toHaveTextContent(
+      "Open City",
+    );
+    expect(screen.getByTestId("btn-claim-open-slot")).toBeInTheDocument();
+    expect(screen.getByTestId("badge-team-count")).toHaveTextContent("2");
+  });
+});
+
 describe("featured recap preview text", () => {
   it("prefers a later paragraph from the published recap body", () => {
     expect(

@@ -2355,8 +2355,12 @@ export default function CompetitionPage() {
                           )
                         ) : null}
                         {p.claimed ? (
-                          <Badge variant="secondary" className="shrink-0 font-bold px-2.5">
-                            Taken
+                          <Badge
+                            variant="secondary"
+                            className="shrink-0 font-bold px-2.5"
+                            data-testid={`badge-claimed-${p.id}`}
+                          >
+                            Claimed
                           </Badge>
                         ) : p.pending ? (
                           <Badge variant="outline" className="shrink-0 font-bold px-2.5">

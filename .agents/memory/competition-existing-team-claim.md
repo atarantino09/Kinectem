@@ -11,3 +11,6 @@ description: Claim branch to an existing team — advisory-lock atomicity + coac
 - **Why:** verified live — concurrent double-claim yielded two rows before the lock, exactly one after.
 - Name mismatch between slot and team is a **coach-confirmed UI gate** (checkbox ack; `lib/name-match.ts` loose normalize, no fuzzy match in v1), NOT server-enforced — openapi is locked, and organizers can reject via the pending-approval flow.
 - Claimed games surface via the existing team-page tournament-schedule card automatically (keys off participant.teamId) — no schedule merge needed.
+- Claimed slots remain in the competition Teams directory; replace Claim with a Claimed status and retain the team-page link.
+- **Why:** claiming locks ownership of a slot, but must not remove a participant from the public competition directory.
+- **How to apply:** never filter participants by claim state; only explicit organizer hiding and viewer filters may remove rows.
