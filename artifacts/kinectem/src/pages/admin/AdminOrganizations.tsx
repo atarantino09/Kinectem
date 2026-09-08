@@ -140,7 +140,7 @@ function formatExpiry(expiresAt: string | null): string {
 }
 
 function claimUrl(token: string): string {
-  return `${window.location.origin}${import.meta.env.BASE_URL}org-claim/${token}`;
+  return `${window.location.origin}${import.meta.env.BASE_URL}claim/${token}`;
 }
 
 function csvCell(value: string): string {

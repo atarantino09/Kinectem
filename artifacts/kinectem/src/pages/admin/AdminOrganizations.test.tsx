@@ -327,7 +327,7 @@ describe("AdminOrganizations bulk import", () => {
       "2 organizations created",
     );
     expect(importedBody).toEqual(validatedBody);
-    expect(screen.getByText(/org-claim\/token-north/)).toBeInTheDocument();
+    expect(screen.getByText(/\/claim\/token-north/)).toBeInTheDocument();
   });
 
   it("validates and creates an import without a promo code", async () => {

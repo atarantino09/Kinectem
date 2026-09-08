@@ -135,6 +135,11 @@ function Router() {
           path="/claim/competition/:token"
           component={ClaimCompetitionPage}
         />
+        {/* Legacy links were briefly generated with /org-claim. Keep them
+            working by normalizing to the canonical claim route. */}
+        <Route path="/org-claim/:token">
+          {(p) => <Redirect to={`/claim/${p.token}`} replace />}
+        </Route>
         <Route path="/claim/:token" component={ClaimOrgPage} />
         <Route path="/adopt-team/:token" component={TeamAdoptPage} />
         <Route path="/c/:slug/signup" component={TournamentSignupPage} />

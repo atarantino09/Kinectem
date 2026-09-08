@@ -1,6 +1,9 @@
 import { useRoute, useLocation, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { customFetch } from "@workspace/api-client-react";
+import {
+  customFetch,
+  useGetLoggedInUser,
+} from "@workspace/api-client-react";
 import { useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,10 +23,28 @@ type ClaimResolve = {
   alreadyClaimed: boolean;
 };
 
+export function getClaimOrgRedirect({
+  organizationId,
+  token,
+  alreadyClaimed,
+  signedIn,
+}: {
+  organizationId: string;
+  token: string;
+  alreadyClaimed: boolean;
+  signedIn: boolean;
+}): string {
+  const destination = `/organizations/${organizationId}?claimToken=${encodeURIComponent(token)}`;
+  if (alreadyClaimed || signedIn) return destination;
+  const returnTo = `${destination}&autoClaim=1`;
+  return `/login?signup=1&returnTo=${encodeURIComponent(returnTo)}`;
+}
+
 export default function ClaimOrgPage() {
   const [, params] = useRoute("/claim/:token");
   const token = params?.token ?? "";
   const [, navigate] = useLocation();
+  const { data: me, isLoading: meLoading } = useGetLoggedInUser();
 
   const resolve = useQuery<ClaimResolve>({
     queryKey: ["org-claim-link", token],
@@ -38,12 +59,17 @@ export default function ClaimOrgPage() {
 
   const data = resolve.data;
   useEffect(() => {
-    if (!data) return;
-    // Keep the token on already-claimed links too so the page can explain
-    // why there's no claim button (banner shows an informational notice).
-    const dest = `/organizations/${data.organization.id}?claimToken=${encodeURIComponent(token)}`;
-    navigate(dest, { replace: true });
-  }, [data, token, navigate]);
+    if (!data || meLoading) return;
+    navigate(
+      getClaimOrgRedirect({
+        organizationId: data.organization.id,
+        token,
+        alreadyClaimed: data.alreadyClaimed,
+        signedIn: !!me,
+      }),
+      { replace: true },
+    );
+  }, [data, token, navigate, me, meLoading]);
 
   if (resolve.isError) {
     const message =
