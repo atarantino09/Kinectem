@@ -2510,6 +2510,17 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
     `,
   },
   {
+    name: "2026-09-10-partner-multiple-featured-competitions",
+    sql: `
+      ALTER TABLE partner_landing_pages
+        ADD COLUMN IF NOT EXISTS competition_ids uuid[] NOT NULL DEFAULT '{}'::uuid[];
+      UPDATE partner_landing_pages
+      SET competition_ids = ARRAY[competition_id]
+      WHERE competition_id IS NOT NULL
+        AND cardinality(competition_ids) = 0;
+    `,
+  },
+  {
     // Task #1008 — moderation removals use explicit audit labels while
     // retaining the existing admin_activity_log table.
     name: "2026-09-03-task-1008-moderation-audit",

@@ -467,6 +467,7 @@ export const partnerLandingPages = pgTable("partner_landing_pages", {
     (): AnyPgColumn => tournaments.id,
     { onDelete: "set null" },
   ),
+  competitionIds: uuid("competition_ids").array().notNull().default(sql`'{}'::uuid[]`),
   introduction: text("introduction").notNull().default(""),
   logoUrl: text("logo_url"),
   bannerUrl: text("banner_url"),

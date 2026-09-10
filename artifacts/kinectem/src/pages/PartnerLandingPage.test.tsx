@@ -98,6 +98,40 @@ describe("PartnerLandingPage featured competition", () => {
     ).toHaveAttribute("href", "/c/fall-classic-2026");
   });
 
+  it("renders every featured competition", async () => {
+    const response = partnerResponse({
+      id: "competition-1",
+      slug: "fall-classic-2026",
+      name: "Fall Classic",
+      type: "tournament",
+      startDate: "2026-10-03",
+      endDate: "2026-10-04",
+      location: "Riverside",
+    });
+    response.data.competitions = [
+      response.data.competition!,
+      {
+        id: "competition-2",
+        slug: "winter-league-2026",
+        name: "Winter League",
+        type: "league",
+        startDate: "2026-12-01",
+        endDate: "2027-01-31",
+        location: "North Fields",
+      },
+    ];
+    mockedFetch.mockResolvedValue(response as never);
+
+    renderWithProviders(<PartnerLandingPage />);
+
+    expect(
+      await screen.findByTestId("featured-partner-competition-card-competition-1"),
+    ).toHaveTextContent("Fall Classic");
+    expect(
+      screen.getByTestId("featured-partner-competition-card-competition-2"),
+    ).toHaveTextContent("Winter League");
+  });
+
   it("keeps the featured layout scannable when the public location is missing", async () => {
     mockedFetch.mockResolvedValue(
       partnerResponse({

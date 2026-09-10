@@ -74,6 +74,7 @@ type PartnerDetail = PartnerSummary & {
   primaryColor: string;
   secondaryColor: string;
   competition: PartnerCompetition | null;
+  competitions?: PartnerCompetition[];
   members: PartnerMember[];
 };
 
@@ -211,7 +212,7 @@ export function AdminPartnerLanding({
   const [selectedOrgListId, setSelectedOrgListId] = useState("");
   const [addingOrgList, setAddingOrgList] = useState(false);
   const [competitionSearch, setCompetitionSearch] = useState("");
-  const [selectedCompetition, setSelectedCompetition] = useState<PartnerCompetition | null>(null);
+  const [selectedCompetitions, setSelectedCompetitions] = useState<PartnerCompetition[]>([]);
   const [newCompetition, setNewCompetition] = useState({
     name: "",
     type: "tournament" as "tournament" | "league",
@@ -318,7 +319,9 @@ export function AdminPartnerLanding({
       secondaryColor: hydrated.secondaryColor,
       published: hydrated.published,
     });
-    setSelectedCompetition(hydrated.competition);
+    setSelectedCompetitions(
+      hydrated.competitions ?? (hydrated.competition ? [hydrated.competition] : []),
+    );
     // Existing pages created with the default palette should catch up to the
     // logo they already have. Custom colors remain untouched.
     if (
@@ -495,7 +498,10 @@ export function AdminPartnerLanding({
 
   const updateFeaturedCompetition = async (competitionId: string) => {
     try {
-      const response = await customFetch<{ competition: PartnerCompetition }>(
+      const response = await customFetch<{
+        competition: PartnerCompetition;
+        competitions: PartnerCompetition[];
+      }>(
         `/api/v1/admin/partner-pages/${selectedId}/competition`,
         {
           method: "PUT",
@@ -503,7 +509,7 @@ export function AdminPartnerLanding({
           body: JSON.stringify({ competitionId }),
         },
       );
-      setSelectedCompetition(response.competition);
+      setSelectedCompetitions(response.competitions);
       setCompetitionSearch("");
       await refresh();
       toast({ title: "Featured competition linked" });
@@ -512,10 +518,13 @@ export function AdminPartnerLanding({
     }
   };
 
-  const removeFeaturedCompetition = async () => {
+  const removeFeaturedCompetition = async (competitionId: string) => {
     try {
-      await customFetch(`/api/v1/admin/partner-pages/${selectedId}/competition`, { method: "DELETE" });
-      setSelectedCompetition(null);
+      const response = await customFetch<{ competitions: PartnerCompetition[] }>(
+        `/api/v1/admin/partner-pages/${selectedId}/competition/${competitionId}`,
+        { method: "DELETE" },
+      );
+      setSelectedCompetitions(response.competitions);
       await refresh();
       toast({ title: "Featured competition removed" });
     } catch (error) {
@@ -539,7 +548,7 @@ export function AdminPartnerLanding({
           description: newCompetition.description.trim() || null,
         }),
       });
-      setSelectedCompetition(response.competition);
+      setSelectedCompetitions((current) => [...current, response.competition]);
       setNewCompetition({
         name: "",
         type: "tournament",
@@ -906,13 +915,13 @@ export function AdminPartnerLanding({
         </div>
       </Step>
 
-      <Step number={4} title="Feature a competition" done={!!selectedCompetition}>
+      <Step number={4} title="Feature competitions" done={selectedCompetitions.length > 0}>
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Feature one tournament or league on this partner page. Linking does not change the competition's owner, hub, branding, or schedule.
+            Feature any number of tournaments or leagues on this partner page. Linking does not change their owner, hub, branding, or schedule.
           </p>
-          {selectedCompetition ? (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 p-4" data-testid="featured-competition-current">
+          {selectedCompetitions.map((selectedCompetition) => (
+            <div key={selectedCompetition.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 p-4" data-testid={`featured-competition-current-${selectedCompetition.id}`}>
               <div className="flex min-w-0 items-start gap-3">
                 <Trophy className="mt-1 h-5 w-5 shrink-0 text-primary" />
                 <div className="min-w-0">
@@ -927,10 +936,10 @@ export function AdminPartnerLanding({
                 <Link href={`/competitions/${selectedCompetition.id}`}>
                   <Button size="sm" variant="outline" className="font-bold">Open console</Button>
                 </Link>
-                <Button size="sm" variant="ghost" onClick={() => void removeFeaturedCompetition()}>Remove</Button>
+                <Button size="sm" variant="ghost" onClick={() => void removeFeaturedCompetition(selectedCompetition.id)}>Remove</Button>
               </div>
             </div>
-          ) : null}
+          ))}
           <div className="space-y-2 rounded-lg border p-3">
             <Label>Search existing competitions</Label>
             <div className="relative">

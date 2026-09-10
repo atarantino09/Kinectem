@@ -56,6 +56,7 @@ type PartnerResponse = {
       endDate: string;
       location: string | null;
     } | null;
+    competitions?: Array<NonNullable<PartnerResponse["data"]["competition"]>>;
     organizations: PartnerOrganization[];
   };
 };
@@ -205,7 +206,8 @@ export default function PartnerLandingPage() {
     page.secondaryColor,
   );
   const intro = page.introduction || "Kinectem is the youth-sports platform where the story of your season comes to life — a lasting home for every club, team, player, and game day.";
-  const featuredCompetition = data.competition;
+  const featuredCompetitions =
+    data.competitions ?? (data.competition ? [data.competition] : []);
   const createOrganizationPath = "/organizations/mine?new=1";
   const createOrganizationHref = me
     ? createOrganizationPath
@@ -363,10 +365,13 @@ export default function PartnerLandingPage() {
         </div>
       </section>
 
-      {featuredCompetition && (
-        <section className="relative z-10 mx-auto -mt-8 max-w-6xl px-5" data-testid="featured-partner-competition">
+      {featuredCompetitions.length > 0 && (
+        <section className="relative z-10 mx-auto -mt-8 max-w-6xl space-y-4 px-5" data-testid="featured-partner-competition">
+          {featuredCompetitions.map((featuredCompetition) => (
           <Card
+            key={featuredCompetition.id}
             className="overflow-hidden rounded-[2rem] border-0 p-1 shadow-[0_24px_70px_-28px_rgba(15,23,42,0.65)]"
+            data-testid={`featured-partner-competition-card-${featuredCompetition.id}`}
             style={{
               backgroundImage: `linear-gradient(125deg, ${page.primaryColor}, ${page.secondaryColor})`,
             }}
@@ -465,6 +470,7 @@ export default function PartnerLandingPage() {
               </div>
             </CardContent>
           </Card>
+          ))}
         </section>
       )}
 

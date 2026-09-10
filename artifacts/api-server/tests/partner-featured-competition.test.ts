@@ -63,6 +63,32 @@ describe("partner featured competition", () => {
       });
     }
 
+    const secondCreate = await agent.post("/api/v1/competitions").send({
+      name: `Second Cup ${suffix}`,
+      type: "league",
+      startDate: "2026-11-01",
+      endDate: "2026-11-30",
+      location: "North Fields",
+    });
+    expect(secondCreate.status, JSON.stringify(secondCreate.body)).toBe(201);
+    createdCompetitionIds.push(secondCreate.body.id);
+    const secondAttach = await agent
+      .put(`/api/v1/admin/partner-pages/${pageId}/competition`)
+      .send({ competitionId: secondCreate.body.id });
+    expect(secondAttach.status).toBe(200);
+    expect(secondAttach.body.competitions.map((item: { id: string }) => item.id)).toEqual([
+      firstCreate.body.id,
+      secondCreate.body.id,
+    ]);
+    const linkedSearch = await agent.get(
+      `/api/v1/admin/partner-pages/${pageId}/competition-search?q=Second`,
+    );
+    expect(linkedSearch.status).toBe(200);
+    expect(linkedSearch.body.data[0]).toMatchObject({
+      id: secondCreate.body.id,
+      linkedToPage: true,
+    });
+
     const publish = await agent
       .patch(`/api/v1/admin/partner-pages/${pageId}`)
       .send({ published: true });
@@ -80,6 +106,17 @@ describe("partner featured competition", () => {
       endDate: "2026-10-04",
       location: "Riverside",
     });
+    expect(
+      publicPage.body.data.competitions.map((item: { id: string }) => item.id),
+    ).toEqual([firstCreate.body.id, secondCreate.body.id]);
+
+    const removeSecond = await agent.delete(
+      `/api/v1/admin/partner-pages/${pageId}/competition/${secondCreate.body.id}`,
+    );
+    expect(removeSecond.status).toBe(200);
+    expect(
+      removeSecond.body.competitions.map((item: { id: string }) => item.id),
+    ).toEqual([firstCreate.body.id]);
 
     const remove = await agent.delete(
       `/api/v1/admin/partner-pages/${pageId}/competition`,

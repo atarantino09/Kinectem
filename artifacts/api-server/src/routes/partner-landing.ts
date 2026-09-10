@@ -90,16 +90,34 @@ function competitionMetadata(
 }
 
 async function featuredCompetition(pageId: string) {
-  const [row] = await db
-    .select({ competition: tournaments })
+  return (await featuredCompetitions(pageId))[0] ?? null;
+}
+
+async function featuredCompetitions(pageId: string) {
+  const [page] = await db
+    .select({
+      competitionIds: partnerLandingPages.competitionIds,
+      competitionId: partnerLandingPages.competitionId,
+    })
     .from(partnerLandingPages)
-    .leftJoin(
-      tournaments,
-      eq(tournaments.id, partnerLandingPages.competitionId),
-    )
     .where(eq(partnerLandingPages.id, pageId))
     .limit(1);
-  return row?.competition ? competitionMetadata(row.competition) : null;
+  if (!page) return [];
+  const ids = page.competitionIds.length
+    ? page.competitionIds
+    : page.competitionId
+      ? [page.competitionId]
+      : [];
+  if (!ids.length) return [];
+  const rows = await db
+    .select()
+    .from(tournaments)
+    .where(inArray(tournaments.id, ids));
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  return ids.flatMap((id) => {
+    const row = byId.get(id);
+    return row ? [competitionMetadata(row)] : [];
+  });
 }
 
 const PartnerCompetitionBody = z.object({
@@ -263,6 +281,7 @@ router.get(
       data: {
         ...page,
         competition: await featuredCompetition(page.id),
+        competitions: await featuredCompetitions(page.id),
         members: await adminMembers(page.id),
       },
     });
@@ -288,8 +307,11 @@ router.get(
         startDate: tournaments.startDate,
         endDate: tournaments.endDate,
         location: tournaments.location,
-        linkedToPage: sql<boolean>`tournaments.id = (
-          SELECT competition_id FROM partner_landing_pages WHERE id = ${pageId}
+        linkedToPage: sql<boolean>`EXISTS (
+          SELECT 1
+          FROM partner_landing_pages partner_page
+          WHERE partner_page.id = ${pageId}
+            AND tournaments.id = ANY(partner_page.competition_ids)
         )`,
       })
       .from(tournaments)
@@ -320,14 +342,47 @@ router.put(
       .where(eq(tournaments.id, parsed.data.competitionId))
       .limit(1);
     if (!competition) return apiError(res, 404, "Competition not found");
+    const nextIds = page.competitionIds.includes(competition.id)
+      ? page.competitionIds
+      : [...page.competitionIds, competition.id];
     const [updated] = await db
       .update(partnerLandingPages)
-      .set({ competitionId: competition.id, updatedAt: new Date() })
+      .set({
+        competitionId: nextIds[0] ?? competition.id,
+        competitionIds: nextIds,
+        updatedAt: new Date(),
+      })
       .where(eq(partnerLandingPages.id, pageId))
       .returning();
     return res.json({
       data: updated,
       competition: competitionMetadata(competition),
+      competitions: await featuredCompetitions(pageId),
+    });
+  }),
+);
+
+router.delete(
+  "/admin/partner-pages/:pageId/competition/:competitionId",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const pageId = p(req.params.pageId);
+    const page = await findPage(pageId);
+    if (!page) return apiError(res, 404, "Partner page not found");
+    const competitionId = p(req.params.competitionId);
+    const nextIds = page.competitionIds.filter((id) => id !== competitionId);
+    const [updated] = await db
+      .update(partnerLandingPages)
+      .set({
+        competitionIds: nextIds,
+        competitionId: nextIds[0] ?? null,
+        updatedAt: new Date(),
+      })
+      .where(eq(partnerLandingPages.id, pageId))
+      .returning();
+    return res.json({
+      data: updated,
+      competitions: await featuredCompetitions(pageId),
     });
   }),
 );
@@ -341,7 +396,7 @@ router.delete(
       return apiError(res, 404, "Partner page not found");
     const [updated] = await db
       .update(partnerLandingPages)
-      .set({ competitionId: null, updatedAt: new Date() })
+      .set({ competitionId: null, competitionIds: [], updatedAt: new Date() })
       .where(eq(partnerLandingPages.id, pageId))
       .returning();
     return res.json({ data: updated, competition: null });
@@ -383,9 +438,15 @@ router.post(
           ownerUserId: adminId,
         })
         .returning();
+      const page = await findPage(pageId);
+      const nextIds = [...(page?.competitionIds ?? []), competition.id];
       const [updatedPage] = await tx
         .update(partnerLandingPages)
-        .set({ competitionId: competition.id, updatedAt: new Date() })
+        .set({
+          competitionId: nextIds[0] ?? competition.id,
+          competitionIds: nextIds,
+          updatedAt: new Date(),
+        })
         .where(eq(partnerLandingPages.id, pageId))
         .returning();
       return { competition, page: updatedPage };
@@ -1048,6 +1109,7 @@ router.get(
           secondaryColor: page.secondaryColor,
         },
         competition: await featuredCompetition(page.id),
+        competitions: await featuredCompetitions(page.id),
         organizations: rows.map((row) => ({
           ...row.organization,
           canRequestClaim: row.canRequestClaim,
