@@ -1422,6 +1422,10 @@ export function toJoinRequest(
         }
       : null,
     status: r.status,
+    // Extra fields beyond the locked spec distinguish partner-directory
+    // administrator recovery requests from ordinary member join requests.
+    requestedRole: r.requestedRole,
+    source: r.sourcePartnerPageId ? "partner_page" : "organization",
     decidedBy: r.decidedById ?? null,
     decidedAt: r.decidedAt ? r.decidedAt.toISOString() : null,
     createdAt: r.createdAt.toISOString(),

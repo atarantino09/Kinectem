@@ -2521,6 +2521,33 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
     `,
   },
   {
+    name: "2026-09-11-partner-claimed-club-admin-requests",
+    sql: `
+      ALTER TABLE organization_join_requests
+        ADD COLUMN IF NOT EXISTS requested_role text NOT NULL DEFAULT 'member',
+        ADD COLUMN IF NOT EXISTS source_partner_page_id uuid
+          REFERENCES partner_landing_pages(id) ON DELETE SET NULL;
+      WITH ranked_pending AS (
+        SELECT id,
+          row_number() OVER (
+            PARTITION BY organization_id, user_id
+            ORDER BY created_at ASC, id ASC
+          ) AS pending_rank
+        FROM organization_join_requests
+        WHERE status = 'pending'
+      )
+      UPDATE organization_join_requests r
+      SET status = 'withdrawn', updated_at = now()
+      FROM ranked_pending ranked
+      WHERE r.id = ranked.id AND ranked.pending_rank > 1;
+      CREATE UNIQUE INDEX IF NOT EXISTS org_join_request_unique_pending_per_user
+        ON organization_join_requests (organization_id, user_id)
+        WHERE status = 'pending';
+      CREATE INDEX IF NOT EXISTS org_join_request_org_status_idx
+        ON organization_join_requests (organization_id, status);
+    `,
+  },
+  {
     // Task #1008 — moderation removals use explicit audit labels while
     // retaining the existing admin_activity_log table.
     name: "2026-09-03-task-1008-moderation-audit",

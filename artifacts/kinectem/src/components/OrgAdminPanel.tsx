@@ -163,7 +163,15 @@ export function OrgAdminPanel({
             </p>
           ) : (
             <div className="space-y-2">
-              {requests.map((r: JoinRequestResponse) => (
+              {requests.map((r: JoinRequestResponse) => {
+                const requestExtras = r as JoinRequestResponse & {
+                  requestedRole?: "admin" | "member";
+                  source?: "partner_page" | "organization";
+                };
+                const partnerAdminRequest =
+                  requestExtras.source === "partner_page" &&
+                  requestExtras.requestedRole === "admin";
+                return (
                 <div
                   key={r.id}
                   className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 p-2 rounded-lg bg-muted/40"
@@ -176,7 +184,10 @@ export function OrgAdminPanel({
                       </p>
                     </Link>
                     <p className="text-[11px] text-muted-foreground">
-                      Requested {timeAgo(r.createdAt)}
+                      {partnerAdminRequest
+                        ? "Requested admin access from a partner page"
+                        : "Requested to join"}{" "}
+                      {timeAgo(r.createdAt)}
                     </p>
                   </div>
                   <div className="flex gap-1 self-end sm:self-auto shrink-0">
@@ -193,24 +204,26 @@ export function OrgAdminPanel({
                     >
                       <X className="w-3 h-3" />
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="font-bold px-3 h-8"
-                      onClick={() =>
-                        approveJR.mutate({
-                          orgId,
-                          requestId: r.id,
-                          data: { role: "member" },
-                        })
-                      }
-                      disabled={approveJR.isPending}
-                      data-testid={`btn-approve-member-${r.id}`}
-                      title="Approve as member"
-                    >
-                      <Check className="w-3 h-3 mr-1" />
-                      Member
-                    </Button>
+                    {!partnerAdminRequest && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="font-bold px-3 h-8"
+                        onClick={() =>
+                          approveJR.mutate({
+                            orgId,
+                            requestId: r.id,
+                            data: { role: "member" },
+                          })
+                        }
+                        disabled={approveJR.isPending}
+                        data-testid={`btn-approve-member-${r.id}`}
+                        title="Approve as member"
+                      >
+                        <Check className="w-3 h-3 mr-1" />
+                        Member
+                      </Button>
+                    )}
                     <Button
                       variant="brand"
                       size="sm"
@@ -231,7 +244,8 @@ export function OrgAdminPanel({
                     </Button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>

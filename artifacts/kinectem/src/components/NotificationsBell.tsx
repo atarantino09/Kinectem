@@ -90,6 +90,10 @@ import { useToast } from "@/hooks/use-toast";
 //                               claim was declined)
 //                               source: routes/admin.ts
 //                               (POST /admin/org-claims/:id/decline)
+//   org_admin_access_request -> `/organizations/<orgId>` (owner review queue)
+//   org_admin_access_approved / org_admin_access_declined
+//                            -> `/organizations/<orgId>` (request outcome)
+//                               source: partner-landing.ts / organizations.ts
 //   guardian_expired         -> `/family?childId=<childId>` (NOT the
 //                               inserted `/guardian?childId=...` link).
 //                               The bell intentionally rewrites this to

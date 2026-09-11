@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useRoute } from "wouter";
+import { Link, useLocation, useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { OrgLogo } from "@/components/OrgLogoFallback";
+import { ClaimedOrgAccessDialog } from "@/components/ClaimedOrgAccessDialog";
 import { useWhoami } from "@/hooks/useWhoami";
 import { formatOrgName } from "@/lib/format";
 import kinectemIcon from "@assets/kinectem_icon_1788367110859.png";
@@ -32,8 +33,17 @@ type PartnerOrganization = {
   state: string | null;
   logoUrl: string | null;
   canRequestClaim: boolean;
+  owner: {
+    userId: string | null;
+    displayName: string;
+    avatarUrl: string | null;
+  } | null;
   teams: Array<{ id: string; name: string }>;
 };
+
+export function claimedOrgAccessSeenKey(orgId: string): string {
+  return `kinectem:partner-claimed-access-seen:${orgId}`;
+}
 
 type PartnerResponse = {
   data: {
@@ -157,6 +167,7 @@ function normalizedOrganizationName(value: string): string {
 export default function PartnerLandingPage() {
   const [, params] = useRoute("/partners/:slug");
   const slug = params?.slug ?? "";
+  const [, navigate] = useLocation();
   const [tab, setTab] = useState<"why" | "clubs">("why");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<PartnerOrganization | null>(null);
@@ -164,6 +175,10 @@ export default function PartnerLandingPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [claimError, setClaimError] = useState<string | null>(null);
+  const [accessOrg, setAccessOrg] = useState<PartnerOrganization | null>(null);
+  const [accessRequestPending, setAccessRequestPending] = useState(false);
+  const [accessRequestSubmitted, setAccessRequestSubmitted] = useState(false);
+  const [accessRequestError, setAccessRequestError] = useState<string | null>(null);
   const requestPanelRef = useRef<HTMLDivElement>(null);
   const { data: whoami } = useWhoami();
   const me = whoami?.viewingAs ?? whoami?.realUser;
@@ -174,6 +189,31 @@ export default function PartnerLandingPage() {
     retry: false,
   });
   const data = partner.data?.data;
+  useEffect(() => {
+    if (!data) return;
+    const requestedOrgId = new URLSearchParams(window.location.search).get(
+      "accessRequestOrg",
+    );
+    if (!requestedOrgId) return;
+    const org = data.organizations.find(
+      (candidate) =>
+        candidate.id === requestedOrgId &&
+        !candidate.canRequestClaim &&
+        candidate.owner,
+    );
+    if (!org) return;
+    setTab("clubs");
+    setAccessOrg(org);
+    setAccessRequestSubmitted(false);
+    setAccessRequestError(null);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("accessRequestOrg");
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${url.pathname}${url.search}${url.hash}`,
+    );
+  }, [data]);
   useEffect(() => {
     if (!selected) return;
     requestPanelRef.current?.scrollIntoView({
@@ -230,6 +270,56 @@ export default function PartnerLandingPage() {
       confirmCorrect: false,
       confirmAuthorized: false,
     });
+  };
+
+  const organizationHref = (org: PartnerOrganization) =>
+    `/organizations/${org.id}?showAround=1`;
+
+  const continueToOrganization = (org: PartnerOrganization) => {
+    setAccessOrg(null);
+    navigate(organizationHref(org));
+  };
+
+  const openClaimedOrganization = (org: PartnerOrganization) => {
+    if (org.canRequestClaim || !org.owner) {
+      navigate(organizationHref(org));
+      return;
+    }
+    try {
+      const key = claimedOrgAccessSeenKey(org.id);
+      if (localStorage.getItem(key) === "1") {
+        navigate(organizationHref(org));
+        return;
+      }
+      localStorage.setItem(key, "1");
+    } catch {
+      // Storage can be unavailable; showing the safe popup is still useful.
+    }
+    setAccessRequestSubmitted(false);
+    setAccessRequestError(null);
+    setAccessOrg(org);
+  };
+
+  const requestAdminAccess = async () => {
+    if (!accessOrg) return;
+    setAccessRequestPending(true);
+    setAccessRequestError(null);
+    try {
+      await customFetch(
+        `/api/v1/partner-pages/${encodeURIComponent(slug)}/organizations/${accessOrg.id}/admin-requests`,
+        { method: "POST" },
+      );
+      setAccessRequestSubmitted(true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      setAccessRequestError(
+        message.includes("already have administrator access")
+          ? "You already have administrator access to this organization."
+          : "We couldn't send your request. Please try again.",
+      );
+    } finally {
+      setAccessRequestPending(false);
+    }
   };
 
   const submitClaim = async () => {
@@ -682,7 +772,14 @@ export default function PartnerLandingPage() {
                     <div className="flex items-start gap-3"><OrgLogo name={org.name} logoUrl={org.logoUrl} className="h-14 w-14 rounded-xl" /><div className="min-w-0"><h3 className="font-black text-slate-900">{formatOrgName(org.name)}</h3><p className="mt-1 flex items-center gap-1 text-sm text-slate-500"><MapPin className="h-3.5 w-3.5" />{locationOf(org)}</p></div></div>
                     <div className="mt-4 text-sm text-slate-500">{org.teams.slice(0, 3).map((team) => team.name).join(" · ") || "Team pages are ready to explore"}{org.teams.length > 3 ? ` +${org.teams.length - 3} more` : ""}</div>
                     <div className="mt-auto flex flex-wrap gap-2 pt-5">
-                      <Link href={`/organizations/${org.id}?showAround=1`}><Button variant="outline" size="sm" className="font-bold">View club page</Button></Link>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="font-bold"
+                        onClick={() => openClaimedOrganization(org)}
+                      >
+                        View club page
+                      </Button>
                       {org.canRequestClaim && <Button size="sm" className="font-bold" style={{ background: page.primaryColor }} onClick={() => beginClaim(org)}>Request ownership access</Button>}
                     </div>
                   </CardContent>
@@ -753,6 +850,30 @@ export default function PartnerLandingPage() {
               )}
             </CardContent>
           </Card>
+        )}
+        {accessOrg?.owner && (
+          <ClaimedOrgAccessDialog
+            open
+            onOpenChange={(open) => {
+              if (!open) continueToOrganization(accessOrg);
+            }}
+            organizationName={accessOrg.name}
+            owner={accessOrg.owner}
+            signedIn={!!me}
+            currentUserIsOwner={me?.id === accessOrg.owner.userId}
+            pending={accessRequestPending}
+            submitted={accessRequestSubmitted}
+            error={accessRequestError}
+            onRequestAccess={requestAdminAccess}
+            onCreateAccount={() => {
+              navigate(
+                `/login?signup=1&returnTo=${encodeURIComponent(
+                  `/partners/${slug}?accessRequestOrg=${accessOrg.id}`,
+                )}`,
+              );
+            }}
+            onContinue={() => continueToOrganization(accessOrg)}
+          />
         )}
         </div>
       </section>

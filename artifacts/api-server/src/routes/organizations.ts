@@ -3054,6 +3054,19 @@ async function decideJoinRequest(
     .limit(1);
   if (!r || r.organizationId !== req.params.orgId) return notFound(res);
   if (r.status !== "pending") return apiError(res, 409, `Request already ${r.status}`);
+  const rawRole = req.body?.role;
+  if (
+    decision === "approved" &&
+    rawRole !== undefined &&
+    rawRole !== "admin" &&
+    rawRole !== "member"
+  ) {
+    return apiError(res, 400, "role must be 'admin' or 'member'");
+  }
+  const role: "admin" | "member" =
+    r.requestedRole === "admin" || rawRole === "admin"
+      ? "admin"
+      : "member";
   const [updated] = await db
     .update(organizationJoinRequests)
     .set({
@@ -3065,11 +3078,6 @@ async function decideJoinRequest(
     .where(eq(organizationJoinRequests.id, r.id))
     .returning();
   if (decision === "approved") {
-    const rawRole = req.body?.role;
-    if (rawRole !== undefined && rawRole !== "admin" && rawRole !== "member") {
-      return apiError(res, 400, "role must be 'admin' or 'member'");
-    }
-    const role: "admin" | "member" = rawRole === "admin" ? "admin" : "member";
     // Both members and admins live in organization_admins now (the table
     // name is historical). Members get the same row with role 'member';
     // permission helpers gate writes by checking role in ('owner','admin').
@@ -3084,6 +3092,56 @@ async function decideJoinRequest(
       .onConflictDoNothing();
   }
   const [u] = await db.select().from(users).where(eq(users.id, r.userId)).limit(1);
+  if (r.sourcePartnerPageId) {
+    const [org] = await db
+      .select({ name: organizations.name })
+      .from(organizations)
+      .where(eq(organizations.id, r.organizationId))
+      .limit(1);
+    const organizationName = org?.name ?? "the organization";
+    const approvedAsAdmin = decision === "approved" && role === "admin";
+    await db.insert(notifications).values({
+      userId: r.userId,
+      kind:
+        decision === "approved"
+          ? "org_admin_access_approved"
+          : "org_admin_access_declined",
+      message:
+        decision === "approved"
+          ? `Your access request for ${organizationName} was approved${approvedAsAdmin ? " as an administrator" : ""}`
+          : `Your access request for ${organizationName} was declined`,
+      link: `/organizations/${r.organizationId}`,
+      actorUserId: me.id,
+    });
+    await dispatchNotificationEmail({
+      userId: r.userId,
+      category: "team_roster",
+      excludeRecipientUserId: me.id,
+      build: (ctx) => ({
+        to: ctx.to,
+        subject:
+          decision === "approved"
+            ? `Your ${organizationName} access request was approved`
+            : `Update on your ${organizationName} access request`,
+        kind:
+          decision === "approved"
+            ? "org_admin_access_approved"
+            : "org_admin_access_declined",
+        contextLabel: organizationName,
+        text: [
+          `Hi ${ctx.recipientName},`,
+          "",
+          decision === "approved"
+            ? `Your request to join ${organizationName} was approved${approvedAsAdmin ? " with administrator access" : ""}.`
+            : `Your request to join ${organizationName} was declined by a current administrator.`,
+          "",
+          `View the organization: ${appBaseUrl()}/app/organizations/${r.organizationId}`,
+          "",
+          `Manage email preferences: ${ctx.unsubscribeUrl}`,
+        ].join("\n"),
+      }),
+    });
+  }
   // Task #414 — admin decision echo. Viewer is the deciding org admin
   // and may not be privileged for a minor requester; build a real ctx.
   const decideMinorCtx = await buildMinorNameContext(

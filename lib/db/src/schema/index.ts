@@ -1193,11 +1193,20 @@ export const organizationJoinRequests = pgTable("organization_join_requests", {
   organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
   status: joinRequestStatusEnum("status").notNull().default("pending"),
+  // Partner-directory recovery requests explicitly ask for admin access.
+  // Ordinary join requests retain the historical member default.
+  requestedRole: text("requested_role").notNull().default("member"),
+  sourcePartnerPageId: uuid("source_partner_page_id").references(() => partnerLandingPages.id, { onDelete: "set null" }),
   decidedById: uuid("decided_by_id").references(() => users.id, { onDelete: "set null" }),
   decidedAt: timestamp("decided_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (t) => ({
+  uniquePendingPerUser: uniqueIndex("org_join_request_unique_pending_per_user")
+    .on(t.organizationId, t.userId)
+    .where(sql`${t.status} = 'pending'`),
+  byOrgStatus: index("org_join_request_org_status_idx").on(t.organizationId, t.status),
+}));
 
 export const organizationClaimRequests = pgTable("organization_claim_requests", {
   id: uuid("id").primaryKey().defaultRandom(),

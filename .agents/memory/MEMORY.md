@@ -76,6 +76,7 @@
 - [Unclaimed organization deletion](unclaimed-org-deletion.md) — lock organization rows before the owner check, and explicitly purge polymorphic records that have no foreign keys.
 - [Branded email boundary](branded-email-boundary.md) — API email branding belongs at final delivery; scripts use the shared shell, while plaintext and compliance copy remain caller-owned.
 - [Organization handoff prompt queue](organization-handoff-prompt-queue.md) — one-shot create/claim prompts must be consumed in priority order without deleting later onboarding signals.
+- [Claimed partner club access](claimed-partner-club-access.md) — partner-directory visitors see a safe owner identity once and can request admin access without changing ordinary org visits.
 - [Moderation scope and audit atomicity](moderation-scope-audit.md) — derive scope from persisted targets; destructive moderation and its audit record commit or roll back together.
 - [Private practice plans](private-practice-plans.md) — explicit private article kind; server-gate every read path to team members, active guardians, team staff, and org admins.
 - [Organization sport inheritance](organization-sport-inheritance.md) — a selected org sport is authoritative for all teams; clearing it preserves team labels and restores per-team editing.

@@ -4,7 +4,10 @@ import userEvent from "@testing-library/user-event";
 import { customFetch } from "@workspace/api-client-react";
 import { renderWithProviders } from "@/test/renderWithProviders";
 import { useWhoami } from "@/hooks/useWhoami";
-import PartnerLandingPage, { partnerHeroShade } from "./PartnerLandingPage";
+import PartnerLandingPage, {
+  claimedOrgAccessSeenKey,
+  partnerHeroShade,
+} from "./PartnerLandingPage";
 
 vi.mock("@workspace/api-client-react", () => ({
   customFetch: vi.fn(),
@@ -45,6 +48,7 @@ function partnerResponse(
         ...page,
       },
       competition,
+      competitions: competition ? [competition] : [],
       organizations,
     },
   };
@@ -53,6 +57,7 @@ function partnerResponse(
 describe("PartnerLandingPage featured competition", () => {
   beforeEach(() => {
     window.history.pushState({}, "", "/partners/north-stars");
+    localStorage.clear();
     mockedFetch.mockReset();
     mockedWhoami.mockReturnValue({
       data: { authenticated: false },
@@ -374,7 +379,7 @@ describe("PartnerLandingPage featured competition", () => {
     expect(logo).not.toHaveClass("object-cover");
   });
 
-  it("adds the guided tour trigger to each club page link", async () => {
+  it("shows the current owner before an anonymous visitor enters a claimed club", async () => {
     mockedFetch.mockResolvedValue(
       partnerResponse(null, [
         {
@@ -385,6 +390,11 @@ describe("PartnerLandingPage featured competition", () => {
           state: "CA",
           logoUrl: null,
           canRequestClaim: false,
+          owner: {
+            userId: "owner-1",
+            displayName: "Jordan Lee",
+            avatarUrl: null,
+          },
           teams: [],
         },
       ]) as never,
@@ -395,13 +405,146 @@ describe("PartnerLandingPage featured competition", () => {
       await screen.findByRole("button", { name: "Find Your Club" }),
     );
 
-    const viewClubButton = await screen.findByRole("button", {
-      name: "View club page",
-    });
-    expect(viewClubButton.closest("a")).toHaveAttribute(
-      "href",
-      "/organizations/org-1?showAround=1",
+    await userEvent.setup().click(
+      await screen.findByRole("button", { name: "View club page" }),
     );
+    const dialog = await screen.findByTestId("dialog-claimed-org-access");
+    expect(dialog).toHaveTextContent("Jordan Lee");
+    expect(within(dialog).getByRole("link", { name: "Jordan Lee" })).toHaveAttribute(
+      "href",
+      "/users/owner-1",
+    );
+    expect(localStorage.getItem(claimedOrgAccessSeenKey("org-1"))).toBe("1");
+    await userEvent.setup().click(
+      within(dialog).getByRole("button", { name: "Sign in or create an account" }),
+    );
+    expect(window.location.pathname).toBe("/login");
+    expect(new URLSearchParams(window.location.search).get("signup")).toBe("1");
+    expect(new URLSearchParams(window.location.search).get("returnTo")).toBe(
+      "/partners/north-stars?accessRequestOrg=org-1",
+    );
+  });
+
+  it("opens the claimed-club dialog after signup return even when it was already seen", async () => {
+    window.history.pushState(
+      {},
+      "",
+      "/partners/north-stars?accessRequestOrg=org-1",
+    );
+    localStorage.setItem(claimedOrgAccessSeenKey("org-1"), "1");
+    mockedFetch.mockResolvedValue(
+      partnerResponse(null, [
+        {
+          id: "org-1",
+          name: "North Stars Soccer",
+          location: "Riverside",
+          city: "Riverside",
+          state: "CA",
+          logoUrl: null,
+          canRequestClaim: false,
+          owner: {
+            userId: "owner-1",
+            displayName: "Jordan Lee",
+            avatarUrl: null,
+          },
+          teams: [],
+        },
+      ]) as never,
+    );
+
+    renderWithProviders(<PartnerLandingPage />);
+
+    expect(await screen.findByTestId("dialog-claimed-org-access")).toHaveTextContent(
+      "Jordan Lee",
+    );
+    expect(window.location.search).not.toContain("accessRequestOrg");
+  });
+
+  it("sends a partner admin request and shows confirmation to a signed-in visitor", async () => {
+    mockedWhoami.mockReturnValue({
+      data: {
+        authenticated: true,
+        realUser: {
+          id: "requester-1",
+          name: "Example Coach",
+          email: "coach@example.com",
+          role: "coach",
+        },
+        viewingAs: null,
+      },
+    } as never);
+    mockedFetch
+      .mockResolvedValueOnce(
+        partnerResponse(null, [
+          {
+            id: "org-1",
+            name: "North Stars Soccer",
+            location: "Riverside",
+            city: "Riverside",
+            state: "CA",
+            logoUrl: null,
+            canRequestClaim: false,
+            owner: {
+              userId: "owner-1",
+              displayName: "Jordan Lee",
+              avatarUrl: null,
+            },
+            teams: [],
+          },
+        ]) as never,
+      )
+      .mockResolvedValueOnce({
+        data: {
+          id: "request-1",
+          status: "pending",
+          requestedRole: "admin",
+        },
+      } as never);
+
+    const user = userEvent.setup();
+    renderWithProviders(<PartnerLandingPage />);
+    await user.click(await screen.findByRole("button", { name: "Find Your Club" }));
+    await user.click(await screen.findByRole("button", { name: "View club page" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Request admin access" }),
+    );
+
+    await waitFor(() =>
+      expect(mockedFetch).toHaveBeenCalledWith(
+        "/api/v1/partner-pages/north-stars/organizations/org-1/admin-requests",
+        { method: "POST" },
+      ),
+    );
+    expect(await screen.findByTestId("claimed-org-success")).toHaveTextContent(
+      "Request sent securely",
+    );
+  });
+
+  it("keeps ownerless partner clubs on the existing organization-page path", async () => {
+    mockedFetch.mockResolvedValue(
+      partnerResponse(null, [
+        {
+          id: "org-1",
+          name: "North Stars Soccer",
+          location: "Riverside",
+          city: "Riverside",
+          state: "CA",
+          logoUrl: null,
+          canRequestClaim: true,
+          owner: null,
+          teams: [],
+        },
+      ]) as never,
+    );
+
+    renderWithProviders(<PartnerLandingPage />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Find Your Club" }));
+    await user.click(await screen.findByRole("button", { name: "View club page" }));
+
+    expect(window.location.pathname).toBe("/organizations/org-1");
+    expect(window.location.search).toBe("?showAround=1");
+    expect(screen.queryByTestId("dialog-claimed-org-access")).not.toBeInTheDocument();
   });
 
   it("keeps the existing page unchanged when no competition is linked", async () => {

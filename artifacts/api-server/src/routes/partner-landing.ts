@@ -4,6 +4,8 @@ import {
   organizations,
   organizationAdmins,
   organizationClaimRequests,
+  organizationJoinRequests,
+  notifications,
   orgAdminLists,
   partnerImportOperations,
   partnerLandingPages,
@@ -17,6 +19,7 @@ import { z } from "zod";
 import { requireAdmin } from "../lib/auth";
 import { asyncHandler } from "../lib/async-handler";
 import { appBaseUrl, sendEmail } from "../lib/email";
+import { dispatchNotificationEmail } from "../lib/notification-email";
 import { generateToken } from "../lib/passwords";
 import { apiError, MAX_IMAGE_DATA_URL_LENGTH } from "../lib/spec-helpers";
 
@@ -1065,12 +1068,25 @@ router.get(
           SELECT 1 FROM organization_admins oa
           WHERE oa.organization_id = ${organizations.id} AND oa.role = 'owner'
         )`,
+        owner: {
+          userId: sql<string | null>`CASE WHEN ${users.isMinor} = false THEN ${users.id} ELSE NULL END`,
+          displayName: sql<string | null>`CASE WHEN ${users.isMinor} = true THEN 'Organization owner' ELSE ${users.name} END`,
+          avatarUrl: sql<string | null>`CASE WHEN ${users.isMinor} = false THEN ${users.avatarUrl} ELSE NULL END`,
+        },
       })
       .from(partnerOrganizationMemberships)
       .innerJoin(
         organizations,
         eq(organizations.id, partnerOrganizationMemberships.organizationId),
       )
+      .leftJoin(
+        organizationAdmins,
+        and(
+          eq(organizationAdmins.organizationId, organizations.id),
+          eq(organizationAdmins.role, "owner"),
+        ),
+      )
+      .leftJoin(users, eq(users.id, organizationAdmins.userId))
       .where(
         and(
           eq(partnerOrganizationMemberships.partnerPageId, page.id),
@@ -1113,10 +1129,155 @@ router.get(
         organizations: rows.map((row) => ({
           ...row.organization,
           canRequestClaim: row.canRequestClaim,
+          owner:
+            row.owner.displayName == null
+              ? null
+              : {
+                  userId: row.owner.userId,
+                  displayName: row.owner.displayName,
+                  avatarUrl: row.owner.avatarUrl,
+                },
           teams: teamRows
             .filter((team) => team.organizationId === row.organization.id)
             .map(({ id, name }) => ({ id, name })),
         })),
+      },
+    });
+  }),
+);
+
+router.post(
+  "/partner-pages/:slug/organizations/:organizationId/admin-requests",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Create an account or sign in before requesting access");
+    const slug = p(req.params.slug).toLowerCase();
+    const organizationId = p(req.params.organizationId);
+    const [target] = await db
+      .select({
+        pageId: partnerLandingPages.id,
+        organizationId: organizations.id,
+        organizationName: organizations.name,
+        ownerUserId: organizationAdmins.userId,
+      })
+      .from(partnerLandingPages)
+      .innerJoin(
+        partnerOrganizationMemberships,
+        eq(partnerOrganizationMemberships.partnerPageId, partnerLandingPages.id),
+      )
+      .innerJoin(
+        organizations,
+        eq(organizations.id, partnerOrganizationMemberships.organizationId),
+      )
+      .innerJoin(
+        organizationAdmins,
+        and(
+          eq(organizationAdmins.organizationId, organizations.id),
+          eq(organizationAdmins.role, "owner"),
+        ),
+      )
+      .where(
+        and(
+          sql`lower(${partnerLandingPages.slug}) = ${slug}`,
+          eq(partnerLandingPages.published, true),
+          eq(partnerOrganizationMemberships.visible, true),
+          eq(organizations.id, organizationId),
+        ),
+      )
+      .limit(1);
+    if (!target) {
+      return apiError(res, 404, "Claimed organization is not available on this partner page");
+    }
+
+    const [myMembership] = await db
+      .select({ role: organizationAdmins.role })
+      .from(organizationAdmins)
+      .where(
+        and(
+          eq(organizationAdmins.organizationId, organizationId),
+          eq(organizationAdmins.userId, me.id),
+        ),
+      )
+      .limit(1);
+    if (myMembership?.role === "owner" || myMembership?.role === "admin") {
+      return apiError(res, 409, "You already have administrator access");
+    }
+
+    const [requester] = await db
+      .select({ name: users.name, isMinor: users.isMinor })
+      .from(users)
+      .where(eq(users.id, me.id))
+      .limit(1);
+    const requesterName =
+      requester && !requester.isMinor ? requester.name : "A Kinectem user";
+
+    const result = await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(organizationJoinRequests)
+        .values({
+          organizationId,
+          userId: me.id,
+          status: "pending",
+          requestedRole: "admin",
+          sourcePartnerPageId: target.pageId,
+        })
+        .onConflictDoNothing()
+        .returning();
+      if (!created) {
+        const [existing] = await tx
+          .select()
+          .from(organizationJoinRequests)
+          .where(
+            and(
+              eq(organizationJoinRequests.organizationId, organizationId),
+              eq(organizationJoinRequests.userId, me.id),
+              eq(organizationJoinRequests.status, "pending"),
+            ),
+          )
+          .limit(1);
+        return { request: existing, created: false };
+      }
+      await tx.insert(notifications).values({
+        userId: target.ownerUserId,
+        kind: "org_admin_access_request",
+        message: `${requesterName} requested admin access to ${target.organizationName}`,
+        link: `/organizations/${organizationId}`,
+        actorUserId: me.id,
+      });
+      return { request: created, created: true };
+    });
+    if (!result.request) {
+      return apiError(res, 409, "A pending access request already exists");
+    }
+
+    if (result.created) {
+      await dispatchNotificationEmail({
+        userId: target.ownerUserId,
+        category: "team_roster",
+        excludeRecipientUserId: me.id,
+        build: (ctx) => ({
+          to: ctx.to,
+          subject: `${requesterName} requested admin access to ${target.organizationName}`,
+          kind: "org_admin_access_request",
+          contextLabel: target.organizationName,
+          text: [
+            `Hi ${ctx.recipientName},`,
+            "",
+            `${requesterName} requested administrator access to ${target.organizationName} after finding the club on its partner page.`,
+            "",
+            `Review the request: ${appBaseUrl()}/app/organizations/${organizationId}`,
+            "",
+            `Manage email preferences: ${ctx.unsubscribeUrl}`,
+          ].join("\n"),
+        }),
+      });
+    }
+
+    return res.status(result.created ? 201 : 200).json({
+      data: {
+        id: result.request.id,
+        status: result.request.status,
+        requestedRole: result.request.requestedRole,
       },
     });
   }),
