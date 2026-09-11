@@ -158,40 +158,49 @@ export function ClaimedOrgAccessDialog({
           </div>
         ) : null}
 
-        <div className="mt-6 flex flex-col gap-3">
-          {submitted || currentUserIsOwner ? (
+        <div className="mt-6 space-y-3">
+          {!submitted && !currentUserIsOwner && (
+            <p className="text-center text-xs leading-relaxed text-muted-foreground">
+              You can continue to the club page now without requesting access.
+            </p>
+          )}
+          <div className="flex flex-col gap-3">
             <Button
               className="w-full font-bold h-11"
               onClick={onContinue}
               data-testid="btn-claimed-org-continue"
             >
-              Done
+              Continue to club page
             </Button>
-          ) : !signedIn ? (
-            <Button
-              className="w-full font-bold h-11"
-              onClick={onCreateAccount}
-              data-testid="btn-claimed-org-create-account"
-            >
-              Sign in or create an account
-            </Button>
-          ) : (
-            <Button
-              className="w-full font-bold h-11"
-              onClick={onRequestAccess}
-              disabled={pending}
-              data-testid="btn-claimed-org-request"
-            >
-              {pending ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Sending request...
-                </>
-              ) : (
-                "Request admin access"
-              )}
-            </Button>
-          )}
+            {!submitted && !currentUserIsOwner && !signedIn && (
+              <Button
+                variant="outline"
+                className="w-full font-bold h-11"
+                onClick={onCreateAccount}
+                data-testid="btn-claimed-org-create-account"
+              >
+                Sign in or create an account
+              </Button>
+            )}
+            {!submitted && !currentUserIsOwner && signedIn && (
+              <Button
+                variant="outline"
+                className="w-full font-bold h-11"
+                onClick={onRequestAccess}
+                disabled={pending}
+                data-testid="btn-claimed-org-request"
+              >
+                {pending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Sending request...
+                  </>
+                ) : (
+                  "Request admin access"
+                )}
+              </Button>
+            )}
+          </div>
         </div>
       </DialogContent>
     </Dialog>

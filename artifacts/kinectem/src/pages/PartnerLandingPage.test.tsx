@@ -414,6 +414,12 @@ describe("PartnerLandingPage featured competition", () => {
       "href",
       "/users/owner-1",
     );
+    expect(dialog).toHaveTextContent(
+      "You can continue to the club page now without requesting access.",
+    );
+    expect(
+      within(dialog).getByRole("button", { name: "Continue to club page" }),
+    ).toBeInTheDocument();
     expect(localStorage.getItem(claimedOrgAccessSeenKey("org-1"))).toBe("1");
     await userEvent.setup().click(
       within(dialog).getByRole("button", { name: "Sign in or create an account" }),
@@ -423,6 +429,39 @@ describe("PartnerLandingPage featured competition", () => {
     expect(new URLSearchParams(window.location.search).get("returnTo")).toBe(
       "/partners/north-stars?accessRequestOrg=org-1",
     );
+  });
+
+  it("lets a signed-out visitor continue to the club page without requesting", async () => {
+    mockedFetch.mockResolvedValue(
+      partnerResponse(null, [
+        {
+          id: "org-1",
+          name: "North Stars Soccer",
+          location: "Riverside",
+          city: "Riverside",
+          state: "CA",
+          logoUrl: null,
+          canRequestClaim: false,
+          owner: {
+            userId: "owner-1",
+            displayName: "Jordan Lee",
+            avatarUrl: null,
+          },
+          teams: [],
+        },
+      ]) as never,
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<PartnerLandingPage />);
+    await user.click(await screen.findByRole("button", { name: "Find Your Club" }));
+    await user.click(await screen.findByRole("button", { name: "View club page" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Continue to club page" }),
+    );
+
+    expect(window.location.pathname).toBe("/organizations/org-1");
+    expect(window.location.search).toBe("?showAround=1");
+    expect(mockedFetch).toHaveBeenCalledTimes(1);
   });
 
   it("opens the claimed-club dialog after signup return even when it was already seen", async () => {
@@ -505,6 +544,9 @@ describe("PartnerLandingPage featured competition", () => {
     renderWithProviders(<PartnerLandingPage />);
     await user.click(await screen.findByRole("button", { name: "Find Your Club" }));
     await user.click(await screen.findByRole("button", { name: "View club page" }));
+    expect(
+      await screen.findByRole("button", { name: "Continue to club page" }),
+    ).toBeInTheDocument();
     await user.click(
       await screen.findByRole("button", { name: "Request admin access" }),
     );
@@ -518,6 +560,12 @@ describe("PartnerLandingPage featured competition", () => {
     expect(await screen.findByTestId("claimed-org-success")).toHaveTextContent(
       "Request sent securely",
     );
+    expect(
+      screen.getByRole("button", { name: "Continue to club page" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Request admin access" }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps ownerless partner clubs on the existing organization-page path", async () => {

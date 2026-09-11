@@ -3,7 +3,7 @@ name: Claimed partner club access
 description: Product and privacy rules for recovering administrator access from a claimed club listed on a partner page.
 ---
 
-An already-claimed club opened from a partnership directory gets a public-safe ownership explanation before navigation. Show only an adult owner's public profile identity; mask a minor owner. The automatic explanation is once per organization/browser, but an explicit signup return must reopen it so the visitor can finish.
+An already-claimed club opened from a partnership directory gets a public-safe ownership explanation before navigation. Show only an adult owner's public profile identity; mask a minor owner. The automatic explanation is once per organization/browser, but an explicit signup return must reopen it so the visitor can finish. Visitors must always have a clear way to continue to the club page without signing in or requesting access.
 
 Access requests from this surface always request the administrator role. The current owner approves or declines through the existing organization queue, and approval grants administrator access; ownership transfer remains a separate owner-only action.
 
