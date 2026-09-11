@@ -37,7 +37,27 @@ vi.mock("@/components/OrgSetupChecklist", () => ({
   RolesPermissionsCard: () => <div data-testid="mock-roles-permissions" />,
 }));
 vi.mock("@/components/ManageMembersDialog", () => ({
-  ManageMembersDialog: () => null,
+  ManageMembersDialog: ({
+    open,
+    ownershipHandoff,
+    onOpenChange,
+  }: {
+    open: boolean;
+    ownershipHandoff?: boolean;
+    onOpenChange: (open: boolean) => void;
+  }) =>
+    open ? (
+      <div data-testid="dialog-manage-members">
+        {ownershipHandoff && (
+          <div data-testid="ownership-handoff-message">
+            You are now the owner of this entire organization
+          </div>
+        )}
+        <button type="button" onClick={() => onOpenChange(false)}>
+          Close member management
+        </button>
+      </div>
+    ) : null,
 }));
 vi.mock("@/components/EditOrgDialog", () => ({
   EditOrgDialog: () => null,
@@ -441,17 +461,27 @@ describe("OrganizationPage — admin control gating", () => {
   });
 
   it("starts the approved-owner handoff from its email link", async () => {
+    const user = userEvent.setup();
     installHandlers({ role: "owner" });
     localStorage.setItem(ORG_TOUR_STORAGE_KEY, "1");
     setMockSearch("ownerSetup=1");
 
     renderWithProviders(<OrganizationPage />);
 
-    expect(await screen.findByTestId("dialog-org-pre-invite")).toBeInTheDocument();
+    expect(await screen.findByTestId("dialog-manage-members")).toBeInTheDocument();
+    expect(screen.getByTestId("ownership-handoff-message")).toHaveTextContent(
+      "You are now the owner of this entire organization",
+    );
+    expect(screen.queryByTestId("dialog-org-pre-invite")).not.toBeInTheDocument();
     expect(localStorage.getItem(ORG_TOUR_STORAGE_KEY)).toBeNull();
     expect(
       sessionStorage.getItem(`kinectem:coach-setup:${ORG_ID}`),
     ).toBe("1");
+
+    await user.click(
+      screen.getByRole("button", { name: "Close member management" }),
+    );
+    expect(await screen.findByTestId("dialog-org-pre-invite")).toBeInTheDocument();
   });
 
   it("lets a manager manually reopen the pre-invite message", async () => {

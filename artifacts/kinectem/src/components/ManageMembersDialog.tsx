@@ -94,6 +94,7 @@ export function ManageMembersDialog({
   myUserId,
   myRole,
   onBulkAddCoaches,
+  ownershipHandoff = false,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -106,6 +107,7 @@ export function ManageMembersDialog({
   // Optional shortcut to the bulk coach invite flow. When provided we show
   // a "Bulk add coach" button; clicking it closes this dialog first.
   onBulkAddCoaches?: () => void;
+  ownershipHandoff?: boolean;
 }) {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -338,6 +340,29 @@ export function ManageMembersDialog({
               of the org. Only the owner can transfer ownership.
             </DialogDescription>
           </DialogHeader>
+
+          {ownershipHandoff && (
+            <div
+              className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950"
+              data-testid="ownership-handoff-message"
+            >
+              <div className="flex items-start gap-3">
+                <Crown className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                <div className="space-y-2">
+                  <p className="font-black">
+                    You are now the owner of this entire organization
+                  </p>
+                  <p className="text-sm leading-relaxed">
+                    This is broader than coach or team access. If you are not
+                    the club&apos;s long-term owner, invite the actual owner,
+                    director, board members, or other trusted administrators
+                    now. After the right person joins, you can transfer
+                    ownership to them from this window.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="flex flex-wrap justify-end gap-2">
             {onBulkAddCoaches && (

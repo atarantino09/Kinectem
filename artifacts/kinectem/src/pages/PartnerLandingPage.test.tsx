@@ -531,7 +531,7 @@ describe("PartnerLandingPage featured competition", () => {
       renderWithProviders(<PartnerLandingPage />);
       await user.click(await screen.findByRole("button", { name: "Find Your Club" }));
 
-      await user.click(screen.getAllByRole("button", { name: "Request access" })[0]);
+      await user.click(screen.getAllByRole("button", { name: "Request ownership access" })[0]);
       const requestPanel = await screen.findByTestId("partner-access-request");
       expect(requestPanel).toHaveTextContent("North Stars Soccer");
       expect(scrollIntoView).toHaveBeenLastCalledWith({
@@ -539,7 +539,7 @@ describe("PartnerLandingPage featured competition", () => {
         block: "center",
       });
 
-      await user.click(screen.getAllByRole("button", { name: "Request access" })[1]);
+      await user.click(screen.getAllByRole("button", { name: "Request ownership access" })[1]);
       expect(requestPanel).toHaveTextContent("Harbor United");
       expect(scrollIntoView).toHaveBeenLastCalledWith({
         behavior: "smooth",
@@ -582,7 +582,7 @@ describe("PartnerLandingPage featured competition", () => {
     renderWithProviders(<PartnerLandingPage />);
 
     await user.click(await screen.findByRole("button", { name: "Find Your Club" }));
-    await user.click(screen.getByRole("button", { name: "Request access" }));
+    await user.click(screen.getByRole("button", { name: "Request ownership access" }));
     await user.type(
       screen.getByLabelText("Organization name"),
       "Athletic Soccer Club Saugerties - H",
@@ -597,7 +597,7 @@ describe("PartnerLandingPage featured competition", () => {
     await user.click(screen.getByText(/I am authorized to represent/));
     await user.click(
       screen.getByRole("button", {
-        name: "Submit request for Athletic Soccer Club Saugerties - HV",
+        name: "Request ownership of Athletic Soccer Club Saugerties - HV",
       }),
     );
 

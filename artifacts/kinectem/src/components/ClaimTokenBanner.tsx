@@ -152,6 +152,10 @@ export function OrgClaimBanner({ orgId }: { orgId: string }) {
           `kinectem:pre-invite-org:${res.organizationId}`,
           "1",
         );
+        sessionStorage.setItem(
+          `kinectem:ownership-handoff:${res.organizationId}`,
+          "1",
+        );
       } catch {
         // sessionStorage unavailable — the owner can invite coaches later.
       }

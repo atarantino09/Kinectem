@@ -683,7 +683,7 @@ export default function PartnerLandingPage() {
                     <div className="mt-4 text-sm text-slate-500">{org.teams.slice(0, 3).map((team) => team.name).join(" · ") || "Team pages are ready to explore"}{org.teams.length > 3 ? ` +${org.teams.length - 3} more` : ""}</div>
                     <div className="mt-auto flex flex-wrap gap-2 pt-5">
                       <Link href={`/organizations/${org.id}?showAround=1`}><Button variant="outline" size="sm" className="font-bold">View club page</Button></Link>
-                      {org.canRequestClaim && <Button size="sm" className="font-bold" style={{ background: page.primaryColor }} onClick={() => beginClaim(org)}>Request access</Button>}
+                      {org.canRequestClaim && <Button size="sm" className="font-bold" style={{ background: page.primaryColor }} onClick={() => beginClaim(org)}>Request ownership access</Button>}
                     </div>
                   </CardContent>
                 </Card>
@@ -709,7 +709,7 @@ export default function PartnerLandingPage() {
                 </div>
               ) : (
                 <div className="grid gap-8 lg:grid-cols-[.8fr_1.2fr]">
-                  <div><div className="flex items-center gap-3"><OrgLogo name={selected.name} logoUrl={selected.logoUrl} className="h-16 w-16 rounded-xl" /><div><div className="text-xs font-black uppercase tracking-wide" style={{ color: page.primaryColor }}>{page.officialName}</div><h2 className="text-2xl font-black">{selected.name}</h2><p className="text-sm text-muted-foreground">{locationOf(selected)}</p></div></div><p className="mt-5 text-sm leading-relaxed text-muted-foreground">Kinectem must authenticate every requester. Only an authorized leader of {selected.name} should continue. Your request will be reviewed; access is never granted immediately.</p></div>
+                  <div><div className="flex items-center gap-3"><OrgLogo name={selected.name} logoUrl={selected.logoUrl} className="h-16 w-16 rounded-xl" /><div><div className="text-xs font-black uppercase tracking-wide" style={{ color: page.primaryColor }}>{page.officialName}</div><h2 className="text-2xl font-black">{selected.name}</h2><p className="text-sm text-muted-foreground">{locationOf(selected)}</p></div></div><p className="mt-5 text-sm leading-relaxed text-muted-foreground">Kinectem must authenticate every requester. Approval makes you the initial owner of the entire {selected.name} organization, not only a coach or team manager. If that should be someone else, you can invite the actual owner, directors, or board members after approval and transfer ownership. Your request will be reviewed; ownership is never granted immediately.</p></div>
                   {!me ? (
                     <div className="rounded-2xl bg-muted p-6"><h3 className="font-black">Sign in or create an account to continue</h3><p className="mt-2 text-sm text-muted-foreground">We'll preserve your selected organization when you return.</p><div className="mt-4 flex gap-2"><Link href={`/login?signup=1&returnTo=${encodeURIComponent(`/partners/${slug}`)}`}><Button>Create account</Button></Link><Link href={`/login?returnTo=${encodeURIComponent(`/partners/${slug}`)}`}><Button variant="outline">Sign in</Button></Link></div></div>
                   ) : (
@@ -745,8 +745,8 @@ export default function PartnerLandingPage() {
                        </div>
                       <div className="grid gap-3 md:grid-cols-2"><div><Label>Full name</Label><Input value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} /></div><div><Label>Title at the organization</Label><Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Club president, director…" /></div></div>
                       <label className="flex gap-3 text-sm"><Checkbox checked={form.confirmCorrect} onCheckedChange={(value) => setForm({ ...form, confirmCorrect: value === true })} />I selected the correct organization: {selected.name}.</label>
-                      <label className="flex gap-3 text-sm"><Checkbox checked={form.confirmAuthorized} onCheckedChange={(value) => setForm({ ...form, confirmAuthorized: value === true })} />I am authorized to represent {selected.name} and understand Kinectem will verify this request.</label>
-                      <Button className="font-black" style={{ background: page.primaryColor }} disabled={submitting || !form.organizationName || !form.fullName || !form.title || !form.confirmCorrect || !form.confirmAuthorized} onClick={submitClaim}>{submitting ? "Submitting…" : `Submit request for ${selected.name}`}</Button>
+                      <label className="flex gap-3 text-sm"><Checkbox checked={form.confirmAuthorized} onCheckedChange={(value) => setForm({ ...form, confirmAuthorized: value === true })} />I am authorized to represent {selected.name} and understand that approval makes me its initial organization owner.</label>
+                      <Button className="font-black" style={{ background: page.primaryColor }} disabled={submitting || !form.organizationName || !form.fullName || !form.title || !form.confirmCorrect || !form.confirmAuthorized} onClick={submitClaim}>{submitting ? "Submitting…" : `Request ownership of ${selected.name}`}</Button>
                     </div>
                   )}
                 </div>

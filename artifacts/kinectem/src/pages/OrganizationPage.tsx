@@ -135,6 +135,7 @@ export default function OrganizationPage() {
   const [newPostOpen, setNewPostOpen] = useState(false);
   const [newsletterOpen, setNewsletterOpen] = useState(false);
   const [manageMembersOpen, setManageMembersOpen] = useState(false);
+  const [ownershipHandoffOpen, setOwnershipHandoffOpen] = useState(false);
   const [adminQueueOpen, setAdminQueueOpen] = useState(false);
   const [broadcastOpen, setBroadcastOpen] = useState(false);
   const [sharePageOpen, setSharePageOpen] = useState(false);
@@ -167,6 +168,18 @@ export default function OrganizationPage() {
   const [stageCoachesOpen, setStageCoachesOpen] = useState(false);
   useEffect(() => {
     if (!orgId) return;
+    try {
+      const ownershipKey = `kinectem:ownership-handoff:${orgId}`;
+      if (sessionStorage.getItem(ownershipKey) === "1") {
+        sessionStorage.removeItem(ownershipKey);
+        setOwnershipHandoffOpen(true);
+        setManageMembersOpen(true);
+        setFirstRunResolved(false);
+        return;
+      }
+    } catch {
+      // sessionStorage unavailable; continue to the existing prompts.
+    }
     try {
       const preInviteKey = `kinectem:pre-invite-org:${orgId}`;
       if (sessionStorage.getItem(preInviteKey) === "1") {
@@ -326,7 +339,8 @@ export default function OrganizationPage() {
       `${url.pathname}${url.search}${url.hash}`,
     );
     setFirstRunResolved(false);
-    setHandoffAdvance((value) => value + 1);
+    setOwnershipHandoffOpen(true);
+    setManageMembersOpen(true);
   }, [
     isManagerRole,
     me?.id,
@@ -780,11 +794,18 @@ export default function OrganizationPage() {
       {me?.id && isOrgManager && (
         <ManageMembersDialog
           open={manageMembersOpen}
-          onOpenChange={setManageMembersOpen}
+          onOpenChange={(open) => {
+            setManageMembersOpen(open);
+            if (!open && ownershipHandoffOpen) {
+              setOwnershipHandoffOpen(false);
+              setHandoffAdvance((value) => value + 1);
+            }
+          }}
           orgId={orgId}
           orgName={organization.name}
           myUserId={me.id}
           myRole={organization.role!}
+          ownershipHandoff={ownershipHandoffOpen}
           onBulkAddCoaches={() => setBulkCoachesOpen(true)}
         />
       )}
