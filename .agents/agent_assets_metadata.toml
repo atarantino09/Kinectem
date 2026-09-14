@@ -6,231 +6,284 @@ id = "SgflPTEXPZxrZuE11oC5z"
 uri = "file://artifacts/kinectem/screenshots/roster-filled.jpg"
 type = "image"
 title = "Filled Roster — Players with Parents Expanded"
+logical_id = "d35a24cd-a56a-469d-8649-b5853bb37721"
 
 [[outputs]]
 id = "J699H2iCx2A9FosYzn0x7"
 uri = "file://artifacts/kinectem/screenshots/org-logo-uploaded.jpg"
 type = "image"
 title = "Existing Org — Logo Uploaded"
+logical_id = "dae3fbe5-964a-4c17-864a-4bc6773020fb"
 
 [[outputs]]
 id = "3gOUP76w0O5o70dYCaiWi"
 uri = "file://artifacts/kinectem/screenshots/org-created-with-logo.jpg"
 type = "image"
 title = "New Org Created with Logo"
+logical_id = "c64c741b-3693-46fa-9872-240963d4b990"
 
 [[outputs]]
 id = "p6eI7MYv0itwqPODHKssh"
 uri = "file://artifacts/kinectem/test-results/recap-composer-single-clic-2d2c0-r-opening-Post-On-Behalf-Of-chromium/test-failed-1.png"
 type = "image"
 title = "Recap composer test failure screenshot"
+logical_id = "880d75f6-71c0-4259-8a94-ce0c0439e66f"
 
 [[outputs]]
 id = "0uYJMmUwVdJFrizLSezoR"
 uri = "file://exports/kinectem-sdk/kinectem-sdk-0.1.0.tar.gz"
 type = "unspecified"
 title = "@kinectem/sdk v0.1.0 — installable npm tarball"
+logical_id = "d11fc680-f55a-4c50-8f09-7724485c9379"
 
 [[outputs]]
 id = "_cW_8uRurtf_pBF4pUfUq"
 uri = "file://exports/kinectem-sdk/README.md"
 type = "text"
 title = "SDK README — install + usage"
+logical_id = "b90bf25c-c5ea-401b-90d5-56e419154bf8"
 
 [[outputs]]
 id = "XxcSva6mMe7f-9jntVHqx"
 uri = "file://exports/kinectem-sdk/openapi.json"
 type = "unspecified"
 title = "Kinectem OpenAPI spec (JSON, 153 endpoints)"
+logical_id = "c9bf16f6-d51c-4544-9a8e-6176e4088375"
 
 [[outputs]]
 id = "0xIArRda-9uIz9IhOskFz"
 uri = "file://artifacts/kinectem/public/logo-icon.png"
 type = "image"
 title = "New favicon (K mark)"
+logical_id = "b89396f6-4108-4402-bc8c-7528055d3775"
 
 [[outputs]]
 id = "qgHXZP7G9XJaxA4qmo-l8"
 uri = "file://artifacts/signup-walkthrough/public/audio/bg_music.mp3"
 type = "audio"
 title = "background music"
+logical_id = "e5e0fc0f-982b-4dee-9153-4d0230932824"
 
 [[outputs]]
 id = "cTLKMyzbGe_vQ8-HZTuOv"
 uri = "file://artifacts/signup-walkthrough/public/audio/vo_marketing.mp3"
 type = "audio"
 title = "speech"
+logical_id = "bbef8dda-f911-4c06-967b-34734504d8d7"
 
 [[outputs]]
 id = "FbPELdHQ1PMVlvIX05z2M"
 uri = "file://artifacts/signup-walkthrough/public/audio/vo_orgCreate.mp3"
 type = "audio"
 title = "speech"
+logical_id = "f856cc50-aa13-4342-b380-7e95f97a0f69"
 
 [[outputs]]
 id = "g1TQ-IG5imLmKQ0qYbTRc"
 uri = "file://artifacts/signup-walkthrough/public/audio/vo_signup.mp3"
 type = "audio"
 title = "speech"
+logical_id = "b05eeb72-1bb3-426e-880f-060396107de3"
 
 [[outputs]]
 id = "6BvUGW0wkmxpVR7I2P7Kx"
 uri = "file://artifacts/signup-walkthrough/public/audio/vo_teamCreate.mp3"
 type = "audio"
 title = "speech"
+logical_id = "6265e2f8-13a6-4b52-a76a-485297e7bc69"
 
 [[outputs]]
 id = "FNMdtQIK7RsN1y6bmlpiO"
 uri = "file://artifacts/signup-walkthrough/public/audio/vo_recap.mp3"
 type = "audio"
 title = "speech"
+logical_id = "745f64e7-e13a-452e-97b5-469be305133e"
 
 [[outputs]]
 id = "fHtxQYSrRn3D64bYygB1I"
 uri = "file://artifacts/signup-walkthrough/public/walkthrough.mp4"
 type = "video"
 title = "Kinectem signup walkthrough"
+logical_id = "f15efd51-29d5-4857-930b-0e224c5995a7"
 
 [[outputs]]
 id = "jhUVWE7nWQb3ARg7m1l84"
 uri = "file://artifacts/game-recap-walkthrough/public/audio/bg_music.mp3"
 type = "audio"
 title = "background music"
+logical_id = "892dafb7-9572-42f7-b03c-135fa95c19ed"
 
 [[outputs]]
 id = "HdMADroD97s8IHTxrLabZ"
 uri = "file://artifacts/game-recap-walkthrough/public/audio/vo_1b.mp3"
 type = "audio"
 title = "scene1 coach recap line"
+logical_id = "45d74161-bd85-45ad-a295-1619f7aa5ba8"
 
 [[outputs]]
 id = "bqkYnul3kCasrz4rBVZ_c"
 uri = "file://artifacts/game-recap-walkthrough/public/audio/vo_2a.mp3"
 type = "audio"
 title = "vo_2a_team_story"
+logical_id = "38cedf4a-2fde-43cf-8920-3adc016b7496"
 
 [[outputs]]
 id = "07Xf_0iOTc7suOnHwnJ0r"
 uri = "file://artifacts/game-recap-walkthrough/public/audio/vo_3a.mp3"
 type = "audio"
 title = "vo_3a"
+logical_id = "bd9accb4-e3a3-45b7-b571-dc37888f39c7"
 
 [[outputs]]
 id = "RWtl12G8vPdE96d_JUlOb"
 uri = "file://artifacts/game-recap-walkthrough/public/audio/vo_3b.mp3"
 type = "audio"
 title = "vo_3b growing searchable digital storybook"
+logical_id = "fff7d05a-c800-4517-b502-d6c8480f148e"
 
 [[outputs]]
 id = "T7mLdlEPg6IfrRjq_3OUr"
 uri = "file://artifacts/game-recap-walkthrough/public/audio/vo_4a.mp3"
 type = "audio"
 title = "scene4 filter sentence"
+logical_id = "9811e49b-2db3-401c-ab13-1319e33c8cb5"
 
 [[outputs]]
 id = "Hbw5hyt8dS8fU_toUeu6C"
 uri = "file://artifacts/game-recap-walkthrough/public/audio/vo_4b.mp3"
 type = "audio"
 title = "scene4 closing line"
+logical_id = "5edc4d2b-633c-4d3b-a92d-f661cdacaed6"
 
 [[outputs]]
 id = "8FwrauQLHlT4lbMPTMI0V"
 uri = "file://artifacts/game-recap-walkthrough/public/audio/vo_5.mp3"
 type = "audio"
 title = "vo_5"
+logical_id = "2b4464ae-9b51-470e-b915-c13629e21ca1"
 
 [[outputs]]
 id = "hrII8zRuwOzvfIm1hQn9d"
 uri = "file://artifacts/game-recap-walkthrough/public/audio/vo_1a.mp3"
 type = "audio"
 title = "vo_1a"
+logical_id = "680f2e6b-bc12-47a1-8887-1069d372ce6e"
 
 [[outputs]]
 id = "JngVq7C1NaLVJ5p4LQth7"
 uri = "file://artifacts/game-recap-walkthrough/public/audio/vo_2b.mp3"
 type = "audio"
 title = "vo_2b org page alongside every other team"
+logical_id = "a5f5aec5-de8c-4506-9ad6-74d4290643bf"
 
 [[outputs]]
 id = "M2Epa3EtS-9ZsKrvwLRQF"
 uri = "file://.local/sam-carter-avatar-preview.jpg"
 type = "image"
 title = "Sam Carter avatar — wider action crop"
+logical_id = "6fc11371-d688-43ce-aa15-05f596af0d91"
 
 [[outputs]]
 id = "AFQwb1PcIyLJQhQrjjM--"
 uri = "file://.local/vo4b_takeA.mp3"
 type = "audio"
 title = "Take A — expressive"
+logical_id = "cb9e5b6e-095b-4782-ace2-709c98004152"
 
 [[outputs]]
 id = "thvSoHuOdmu6-VzeGRiDU"
 uri = "file://.local/vo4b_takeB.mp3"
 type = "audio"
 title = "Take B — slightly faster"
+logical_id = "a2229efe-cc5f-49ef-8b1e-baf08797b29d"
 
 [[outputs]]
 id = "ZDJTUskpCIYK245aEbegv"
 uri = "file://.local/vo4b_takeC.mp3"
 type = "audio"
 title = "Take C — most upbeat"
+logical_id = "86e47dbe-1daf-43d6-854d-73b1894abf6d"
 
 [[outputs]]
 id = "3YRs3GCVWqrdTawxUJaGt"
 uri = "file://CODE_REVIEW.md"
 type = "text"
 title = "Kinectem — Full Code Review (Security & UX Speed)"
+logical_id = "55384a0c-e8eb-4e65-88c1-12bfd08892bc"
 
 [[outputs]]
 id = "ozANDl0YOF4XHpcZQcBb4"
 uri = "file://artifacts/ai-assist-walkthrough/public/audio/vo_1a.mp3"
 type = "audio"
 title = "vo_1a"
+logical_id = "88a99a94-c554-4764-a478-1f717884413e"
 
 [[outputs]]
 id = "s1kvXI18P7X2zPIvRKF50"
 uri = "file://artifacts/ai-assist-walkthrough/public/audio/vo_1b.mp3"
 type = "audio"
 title = "vo_1b"
+logical_id = "f3823196-c44b-40f5-bfcc-51f2bf62691e"
 
 [[outputs]]
 id = "QOIsDc_2CxpsLIRSFjKzm"
 uri = "file://artifacts/ai-assist-walkthrough/public/audio/vo_2.mp3"
 type = "audio"
 title = "vo_2"
+logical_id = "7bc4065d-779f-458a-bc16-5e12436ae421"
 
 [[outputs]]
 id = "4pvEVK5mQN96EVhySQN35"
 uri = "file://artifacts/ai-assist-walkthrough/public/audio/vo_3.mp3"
 type = "audio"
 title = "vo_3"
+logical_id = "d8ed84b3-7dc3-48c1-96b6-55c41ea6f6f9"
 
 [[outputs]]
 id = "nNHo1Q9wFQ7r_f6_Pt7qD"
 uri = "file://artifacts/ai-assist-walkthrough/public/audio/vo_4a.mp3"
 type = "audio"
 title = "vo_4a"
+logical_id = "3419b02b-8025-4737-a15e-348153e313c9"
 
 [[outputs]]
 id = "UfGoRiULhNxf7MkhzRu27"
 uri = "file://artifacts/ai-assist-walkthrough/public/audio/vo_4b.mp3"
 type = "audio"
 title = "vo_4b"
+logical_id = "d1459a65-9cc5-412f-bbe5-60d37ac092eb"
 
 [[outputs]]
 id = "wTUVLs9qGz8y7QwrOiVnc"
 uri = "file://artifacts/ai-assist-walkthrough/public/audio/vo_5.mp3"
 type = "audio"
 title = "vo_5"
+logical_id = "8c297c61-90b9-410b-8c12-49b11a669fde"
 
 [[outputs]]
 id = "aOvDNMd7_0FKk44icoPtH"
 uri = "file://organizations.csv"
 type = "table"
 title = "837 written-in org names (production seed list)"
+logical_id = "4617e0dc-3d6c-4d9f-b7f0-2a91d24c91fd"
 
 [[outputs]]
 id = "xfWrBKDzmxmU90FxIVSEs"
 uri = "file://exports/competition-pages-and-hubs-writeup.md"
 type = "text"
 title = "Competition Pages & Hubs — Feature Write-up"
+logical_id = "1b09cfdb-75c8-4f14-8293-c4b4e80d00b3"
+
+[[outputs]]
+id = "G5NMuchOz2kCzIrsDjLNs"
+uri = "file://attached_assets/full-360-sports-logo-cropped.png"
+type = "image"
+title = "Full 360 Sports — optimized logo"
+description = "High-resolution logo cropped to the artwork bounds for a larger, sharper Partners card."
+logical_id = "2da10e65-bcdf-41e6-97b5-ab69dbbb0fb3"
+content_hash = "sha256:c8934265d2381f44e38a2f308b38e502177c57a7436176d00b13a7857375102d"
+size = 386135
+mtime_ms = 1789394360970
+storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:59b3789f-cce8-49cf-88a3-887151719960/2da10e65-bcdf-41e6-97b5-ab69dbbb0fb3/f4c5dcf9-bae4-4ef4-a20f-4f373e47c912"
+storage_version_token = "1789394832770876"
+content_type = "image/png"
