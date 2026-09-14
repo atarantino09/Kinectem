@@ -43,6 +43,10 @@ export default defineConfig({
           import.meta.dirname,
           "for-organizers.html",
         ),
+        partners: path.resolve(
+          import.meta.dirname,
+          "partners.html",
+        ),
       },
     },
   },

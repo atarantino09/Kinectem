@@ -2586,6 +2586,22 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
         ADD COLUMN IF NOT EXISTS practice_dates date[];
     `,
   },
+  {
+    name: "2026-09-14-marketing-partners",
+    sql: `
+      CREATE TABLE IF NOT EXISTS marketing_partners (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        name text NOT NULL,
+        logo_url text NOT NULL,
+        website_url text,
+        sort_order integer NOT NULL DEFAULT 0,
+        created_at timestamp NOT NULL DEFAULT now(),
+        updated_at timestamp NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS marketing_partners_sort_idx
+        ON marketing_partners (sort_order, created_at);
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

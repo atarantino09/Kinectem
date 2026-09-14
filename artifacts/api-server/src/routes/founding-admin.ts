@@ -3,6 +3,7 @@ import {
   db,
   competitionOrganizers,
   foundingSignups,
+  marketingPartners,
   organizations,
   organizationAdmins,
   teams,
@@ -16,6 +17,10 @@ import { asyncHandler } from "../lib/async-handler";
 import { rateLimit, ipKey } from "../middlewares/rate-limit";
 import { apiError } from "../lib/spec-helpers";
 import { WRITTEN_IN_ORG_NAMES } from "../data/written-in-orgs";
+import {
+  createPartnerLogoUpload,
+  partnerLogoFileFromUrl,
+} from "../lib/marketing-partner-storage";
 
 const router: IRouter = Router();
 
@@ -170,6 +175,137 @@ const UpdateBody = z.object({
     .nullable()
     .transform((v) => (v ? v : null)),
 });
+
+function serializeMarketingPartner(row: typeof marketingPartners.$inferSelect) {
+  return {
+    ...row,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+const PartnerUploadBody = z.object({
+  name: z.string().trim().min(1).max(200),
+  size: z.number().int().positive().max(5 * 1024 * 1024),
+  contentType: z.enum(["image/png", "image/jpeg", "image/webp", "image/svg+xml"]),
+});
+
+const PartnerBody = z.object({
+  name: z.string().trim().min(1, "Partner name is required").max(200),
+  logoUrl: z.string().startsWith("/api/v1/marketing-partner-logos/"),
+  websiteUrl: z.string().trim().url().max(2000).optional().nullable(),
+  sortOrder: z.number().int().min(0).max(10000).default(0),
+});
+
+router.get(
+  "/founding-admin/partners",
+  requireFoundingAdmin,
+  asyncHandler(async (_req, res) => {
+    const rows = await db
+      .select()
+      .from(marketingPartners)
+      .orderBy(asc(marketingPartners.sortOrder), asc(marketingPartners.createdAt));
+    res.json({ data: rows.map(serializeMarketingPartner) });
+  }),
+);
+
+router.post(
+  "/founding-admin/partners/request-upload",
+  requireFoundingAdmin,
+  asyncHandler(async (req, res) => {
+    const parsed = PartnerUploadBody.safeParse(req.body);
+    if (!parsed.success) {
+      apiError(res, 400, "Choose a PNG, JPG, WebP, or SVG logo under 5 MB.", {
+        code: "VALIDATION_FAILED",
+      });
+      return;
+    }
+    const upload = await createPartnerLogoUpload();
+    res.json(upload);
+  }),
+);
+
+router.post(
+  "/founding-admin/partners",
+  requireFoundingAdmin,
+  asyncHandler(async (req, res) => {
+    const parsed = PartnerBody.safeParse(req.body);
+    if (!parsed.success) {
+      apiError(res, 400, parsed.error.errors[0]?.message ?? "Invalid partner.", {
+        code: "VALIDATION_FAILED",
+      });
+      return;
+    }
+    const logoFile = partnerLogoFileFromUrl(parsed.data.logoUrl);
+    const [exists] = await logoFile.exists();
+    if (!exists) {
+      apiError(res, 400, "Upload the logo before saving the partner.", {
+        code: "LOGO_NOT_UPLOADED",
+      });
+      return;
+    }
+    const [metadata] = await logoFile.getMetadata();
+    const allowedTypes = new Set(["image/png", "image/jpeg", "image/webp", "image/svg+xml"]);
+    if (
+      !allowedTypes.has(String(metadata.contentType)) ||
+      Number(metadata.size ?? 0) <= 0 ||
+      Number(metadata.size ?? 0) > 5 * 1024 * 1024
+    ) {
+      await logoFile.delete({ ignoreNotFound: true });
+      apiError(res, 400, "The uploaded file is not a supported logo.", {
+        code: "INVALID_LOGO",
+      });
+      return;
+    }
+    const [row] = await db.insert(marketingPartners).values(parsed.data).returning();
+    res.status(201).json(serializeMarketingPartner(row));
+  }),
+);
+
+router.patch(
+  "/founding-admin/partners/:id",
+  requireFoundingAdmin,
+  asyncHandler(async (req, res) => {
+    const parsed = PartnerBody.safeParse(req.body);
+    if (!parsed.success) {
+      apiError(res, 400, parsed.error.errors[0]?.message ?? "Invalid partner.", {
+        code: "VALIDATION_FAILED",
+      });
+      return;
+    }
+    const [row] = await db
+      .update(marketingPartners)
+      .set({ ...parsed.data, updatedAt: new Date() })
+      .where(eq(marketingPartners.id, String(req.params.id)))
+      .returning();
+    if (!row) {
+      apiError(res, 404, "Partner not found.", { code: "NOT_FOUND" });
+      return;
+    }
+    res.json(serializeMarketingPartner(row));
+  }),
+);
+
+router.delete(
+  "/founding-admin/partners/:id",
+  requireFoundingAdmin,
+  asyncHandler(async (req, res) => {
+    const [row] = await db
+      .delete(marketingPartners)
+      .where(eq(marketingPartners.id, String(req.params.id)))
+      .returning();
+    if (!row) {
+      apiError(res, 404, "Partner not found.", { code: "NOT_FOUND" });
+      return;
+    }
+    try {
+      await partnerLogoFileFromUrl(row.logoUrl).delete({ ignoreNotFound: true });
+    } catch (error) {
+      req.log.warn({ err: error, partnerId: row.id }, "Could not delete partner logo object");
+    }
+    res.json({ ok: true, id: row.id });
+  }),
+);
 
 router.patch(
   "/founding-admin/signups/:id",

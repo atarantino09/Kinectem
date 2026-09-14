@@ -71,7 +71,19 @@ const PAGE = String.raw`<!doctype html>
     background: var(--panel); border: 1px solid var(--line); padding: 10px 16px;
     border-radius: 10px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 60; }
   .toast.show { opacity: 1; }
+  .tabs { display:flex; gap:8px; margin:0 0 18px; border-bottom:1px solid var(--line); }
+  .tab { border:0; border-bottom:2px solid transparent; border-radius:0; background:transparent;
+    color:var(--muted); padding:11px 4px; margin-right:18px; font-weight:700; }
+  .tab.active { color:var(--text); border-bottom-color:var(--brand); }
+  .partner-form { display:grid; grid-template-columns:1.3fr 1.4fr .55fr 1fr auto; gap:10px; align-items:end; }
+  .partner-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:12px; margin-top:14px; }
+  .partner-card { padding:16px; position:relative; }
+  .partner-logo { height:78px; width:100%; object-fit:contain; border-radius:8px; background:#fff; padding:8px; }
+  .partner-name { font-weight:700; margin-top:10px; overflow-wrap:anywhere; }
+  .partner-meta { color:var(--muted); font-size:12px; margin-top:4px; overflow-wrap:anywhere; }
+  .partner-delete { position:absolute; right:8px; top:8px; background:rgba(11,18,32,.88); }
   @media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } .hide-sm { display: none; } }
+  @media (max-width: 860px) { .partner-form { grid-template-columns:1fr; } }
 </style>
 </head>
 <body>
@@ -100,6 +112,12 @@ const PAGE = String.raw`<!doctype html>
       </div>
     </header>
 
+    <div class="tabs" role="tablist" aria-label="Admin sections">
+      <button class="tab active" id="foundingTabBtn" role="tab" aria-selected="true">Founding 100</button>
+      <button class="tab" id="partnersTabBtn" role="tab" aria-selected="false">Partners</button>
+    </div>
+
+    <div id="foundingTab">
     <div class="toolbar">
       <div class="search"><input id="search" placeholder="Search organization, name, email, sport…" /></div>
       <div class="count" id="count">—</div>
@@ -196,6 +214,23 @@ const PAGE = String.raw`<!doctype html>
         <tbody id="rows"><tr><td colspan="9" class="empty">Loading…</td></tr></tbody>
       </table>
     </div>
+    </div>
+
+    <div id="partnersTab" style="display:none">
+      <div class="card" style="padding:18px;">
+        <div style="font-weight:800; font-size:18px;">Marketing partners</div>
+        <div class="sub" style="margin:4px 0 16px;">Upload partner logos shown publicly at <a href="/partners.html" target="_blank" rel="noopener">kinectem.com/partners</a>.</div>
+        <form id="partnerForm" class="partner-form">
+          <div class="field" style="margin:0"><label>Partner name</label><input id="partnerName" required maxlength="200" placeholder="Partner name" /></div>
+          <div class="field" style="margin:0"><label>Website (optional)</label><input id="partnerWebsite" type="url" maxlength="2000" placeholder="https://…" /></div>
+          <div class="field" style="margin:0"><label>Order</label><input id="partnerOrder" type="number" min="0" max="10000" value="0" /></div>
+          <div class="field" style="margin:0"><label>Logo (PNG, JPG, WebP, SVG; max 5 MB)</label><input id="partnerLogo" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" required /></div>
+          <button id="partnerSave" class="primary" type="submit">Add partner</button>
+        </form>
+        <div id="partnerStatus" class="err"></div>
+      </div>
+      <div id="partnerGrid" class="partner-grid"><div class="card empty">Loading partners…</div></div>
+    </div>
   </div>
 </div>
 
@@ -234,6 +269,7 @@ const PAGE = String.raw`<!doctype html>
   var API = "/api/v1/founding-admin";
   var TOKEN_KEY = "founding_admin_token";
   var rows = [];
+  var partners = [];
 
   function token() { return sessionStorage.getItem(TOKEN_KEY); }
   function setToken(t) { if (t) sessionStorage.setItem(TOKEN_KEY, t); else sessionStorage.removeItem(TOKEN_KEY); }
@@ -267,7 +303,7 @@ const PAGE = String.raw`<!doctype html>
   }
 
   function renderAuth() {
-    if (token()) { show($("loginView"), false); show($("appView"), true); load(); }
+    if (token()) { show($("loginView"), false); show($("appView"), true); load(); loadPartners(); }
     else { show($("appView"), false); show($("loginView"), true); $("pw").focus(); }
   }
 
@@ -308,6 +344,56 @@ const PAGE = String.raw`<!doctype html>
         + '</div></td>'
         + '</tr>';
     }).join("");
+  }
+
+  function switchTab(name) {
+    var partnersActive = name === "partners";
+    show($("foundingTab"), !partnersActive);
+    show($("partnersTab"), partnersActive);
+    $("foundingTabBtn").classList.toggle("active", !partnersActive);
+    $("partnersTabBtn").classList.toggle("active", partnersActive);
+    $("foundingTabBtn").setAttribute("aria-selected", String(!partnersActive));
+    $("partnersTabBtn").setAttribute("aria-selected", String(partnersActive));
+  }
+
+  async function loadPartners() {
+    try {
+      var data = await api("/partners");
+      partners = data.data || [];
+      renderPartners();
+    } catch (e) {
+      $("partnerGrid").innerHTML = '<div class="card empty">Could not load partners.</div>';
+      toast(e.message);
+    }
+  }
+
+  function renderPartners() {
+    if (!partners.length) {
+      $("partnerGrid").innerHTML = '<div class="card empty">No partner logos yet. Add the first one above.</div>';
+      return;
+    }
+    $("partnerGrid").innerHTML = partners.map(function (p) {
+      return '<article class="card partner-card">'
+        + '<button class="danger partner-delete" data-partner-del="' + esc(p.id) + '" aria-label="Delete ' + esc(p.name) + '">Delete</button>'
+        + '<img class="partner-logo" src="' + esc(p.logoUrl) + '" alt="' + esc(p.name) + ' logo" />'
+        + '<div class="partner-name">' + esc(p.name) + '</div>'
+        + '<div class="partner-meta">Order ' + esc(p.sortOrder) + (p.websiteUrl ? ' · ' + esc(p.websiteUrl) : '') + '</div>'
+        + '</article>';
+    }).join("");
+  }
+
+  async function uploadPartner(file) {
+    var request = await api("/partners/request-upload", {
+      method: "POST",
+      body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type })
+    });
+    var upload = await fetch(request.uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": file.type },
+      body: file
+    });
+    if (!upload.ok) throw new Error("The logo upload failed. Please try again.");
+    return request.logoUrl;
   }
 
   function openEdit(r) {
@@ -436,6 +522,8 @@ const PAGE = String.raw`<!doctype html>
   }
 
   $("logoutBtn").addEventListener("click", function () { setToken(null); renderAuth(); });
+  $("foundingTabBtn").addEventListener("click", function () { switchTab("founding"); });
+  $("partnersTabBtn").addEventListener("click", function () { switchTab("partners"); });
   $("refreshBtn").addEventListener("click", load);
   $("exportBtn").addEventListener("click", exportCsv);
   $("seedBtn").addEventListener("click", onSeed);
@@ -487,6 +575,40 @@ const PAGE = String.raw`<!doctype html>
   $("delCompBtn").addEventListener("click", onDeleteCompetition);
   $("delHubBtn").addEventListener("click", onDeleteHub);
   $("search").addEventListener("input", renderRows);
+
+  $("partnerForm").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    var status = $("partnerStatus");
+    var file = $("partnerLogo").files[0];
+    if (!file) { status.textContent = "Choose a logo file."; return; }
+    var btn = $("partnerSave"); btn.disabled = true;
+    status.style.color = "var(--muted)"; status.textContent = "Uploading logo…";
+    try {
+      var logoUrl = await uploadPartner(file);
+      await api("/partners", {
+        method: "POST",
+        body: JSON.stringify({
+          name: $("partnerName").value.trim(),
+          websiteUrl: $("partnerWebsite").value.trim() || null,
+          sortOrder: Number($("partnerOrder").value || 0),
+          logoUrl: logoUrl
+        })
+      });
+      $("partnerForm").reset(); $("partnerOrder").value = "0";
+      status.textContent = ""; toast("Partner added"); await loadPartners();
+    } catch (err) {
+      status.style.color = "var(--danger)"; status.textContent = err.message;
+    } finally { btn.disabled = false; }
+  });
+
+  $("partnerGrid").addEventListener("click", async function (e) {
+    var id = e.target.getAttribute("data-partner-del");
+    if (!id) return;
+    var partner = partners.find(function (item) { return item.id === id; });
+    if (!confirm('Remove "' + (partner ? partner.name : "this partner") + '" from the public Partners page?')) return;
+    try { await api("/partners/" + id, { method: "DELETE" }); toast("Partner removed"); await loadPartners(); }
+    catch (err) { toast(err.message); }
+  });
 
   $("rows").addEventListener("click", function (e) {
     var ed = e.target.getAttribute("data-edit");

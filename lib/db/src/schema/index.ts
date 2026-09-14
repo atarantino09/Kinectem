@@ -481,6 +481,19 @@ export const partnerLandingPages = pgTable("partner_landing_pages", {
   slugIdx: uniqueIndex("partner_landing_pages_slug_idx").on(sql`lower(${t.slug})`),
 }));
 
+// Public partner logos displayed on the marketing site's Partners page.
+// Logo bytes live in App Storage; this table stores only the public serving
+// path and display metadata.
+export const marketingPartners = pgTable("marketing_partners", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  logoUrl: text("logo_url").notNull(),
+  websiteUrl: text("website_url"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const partnerOrganizationMemberships = pgTable("partner_organization_memberships", {
   id: uuid("id").primaryKey().defaultRandom(),
   partnerPageId: uuid("partner_page_id").references(() => partnerLandingPages.id, { onDelete: "cascade" }).notNull(),

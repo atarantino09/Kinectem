@@ -39,6 +39,7 @@ import competitionBracketsRouter from "./competition-brackets";
 import broadcastsRouter from "./broadcasts";
 import dailyAdminDigestRouter from "./daily-admin-digest";
 import partnerLandingRouter from "./partner-landing";
+import marketingPartnersRouter from "./marketing-partners";
 
 const router: Router = Router();
 
@@ -91,5 +92,6 @@ router.use(competitionBracketsRouter);
 router.use(broadcastsRouter);
 router.use(dailyAdminDigestRouter);
 router.use(partnerLandingRouter);
+router.use(marketingPartnersRouter);
 
 export default router;

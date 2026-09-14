@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",
+    "@google-cloud/storage": "^8.1.0",
     "@scalar/api-reference": "^1.52.4",
     "@stoplight/prism-cli": "^5.14.2",
     "@workspace/api-zod": "workspace:*",
@@ -27,6 +28,7 @@
     "cors": "^2",
     "drizzle-orm": "catalog:",
     "express": "^5",
+    "google-auth-library": "^11.0.2",
     "helmet": "^8.2.0",
     "pino": "^9",
     "pino-http": "^10",
