@@ -274,7 +274,7 @@
     </div>
   </footer>
 
-  <script>
+  <script type="module">
     (function () {
       // Mobile menu toggle
       var toggle = document.querySelector('.nav__mobile-toggle');
@@ -299,6 +299,31 @@
       // Fetch and render partners
       var container = document.getElementById('partners-content');
       if (!container) return;
+
+      var builtInPartners = [
+        {
+          name: 'Hudson Valley Youth Soccer League',
+          websiteUrl: 'https://hvysl.org',
+          logoUrl: new URL('../../attached_assets/HVYSL-Logo-rgb-badge2-1-3_1789393794578.png', import.meta.url).href,
+          sortOrder: 0
+        },
+        {
+          name: 'Full 360 Sports',
+          websiteUrl: 'https://www.maestrosoccer.com/full-360-tournaments',
+          logoUrl: new URL('../../attached_assets/full-360-sports-logo-cropped.png', import.meta.url).href,
+          sortOrder: 1
+        }
+      ];
+
+      function mergePartners(managedPartners) {
+        var builtInNames = new Set(builtInPartners.map(function(partner) {
+          return partner.name.toLowerCase();
+        }));
+        var additionalPartners = (managedPartners || []).filter(function(partner) {
+          return !builtInNames.has(String(partner.name || '').toLowerCase());
+        });
+        return builtInPartners.concat(additionalPartners);
+      }
 
       function renderError() {
         container.innerHTML = `
@@ -363,16 +388,11 @@
           return res.json();
         })
         .then(function(json) {
-          var data = json.data;
-          if (!data || data.length === 0) {
-            renderEmpty();
-          } else {
-            renderPartners(data);
-          }
+          renderPartners(mergePartners(json.data));
         })
         .catch(function(err) {
           console.error('Error fetching partners:', err);
-          renderError();
+          renderPartners(builtInPartners);
         });
     }());
   </script>
