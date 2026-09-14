@@ -1,4 +1,4 @@
-import { pgTable, text, integer, timestamp, date, uuid, pgEnum, boolean, primaryKey, uniqueIndex, index, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, timestamp, date, uuid, pgEnum, boolean, primaryKey, uniqueIndex, index, jsonb, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 
 export const userRoleEnum = pgEnum("user_role", ["athlete", "coach", "admin", "parent", "fan"]);
@@ -440,6 +440,11 @@ export const organizations = pgTable("organizations", {
   adminListId: uuid("admin_list_id").references(() => orgAdminLists.id, {
     onDelete: "set null",
   }),
+  // Provenance for the partner directory cleanup guard. This is intentionally
+  // not an FK because partner import operations are declared below this table.
+  // A membership being imported is not enough to prove that the organization
+  // itself was created by that import.
+  partnerImportCreatedByOperationId: uuid("partner_import_created_by_operation_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => ({
   // Task #592 — trigram GIN index for `ilike '%q%'` org-name search.
@@ -501,11 +506,29 @@ export const partnerOrganizationMemberships = pgTable("partner_organization_memb
   visible: boolean("visible").notNull().default(true),
   sourceColumn: text("source_column"),
   importOperationId: uuid("import_operation_id"),
+  replacementIdempotencyKey: text("replacement_idempotency_key"),
+  // Stable directory order. NULL is retained for rows created before the
+  // ordering migration and is ordered after explicitly positioned rows.
+  position: integer("position"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => ({
   pageOrgUnique: uniqueIndex("partner_membership_page_org_idx").on(t.partnerPageId, t.organizationId),
   pageIdx: index("partner_membership_page_idx").on(t.partnerPageId),
   orgIdx: index("partner_membership_org_idx").on(t.organizationId),
+}));
+
+export const partnerReplacementOperations = pgTable("partner_replacement_operations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  partnerPageId: uuid("partner_page_id").references(() => partnerLandingPages.id, { onDelete: "cascade" }).notNull(),
+  membershipId: uuid("membership_id").references(() => partnerOrganizationMemberships.id, { onDelete: "cascade" }).notNull(),
+  idempotencyKey: text("idempotency_key").notNull(),
+  candidateOrganizationId: uuid("candidate_organization_id").references(() => organizations.id).notNull(),
+  result: jsonb("result").$type<Record<string, unknown>>().notNull().default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  retryUnique: uniqueIndex("partner_replacement_retry_unique")
+    .on(t.partnerPageId, t.membershipId, t.idempotencyKey),
+  membershipIdx: index("partner_replacement_membership_idx").on(t.membershipId),
 }));
 
 export const partnerImportOperations = pgTable("partner_import_operations", {
@@ -515,6 +538,72 @@ export const partnerImportOperations = pgTable("partner_import_operations", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => ({
   retryUnique: uniqueIndex("partner_import_retry_unique").on(t.partnerPageId, t.idempotencyKey),
+}));
+
+// A validation/import row is deliberately separate from organizations. It is
+// a durable record of what the partner supplied, not a staging copy of
+// canonical organization data.
+export const partnerImportRows = pgTable("partner_import_rows", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  operationId: uuid("operation_id").references(() => partnerImportOperations.id, { onDelete: "cascade" }).notNull(),
+  rowIndex: integer("row_index").notNull(),
+  sourceColumn: text("source_column"),
+  sourceName: text("source_name").notNull(),
+  normalizedName: text("normalized_name").notNull(),
+  status: text("status").notNull().default("pending"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  operationRowUnique: uniqueIndex("partner_import_rows_operation_row_idx").on(t.operationId, t.rowIndex),
+  operationIdx: index("partner_import_rows_operation_idx").on(t.operationId),
+}));
+
+export const partnerImportCandidates = pgTable("partner_import_candidates", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  importRowId: uuid("import_row_id").references(() => partnerImportRows.id, { onDelete: "cascade" }).notNull(),
+  organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
+  rank: integer("rank").notNull(),
+  matchKind: text("match_kind").notNull(),
+  evidence: jsonb("evidence").$type<Record<string, unknown>>().notNull().default({}),
+  teamCount: integer("team_count").notNull().default(0),
+  pageMember: boolean("page_member").notNull().default(false),
+  status: text("status").notNull().default("candidate"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  rowOrganizationUnique: uniqueIndex("partner_import_candidates_row_org_idx").on(t.importRowId, t.organizationId),
+  rowRankIdx: index("partner_import_candidates_row_rank_idx").on(t.importRowId, t.rank),
+}));
+
+export const partnerImportDecisions = pgTable("partner_import_decisions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  partnerPageId: uuid("partner_page_id").references(() => partnerLandingPages.id, { onDelete: "cascade" }).notNull(),
+  operationId: uuid("operation_id").references(() => partnerImportOperations.id, { onDelete: "cascade" }).notNull(),
+  importRowId: uuid("import_row_id").references(() => partnerImportRows.id, { onDelete: "cascade" }).notNull(),
+  decision: text("decision").notNull(),
+  organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "set null" }),
+  decidedById: uuid("decided_by_id").references(() => users.id, { onDelete: "set null" }),
+  reversedAt: timestamp("reversed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => ({
+  rowUnique: uniqueIndex("partner_import_decisions_row_idx").on(t.operationId, t.importRowId),
+  pageIdx: index("partner_import_decisions_page_idx").on(t.partnerPageId, t.createdAt),
+}));
+
+// Suggestions are scoped to a partner page. A decision made for one partner
+// must never silently influence another partner's directory.
+export const partnerImportSuggestions = pgTable("partner_import_suggestions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  partnerPageId: uuid("partner_page_id").references(() => partnerLandingPages.id, { onDelete: "cascade" }).notNull(),
+  normalizedName: text("normalized_name").notNull(),
+  importRowId: uuid("import_row_id").references(() => partnerImportRows.id, { onDelete: "set null" }),
+  organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "set null" }),
+  decision: text("decision").notNull().default("use_existing"),
+  rationale: jsonb("rationale").$type<Record<string, unknown>>().notNull().default({}),
+  lastUsedAt: timestamp("last_used_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  pageNameUnique: uniqueIndex("partner_import_suggestions_page_name_idx").on(t.partnerPageId, t.normalizedName),
+  pageIdx: index("partner_import_suggestions_page_idx").on(t.partnerPageId, t.lastUsedAt),
 }));
 
 // Despite the legacy table name, this records every member of an

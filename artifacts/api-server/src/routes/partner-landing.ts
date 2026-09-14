@@ -8,8 +8,19 @@ import {
   notifications,
   orgAdminLists,
   partnerImportOperations,
+  partnerImportRows,
+  partnerImportCandidates,
+  partnerImportDecisions,
+  partnerImportSuggestions,
+  partnerReplacementOperations,
   partnerLandingPages,
   partnerOrganizationMemberships,
+  organizationFollowers,
+  rosterEntries,
+  rosterInvites,
+  scheduleEvents,
+  scheduleRecurrences,
+  teamFollowers,
   tournaments,
   teams,
   users,
@@ -35,6 +46,20 @@ function cleanText(value: unknown, max: number): string {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 
+function dedupeTeamNames(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  return value
+    .map((entry) => cleanText(entry, 200))
+    .filter((name) => {
+      const key = normalizedOrganizationName(name);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 100);
+}
+
 function normalizedOrganizationName(value: string): string {
   return value
     .normalize("NFKC")
@@ -43,6 +68,137 @@ function normalizedOrganizationName(value: string): string {
     .replace(/[^a-z0-9]+/g, " ")
     .trim()
     .replace(/\s+/g, " ");
+}
+
+function credibleOrganizationCollision(sourceName: string, candidateName: string): boolean {
+  const source = normalizedOrganizationName(sourceName);
+  const candidate = normalizedOrganizationName(candidateName);
+  if (!source || !candidate) return false;
+  if (source === candidate) return true;
+  const sourceTokens = new Set(source.split(" ").filter(Boolean));
+  const candidateTokens = new Set(candidate.split(" ").filter(Boolean));
+  const overlap = [...sourceTokens].filter((token) => candidateTokens.has(token));
+  return editDistance(source, candidate) <= Math.max(2, Math.floor(source.length * 0.28)) ||
+    (overlap.length > 0 && overlap.length >= Math.min(sourceTokens.size, candidateTokens.size));
+}
+
+function editDistance(a: string, b: string): number {
+  const previous = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let diagonal = previous[0]!;
+    previous[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const above = previous[j]!;
+      previous[j] = Math.min(
+        previous[j]! + 1,
+        previous[j - 1]! + 1,
+        diagonal + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+      diagonal = above;
+    }
+  }
+  return previous[b.length]!;
+}
+
+type ImportCandidate = {
+  id: string;
+  name: string;
+  city: string | null;
+  state: string | null;
+  location: string | null;
+  rank: number;
+  matchKind: "exact" | "normalized" | "close";
+  matchType: "exact" | "normalized" | "close";
+  evidence: Record<string, unknown>;
+  teamCount: number;
+  pageMember: boolean;
+  status: "claimed" | "ownerless";
+  matchStatus: "candidate";
+};
+
+class PartnerImportCollisionError extends Error {}
+
+async function rankedImportCandidates(pageId: string, sourceName: string) {
+  const exactName = sourceName.trim().toLocaleLowerCase("en-US");
+  const normalizedName = normalizedOrganizationName(sourceName);
+  if (!normalizedName) return [] as ImportCandidate[];
+  const sourceTokens = new Set(normalizedName.split(" ").filter(Boolean));
+  const rows = await db
+    .select({
+      id: organizations.id,
+      name: organizations.name,
+      city: organizations.city,
+      state: organizations.state,
+      location: organizations.location,
+      pageMember: sql<boolean>`EXISTS (
+        SELECT 1 FROM partner_organization_memberships pm
+        WHERE pm.partner_page_id = ${pageId} AND pm.organization_id = ${organizations.id}
+      )`,
+      ownerCount: sql<number>`(
+        SELECT count(*)::int FROM organization_admins oa
+        WHERE oa.organization_id = ${organizations.id} AND oa.role = 'owner'
+      )`,
+    })
+    .from(organizations)
+    .orderBy(asc(organizations.name))
+    .limit(10000);
+  const teamCounts = await db
+    .select({
+      organizationId: teams.organizationId,
+      teamCount: sql<number>`count(*)::int`,
+    })
+    .from(teams)
+    .groupBy(teams.organizationId);
+  const teamCountByOrganization = new Map(
+    teamCounts.map((row) => [row.organizationId, Number(row.teamCount)]),
+  );
+  const candidates = rows.flatMap((row) => {
+    const candidateExact = row.name.trim().toLocaleLowerCase("en-US");
+    const candidateNormalized = normalizedOrganizationName(row.name);
+    const distance = editDistance(normalizedName, candidateNormalized);
+    const candidateTokens = new Set(candidateNormalized.split(" ").filter(Boolean));
+    const overlap = [...sourceTokens].filter((token) => candidateTokens.has(token));
+    let matchKind: ImportCandidate["matchKind"] | null = null;
+    if (candidateExact === exactName) matchKind = "exact";
+    else if (candidateNormalized === normalizedName) matchKind = "normalized";
+    else if (
+      distance <= Math.max(2, Math.floor(normalizedName.length * 0.28)) ||
+      (overlap.length > 0 && overlap.length >= Math.min(sourceTokens.size, candidateTokens.size))
+    ) matchKind = "close";
+    if (!matchKind) return [];
+    const evidence: Record<string, unknown> = {
+      sourceName,
+      candidateName: row.name,
+      exactName: matchKind === "exact",
+      normalizedName: matchKind !== "close",
+      editDistance: distance,
+      sharedTokens: overlap,
+    };
+    return [{
+      id: row.id,
+      name: row.name,
+      city: row.city,
+      state: row.state,
+      location: row.location,
+      rank: 0,
+      matchKind,
+      matchType: matchKind,
+      evidence,
+      teamCount: teamCountByOrganization.get(row.id) ?? 0,
+      pageMember: row.pageMember,
+      status: Number(row.ownerCount) > 0 ? ("claimed" as const) : ("ownerless" as const),
+      matchStatus: "candidate" as const,
+    }];
+  });
+  return candidates
+    .sort((a, b) => {
+      const kindRank = { exact: 0, normalized: 1, close: 2 };
+      return kindRank[a.matchKind] - kindRank[b.matchKind] ||
+        Number(a.evidence.editDistance) - Number(b.evidence.editDistance) ||
+        a.name.localeCompare(b.name);
+    })
+    .slice(0, 10)
+    .map((candidate, index) => ({ ...candidate, rank: index + 1 }));
 }
 
 function validateImage(value: unknown): string | null | undefined {
@@ -186,21 +342,41 @@ async function adminMembers(pageId: string) {
     )
     .where(eq(partnerOrganizationMemberships.partnerPageId, pageId))
     .orderBy(
+      sql`${partnerOrganizationMemberships.position} NULLS LAST`,
       asc(organizations.name),
       asc(partnerOrganizationMemberships.createdAt),
     );
-  return rows.map((row) => ({
-    id: row.membership.id,
-    visible: row.membership.visible,
-    sourceColumn: row.membership.sourceColumn,
-    importOperationId: row.membership.importOperationId,
-    createdAt: row.membership.createdAt.toISOString(),
-    organization: row.organization,
-    hasOwner: row.hasOwner,
-    teamCount: Number(row.teamCount),
-    contentCount: Number(row.contentCount),
-    duplicateName: Number(row.duplicateCount) > 1,
-    canDeleteStaleImport: !row.hasOwner && Number(row.contentCount) === 0,
+  return Promise.all(rows.map(async (row) => {
+    const duplicateCandidates = (await rankedImportCandidates(pageId, row.organization.name))
+      .filter((candidate) => candidate.id !== row.organization.id);
+    const cleanup = await db.transaction((tx) =>
+      organizationDeleteSafety(tx, row.membership.id, row.organization.id),
+    );
+    const protection = cleanup.safe ? [] : cleanup.reasons;
+    return {
+      id: row.membership.id,
+      visible: row.membership.visible,
+      position: row.membership.position,
+      sourceColumn: row.membership.sourceColumn,
+      importOperationId: row.membership.importOperationId,
+      createdAt: row.membership.createdAt.toISOString(),
+      organization: row.organization,
+      hasOwner: row.hasOwner,
+      teamCount: Number(row.teamCount),
+      contentCount: Number(row.contentCount),
+      duplicateName: Number(row.duplicateCount) > 1,
+      duplicateCandidates,
+      protected: !cleanup.safe,
+      protection,
+      cleanup: {
+        allowed: cleanup.safe,
+        reason: protection.length ? protection.join(", ") : null,
+        summary: cleanup.safe
+          ? "Eligible for safe cleanup"
+          : "Keep the organization; remove only its directory membership",
+      },
+      canDeleteStaleImport: cleanup.safe,
+    };
   }));
 }
 
@@ -727,56 +903,54 @@ router.post(
       cleanText((row as { name?: unknown })?.name, 200),
     );
     const valid = names.every(Boolean) && input.length > 0;
-    const existing =
-      names.length > 0
-        ? await db
-            .select({
-              id: organizations.id,
-              name: organizations.name,
-              city: organizations.city,
-              state: organizations.state,
-              location: organizations.location,
-            })
-            .from(organizations)
-            .where(
-              or(
-                ...names.map(
-                  (name: string) =>
-                    sql`lower(${organizations.name}) = ${name.toLowerCase()}`,
-                ),
-              ),
-            )
-        : [];
     const seen = new Map<string, number>();
-    const rows = input.map((raw: unknown, index: number) => {
+    const rows = await Promise.all(input.map(async (raw: unknown, index: number) => {
       const row = raw as { name?: unknown; sourceColumn?: unknown };
       const name = names[index] ?? "";
       const key = normalizedOrganizationName(name);
       const duplicateInFile = seen.has(key);
       if (key && !seen.has(key)) seen.set(key, index);
+      const candidates = key ? await rankedImportCandidates(pageId, name) : [];
+      const remembered = key
+        ? await db
+            .select({
+              organizationId: partnerImportSuggestions.organizationId,
+              decision: partnerImportSuggestions.decision,
+              rationale: partnerImportSuggestions.rationale,
+            })
+            .from(partnerImportSuggestions)
+            .where(and(
+              eq(partnerImportSuggestions.partnerPageId, pageId),
+              eq(partnerImportSuggestions.normalizedName, key),
+            ))
+            .limit(1)
+        : [];
       return {
         index,
         sourceColumn: cleanText(row.sourceColumn, 200) || `Column ${index + 1}`,
         name,
+        normalizedName: key,
+        decisionRequired: candidates.length > 0,
+        rememberedSuggestion: remembered[0] ?? null,
+        rememberedDecision: remembered[0]?.decision ?? null,
         warnings: [
           ...(duplicateInFile
             ? [
                 "This name appears more than once in the upload. A separate organization will be created by default.",
               ]
             : []),
-          ...(existing.some(
-            (item) => normalizedOrganizationName(item.name) === key,
-          )
+          ...(candidates.length > 0
             ? [
-                "Possible existing organization found. Creating a separate record remains the default.",
+                "Possible existing organizations found. Choose use_existing or keep_distinct before applying this row.",
               ]
             : []),
         ],
-        possibleMatches: existing.filter(
-          (item) => normalizedOrganizationName(item.name) === key,
-        ),
+        candidates,
+        // Keep the pre-1027 field for API clients while exposing ranked
+        // evidence/status/team/page membership in candidates.
+        possibleMatches: candidates.filter((item) => item.matchKind !== "close"),
       };
-    });
+    }));
     return res.json({
       data: {
         valid,
@@ -805,10 +979,75 @@ router.post(
         "Import identity and at least one organization are required",
       );
     }
-    const result = await db.transaction(async (tx) => {
+    // Retry before candidate validation: a durable idempotency result wins
+    // even if canonical data changed after the first request.
+    const retry = await db.transaction(async (tx) => {
       await tx.execute(
         sql`SELECT pg_advisory_xact_lock(hashtext(${"partner-import:" + pageId + ":" + idempotencyKey}))`,
       );
+      const [lockedPage] = await tx.select({ id: partnerLandingPages.id })
+        .from(partnerLandingPages)
+        .where(eq(partnerLandingPages.id, pageId))
+        .for("update")
+        .limit(1);
+      if (!lockedPage) return { error: "Partner page not found" as const };
+      const [existingOperation] = await tx.select().from(partnerImportOperations)
+        .where(and(
+          eq(partnerImportOperations.partnerPageId, pageId),
+          eq(partnerImportOperations.idempotencyKey, idempotencyKey),
+        ))
+        .limit(1);
+      if (!existingOperation) return null;
+      const memberships = await tx.select({
+        id: partnerOrganizationMemberships.id,
+        organizationId: partnerOrganizationMemberships.organizationId,
+      }).from(partnerOrganizationMemberships).where(
+        eq(partnerOrganizationMemberships.importOperationId, existingOperation.id),
+      );
+      return { replayed: true as const, operationId: existingOperation.id, memberships };
+    });
+    if (retry && "error" in retry) return apiError(res, 404, String(retry.error));
+    if (retry?.replayed) return res.status(200).json({ data: retry });
+
+    const candidateMap = new Map<number, ImportCandidate[]>();
+    await Promise.all(input.map(async (raw: unknown, index: number) => {
+      const name = cleanText((raw as { name?: unknown })?.name, 200);
+      candidateMap.set(index, name ? await rankedImportCandidates(pageId, name) : []);
+    }));
+    for (let index = 0; index < input.length; index++) {
+      const row = input[index] as {
+        name?: unknown;
+        action?: unknown;
+        decision?: unknown;
+        existingOrganizationId?: unknown;
+        organizationId?: unknown;
+      };
+      const name = cleanText(row.name, 200);
+      const action = cleanText(row.decision ?? row.action, 40);
+      if (!name) return apiError(res, 400, `Organization ${index + 1}: name required`);
+      if (!["skip", "use_existing", "attach", "keep_distinct", "create", ""].includes(action)) {
+        return apiError(res, 400, `Organization ${index + 1}: decision must be use_existing or keep_distinct`);
+      }
+      if ((action === "use_existing" || action === "attach") &&
+        !cleanText(row.existingOrganizationId ?? row.organizationId, 80)) {
+        return apiError(res, 400, `Organization ${index + 1}: organizationId is required for use_existing`);
+      }
+    }
+    let result;
+    try {
+      result = await db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${"partner-import:" + pageId + ":" + idempotencyKey}))`,
+      );
+      // Serialize imports/replacements for a page and recheck the page while
+      // holding the lock. This closes the validate→apply race.
+      const lockedPage = await tx
+        .select({ id: partnerLandingPages.id })
+        .from(partnerLandingPages)
+        .where(eq(partnerLandingPages.id, pageId))
+        .for("update")
+        .limit(1);
+      if (!lockedPage[0]) throw new Error("Partner page not found");
       const [existingOperation] = await tx
         .select()
         .from(partnerImportOperations)
@@ -853,13 +1092,78 @@ router.post(
           city?: unknown;
           state?: unknown;
           teams?: unknown;
+          decision?: unknown;
         };
-        if (row.action === "skip") continue;
-        let organizationId = cleanText(row.existingOrganizationId, 80);
-        if (row.action !== "attach" || !organizationId) {
-          const name = cleanText(row.name, 200);
-          if (!name)
-            throw new Error(`Organization ${index + 1}: name required`);
+        const action = cleanText(row.decision ?? row.action, 40);
+        if (!["skip", "use_existing", "attach", "keep_distinct", "create", ""].includes(action)) {
+          throw new Error(`Organization ${index + 1}: decision must be use_existing or keep_distinct`);
+        }
+        const name = cleanText(row.name, 200);
+        if (!name) throw new Error(`Organization ${index + 1}: name required`);
+        const normalizedInputName = normalizedOrganizationName(name);
+        await tx.execute(
+          sql`SELECT pg_advisory_xact_lock(hashtext(${"partner-import-row:" + pageId + ":" + normalizedInputName}))`,
+        );
+        const currentNameRows = await tx.select({ id: organizations.id, name: organizations.name })
+          .from(organizations);
+        const currentCollision = currentNameRows.some((candidate) =>
+          credibleOrganizationCollision(name, candidate.name),
+        );
+        if ((action === "" || action === "create") && currentCollision) {
+          throw new PartnerImportCollisionError(
+            `Organization ${index + 1}: a credible organization collision appeared; choose use_existing or keep_distinct`,
+          );
+        }
+        let organizationId = cleanText(
+          row.existingOrganizationId ??
+            (row as { organizationId?: unknown }).organizationId,
+          80,
+        );
+        if (action === "skip") {
+          const [skippedRow] = await tx.insert(partnerImportRows).values({
+            operationId: operation.id,
+            rowIndex: index,
+            sourceColumn: cleanText(row.sourceColumn, 200) || `Column ${index + 1}`,
+            sourceName: name,
+            normalizedName: normalizedOrganizationName(name),
+            status: "skipped",
+          }).returning();
+          await tx.insert(partnerImportDecisions).values({
+            partnerPageId: pageId,
+            operationId: operation.id,
+            importRowId: skippedRow.id,
+            decision: "skip",
+            decidedById: req.realUser!.id,
+          });
+          await tx.insert(partnerImportSuggestions).values({
+            partnerPageId: pageId,
+            normalizedName: normalizedOrganizationName(name),
+            importRowId: skippedRow.id,
+            organizationId: null,
+            decision: "skip",
+            rationale: { source: "explicit_decision", rowIndex: index },
+            lastUsedAt: new Date(),
+          }).onConflictDoUpdate({
+            target: [
+              partnerImportSuggestions.partnerPageId,
+              partnerImportSuggestions.normalizedName,
+            ],
+            set: {
+              organizationId: null,
+              importRowId: skippedRow.id,
+              decision: "skip",
+              lastUsedAt: new Date(),
+              rationale: { source: "explicit_decision", rowIndex: index },
+            },
+          });
+          continue;
+        }
+        // Keep-distinct is intentionally the safe default when an older
+        // client sends no decision. It never edits a possible source row.
+        if (action !== "use_existing" && action !== "attach") {
+          organizationId = "";
+        }
+        if (!organizationId) {
           const [org] = await tx
             .insert(organizations)
             .values({
@@ -868,19 +1172,20 @@ router.post(
               city: cleanText(row.city, 120) || null,
               state: cleanText(row.state, 2).toUpperCase() || null,
               claimToken: generateToken(),
+              partnerImportCreatedByOperationId: operation.id,
             })
             .returning({ id: organizations.id });
           organizationId = org.id;
-          const teamNames = Array.isArray(row.teams)
-            ? row.teams
-                .map((v) => cleanText(v, 200))
-                .filter(Boolean)
-                .slice(0, 100)
-            : [];
-          for (const teamName of teamNames) {
-            await tx.insert(teams).values({ organizationId, name: teamName });
+          for (const teamName of dedupeTeamNames(row.teams)) {
+            await tx.insert(teams).values({
+              organizationId,
+              name: teamName,
+            });
           }
         } else {
+          await tx.execute(
+            sql`SELECT id FROM organizations WHERE id = ${organizationId} FOR UPDATE`,
+          );
           const [org] = await tx
             .select({ id: organizations.id })
             .from(organizations)
@@ -891,6 +1196,61 @@ router.post(
               `Organization ${index + 1}: selected match no longer exists`,
             );
         }
+        const [importRow] = await tx.insert(partnerImportRows).values({
+          operationId: operation.id,
+          rowIndex: index,
+          sourceColumn: cleanText(row.sourceColumn, 200) || `Column ${index + 1}`,
+          sourceName: name,
+          normalizedName: normalizedOrganizationName(name),
+          status: "applied",
+        }).returning();
+        for (const candidate of candidateMap.get(index) ?? []) {
+          await tx.insert(partnerImportCandidates).values({
+            importRowId: importRow.id,
+            organizationId: candidate.id,
+            rank: candidate.rank,
+            matchKind: candidate.matchKind,
+            evidence: candidate.evidence,
+            teamCount: candidate.teamCount,
+            pageMember: candidate.pageMember,
+            status: candidate.id === organizationId ? "selected" : "candidate",
+          }).onConflictDoNothing();
+        }
+        await tx.insert(partnerImportDecisions).values({
+          partnerPageId: pageId,
+          operationId: operation.id,
+          importRowId: importRow.id,
+          decision: action === "use_existing" || action === "attach"
+            ? "use_existing"
+            : "keep_distinct",
+          organizationId,
+          decidedById: req.realUser!.id,
+        });
+        await tx.insert(partnerImportSuggestions).values({
+          partnerPageId: pageId,
+          normalizedName: normalizedOrganizationName(name),
+          importRowId: importRow.id,
+          organizationId: action === "use_existing" || action === "attach" ? organizationId : null,
+          decision: action === "use_existing" || action === "attach"
+            ? "use_existing"
+            : "keep_distinct",
+          rationale: { source: "explicit_decision", rowIndex: index },
+          lastUsedAt: new Date(),
+        }).onConflictDoUpdate({
+          target: [
+            partnerImportSuggestions.partnerPageId,
+            partnerImportSuggestions.normalizedName,
+          ],
+          set: {
+            organizationId: action === "use_existing" || action === "attach" ? organizationId : null,
+            importRowId: importRow.id,
+            decision: action === "use_existing" || action === "attach"
+              ? "use_existing"
+              : "keep_distinct",
+            lastUsedAt: new Date(),
+            rationale: { source: "explicit_decision", rowIndex: index },
+          },
+        });
         const [membership] = await tx
           .insert(partnerOrganizationMemberships)
           .values({
@@ -899,6 +1259,7 @@ router.post(
             sourceColumn:
               cleanText(row.sourceColumn, 200) || `Column ${index + 1}`,
             importOperationId: operation.id,
+            position: index,
           })
           .onConflictDoNothing()
           .returning({
@@ -907,10 +1268,748 @@ router.post(
           });
         if (membership) memberships.push(membership);
       }
-      return { replayed: false, operationId: operation.id, memberships };
-    });
+        return { replayed: false, operationId: operation.id, memberships };
+      });
+    } catch (error) {
+      if (error instanceof PartnerImportCollisionError) {
+        return apiError(res, 409, error.message);
+      }
+      throw error;
+    }
     return res.status(result.replayed ? 200 : 201).json({ data: result });
   }),
+);
+
+const ImportDecisionBody = z.object({
+  decision: z.enum(["use_existing", "keep_distinct", "create", "skip"]),
+  organizationId: z.string().uuid().nullable().optional(),
+});
+
+async function lockImportRow(tx: any, pageId: string, rowId: string) {
+  const [row] = await tx
+    .select({ row: partnerImportRows, operation: partnerImportOperations })
+    .from(partnerImportRows)
+    .innerJoin(partnerImportOperations, eq(partnerImportOperations.id, partnerImportRows.operationId))
+    .where(and(
+      eq(partnerImportRows.id, rowId),
+      eq(partnerImportOperations.partnerPageId, pageId),
+    ))
+    .for("update")
+    .limit(1);
+  return row;
+}
+
+router.get(
+  "/admin/partner-pages/:pageId/import/suggestions",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const pageId = p(req.params.pageId);
+    if (!(await findPage(pageId))) return apiError(res, 404, "Partner page not found");
+    const query = normalizedOrganizationName(cleanText(req.query.q, 200));
+    const rows = await db
+      .select()
+      .from(partnerImportSuggestions)
+      .where(and(
+        eq(partnerImportSuggestions.partnerPageId, pageId),
+        query ? ilike(partnerImportSuggestions.normalizedName, `%${query}%`) : undefined,
+      ))
+      .orderBy(desc(partnerImportSuggestions.lastUsedAt))
+      .limit(50);
+    return res.json({ data: rows });
+  }),
+);
+
+// Decisions may be made after validation and before an import is applied.
+// This endpoint is intentionally partner-page scoped: the same name can have
+// a different answer for a different association.
+async function decideImportRow(req: any, res: any) {
+  const pageId = p(req.params.pageId);
+  const rowId = p(req.params.rowId);
+  const parsed = ImportDecisionBody.safeParse(req.body);
+  if (!parsed.success) return apiError(res, 400, "decision must be use_existing, keep_distinct/create, or skip");
+  const result = await db.transaction(async (tx) => {
+    const locked = await lockImportRow(tx, pageId, rowId);
+    if (!locked) return null;
+    const { row, operation } = locked;
+    const requestedDecision = parsed.data.decision === "create"
+      ? "keep_distinct"
+      : parsed.data.decision;
+    let organizationId = parsed.data.organizationId ?? null;
+    if (requestedDecision === "use_existing") {
+      if (!organizationId) return { error: "organizationId is required for use_existing" };
+      await tx.execute(sql`SELECT id FROM organizations WHERE id = ${organizationId} FOR UPDATE`);
+      const [org] = await tx.select({ id: organizations.id }).from(organizations)
+        .where(eq(organizations.id, organizationId)).limit(1);
+      if (!org) return { error: "Selected organization no longer exists" };
+    } else {
+      organizationId = null;
+    }
+    const [decision] = await tx.insert(partnerImportDecisions).values({
+      partnerPageId: pageId,
+      operationId: operation.id,
+      importRowId: row.id,
+      decision: requestedDecision,
+      organizationId,
+      decidedById: req.realUser!.id,
+    }).onConflictDoUpdate({
+      target: [partnerImportDecisions.operationId, partnerImportDecisions.importRowId],
+      set: {
+        decision: requestedDecision,
+        organizationId,
+        decidedById: req.realUser!.id,
+        reversedAt: null,
+        updatedAt: new Date(),
+      },
+    }).returning();
+    await tx.update(partnerImportRows).set({
+      status: requestedDecision === "skip" ? "skipped" : "decided",
+    }).where(eq(partnerImportRows.id, row.id));
+    await tx.insert(partnerImportSuggestions).values({
+      partnerPageId: pageId,
+      normalizedName: row.normalizedName,
+      importRowId: row.id,
+      organizationId,
+      decision: requestedDecision,
+      rationale: { source: "explicit_decision", importRowId: row.id },
+      lastUsedAt: new Date(),
+    }).onConflictDoUpdate({
+      target: [partnerImportSuggestions.partnerPageId, partnerImportSuggestions.normalizedName],
+      set: {
+        organizationId,
+        importRowId: row.id,
+        decision: requestedDecision,
+        lastUsedAt: new Date(),
+        rationale: { source: "explicit_decision", importRowId: row.id },
+      },
+    });
+    return { decision, row };
+  });
+  if (!result) return apiError(res, 404, "Import row not found");
+  if ("error" in result) return apiError(res, 409, String(result.error));
+  return res.json({ data: result });
+}
+
+router.put(
+  "/admin/partner-pages/:pageId/import/rows/:rowId/decision",
+  requireAdmin,
+  asyncHandler(decideImportRow),
+);
+router.post(
+  "/admin/partner-pages/:pageId/import/decisions/:rowId",
+  requireAdmin,
+  asyncHandler(decideImportRow),
+);
+
+async function reverseImportDecision(req: any, res: any) {
+  const pageId = p(req.params.pageId);
+  const rowId = p(req.params.rowId);
+  const result = await db.transaction(async (tx) => {
+    let locked = await lockImportRow(tx, pageId, rowId);
+    let actualRowId = rowId;
+    if (!locked) {
+      const [byDecisionId] = await tx.select({
+        importRowId: partnerImportDecisions.importRowId,
+      }).from(partnerImportDecisions).where(and(
+        eq(partnerImportDecisions.id, rowId),
+        eq(partnerImportDecisions.partnerPageId, pageId),
+      )).limit(1);
+      if (byDecisionId) {
+        actualRowId = byDecisionId.importRowId;
+        locked = await lockImportRow(tx, pageId, actualRowId);
+      }
+    }
+    if (!locked) return null;
+    const [updated] = await tx.update(partnerImportDecisions).set({
+      reversedAt: new Date(),
+      updatedAt: new Date(),
+    }).where(and(
+      eq(partnerImportDecisions.operationId, locked.operation.id),
+      eq(partnerImportDecisions.importRowId, actualRowId),
+      sql`${partnerImportDecisions.reversedAt} IS NULL`,
+    )).returning();
+    if (!updated) return { alreadyReversed: true };
+    const [priorDecision] = await tx.select({
+      id: partnerImportDecisions.id,
+      importRowId: partnerImportDecisions.importRowId,
+      decision: partnerImportDecisions.decision,
+      organizationId: partnerImportDecisions.organizationId,
+      normalizedName: partnerImportRows.normalizedName,
+    }).from(partnerImportDecisions).innerJoin(
+      partnerImportRows,
+      eq(partnerImportRows.id, partnerImportDecisions.importRowId),
+    ).where(and(
+      eq(partnerImportDecisions.partnerPageId, pageId),
+      eq(partnerImportRows.normalizedName, locked.row.normalizedName),
+      sql`${partnerImportDecisions.reversedAt} IS NULL`,
+    )).orderBy(desc(partnerImportDecisions.createdAt), desc(partnerImportDecisions.updatedAt))
+      .limit(1);
+    if (priorDecision) {
+      await tx.insert(partnerImportSuggestions).values({
+        partnerPageId: pageId,
+        normalizedName: priorDecision.normalizedName,
+        importRowId: priorDecision.importRowId,
+        organizationId: priorDecision.organizationId,
+        decision: priorDecision.decision,
+        rationale: { source: "restored_prior_decision", decisionId: priorDecision.id },
+        lastUsedAt: new Date(),
+      }).onConflictDoUpdate({
+        target: [partnerImportSuggestions.partnerPageId, partnerImportSuggestions.normalizedName],
+        set: {
+          importRowId: priorDecision.importRowId,
+          organizationId: priorDecision.organizationId,
+          decision: priorDecision.decision,
+          rationale: { source: "restored_prior_decision", decisionId: priorDecision.id },
+          lastUsedAt: new Date(),
+        },
+      });
+    } else {
+      await tx.delete(partnerImportSuggestions).where(and(
+        eq(partnerImportSuggestions.partnerPageId, pageId),
+        eq(partnerImportSuggestions.normalizedName, locked.row.normalizedName),
+      ));
+    }
+    await tx.update(partnerImportRows).set({ status: "pending" })
+      .where(eq(partnerImportRows.id, actualRowId));
+    return {
+      decision: updated,
+      reversible: {
+        organizationEffect: "not_reversed",
+        restoredPriorDecision: priorDecision ?? null,
+        removedActiveSuggestion: !priorDecision,
+      },
+    };
+  });
+  if (!result) return apiError(res, 404, "Import row not found");
+  return res.json({ data: result });
+}
+
+router.delete(
+  "/admin/partner-pages/:pageId/import/decisions/:rowId",
+  requireAdmin,
+  asyncHandler(reverseImportDecision),
+);
+router.post(
+  "/admin/partner-pages/:pageId/import/decisions/:rowId/revert",
+  requireAdmin,
+  asyncHandler(reverseImportDecision),
+);
+
+async function organizationDeleteSafety(tx: any, membershipId: string, organizationId: string) {
+  await tx.execute(sql`SELECT id FROM organizations WHERE id = ${organizationId} FOR UPDATE`);
+  await tx.execute(sql`SELECT id FROM partner_organization_memberships WHERE id = ${membershipId} FOR UPDATE`);
+  // Lock every source team in a stable order before checking any activity.
+  // This serializes roster/schedule/content writes with cleanup and prevents
+  // a team from becoming active between the safety check and deletion.
+  await tx.execute(sql`
+    SELECT id
+    FROM teams
+    WHERE organization_id = ${organizationId}
+    ORDER BY id
+    FOR UPDATE
+  `);
+  const [state] = await tx.select({
+    importOperationId: partnerOrganizationMemberships.importOperationId,
+    createdByImportOperationId: organizations.partnerImportCreatedByOperationId,
+    ownerCount: sql<number>`(SELECT count(*) FROM organization_admins WHERE organization_id = ${organizationId} AND role = 'owner')::int`,
+    adminCount: sql<number>`(SELECT count(*) FROM organization_admins WHERE organization_id = ${organizationId})::int`,
+    pendingClaimCount: sql<number>`(SELECT count(*) FROM organization_claim_requests WHERE organization_id = ${organizationId} AND status = 'pending')::int`,
+    pendingJoinCount: sql<number>`(SELECT count(*) FROM organization_join_requests WHERE organization_id = ${organizationId} AND status = 'pending')::int`,
+    pendingInviteCount: sql<number>`(
+      (SELECT count(*) FROM organization_invites WHERE organization_id = ${organizationId} AND status = 'pending') +
+      (SELECT count(*) FROM coach_invite_groups WHERE organization_id = ${organizationId} AND status = 'pending')
+    )::int`,
+    // Count every organization-owned row that would be deleted or nulled by
+    // an organization cascade. The row locks above prevent FK-backed inserts
+    // while these counts are evaluated.
+    organizationDependencyCount: sql<number>`(
+      (SELECT count(*) FROM organization_follow_optouts WHERE organization_id = ${organizationId}) +
+      (SELECT count(*) FROM user_pinned_orgs WHERE org_id = ${organizationId}) +
+      (SELECT count(*) FROM organization_roster_outreach WHERE organization_id = ${organizationId}) +
+      (SELECT count(*) FROM organization_invites WHERE organization_id = ${organizationId}) +
+      (SELECT count(*) FROM coach_invite_groups WHERE organization_id = ${organizationId}) +
+      (SELECT count(*) FROM staged_coach_invites WHERE organization_id = ${organizationId}) +
+      (SELECT count(*) FROM org_subscriptions WHERE organization_id = ${organizationId}) +
+      (SELECT count(*) FROM organization_join_requests WHERE organization_id = ${organizationId}) +
+      (SELECT count(*) FROM organization_claim_requests WHERE organization_id = ${organizationId}) +
+      (SELECT count(*) FROM partner_import_candidates pic JOIN partner_import_rows pir ON pir.id = pic.import_row_id
+        WHERE pic.organization_id = ${organizationId}
+          AND pir.operation_id IS DISTINCT FROM ${partnerOrganizationMemberships.importOperationId}) +
+      (SELECT count(*) FROM partner_import_decisions
+        WHERE organization_id = ${organizationId}
+          AND operation_id IS DISTINCT FROM ${partnerOrganizationMemberships.importOperationId}) +
+      (SELECT count(*) FROM partner_import_suggestions pis
+        WHERE pis.organization_id = ${organizationId}
+          AND (pis.import_row_id IS NULL OR NOT EXISTS (
+            SELECT 1 FROM partner_import_rows pir2
+            WHERE pir2.id = pis.import_row_id
+              AND pir2.operation_id = ${partnerOrganizationMemberships.importOperationId}
+          ))) +
+      (SELECT count(*) FROM partner_replacement_operations WHERE candidate_organization_id = ${organizationId}) +
+      (SELECT count(*) FROM broadcasts WHERE organization_id = ${organizationId}) +
+      (SELECT count(*) FROM schedule_events WHERE organization_id = ${organizationId})
+    )::int`,
+    // Team rows themselves are intentionally omitted: empty shells are safe
+    // to cascade. Every other team FK is a protected dependency, including
+    // staged invites and competition/news/broadcast data.
+    teamDependencyCount: sql<number>`(
+      (SELECT count(*) FROM user_pinned_teams upt JOIN teams t ON t.id = upt.team_id WHERE t.organization_id = ${organizationId}) +
+      (SELECT count(*) FROM organization_roster_outreach oro JOIN teams t ON t.id = oro.team_id WHERE t.organization_id = ${organizationId}) +
+      (SELECT count(*) FROM team_followers tf JOIN teams t ON t.id = tf.team_id WHERE t.organization_id = ${organizationId}) +
+      (SELECT count(*) FROM roster_entries re JOIN teams t ON t.id = re.team_id WHERE t.organization_id = ${organizationId}) +
+      (SELECT count(*) FROM roster_invites ri JOIN teams t ON t.id = ri.team_id WHERE t.organization_id = ${organizationId}) +
+      (SELECT count(*) FROM staged_coach_invites sci JOIN teams t ON t.id = sci.team_id WHERE t.organization_id = ${organizationId}) +
+      (SELECT count(*) FROM articles a JOIN teams t ON t.id = a.team_id WHERE t.organization_id = ${organizationId}) +
+      (SELECT count(*) FROM highlights h JOIN teams t ON t.id = h.team_id WHERE t.organization_id = ${organizationId}) +
+      (SELECT count(*) FROM tournament_participants tp JOIN teams t ON t.id = tp.team_id WHERE t.organization_id = ${organizationId}) +
+      (SELECT count(*) FROM tournament_participants tp JOIN teams t ON t.id = tp.pending_team_id WHERE t.organization_id = ${organizationId}) +
+      (SELECT count(*) FROM game_score_reports gsr JOIN teams t ON t.id = gsr.team_id WHERE t.organization_id = ${organizationId}) +
+      (SELECT count(*) FROM team_hidden_competition_games thc JOIN teams t ON t.id = thc.team_id WHERE t.organization_id = ${organizationId}) +
+      (SELECT count(*) FROM schedule_recurrences sr JOIN teams t ON t.id = sr.team_id WHERE t.organization_id = ${organizationId}) +
+      (SELECT count(*) FROM schedule_events se JOIN teams t ON t.id = se.team_id WHERE t.organization_id = ${organizationId}) +
+      (SELECT count(*) FROM broadcasts b JOIN teams t ON t.id = b.team_id WHERE t.organization_id = ${organizationId}) +
+      (SELECT count(*) FROM team_news_links tnl JOIN teams t ON t.id = tnl.team_id WHERE t.organization_id = ${organizationId})
+    )::int`,
+    followerCount: sql<number>`(SELECT count(*) FROM organization_followers WHERE organization_id = ${organizationId})::int`,
+    contentCount: sql<number>`(
+      (SELECT count(*) FROM org_posts WHERE organization_id = ${organizationId}) +
+      (SELECT count(*) FROM articles a JOIN teams t ON t.id = a.team_id WHERE t.organization_id = ${organizationId}) +
+      (SELECT count(*) FROM highlights h JOIN teams t ON t.id = h.team_id WHERE t.organization_id = ${organizationId})
+    )::int`,
+    teamCount: sql<number>`(SELECT count(*) FROM teams WHERE organization_id = ${organizationId})::int`,
+    teamActivityCount: sql<number>`(
+      (SELECT count(*) FROM roster_entries re JOIN teams t ON t.id = re.team_id WHERE t.organization_id = ${organizationId}) +
+      (SELECT count(*) FROM roster_invites ri JOIN teams t ON t.id = ri.team_id WHERE t.organization_id = ${organizationId}) +
+      (SELECT count(*) FROM team_followers tf JOIN teams t ON t.id = tf.team_id WHERE t.organization_id = ${organizationId}) +
+      (SELECT count(*) FROM schedule_events se JOIN teams t ON t.id = se.team_id WHERE t.organization_id = ${organizationId}) +
+      (SELECT count(*) FROM schedule_recurrences sr JOIN teams t ON t.id = sr.team_id WHERE t.organization_id = ${organizationId})
+    )::int`,
+    otherMembershipCount: sql<number>`(
+      SELECT count(*) FROM partner_organization_memberships
+      WHERE organization_id = ${organizationId} AND id <> ${membershipId}
+    )::int`,
+  }).from(partnerOrganizationMemberships).innerJoin(
+    organizations,
+    eq(organizations.id, partnerOrganizationMemberships.organizationId),
+  ).where(eq(partnerOrganizationMemberships.id, membershipId)).limit(1);
+  if (!state) return { safe: false, reasons: ["membership_missing"] as string[] };
+  const reasons: string[] = [];
+  if (!state.importOperationId) reasons.push("not_import_created");
+  if (
+    !state.createdByImportOperationId ||
+    state.createdByImportOperationId !== state.importOperationId
+  ) reasons.push("source_not_created_by_this_import");
+  if (Number(state.ownerCount) > 0) reasons.push("has_owner");
+  if (Number(state.adminCount) > 0) reasons.push("has_admin");
+  if (Number(state.pendingClaimCount) > 0) reasons.push("pending_claim");
+  if (Number(state.pendingJoinCount) > 0) reasons.push("pending_join_request");
+  if (Number(state.pendingInviteCount) > 0) reasons.push("pending_invite");
+  if (Number(state.organizationDependencyCount) > 0) reasons.push("organization_dependencies");
+  if (Number(state.teamDependencyCount) > 0) reasons.push("team_dependencies");
+  if (Number(state.followerCount) > 0) reasons.push("activity");
+  if (Number(state.contentCount) > 0) reasons.push("content");
+  if (Number(state.teamActivityCount) > 0) reasons.push("team_activity");
+  if (Number(state.otherMembershipCount) > 0) reasons.push("other_partner_use");
+  return { safe: reasons.length === 0, reasons, ...state };
+}
+
+async function importImpactPreview(req: any, res: any) {
+  const pageId = p(req.params.pageId);
+  const operationId = p(req.params.operationId) || cleanText(req.body?.operationId, 80);
+  const preview = await db.transaction(async (tx) => {
+    const [page] = await tx.select({ id: partnerLandingPages.id }).from(partnerLandingPages)
+      .where(eq(partnerLandingPages.id, pageId)).for("update").limit(1);
+    if (!page) return { error: "Partner page not found" as const };
+    const [operation] = await tx.select().from(partnerImportOperations).where(and(
+      eq(partnerImportOperations.id, operationId),
+      eq(partnerImportOperations.partnerPageId, pageId),
+    )).for("update").limit(1);
+    if (!operation) return { error: "Import operation not found" as const };
+    const memberships = await tx.select({
+      id: partnerOrganizationMemberships.id,
+      organizationId: partnerOrganizationMemberships.organizationId,
+      visible: partnerOrganizationMemberships.visible,
+      position: partnerOrganizationMemberships.position,
+      name: organizations.name,
+    }).from(partnerOrganizationMemberships).innerJoin(
+      organizations, eq(organizations.id, partnerOrganizationMemberships.organizationId),
+    ).where(eq(partnerOrganizationMemberships.importOperationId, operationId))
+      .orderBy(sql`${partnerOrganizationMemberships.position} NULLS LAST`)
+      .for("update");
+    const safety = await Promise.all(memberships.map((membership) =>
+      organizationDeleteSafety(tx, membership.id, membership.organizationId),
+    ));
+    return { operationId, memberships, safety };
+  });
+  if ("error" in preview) return apiError(res, 404, String(preview.error));
+  return res.json({
+    data: {
+      operationId: preview.operationId,
+      current: preview.memberships,
+      stale: preview.memberships.map((membership, index) => ({
+        ...membership,
+        ...preview.safety[index],
+        action: preview.safety[index]?.safe ? "delete_membership_and_organization" : "directory_only",
+      })),
+      preservesVisibilityAndOrder: true,
+    },
+  });
+}
+
+router.post(
+  "/admin/partner-pages/:pageId/import/:operationId/impact-preview",
+  requireAdmin,
+  asyncHandler(importImpactPreview),
+);
+router.post(
+  "/admin/partner-pages/:pageId/import/impact-preview",
+  requireAdmin,
+  asyncHandler(importImpactPreview),
+);
+
+async function memberReplacementPreview(req: any, res: any) {
+  const pageId = p(req.params.pageId);
+  const membershipId = p(req.params.membershipId);
+  const candidateId = cleanText(req.body?.organizationId ?? req.body?.candidateId, 80);
+  if (!candidateId) return apiError(res, 400, "organizationId or candidateId is required");
+  const result = await db.transaction(async (tx) => {
+    const [page] = await tx.select({ id: partnerLandingPages.id }).from(partnerLandingPages)
+      .where(eq(partnerLandingPages.id, pageId)).for("update").limit(1);
+    if (!page) return { error: "Partner page not found" as const };
+    const [member] = await tx.select({
+      membership: partnerOrganizationMemberships,
+      organization: { id: organizations.id, name: organizations.name },
+    }).from(partnerOrganizationMemberships).innerJoin(
+      organizations, eq(organizations.id, partnerOrganizationMemberships.organizationId),
+    ).where(and(
+      eq(partnerOrganizationMemberships.id, membershipId),
+      eq(partnerOrganizationMemberships.partnerPageId, pageId),
+    )).for("update").limit(1);
+    if (!member) return { error: "Partner membership not found" as const };
+    await tx.execute(sql`SELECT id FROM organizations WHERE id = ${candidateId} FOR UPDATE`);
+    const [candidate] = await tx.select({
+      id: organizations.id,
+      name: organizations.name,
+      teamCount: sql<number>`(SELECT count(*) FROM teams WHERE organization_id = ${organizations.id})::int`,
+    }).from(organizations).where(eq(organizations.id, candidateId)).limit(1);
+    if (!candidate) return { error: "Replacement organization not found" as const };
+    const [sibling] = await tx.select({ id: partnerOrganizationMemberships.id })
+      .from(partnerOrganizationMemberships).where(and(
+        eq(partnerOrganizationMemberships.partnerPageId, pageId),
+        eq(partnerOrganizationMemberships.organizationId, candidateId),
+        sql`${partnerOrganizationMemberships.id} <> ${membershipId}`,
+      )).limit(1);
+    const cleanup = await organizationDeleteSafety(tx, membershipId, member.organization.id);
+    return {
+      member: member.membership,
+      source: member.organization,
+      candidate,
+      cleanup,
+      siblingMembershipId: sibling?.id ?? null,
+    };
+  });
+  if ("error" in result) return apiError(res, result.error === "Partner page not found" ? 404 : 409, String(result.error));
+  const warnings = result.siblingMembershipId
+    ? ["The replacement organization is already on this partner page."]
+    : result.cleanup.safe
+      ? []
+      : [`Source retained as directory-only (${result.cleanup.reasons.join(", ")}).`];
+  return res.json({
+    impact: {
+      memberId: membershipId,
+      organizationId: result.source.id,
+      organizationName: result.source.name,
+      candidate: result.candidate,
+      protected: !result.cleanup.safe,
+      canReplace: !result.siblingMembershipId,
+      warnings,
+      cleanup: result.cleanup.reasons,
+      sourceVisibility: result.member.visible,
+      sourcePosition: result.member.position,
+      summary: result.siblingMembershipId
+        ? "Replacement is unavailable because the candidate is already included."
+        : "Only this partner membership will be replaced; visibility and order are preserved.",
+    },
+  });
+}
+
+async function replacePartnerMember(req: any, res: any) {
+  const pageId = p(req.params.pageId);
+  const membershipId = p(req.params.membershipId);
+  const candidateId = cleanText(req.body?.organizationId ?? req.body?.candidateId, 80);
+  const idempotencyKey = cleanText(req.body?.idempotencyKey, 160);
+  if (!candidateId || !idempotencyKey) {
+    return apiError(res, 400, "organizationId and idempotencyKey are required");
+  }
+  const result = await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${
+      "partner-member-replace:" + pageId + ":" + membershipId + ":" + candidateId + ":" + idempotencyKey
+    }))`);
+    const [page] = await tx.select({ id: partnerLandingPages.id }).from(partnerLandingPages)
+      .where(eq(partnerLandingPages.id, pageId)).for("update").limit(1);
+    if (!page) return { error: "Partner page not found" as const };
+    const [existingReplacement] = await tx.select().from(partnerReplacementOperations)
+      .where(and(
+        eq(partnerReplacementOperations.partnerPageId, pageId),
+        eq(partnerReplacementOperations.membershipId, membershipId),
+        eq(partnerReplacementOperations.idempotencyKey, idempotencyKey),
+      )).limit(1);
+    if (existingReplacement) {
+      if (existingReplacement.candidateOrganizationId !== candidateId) {
+        return { error: "Replacement idempotency key was already used for another organization" as const };
+      }
+      return { replayed: true as const, response: existingReplacement.result };
+    }
+    const [member] = await tx.select({
+      membership: partnerOrganizationMemberships,
+      organization: { id: organizations.id, name: organizations.name },
+    }).from(partnerOrganizationMemberships).innerJoin(
+      organizations, eq(organizations.id, partnerOrganizationMemberships.organizationId),
+    ).where(and(
+      eq(partnerOrganizationMemberships.id, membershipId),
+      eq(partnerOrganizationMemberships.partnerPageId, pageId),
+    )).for("update").limit(1);
+    if (!member) return { error: "Partner membership not found" as const };
+    const [candidate] = await tx.select({ id: organizations.id, name: organizations.name })
+      .from(organizations).where(eq(organizations.id, candidateId)).for("update").limit(1);
+    if (!candidate) return { error: "Replacement organization not found" as const };
+    if (candidate.id === member.organization.id) {
+      return { error: "Replacement organization is already selected" as const };
+    }
+    const [sibling] = await tx.select({ id: partnerOrganizationMemberships.id })
+      .from(partnerOrganizationMemberships).where(and(
+        eq(partnerOrganizationMemberships.partnerPageId, pageId),
+        eq(partnerOrganizationMemberships.organizationId, candidateId),
+        sql`${partnerOrganizationMemberships.id} <> ${membershipId}`,
+      )).limit(1);
+    if (sibling) return { error: "Replacement organization is already included on this partner page" as const };
+    const cleanup = await organizationDeleteSafety(tx, membershipId, member.organization.id);
+    const preservedVisible = member.membership.visible;
+    const preservedPosition = member.membership.position;
+    // The membership remains the same directory slot. It no longer claims
+    // that the replacement organization was created by the old import.
+    const [updated] = await tx.update(partnerOrganizationMemberships).set({
+      organizationId: candidate.id,
+      importOperationId: null,
+      replacementIdempotencyKey: idempotencyKey,
+      visible: preservedVisible,
+      position: preservedPosition,
+    }).where(and(
+      eq(partnerOrganizationMemberships.id, membershipId),
+      eq(partnerOrganizationMemberships.partnerPageId, pageId),
+    )).returning();
+    let sourceDeleted = false;
+    if (cleanup.safe) {
+      await tx.delete(organizations).where(eq(organizations.id, member.organization.id));
+      sourceDeleted = true;
+    }
+    const responseData = {
+      updated,
+      sourceDeleted,
+      sourceRetainedDirectoryOnly: !cleanup.safe,
+      cleanup,
+      summary: "Only the selected partner membership was replaced.",
+    };
+    const response = { summary: responseData.summary, data: responseData };
+    await tx.insert(partnerReplacementOperations).values({
+      partnerPageId: pageId,
+      membershipId,
+      idempotencyKey,
+      candidateOrganizationId: candidate.id,
+      result: response,
+    });
+    return response;
+  });
+  if ("error" in result) return apiError(res, result.error === "Partner page not found" || result.error === "Partner membership not found" ? 404 : 409, String(result.error));
+  if ("replayed" in result && result.replayed) {
+    return res.status(200).json(result.response);
+  }
+  return res.status(200).json({
+    summary: result.summary,
+    data: result.data,
+  });
+}
+
+router.post(
+  "/admin/partner-pages/:pageId/members/:membershipId/replace/preview",
+  requireAdmin,
+  asyncHandler(memberReplacementPreview),
+);
+router.post(
+  "/admin/partner-pages/:pageId/members/:membershipId/replace",
+  requireAdmin,
+  asyncHandler(replacePartnerMember),
+);
+
+async function replacePartnerImport(req: any, res: any) {
+  // A whole-operation replacement can accidentally touch sibling rows. For
+  // backwards compatibility, dispatch only when the operation has one row;
+  // otherwise force callers to identify the membership explicitly.
+  const pageId = p(req.params.pageId);
+  const operationId = p(req.params.operationId) || cleanText(req.body?.operationId, 80);
+  const operationMembers = operationId
+    ? await db.select({ id: partnerOrganizationMemberships.id })
+      .from(partnerOrganizationMemberships)
+      .where(and(
+        eq(partnerOrganizationMemberships.partnerPageId, pageId),
+        eq(partnerOrganizationMemberships.importOperationId, operationId),
+      ))
+    : [];
+  if (operationMembers.length !== 1) {
+    return apiError(
+      res,
+      409,
+      "Replacement is member-scoped; use /members/:membershipId/replace",
+    );
+  }
+  req.params.membershipId = operationMembers[0].id;
+  const firstOrganization = Array.isArray(req.body?.organizations)
+    ? req.body.organizations[0]
+    : null;
+  req.body = {
+    ...req.body,
+    organizationId: req.body?.organizationId ??
+      req.body?.candidateId ??
+      firstOrganization?.organizationId ??
+      firstOrganization?.existingOrganizationId,
+  };
+  return replacePartnerMember(req, res);
+  /*
+  const pageId = p(req.params.pageId);
+  const sourceOperationId = p(req.params.operationId) || cleanText(req.body?.operationId, 80);
+  const idempotencyKey = cleanText(req.body?.idempotencyKey, 160);
+  const input = Array.isArray(req.body?.organizations)
+    ? req.body.organizations.slice(0, 200)
+    : Array.isArray(req.body?.organizationIds)
+      ? req.body.organizationIds.slice(0, 200).map((organizationId: unknown) => ({
+          organizationId,
+          action: "use_existing",
+        }))
+      : [];
+  if (!idempotencyKey || !sourceOperationId || input.length === 0) {
+    return apiError(res, 400, "operationId, idempotencyKey, and replacement organizations are required");
+  }
+  const result = await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${"partner-replace:" + pageId + ":" + idempotencyKey}))`);
+    const [page] = await tx.select({ id: partnerLandingPages.id }).from(partnerLandingPages)
+      .where(eq(partnerLandingPages.id, pageId)).for("update").limit(1);
+    if (!page) return { error: "Partner page not found" };
+    const [source] = await tx.select().from(partnerImportOperations).where(and(
+      eq(partnerImportOperations.id, sourceOperationId),
+      eq(partnerImportOperations.partnerPageId, pageId),
+    )).for("update").limit(1);
+    if (!source) return { error: "Import operation not found" };
+    const [replayed] = await tx.select().from(partnerImportOperations).where(and(
+      eq(partnerImportOperations.partnerPageId, pageId),
+      eq(partnerImportOperations.idempotencyKey, idempotencyKey),
+    )).limit(1);
+    if (replayed) return { replayed: true, operationId: replayed.id, deletedCount: 0, directoryOnlyCount: 0 };
+    const [operation] = await tx.insert(partnerImportOperations).values({
+      partnerPageId: pageId,
+      idempotencyKey,
+    }).returning();
+    const desiredIds: string[] = [];
+    const memberships: Array<{ id: string; organizationId: string; position: number }> = [];
+    for (let index = 0; index < input.length; index++) {
+      const row = input[index] as {
+        name?: unknown;
+        organizationId?: unknown;
+        existingOrganizationId?: unknown;
+        action?: unknown;
+        decision?: unknown;
+        sourceColumn?: unknown;
+      };
+      const action = cleanText(row.decision ?? row.action, 40) || "use_existing";
+      if (action === "skip") continue;
+      let organizationId = cleanText(row.organizationId ?? row.existingOrganizationId, 80);
+      if (action === "keep_distinct" || !organizationId) {
+        const name = cleanText(row.name, 200);
+        if (!name) return { error: `Organization ${index + 1}: name required` };
+        const [created] = await tx.insert(organizations).values({
+          name,
+          location: cleanText((row as any).location, 200) || null,
+          city: cleanText((row as any).city, 120) || null,
+          state: cleanText((row as any).state, 2).toUpperCase() || null,
+          claimToken: generateToken(),
+          partnerImportCreatedByOperationId: operation.id,
+        }).returning({ id: organizations.id });
+        organizationId = created.id;
+      } else {
+        await tx.execute(sql`SELECT id FROM organizations WHERE id = ${organizationId} FOR UPDATE`);
+        const [exists] = await tx.select({ id: organizations.id }).from(organizations)
+          .where(eq(organizations.id, organizationId)).limit(1);
+        if (!exists) return { error: `Organization ${index + 1}: selected match no longer exists` };
+      }
+      if (desiredIds.includes(organizationId)) continue;
+      desiredIds.push(organizationId);
+      const position = typeof (row as any).position === "number" ? (row as any).position : index;
+      const [membership] = await tx.insert(partnerOrganizationMemberships).values({
+        partnerPageId: pageId,
+        organizationId,
+        sourceColumn: cleanText(row.sourceColumn, 200) || `Column ${index + 1}`,
+        importOperationId: operation.id,
+        position,
+        visible: true,
+      }).onConflictDoUpdate({
+        target: [partnerOrganizationMemberships.partnerPageId, partnerOrganizationMemberships.organizationId],
+        set: {
+          visible: true,
+          position,
+          importOperationId: operation.id,
+          sourceColumn: cleanText(row.sourceColumn, 200) || `Column ${index + 1}`,
+        },
+      }).returning({
+        id: partnerOrganizationMemberships.id,
+        organizationId: partnerOrganizationMemberships.organizationId,
+        position: partnerOrganizationMemberships.position,
+      });
+      memberships.push({ id: membership.id, organizationId, position: membership.position ?? position });
+    }
+    const stale = await tx.select({
+      id: partnerOrganizationMemberships.id,
+      organizationId: partnerOrganizationMemberships.organizationId,
+    }).from(partnerOrganizationMemberships).where(and(
+      eq(partnerOrganizationMemberships.importOperationId, source.id),
+      eq(partnerOrganizationMemberships.partnerPageId, pageId),
+    )).for("update");
+    let deletedCount = 0;
+    let directoryOnlyCount = 0;
+    for (const oldMembership of stale) {
+      if (desiredIds.includes(oldMembership.organizationId)) continue;
+      const safety = await organizationDeleteSafety(tx, oldMembership.id, oldMembership.organizationId);
+      if (safety.safe) {
+        await tx.delete(partnerOrganizationMemberships).where(eq(partnerOrganizationMemberships.id, oldMembership.id));
+        await tx.delete(organizations).where(eq(organizations.id, oldMembership.organizationId));
+        deletedCount++;
+      } else {
+        // A claimed/content-bearing/followed source remains canonical. The
+        // partner directory is simply detached from it.
+        await tx.update(partnerOrganizationMemberships).set({ visible: false }).where(eq(partnerOrganizationMemberships.id, oldMembership.id));
+        directoryOnlyCount++;
+      }
+    }
+    return {
+      replayed: false,
+      operationId: operation.id,
+      replacedOperationId: source.id,
+      memberships,
+      deletedCount,
+      directoryOnlyCount,
+    };
+  });
+  if ("error" in result) return apiError(res, result.error === "Partner page not found" || result.error === "Import operation not found" ? 404 : 409, String(result.error));
+  return res.status(result.replayed ? 200 : 201).json({ data: result });
+  */
+}
+
+router.post(
+  "/admin/partner-pages/:pageId/import/:operationId/replace",
+  requireAdmin,
+  asyncHandler(replacePartnerImport),
+);
+router.post(
+  "/admin/partner-pages/:pageId/import/replace",
+  requireAdmin,
+  asyncHandler(replacePartnerImport),
 );
 
 router.patch(
@@ -962,79 +2061,38 @@ router.delete(
   asyncHandler(async (req, res) => {
     const pageId = p(req.params.pageId);
     const membershipId = p(req.params.membershipId);
-    const [row] = await db
-      .select({
+    const result = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${"partner-stale-delete:" + membershipId}))`);
+      await tx.execute(sql`SELECT id FROM partner_landing_pages WHERE id = ${pageId} FOR UPDATE`);
+      const [row] = await tx.select({
         organizationId: partnerOrganizationMemberships.organizationId,
-        importOperationId: partnerOrganizationMemberships.importOperationId,
         name: organizations.name,
-        ownerCount: sql<number>`(SELECT count(*) FROM organization_admins oa WHERE oa.organization_id = ${organizations.id} AND oa.role = 'owner')::int`,
-        otherMembershipCount: sql<number>`(
-          SELECT count(*) FROM partner_organization_memberships pom
-          WHERE pom.organization_id = ${organizations.id}
-            AND pom.id <> ${partnerOrganizationMemberships.id}
-        )::int`,
-        pendingClaimCount: sql<number>`(
-          SELECT count(*) FROM organization_claim_requests ocr
-          WHERE ocr.organization_id = ${organizations.id}
-            AND ocr.status = 'pending'
-        )::int`,
-        contentCount: sql<number>`(
-          (SELECT count(*) FROM org_posts op WHERE op.organization_id = ${organizations.id}) +
-          (SELECT count(*) FROM articles a JOIN teams t ON t.id = a.team_id WHERE t.organization_id = ${organizations.id}) +
-          (SELECT count(*) FROM highlights h JOIN teams t ON t.id = h.team_id WHERE t.organization_id = ${organizations.id})
-        )::int`,
-      })
-      .from(partnerOrganizationMemberships)
-      .innerJoin(
+      }).from(partnerOrganizationMemberships).innerJoin(
         organizations,
         eq(organizations.id, partnerOrganizationMemberships.organizationId),
-      )
-      .where(
-        and(
-          eq(partnerOrganizationMemberships.id, membershipId),
-          eq(partnerOrganizationMemberships.partnerPageId, pageId),
-        ),
-      )
-      .limit(1);
-    if (!row) return apiError(res, 404, "Partner membership not found");
-    if (!row.importOperationId) {
+      ).where(and(
+        eq(partnerOrganizationMemberships.id, membershipId),
+        eq(partnerOrganizationMemberships.partnerPageId, pageId),
+      )).for("update").limit(1);
+      if (!row) return { notFound: true as const };
+      const safety = await organizationDeleteSafety(tx, membershipId, row.organizationId);
+      if (cleanText(req.body?.confirmName, 200) !== row.name) {
+        return { badConfirmation: true as const, name: row.name };
+      }
+      if (!safety.safe) return { unsafe: true as const, name: row.name, reasons: safety.reasons };
+      await tx.delete(partnerOrganizationMemberships).where(eq(partnerOrganizationMemberships.id, membershipId));
+      await tx.delete(organizations).where(eq(organizations.id, row.organizationId));
+      return { deleted: true as const };
+    });
+    if ("notFound" in result) return apiError(res, 404, "Partner membership not found");
+    if ("badConfirmation" in result) return apiError(res, 400, "Type the organization name exactly to confirm deletion");
+    if ("unsafe" in result) {
       return apiError(
         res,
         409,
-        "Only organizations created by a partner import can be deleted here. Remove it from the page instead.",
+        `Organization cannot be safely deleted (${result.reasons.join(", ")}). Hide or remove it from the page instead.`,
       );
     }
-    if (Number(row.otherMembershipCount) > 0) {
-      return apiError(
-        res,
-        409,
-        "This organization is included on another partner page and cannot be deleted. Remove it from this page instead.",
-      );
-    }
-    if (Number(row.pendingClaimCount) > 0) {
-      return apiError(
-        res,
-        409,
-        "This organization has a pending ownership request and cannot be deleted. Hide or remove it from the page instead.",
-      );
-    }
-    if (Number(row.ownerCount) > 0 || Number(row.contentCount) > 0) {
-      return apiError(
-        res,
-        409,
-        "Claimed or content-bearing organizations cannot be deleted here. Hide or remove it from the page instead.",
-      );
-    }
-    if (cleanText(req.body?.confirmName, 200) !== row.name) {
-      return apiError(
-        res,
-        400,
-        "Type the organization name exactly to confirm deletion",
-      );
-    }
-    await db
-      .delete(organizations)
-      .where(eq(organizations.id, row.organizationId));
     return res.json({ ok: true });
   }),
 );
@@ -1093,7 +2151,11 @@ router.get(
           eq(partnerOrganizationMemberships.visible, true),
         ),
       )
-      .orderBy(asc(organizations.name));
+      .orderBy(
+        sql`${partnerOrganizationMemberships.position} NULLS LAST`,
+        asc(organizations.name),
+        asc(partnerOrganizationMemberships.createdAt),
+      );
     const orgIds = rows.map((row) => row.organization.id);
     const teamRows =
       orgIds.length > 0

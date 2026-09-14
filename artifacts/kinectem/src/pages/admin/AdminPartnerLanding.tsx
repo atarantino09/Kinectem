@@ -57,6 +57,14 @@ type PartnerMember = {
   contentCount: number;
   duplicateName: boolean;
   canDeleteStaleImport: boolean;
+  duplicateCandidates?: OrganizationCandidate[];
+  protected?: boolean;
+  protection?: unknown;
+  cleanup?: {
+    allowed?: boolean;
+    reason?: string | null;
+    summary?: string | null;
+  } | null;
   organization: {
     id: string;
     name: string;
@@ -93,8 +101,20 @@ type CompetitionSearchResult = PartnerCompetition & {
 };
 
 type SearchResult = PartnerMember["organization"] & {
-  hasOwner: boolean;
-  alreadyIncluded: boolean;
+  hasOwner?: boolean;
+  alreadyIncluded?: boolean;
+  matchKind?: string | null;
+  evidence?: unknown;
+  claimed?: boolean;
+  teamNames?: string[];
+  teamCount?: number;
+  pageMember?: boolean;
+  partnerPages?: Array<{ id?: string; name?: string; slug?: string } | string>;
+  rank?: number;
+};
+
+type OrganizationCandidate = SearchResult & {
+  id: string;
 };
 
 type ImportPreviewRow = {
@@ -103,6 +123,43 @@ type ImportPreviewRow = {
   name: string;
   warnings: string[];
   possibleMatches: SearchResult[];
+  candidates?: OrganizationCandidate[];
+  requiresDecision?: boolean;
+  decisionRequired?: boolean;
+  rememberedDecision?: "create" | "attach" | "skip" | "keep_distinct" | null;
+  rememberedSuggestion?: {
+    organizationId?: string;
+    decision?: "create" | "attach" | "skip" | "keep_distinct" | null;
+    action?: "create" | "attach" | "skip" | "keep_distinct" | null;
+    rationale?: unknown;
+  } | null;
+};
+
+type ImportAction = {
+  action: "create" | "attach" | "skip" | "keep_distinct";
+  candidateId?: string;
+  existingOrganizationId?: string;
+};
+
+type ReplacementImpact = {
+  organizationId?: string;
+  organizationName?: string;
+  memberId?: string;
+  protected?: boolean;
+  canReplace?: boolean;
+  warnings?: string[];
+  affectedTeams?: number;
+  affectedPosts?: number;
+  affectedHighlights?: number;
+  cleanup?: string | string[] | null;
+  stale?: Array<{
+    name?: string;
+    safe?: boolean;
+    reasons?: string[];
+    action?: string;
+  }>;
+  summary?: string | null;
+  [key: string]: unknown;
 };
 
 const DEFAULT_PARTNER_PRIMARY = "#155EEF";
@@ -153,6 +210,79 @@ async function copyToClipboard(text: string): Promise<void> {
   const copied = document.execCommand?.("copy");
   document.body.removeChild(textarea);
   if (!copied) throw new Error("Clipboard unavailable");
+}
+
+function candidateList(row: ImportPreviewRow): OrganizationCandidate[] {
+  return (row.candidates ?? row.possibleMatches ?? []) as OrganizationCandidate[];
+}
+
+function candidateLocation(candidate: SearchResult): string {
+  return [candidate.city, candidate.state, candidate.location]
+    .filter(Boolean)
+    .join(", ") || "Location not set";
+}
+
+function candidateEvidence(candidate: SearchResult): string[] {
+  if (Array.isArray(candidate.evidence)) return candidate.evidence.filter(Boolean);
+  if (typeof candidate.evidence === "string") return [candidate.evidence];
+  if (candidate.evidence && typeof candidate.evidence === "object") {
+    return Object.entries(candidate.evidence as Record<string, unknown>)
+      .filter(([, value]) => value !== null && value !== undefined && value !== false)
+      .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(", ") : String(value)}`);
+  }
+  return [];
+}
+
+function candidateLabel(candidate: SearchResult): string {
+  const kind = candidate.matchKind?.replace(/[_-]/g, " ");
+  return kind ? kind.replace(/\b\w/g, (letter) => letter.toUpperCase()) : "Possible match";
+}
+
+function candidateAlreadyIncluded(candidate: SearchResult): boolean {
+  return Boolean(candidate.alreadyIncluded || candidate.pageMember);
+}
+
+function rememberedDecisionLabel(row: ImportPreviewRow): string | null {
+  if (row.rememberedDecision) return row.rememberedDecision.replace("_", " ");
+  if (row.rememberedSuggestion?.decision) {
+    return row.rememberedSuggestion.decision.replace("_", " ");
+  }
+  if (row.rememberedSuggestion?.action) {
+    return row.rememberedSuggestion.action.replace("_", " ");
+  }
+  if (
+    row.rememberedSuggestion?.rationale &&
+    typeof row.rememberedSuggestion.rationale === "object"
+  ) {
+    const rationale = row.rememberedSuggestion.rationale as {
+      decision?: string;
+      action?: string;
+    };
+    const decision = rationale.decision ?? rationale.action;
+    if (decision) return decision.replace("_", " ");
+  }
+  if (row.rememberedSuggestion?.organizationId) return "attach";
+  return null;
+}
+
+function protectionLabel(protection: unknown): string {
+  if (typeof protection === "string") return protection;
+  if (Array.isArray(protection)) return protection.map(String).join(", ");
+  return "This organization has protected data";
+}
+
+function replacementIdempotencyKey(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `partner-replacement-${Date.now()}`;
+}
+
+function replacementBlocked(member: PartnerMember): boolean {
+  // Protected/content-bearing organizations can still be replaced in the
+  // directory. The API keeps their source organization and data in place;
+  // only an imported member with no provenance is unsafe to replace.
+  return !member.importOperationId;
 }
 
 function Step({
@@ -223,8 +353,17 @@ export function AdminPartnerLanding({
   });
   const [importRows, setImportRows] = useState<Array<{ name: string; teams: string[]; sourceColumn: string }>>([]);
   const [previewRows, setPreviewRows] = useState<ImportPreviewRow[]>([]);
-  const [rowActions, setRowActions] = useState<Record<number, { action: "create" | "attach" | "skip"; existingOrganizationId?: string }>>({});
+  const [rowActions, setRowActions] = useState<Record<number, ImportAction>>({});
   const [importKey, setImportKey] = useState("");
+  const [importSummary, setImportSummary] = useState<Record<string, unknown> | null>(null);
+  const [replacement, setReplacement] = useState<{
+    member: PartnerMember;
+    candidate: OrganizationCandidate;
+    impact: ReplacementImpact | null;
+    loading: boolean;
+    idempotencyKey: string;
+  } | null>(null);
+  const [replacementSummary, setReplacementSummary] = useState<Record<string, unknown> | null>(null);
 
   const pages = useQuery<{ data: PartnerSummary[] }>({
     queryKey: ["admin", "partner-pages"],
@@ -509,7 +648,10 @@ export function AdminPartnerLanding({
           body: JSON.stringify({ competitionId }),
         },
       );
-      setSelectedCompetitions(response.competitions);
+      setSelectedCompetitions(
+        response.competitions ??
+          (response.competition ? [response.competition] : []),
+      );
       setCompetitionSearch("");
       await refresh();
       toast({ title: "Featured competition linked" });
@@ -585,23 +727,48 @@ export function AdminPartnerLanding({
         body: JSON.stringify({ organizations: rows }),
       },
     );
-    setPreviewRows(response.data.rows);
+    setPreviewRows(
+      response.data.rows.map((row) => ({
+        ...row,
+        possibleMatches: row.possibleMatches ?? row.candidates ?? [],
+        candidates: row.candidates ?? row.possibleMatches ?? [],
+      })),
+    );
     setRowActions({});
+    setImportSummary(null);
   };
 
   const runImport = async () => {
-    await customFetch(`/api/v1/admin/partner-pages/${selectedId}/import`, {
+    const response = await customFetch<{ data?: Record<string, unknown> }>(
+      `/api/v1/admin/partner-pages/${selectedId}/import`,
+      {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         idempotencyKey: importKey,
-        organizations: importRows.map((row, index) => ({ ...row, ...(rowActions[index] ?? { action: "create" }) })),
+        organizations: importRows.map((row, index) => ({
+          ...row,
+          ...(rowActions[index] ?? { action: "create" }),
+        })),
       }),
-    });
+      },
+    );
     setImportRows([]);
     setPreviewRows([]);
+    setRowActions({});
+    setImportSummary(response.data ?? null);
     await refresh();
-    toast({ title: "Partner organizations imported" });
+    const summary = response.data;
+    const created = summary?.createdCount ?? summary?.created;
+    const attached = summary?.attachedCount ?? summary?.attached;
+    const skipped = summary?.skippedCount ?? summary?.skipped;
+    toast({
+      title: "Partner organizations imported",
+      description:
+        created !== undefined || attached !== undefined || skipped !== undefined
+          ? `${created ?? 0} created · ${attached ?? 0} attached · ${skipped ?? 0} skipped`
+          : undefined,
+    });
   };
 
   const updateMember = async (member: PartnerMember, action: "visibility" | "remove" | "delete") => {
@@ -624,6 +791,82 @@ export function AdminPartnerLanding({
       });
     }
     await refresh();
+  };
+
+  const previewReplacement = async (
+    member: PartnerMember,
+    candidate: OrganizationCandidate,
+  ) => {
+    setReplacement({
+      member,
+      candidate,
+      impact: null,
+      loading: true,
+      idempotencyKey: replacementIdempotencyKey(),
+    });
+    try {
+      const operationPath = `/api/v1/admin/partner-pages/${selectedId}/members/${member.id}/replace/preview`;
+      const response = await customFetch<{
+        data?: ReplacementImpact;
+        impact?: ReplacementImpact;
+      }>(operationPath, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          candidateId: candidate.id,
+          organizationId: candidate.id,
+        }),
+      });
+      setReplacement((current) =>
+        current
+          ? {
+              ...current,
+              impact: response.impact ?? response.data ?? {},
+              loading: false,
+            }
+          : current,
+      );
+    } catch (error) {
+      setReplacement(null);
+      toast({
+        title: "Couldn't preview replacement",
+        description: (error as Error).message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const confirmReplacement = async () => {
+    if (!replacement?.impact || replacement.loading) return;
+    setReplacement((current) => (current ? { ...current, loading: true } : current));
+    try {
+      const operationPath = `/api/v1/admin/partner-pages/${selectedId}/members/${replacement.member.id}/replace`;
+      const response = await customFetch<{
+        data?: Record<string, unknown>;
+        summary?: Record<string, unknown>;
+      }>(operationPath, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "attach",
+          idempotencyKey: replacement.idempotencyKey,
+          candidateId: replacement.candidate.id,
+          organizationId: replacement.candidate.id,
+          confirmed: true,
+        }),
+      });
+      setReplacementSummary(response.summary ?? response.data ?? {});
+      setReplacement(null);
+      await refresh();
+      toast({ title: "Organization replaced", description: "The partner directory was updated." });
+    } catch (error) {
+      setReplacement((current) => (current ? { ...current, loading: false } : current));
+      toast({
+        title: "Couldn't replace organization",
+        description: (error as Error).message,
+        variant: "destructive",
+      });
+    }
   };
 
   const updateOrgLogo = async (member: PartnerMember, logoUrl: string) => {
@@ -857,23 +1100,125 @@ export function AdminPartnerLanding({
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="space-y-3 rounded-lg border p-3">
             <div className="font-bold">Mass upload</div>
-            <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={(e) => e.target.files?.[0] && void parseImport(e.target.files[0])} />
+            <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" data-testid="input-partner-import-file" onChange={(e) => e.target.files?.[0] && void parseImport(e.target.files[0])} />
             <Button variant="outline" onClick={() => fileRef.current?.click()}><Upload className="mr-2 h-4 w-4" /> Choose spreadsheet</Button>
             {previewRows.map((row) => (
-              <div key={row.index} className="rounded-md border p-3 text-sm">
-                <div className="font-bold">{row.sourceColumn}: {row.name}</div>
+              (() => {
+                const candidates = candidateList(row);
+                const action = rowActions[row.index];
+                const needsDecision =
+                  row.requiresDecision === true ||
+                  row.decisionRequired === true ||
+                  candidates.length > 0;
+                const teams = importRows[row.index]?.teams ?? [];
+                return (
+              <div key={row.index} className="rounded-md border p-3 text-sm" data-testid={`import-review-row-${row.index}`}>
+                <div className="flex flex-wrap items-center gap-2 font-bold">
+                  <span>{row.sourceColumn}: {row.name}</span>
+                  {rememberedDecisionLabel(row) && (
+                    <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-800">
+                      Remembered: {rememberedDecisionLabel(row)}
+                    </span>
+                  )}
+                  {needsDecision && !action && (
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                      Decision required
+                    </span>
+                  )}
+                  {action?.action === "keep_distinct" && (
+                    <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-800">
+                      Keep distinct
+                    </span>
+                  )}
+                </div>
                 {row.warnings.map((warning) => <div key={warning} className="mt-1 text-amber-700">{warning}</div>)}
-                <select className="mt-2 w-full rounded border bg-background p-2" value={`${rowActions[row.index]?.action ?? "create"}:${rowActions[row.index]?.existingOrganizationId ?? ""}`} onChange={(e) => {
-                  const [action, id] = e.target.value.split(":");
-                  setRowActions((current) => ({ ...current, [row.index]: { action: action as "create" | "attach" | "skip", existingOrganizationId: id || undefined } }));
-                }}>
-                  <option value="create:">Create a separate organization</option>
-                  {row.possibleMatches.map((match) => <option key={match.id} value={`attach:${match.id}`}>Attach {match.name} · {match.city ?? match.location ?? "Location not set"}</option>)}
-                  <option value="skip:">Skip this row</option>
-                </select>
+                {candidates.length > 0 && (
+                  <div className="mt-3 space-y-2" data-testid={`candidate-comparison-${row.index}`}>
+                    <div className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                      Compare credible matches before importing
+                    </div>
+                    {candidates.map((candidate) => {
+                      const candidateTeams = candidate.teamNames ?? [];
+                      const normalizedTeams = new Set(teams.map((team) => team.trim().toLowerCase()));
+                      const teamMismatch =
+                        normalizedTeams.size > 0 &&
+                        candidateTeams.length > 0 &&
+                        !candidateTeams.some((team) => normalizedTeams.has(team.trim().toLowerCase()));
+                      return (
+                        <div key={candidate.id} className="rounded border bg-muted/20 p-2" data-testid={`candidate-${row.index}-${candidate.id}`}>
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="font-semibold">{candidate.name}</div>
+                            <div className="flex flex-wrap gap-1 text-xs">
+                              <span className="rounded bg-primary/10 px-2 py-0.5 text-primary">{candidateLabel(candidate)}</span>
+                              {candidate.claimed ?? candidate.hasOwner ? <span className="rounded bg-amber-100 px-2 py-0.5 text-amber-800">Claimed</span> : <span className="rounded bg-emerald-100 px-2 py-0.5 text-emerald-800">Ownerless</span>}
+                              {candidateAlreadyIncluded(candidate) && <span className="rounded bg-muted px-2 py-0.5">Already included</span>}
+                            </div>
+                          </div>
+                          <div className="text-xs text-muted-foreground">{candidateLocation(candidate)}</div>
+                          {candidateTeams.length > 0 && <div className="mt-1 text-xs">Teams: {candidateTeams.join(", ")}</div>}
+                          {candidateEvidence(candidate).map((evidence) => <div key={evidence} className="mt-1 text-xs text-muted-foreground">Evidence: {evidence}</div>)}
+                          {teamMismatch && <div className="mt-1 font-semibold text-amber-700" role="alert">Team mismatch: uploaded teams do not match this organization.</div>}
+                          {candidate.partnerPages && candidate.partnerPages.length > 0 && (
+                            <div className="mt-1 text-xs text-muted-foreground">Partner pages: {candidate.partnerPages.map((page) => typeof page === "string" ? page : page.name ?? page.slug ?? page.id).join(", ")}</div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <Label className="mt-3 block text-xs font-bold">
+                  Choose what to do with this row
+                  <select
+                    className="mt-1 w-full rounded border bg-background p-2 font-normal"
+                    aria-label={`Decision for ${row.name}`}
+                    data-testid={`select-import-decision-${row.index}`}
+                    value={action
+                      ? `${action.action}:${action.candidateId ?? action.existingOrganizationId ?? ""}`
+                      : needsDecision
+                        ? ""
+                        : "create:"}
+                    onChange={(e) => {
+                      const [nextAction, id] = e.target.value.split(":");
+                      setRowActions((current) => ({
+                        ...current,
+                        [row.index]: {
+                          action: nextAction as ImportAction["action"],
+                          candidateId: id || undefined,
+                          existingOrganizationId: id || undefined,
+                        },
+                      }));
+                    }}
+                  >
+                    {needsDecision && <option value="">Select an explicit decision…</option>}
+                    {!needsDecision && <option value="create:">Create a separate organization</option>}
+                    <option value="create:">Create a new organization</option>
+                    <option value="keep_distinct:">Keep distinct from the matches (create new)</option>
+                    {candidates.map((match) => <option key={match.id} value={`attach:${match.id}`} disabled={candidateAlreadyIncluded(match)}>Attach {match.name} · {candidateLocation(match)}{candidateAlreadyIncluded(match) ? " · already included" : ""}</option>)}
+                    <option value="skip:">Skip this row</option>
+                  </select>
+                </Label>
               </div>
+                );
+              })()
             ))}
-            {previewRows.length > 0 && <Button onClick={runImport}>Import {previewRows.length} rows</Button>}
+            {previewRows.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">Every credible collision must have an explicit choice. Remembered decisions are shown for context and do not silently import a row.</p>
+                <Button
+                  onClick={runImport}
+                  disabled={previewRows.some((row) => (row.requiresDecision === true || row.decisionRequired === true || candidateList(row).length > 0) && !rowActions[row.index])}
+                  data-testid="btn-run-partner-import"
+                >
+                  Import {previewRows.length} rows
+                </Button>
+              </div>
+            )}
+            {importSummary && (
+              <div className="rounded-md border border-emerald-300 bg-emerald-50 p-3 text-sm" data-testid="partner-import-summary">
+                <div className="font-bold">Import complete</div>
+                <div>{String(importSummary.createdCount ?? importSummary.created ?? 0)} created · {String(importSummary.attachedCount ?? importSummary.attached ?? 0)} attached · {String(importSummary.skippedCount ?? importSummary.skipped ?? 0)} skipped</div>
+              </div>
+            )}
           </div>
           <div className="space-y-3 rounded-lg border p-3">
             <div className="font-bold">Add new organization</div>
@@ -887,8 +1232,17 @@ export function AdminPartnerLanding({
               <div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><Input className="pl-9" placeholder="Name, city, state, or location" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
               {(searchResults.data?.data ?? []).map((result) => (
                 <div key={result.id} className="mt-2 flex items-center justify-between gap-2 rounded border p-2 text-sm">
-                  <div><div className="font-bold">{result.name}</div><div className="text-muted-foreground">{[result.city, result.state, result.location].filter(Boolean).join(", ") || "Location not set"} · {result.hasOwner ? "Claimed" : "Ownerless"}</div></div>
-                  <Button size="sm" variant="outline" disabled={result.alreadyIncluded} onClick={() => attachOrganization(result.id)}>{result.alreadyIncluded ? "Included" : "Attach"}</Button>
+                  <div>
+                    <div className="flex flex-wrap items-center gap-1 font-bold">
+                      <span>{result.name}</span>
+                      {result.matchKind && <span className="rounded bg-primary/10 px-2 py-0.5 text-xs font-normal text-primary">{candidateLabel(result)}</span>}
+                      {candidateAlreadyIncluded(result) && <span className="rounded bg-muted px-2 py-0.5 text-xs font-normal">Already included</span>}
+                    </div>
+                    <div className="text-muted-foreground">{candidateLocation(result)} · {result.claimed ?? result.hasOwner ? "Claimed" : "Ownerless"}</div>
+                    {candidateEvidence(result).map((evidence) => <div key={evidence} className="text-xs text-muted-foreground">Evidence: {evidence}</div>)}
+                    {result.teamNames && result.teamNames.length > 0 && <div className="text-xs text-muted-foreground">Teams: {result.teamNames.join(", ")}</div>}
+                  </div>
+                  <Button size="sm" variant="outline" disabled={candidateAlreadyIncluded(result)} onClick={() => attachOrganization(result.id)}>{candidateAlreadyIncluded(result) ? "Included" : "Attach"}</Button>
                 </div>
               ))}
             </div>
@@ -903,6 +1257,38 @@ export function AdminPartnerLanding({
               <div>
                 <div className="flex flex-wrap items-center gap-2 font-black">{member.organization.name}{member.duplicateName && <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800">Duplicate name</span>}</div>
                 <div className="text-xs text-muted-foreground">{member.sourceColumn ?? "No import source"} · {member.teamCount} teams · {member.contentCount} posts · {member.hasOwner ? "Claimed organization" : "Ownerless import"}</div>
+                {member.protected === true && (
+                  <div className="mt-1 text-xs font-semibold text-amber-700">
+                    Protected: {protectionLabel(member.protection)}
+                  </div>
+                )}
+                {member.cleanup && (
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    Cleanup: {member.cleanup.summary ?? member.cleanup.reason ?? (member.cleanup.allowed === false ? "Not available" : "Available")}
+                  </div>
+                )}
+                {(member.duplicateCandidates ?? []).length > 0 && (
+                  <div className="mt-2 space-y-2" data-testid={`member-duplicate-candidates-${member.id}`}>
+                    <div className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Possible replacement organizations</div>
+                    {(member.duplicateCandidates ?? []).map((candidate) => (
+                      <div key={candidate.id} className="flex flex-wrap items-center justify-between gap-2 rounded border bg-muted/20 p-2 text-sm">
+                        <div>
+                          <div className="font-semibold">{candidate.name}</div>
+                          <div className="text-xs text-muted-foreground">{candidateLocation(candidate)} · {candidateLabel(candidate)}{candidate.claimed ?? candidate.hasOwner ? " · claimed" : ""}</div>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={replacementBlocked(member) || !candidate.id || candidateAlreadyIncluded(candidate)}
+                          onClick={() => void previewReplacement(member, candidate)}
+                          data-testid={`btn-preview-replace-${member.id}-${candidate.id}`}
+                        >
+                          Preview replacement
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <BrandImageField label="Organization logo" value={member.organization.logoUrl ?? ""} onChange={(value) => void updateOrgLogo(member, value)} kind="logo" idPrefix={`member-logo-${member.id}`} />
               <div className="flex flex-wrap gap-1">
@@ -913,6 +1299,54 @@ export function AdminPartnerLanding({
             </div>
           ))}
         </div>
+        {replacementSummary && (
+          <div className="rounded-md border border-emerald-300 bg-emerald-50 p-3 text-sm" data-testid="partner-replacement-summary">
+            <div className="font-bold">Replacement complete</div>
+            <div>{String(replacementSummary.summary ?? "The organization and its partner membership were updated.")}</div>
+            {replacementSummary.affectedTeams !== undefined && <div className="text-muted-foreground">{String(replacementSummary.affectedTeams)} teams · {String(replacementSummary.affectedPosts ?? 0)} posts updated</div>}
+          </div>
+        )}
+        {replacement && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 p-4" role="dialog" aria-label="Confirm organization replacement" data-testid="dialog-partner-replacement">
+            <div className="font-bold">Review replacement</div>
+            <p className="mt-1 text-sm">
+              Replace <strong>{replacement.member.organization.name}</strong> with <strong>{replacement.candidate.name}</strong>?
+              This preview includes the affected teams and content before anything is changed.
+            </p>
+            {replacement.member.protected && (
+              <p className="mt-2 rounded border border-amber-300 bg-amber-100 p-2 text-sm font-semibold text-amber-900">
+                This source organization and its protected data remain in place. Only the partner directory membership will be replaced.
+              </p>
+            )}
+            {replacement.loading && <p className="mt-2 text-sm text-muted-foreground">Loading impact preview…</p>}
+            {replacement.impact && (
+              <div className="mt-3 space-y-2 rounded border bg-background p-3 text-sm" data-testid="replacement-impact-preview">
+                {replacement.impact.summary && <div>{String(replacement.impact.summary)}</div>}
+                <div className="grid gap-2 sm:grid-cols-3">
+                  {replacement.impact.affectedTeams !== undefined && <div><strong>{String(replacement.impact.affectedTeams)}</strong><span className="ml-1 text-muted-foreground">teams</span></div>}
+                  {replacement.impact.affectedPosts !== undefined && <div><strong>{String(replacement.impact.affectedPosts)}</strong><span className="ml-1 text-muted-foreground">posts</span></div>}
+                  {replacement.impact.affectedHighlights !== undefined && <div><strong>{String(replacement.impact.affectedHighlights)}</strong><span className="ml-1 text-muted-foreground">highlights</span></div>}
+                </div>
+                {(replacement.impact.warnings ?? []).map((warning) => <div key={warning} className="font-semibold text-amber-700">{warning}</div>)}
+                {replacement.impact.cleanup && <div className="text-muted-foreground">Cleanup: {Array.isArray(replacement.impact.cleanup) ? replacement.impact.cleanup.join(", ") : replacement.impact.cleanup}</div>}
+                {replacement.impact.stale && replacement.impact.stale.length > 0 && (
+                  <div className="space-y-1 border-t pt-2">
+                    <div className="font-semibold">Current import cleanup impact</div>
+                    {replacement.impact.stale.map((item) => (
+                      <div key={item.name} className={item.safe ? "text-emerald-700" : "text-amber-700"}>
+                        {item.name}: {item.safe ? "safe to remove" : `preserved (${(item.reasons ?? []).join(", ") || "protected data"})`}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button type="button" variant="outline" onClick={() => setReplacement(null)}>Cancel</Button>
+              <Button type="button" disabled={replacement.loading || !replacement.impact || replacement.impact.canReplace === false} onClick={() => void confirmReplacement()} data-testid="btn-confirm-partner-replacement">Confirm replacement</Button>
+            </div>
+          </div>
+        )}
       </Step>
 
       <Step number={4} title="Feature competitions" done={selectedCompetitions.length > 0}>

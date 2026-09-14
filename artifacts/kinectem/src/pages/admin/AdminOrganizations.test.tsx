@@ -23,6 +23,12 @@ let importedBody: Record<string, unknown> | null = null;
 let partnerCreateBody: Record<string, unknown> | null = null;
 let partnerCompetitionBody: Record<string, unknown> | null = null;
 let partnerOrgListBody: Record<string, unknown> | null = null;
+let partnerImportBody: Record<string, unknown> | null = null;
+let partnerValidateResponse: Record<string, unknown> | null = null;
+let partnerDetailMembers: Array<Record<string, unknown>> = [];
+let partnerReplacementPreviewBody: Record<string, unknown> | null = null;
+let partnerReplacementBody: Record<string, unknown> | null = null;
+let partnerReplacementKeys: string[] = [];
 let partnerPages: Array<Record<string, unknown>> = [];
 let partnerPublished = false;
 let claimLinkRows: Array<Record<string, unknown>> = [];
@@ -36,6 +42,12 @@ beforeEach(() => {
   partnerCreateBody = null;
   partnerCompetitionBody = null;
   partnerOrgListBody = null;
+  partnerImportBody = null;
+  partnerValidateResponse = null;
+  partnerDetailMembers = [];
+  partnerReplacementPreviewBody = null;
+  partnerReplacementBody = null;
+  partnerReplacementKeys = [];
   partnerPages = [];
   partnerPublished = false;
   claimLinkRows = [];
@@ -119,7 +131,7 @@ beforeEach(() => {
             published: partnerPublished,
             memberCount: 0,
             competition: null,
-            members: [],
+            members: partnerDetailMembers,
           },
         });
       }
@@ -173,6 +185,74 @@ beforeEach(() => {
             organizationCount: 2,
           },
         }, 201);
+      }
+      if (
+        method === "POST" &&
+        path === "/api/v1/admin/partner-pages/partner-1/import/validate"
+      ) {
+        const body = JSON.parse(String(init?.body ?? "{}"));
+        const rows = (body.organizations as Array<Record<string, unknown>>) ?? [];
+        return jsonResponse({
+          data: partnerValidateResponse ?? {
+            valid: true,
+            rows: rows.map((row, index) => ({
+              index,
+              sourceColumn: row.sourceColumn ?? `Column ${index + 1}`,
+              name: row.name,
+              warnings: [],
+              possibleMatches: [],
+            })),
+          },
+        });
+      }
+      if (
+        method === "POST" &&
+        path === "/api/v1/admin/partner-pages/partner-1/import"
+      ) {
+        partnerImportBody = JSON.parse(String(init?.body ?? "{}"));
+        return jsonResponse({
+          data: {
+            createdCount: 0,
+            attachedCount: 1,
+            skippedCount: 0,
+          },
+        }, 201);
+      }
+      if (
+        method === "POST" &&
+        path === "/api/v1/admin/partner-pages/partner-1/members/member-1/replace/preview"
+      ) {
+        partnerReplacementPreviewBody = JSON.parse(String(init?.body ?? "{}"));
+        return jsonResponse({
+          data: {
+            canReplace: true,
+            summary: "One team and two posts will move.",
+            affectedTeams: 1,
+            affectedPosts: 2,
+            warnings: ["Review the team names before confirming."],
+          },
+        });
+      }
+      if (
+        method === "POST" &&
+        path === "/api/v1/admin/partner-pages/partner-1/members/member-1/replace"
+      ) {
+        const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+        partnerReplacementBody = body;
+        if (typeof body.idempotencyKey !== "string") {
+          return jsonResponse({ error: "idempotencyKey is required" }, 400);
+        }
+        partnerReplacementKeys.push(body.idempotencyKey);
+        if (partnerReplacementKeys.length === 1 && !partnerDetailMembers[0]?.protected) {
+          return jsonResponse({ error: "retry this replacement" }, 500);
+        }
+        return jsonResponse({
+          data: {
+            summary: "One organization replaced.",
+            affectedTeams: 1,
+            affectedPosts: 2,
+          },
+        });
       }
       if (method === "POST" && path === "/api/v1/admin/partner-pages") {
         partnerCreateBody = JSON.parse(String(init?.body ?? "{}"));
@@ -882,6 +962,232 @@ describe("AdminOrganizations bulk import", () => {
     );
     expect(screen.getByTestId("input-partner-secondary-color")).toHaveValue(
       "#e6781e",
+    );
+  });
+
+  it("requires an explicit decision for a credible import collision", async () => {
+    partnerPages = [
+      {
+        id: "partner-1",
+        slug: "north-stars",
+        officialName: "North Stars",
+        associationLabel: "League / association",
+        published: false,
+        memberCount: 0,
+      },
+    ];
+    partnerValidateResponse = {
+      valid: true,
+      rows: [
+        {
+          index: 0,
+          sourceColumn: "North Stars",
+          name: "North Stars",
+          warnings: ["Possible existing organization found."],
+          requiresDecision: true,
+          rememberedDecision: "attach",
+          candidates: [
+            {
+              id: "org-existing",
+              name: "North Stars",
+              city: "Riverside",
+              state: "NY",
+              location: "Riverside, NY",
+              hasOwner: true,
+              claimed: true,
+              matchKind: "exact_name",
+              evidence: ["Exact organization name"],
+              teamNames: ["North U12"],
+              partnerPages: [{ name: "North Stars League" }],
+              alreadyIncluded: false,
+            },
+          ],
+        },
+      ],
+    };
+    const user = userEvent.setup();
+    renderWithProviders(<AdminOrganizations />);
+
+    await user.click(await screen.findByTestId("tab-org-partner"));
+    await user.click(await screen.findByRole("button", { name: /North Stars/ }));
+    await user.upload(
+      await screen.findByTestId("input-partner-import-file"),
+      new File(["North Stars\nNorth U12"], "north-stars.csv", { type: "text/csv" }),
+    );
+
+    expect(await screen.findByTestId("candidate-comparison-0")).toHaveTextContent(
+      "Exact Name",
+    );
+    expect(screen.getByTestId("import-review-row-0")).toHaveTextContent(
+      "Remembered: attach",
+    );
+    expect(screen.getByTestId("btn-run-partner-import")).toBeDisabled();
+
+    await user.selectOptions(
+      screen.getByTestId("select-import-decision-0"),
+      "attach:org-existing",
+    );
+    expect(screen.getByTestId("btn-run-partner-import")).toBeEnabled();
+    await user.click(screen.getByTestId("btn-run-partner-import"));
+    await waitFor(() =>
+      expect(partnerImportBody?.organizations).toEqual([
+        expect.objectContaining({
+          action: "attach",
+          candidateId: "org-existing",
+          existingOrganizationId: "org-existing",
+          teams: ["North U12"],
+        }),
+      ]),
+    );
+    expect(await screen.findByTestId("partner-import-summary")).toHaveTextContent(
+      "1 attached",
+    );
+  });
+
+  it("previews a protected duplicate replacement before confirmation", async () => {
+    partnerPages = [
+      {
+        id: "partner-1",
+        slug: "north-stars",
+        officialName: "North Stars",
+        associationLabel: "League / association",
+        published: false,
+        memberCount: 1,
+      },
+    ];
+    partnerDetailMembers = [
+      {
+        id: "member-1",
+        visible: true,
+        sourceColumn: "North Stars",
+        importOperationId: "import-1",
+        hasOwner: false,
+        teamCount: 1,
+        contentCount: 2,
+        duplicateName: true,
+        canDeleteStaleImport: true,
+        protected: false,
+        protection: [],
+        cleanup: { allowed: true, summary: "Safe after replacement" },
+        organization: {
+          id: "org-old",
+          name: "North Stars",
+          city: "Riverside",
+          state: "NY",
+          location: "Riverside, NY",
+          logoUrl: null,
+        },
+        duplicateCandidates: [
+          {
+            id: "org-new",
+            name: "North Stars Soccer",
+            city: "Riverside",
+            state: "NY",
+            location: "Riverside, NY",
+            hasOwner: false,
+            alreadyIncluded: false,
+            matchKind: "same_location",
+          },
+        ],
+      },
+    ];
+    const user = userEvent.setup();
+    renderWithProviders(<AdminOrganizations />);
+    await user.click(await screen.findByTestId("tab-org-partner"));
+    await user.click(await screen.findByRole("button", { name: /North Stars/ }));
+
+    const previewButton = await screen.findByTestId(
+      "btn-preview-replace-member-1-org-new",
+    );
+    expect(previewButton).toBeEnabled();
+    await user.click(previewButton);
+    const dialog = await screen.findByTestId("dialog-partner-replacement");
+    expect(dialog).toHaveTextContent("One team and two posts will move.");
+    expect(screen.getByTestId("btn-confirm-partner-replacement")).toBeEnabled();
+    expect(partnerReplacementPreviewBody).toEqual({
+      candidateId: "org-new",
+      organizationId: "org-new",
+    });
+    await user.click(screen.getByTestId("btn-confirm-partner-replacement"));
+    expect(partnerReplacementBody).toEqual({
+      action: "attach",
+      candidateId: "org-new",
+      organizationId: "org-new",
+      confirmed: true,
+      idempotencyKey: expect.any(String),
+    });
+    expect(partnerReplacementKeys).toHaveLength(1);
+    expect(screen.queryByTestId("partner-replacement-summary")).not.toBeInTheDocument();
+    expect(screen.getByTestId("btn-confirm-partner-replacement")).toBeEnabled();
+    await user.click(screen.getByTestId("btn-confirm-partner-replacement"));
+    expect(partnerReplacementKeys).toHaveLength(2);
+    expect(partnerReplacementKeys[1]).toBe(partnerReplacementKeys[0]);
+    expect(await screen.findByTestId("partner-replacement-summary")).toHaveTextContent(
+      "One organization replaced.",
+    );
+  });
+
+  it("allows protected members to replace directory membership only", async () => {
+    partnerPages = [
+      {
+        id: "partner-1",
+        slug: "north-stars",
+        officialName: "North Stars",
+        associationLabel: "League / association",
+        published: false,
+        memberCount: 1,
+      },
+    ];
+    partnerDetailMembers = [
+      {
+        id: "member-1",
+        visible: true,
+        sourceColumn: "North Stars",
+        importOperationId: "import-1",
+        hasOwner: false,
+        teamCount: 1,
+        contentCount: 0,
+        duplicateName: true,
+        canDeleteStaleImport: false,
+        protected: true,
+        protection: ["has_owner"],
+        cleanup: { allowed: true },
+        organization: {
+          id: "org-old",
+          name: "North Stars",
+          city: "Riverside",
+          state: "NY",
+          location: "Riverside, NY",
+          logoUrl: null,
+        },
+        duplicateCandidates: [
+          {
+            id: "org-new",
+            name: "North Stars Soccer",
+            city: "Riverside",
+            state: "NY",
+            location: "Riverside, NY",
+            hasOwner: false,
+            alreadyIncluded: false,
+          },
+        ],
+      },
+    ];
+    const user = userEvent.setup();
+    renderWithProviders(<AdminOrganizations />);
+    await user.click(await screen.findByTestId("tab-org-partner"));
+    await user.click(await screen.findByRole("button", { name: /North Stars/ }));
+
+    const previewButton = await screen.findByTestId(
+      "btn-preview-replace-member-1-org-new",
+    );
+    expect(previewButton).toBeEnabled();
+    await user.click(previewButton);
+    const dialog = await screen.findByTestId("dialog-partner-replacement");
+    expect(dialog).toHaveTextContent("source organization and its protected data remain in place");
+    await user.click(screen.getByTestId("btn-confirm-partner-replacement"));
+    expect(await screen.findByTestId("partner-replacement-summary")).toHaveTextContent(
+      "One organization replaced.",
     );
   });
 });
