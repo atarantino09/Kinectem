@@ -72,6 +72,8 @@ type PartnerMember = {
     city: string | null;
     state: string | null;
     logoUrl: string | null;
+    brandPrimaryColor: string | null;
+    brandSecondaryColor: string | null;
   };
 };
 
@@ -380,6 +382,10 @@ export function AdminPartnerLanding({
     idempotencyKey: string;
   } | null>(null);
   const [replacementSummary, setReplacementSummary] = useState<Record<string, unknown> | null>(null);
+  const [orgBrandDrafts, setOrgBrandDrafts] = useState<
+    Record<string, { primary: string; secondary: string }>
+  >({});
+  const [savingOrgBrand, setSavingOrgBrand] = useState<string | null>(null);
   const [swapDecisionLoading, setSwapDecisionLoading] = useState<string | null>(null);
 
   const pages = useQuery<{ data: PartnerSummary[] }>({
@@ -887,12 +893,77 @@ export function AdminPartnerLanding({
   };
 
   const updateOrgLogo = async (member: PartnerMember, logoUrl: string) => {
+    const colors = logoUrl.startsWith("data:")
+      ? await extractBrandColorsFromDataUrl(logoUrl).catch(() => null)
+      : null;
+    const colorPatch = colors
+      ? {
+          brandPrimaryColor: colors.primary,
+          brandSecondaryColor: colors.secondary ?? colors.primary,
+        }
+      : {};
     await customFetch(`/api/v1/organizations/${member.organization.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ logoUrl }),
+      body: JSON.stringify({ logoUrl, ...colorPatch }),
     });
+    if (colors) {
+      setOrgBrandDrafts((current) => ({
+        ...current,
+        [member.organization.id]: {
+          primary: colors.primary,
+          secondary: colors.secondary ?? colors.primary,
+        },
+      }));
+      toast({
+        title: "Organization colors picked from the logo",
+        description: "Adjust them below if needed.",
+      });
+    }
     await refresh();
+  };
+
+  const orgBrandDraft = (member: PartnerMember) =>
+    orgBrandDrafts[member.organization.id] ?? {
+      primary: member.organization.brandPrimaryColor ?? "#155eef",
+      secondary: member.organization.brandSecondaryColor ?? "#06b6d4",
+    };
+
+  const setOrgBrandColor = (
+    member: PartnerMember,
+    key: "primary" | "secondary",
+    value: string,
+  ) => {
+    const current = orgBrandDraft(member);
+    setOrgBrandDrafts((drafts) => ({
+      ...drafts,
+      [member.organization.id]: { ...current, [key]: value },
+    }));
+  };
+
+  const saveOrgBrandColors = async (member: PartnerMember) => {
+    const colors = orgBrandDraft(member);
+    setSavingOrgBrand(member.organization.id);
+    try {
+      await customFetch(`/api/v1/organizations/${member.organization.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          brandPrimaryColor: colors.primary,
+          brandSecondaryColor: colors.secondary,
+        }),
+      });
+      await refresh();
+      toast({ title: "Organization colors saved" });
+    } catch (error) {
+      toast({
+        title: "Couldn't save organization colors",
+        description: (error as Error).message,
+        variant: "destructive",
+      });
+    } finally {
+      setSavingOrgBrand(null);
+    }
   };
 
   const decideDuplicateSwap = async (request: DuplicateSwapRequest, decision: "approved" | "denied") => {
@@ -1351,7 +1422,7 @@ export function AdminPartnerLanding({
       <Step number={4} title="Review and clean up the directory" done={members.length > 0}>
         <div className="space-y-3">
           {members.map((member) => (
-            <div key={member.id} className="grid gap-3 rounded-lg border p-3 lg:grid-cols-[1fr_260px_auto] lg:items-center">
+            <div key={member.id} className="grid gap-3 rounded-lg border p-3 lg:grid-cols-[1fr_300px_auto] lg:items-center">
               <div>
                 <div className="flex flex-wrap items-center gap-2 font-black">{member.organization.name}{member.duplicateName && <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800">Duplicate name</span>}</div>
                 <div className="text-xs text-muted-foreground">{member.sourceColumn ?? "No import source"} · {member.teamCount} teams · {member.contentCount} posts · {member.hasOwner ? "Claimed organization" : "Ownerless import"}</div>
@@ -1388,7 +1459,50 @@ export function AdminPartnerLanding({
                   </div>
                 )}
               </div>
-              <BrandImageField label="Organization logo" value={member.organization.logoUrl ?? ""} onChange={(value) => void updateOrgLogo(member, value)} kind="logo" idPrefix={`member-logo-${member.id}`} />
+              <div className="space-y-3">
+                <BrandImageField label="Organization logo" value={member.organization.logoUrl ?? ""} onChange={(value) => void updateOrgLogo(member, value)} kind="logo" idPrefix={`member-logo-${member.id}`} />
+                <div className="grid grid-cols-2 gap-2" data-testid={`member-brand-colors-${member.id}`}>
+                  {([
+                    ["Primary", "primary"],
+                    ["Secondary", "secondary"],
+                  ] as const).map(([label, key]) => {
+                    const value = orgBrandDraft(member)[key];
+                    return (
+                      <label key={key} className="text-xs font-semibold">
+                        {label}
+                        <div className="mt-1 flex items-center gap-2">
+                          <Input
+                            type="color"
+                            value={value}
+                            onChange={(event) =>
+                              setOrgBrandColor(member, key, event.target.value)
+                            }
+                            className="h-9 w-12 cursor-pointer p-1"
+                            aria-label={`${member.organization.name} ${label.toLowerCase()} color`}
+                          />
+                          <Input
+                            value={value}
+                            onChange={(event) =>
+                              setOrgBrandColor(member, key, event.target.value)
+                            }
+                            className="h-9 font-mono text-xs"
+                            aria-label={`${member.organization.name} ${label.toLowerCase()} color hex`}
+                          />
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={savingOrgBrand === member.organization.id}
+                  onClick={() => void saveOrgBrandColors(member)}
+                  data-testid={`btn-save-member-brand-${member.id}`}
+                >
+                  {savingOrgBrand === member.organization.id ? "Saving…" : "Save organization colors"}
+                </Button>
+              </div>
               <div className="flex flex-wrap gap-1">
                 <Button size="sm" variant="outline" onClick={() => updateMember(member, "visibility")}>{member.visible ? <EyeOff className="mr-1 h-3.5 w-3.5" /> : <Eye className="mr-1 h-3.5 w-3.5" />}{member.visible ? "Hide" : "Show"}</Button>
                 <Button size="sm" variant="outline" onClick={() => updateMember(member, "remove")}>Remove from page</Button>

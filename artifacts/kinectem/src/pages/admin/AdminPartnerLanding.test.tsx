@@ -3,6 +3,7 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { customFetch } from "@workspace/api-client-react";
 import { renderWithProviders } from "@/test";
+import { extractBrandColorsFromDataUrl } from "@/lib/extractBrandColors";
 import { AdminPartnerLanding } from "./AdminPartnerLanding";
 
 vi.mock("@workspace/api-client-react", () => ({
@@ -14,6 +15,8 @@ vi.mock("@/lib/extractBrandColors", () => ({
 }));
 
 const mockedFetch = vi.mocked(customFetch);
+const mockedExtractColors = vi.mocked(extractBrandColorsFromDataUrl);
+let detailMembers: Array<Record<string, unknown>> = [];
 
 const pageSummary = {
   id: "partner-1",
@@ -50,7 +53,7 @@ function detail(requests = [requestRow]) {
       secondaryColor: "#06B6D4",
       competition: null,
       competitions: [],
-      members: [],
+      members: detailMembers,
       duplicateSwapRequests: requests,
     },
   };
@@ -58,6 +61,9 @@ function detail(requests = [requestRow]) {
 
 beforeEach(() => {
   mockedFetch.mockReset();
+  mockedExtractColors.mockReset();
+  mockedExtractColors.mockResolvedValue(null);
+  detailMembers = [];
   mockedFetch.mockImplementation(async (path, options) => {
     if (path === "/api/v1/admin/partner-pages" && options?.method === "GET") {
       return { data: [pageSummary] } as never;
@@ -100,5 +106,65 @@ describe("AdminPartnerLanding duplicate swap review queue", () => {
         }),
       ),
     );
+  });
+});
+
+describe("AdminPartnerLanding organization branding", () => {
+  it("extracts colors from an uploaded logo and allows manual adjustment", async () => {
+    detailMembers = [
+      {
+        id: "membership-1",
+        visible: true,
+        sourceColumn: "A",
+        importOperationId: "import-1",
+        hasOwner: false,
+        teamCount: 1,
+        contentCount: 0,
+        duplicateName: false,
+        canDeleteStaleImport: true,
+        organization: {
+          id: "org-1",
+          name: "North Stars Club",
+          location: null,
+          city: null,
+          state: null,
+          logoUrl: null,
+          brandPrimaryColor: null,
+          brandSecondaryColor: null,
+        },
+      },
+    ];
+    mockedExtractColors.mockResolvedValue({
+      primary: "#112233",
+      secondary: "#aabbcc",
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<AdminPartnerLanding />);
+
+    await user.click(await screen.findByRole("button", { name: "Edit North Stars" }));
+    expect(
+      await screen.findByTestId("member-brand-colors-membership-1"),
+    ).toBeInTheDocument();
+
+    const primaryHex = screen.getByLabelText(
+      "North Stars Club primary color hex",
+    );
+    await user.clear(primaryHex);
+    await user.type(primaryHex, "#334455");
+    await user.click(screen.getByTestId("btn-save-member-brand-membership-1"));
+
+    await waitFor(() => {
+      const patchCall = mockedFetch.mock.calls.find(
+        ([path, options]) =>
+          path === "/api/v1/organizations/org-1" &&
+          options?.method === "PATCH" &&
+          String(options.body).includes("brandPrimaryColor"),
+      );
+      expect(patchCall).toBeDefined();
+      expect(JSON.parse(String(patchCall?.[1]?.body))).toMatchObject({
+        brandPrimaryColor: "#334455",
+        brandSecondaryColor: "#06b6d4",
+      });
+    });
   });
 });

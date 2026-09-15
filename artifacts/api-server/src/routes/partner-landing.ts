@@ -318,6 +318,8 @@ async function adminMembers(pageId: string) {
         city: organizations.city,
         state: organizations.state,
         logoUrl: organizations.logoUrl,
+        brandPrimaryColor: organizations.brandPrimaryColor,
+        brandSecondaryColor: organizations.brandSecondaryColor,
       },
       hasOwner: sql<boolean>`EXISTS (
         SELECT 1 FROM organization_admins oa
