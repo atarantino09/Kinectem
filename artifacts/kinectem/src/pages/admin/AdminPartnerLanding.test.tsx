@@ -246,5 +246,15 @@ describe("AdminPartnerLanding direct directory replacement", () => {
         "btn-preview-replace-membership-1-established-org-1",
       ),
     ).toBeEnabled();
+    await user.click(
+      screen.getByTestId(
+        "btn-preview-replace-membership-1-established-org-1",
+      ),
+    );
+    expect(
+      await screen.findByTestId("dialog-partner-replacement"),
+    ).toHaveTextContent(
+      "Replace Fox Soccer Academy Premier with Fox Soccer Academy?",
+    );
   });
 });

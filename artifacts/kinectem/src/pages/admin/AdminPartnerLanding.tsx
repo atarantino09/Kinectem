@@ -331,6 +331,7 @@ export function AdminPartnerLanding({
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
   const logoExtractionSeq = useRef(0);
+  const replacementPanelRef = useRef<HTMLDivElement>(null);
   const [selectedId, setSelectedId] = useState("");
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -384,6 +385,17 @@ export function AdminPartnerLanding({
   >({});
   const [savingOrgBrand, setSavingOrgBrand] = useState<string | null>(null);
   const [swapDecisionLoading, setSwapDecisionLoading] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!replacement) return;
+    const frame = window.requestAnimationFrame(() => {
+      replacementPanelRef.current?.scrollIntoView?.({
+        behavior: "smooth",
+        block: "center",
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [replacement?.member.id, replacement?.candidate.id]);
 
   const pages = useQuery<{ data: PartnerSummary[] }>({
     queryKey: ["admin", "partner-pages"],
@@ -1528,11 +1540,26 @@ export function AdminPartnerLanding({
                         <Button
                           size="sm"
                           variant="outline"
-                          disabled={!candidate.id || candidateAlreadyIncluded(candidate)}
+                          disabled={
+                            !candidate.id ||
+                            candidateAlreadyIncluded(candidate) ||
+                            (replacement?.loading &&
+                              replacement.member.id === member.id &&
+                              replacement.candidate.id === candidate.id)
+                          }
                           onClick={() => void previewReplacement(member, candidate)}
                           data-testid={`btn-preview-replace-${member.id}-${candidate.id}`}
                         >
-                          Preview replacement
+                          {replacement?.loading &&
+                          replacement.member.id === member.id &&
+                          replacement.candidate.id === candidate.id ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Opening preview…
+                            </>
+                          ) : (
+                            "Preview replacement"
+                          )}
                         </Button>
                       </div>
                     ));
@@ -1599,7 +1626,13 @@ export function AdminPartnerLanding({
           </div>
         )}
         {replacement && (
-          <div className="rounded-lg border border-amber-300 bg-amber-50 p-4" role="dialog" aria-label="Confirm organization replacement" data-testid="dialog-partner-replacement">
+          <div
+            ref={replacementPanelRef}
+            className="rounded-lg border border-amber-300 bg-amber-50 p-4 shadow-lg ring-2 ring-amber-200"
+            role="dialog"
+            aria-label="Confirm organization replacement"
+            data-testid="dialog-partner-replacement"
+          >
             <div className="font-bold">Review replacement</div>
             <p className="mt-1 text-sm">
               Replace <strong>{replacement.member.organization.name}</strong> with <strong>{replacement.candidate.name}</strong>?
