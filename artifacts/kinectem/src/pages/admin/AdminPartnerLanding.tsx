@@ -375,6 +375,10 @@ export function AdminPartnerLanding({
     idempotencyKey: string;
   } | null>(null);
   const [replacementSummary, setReplacementSummary] = useState<Record<string, unknown> | null>(null);
+  const [replacementSearch, setReplacementSearch] = useState({
+    memberId: "",
+    query: "",
+  });
   const [orgBrandDrafts, setOrgBrandDrafts] = useState<
     Record<string, { primary: string; secondary: string }>
   >({});
@@ -400,6 +404,23 @@ export function AdminPartnerLanding({
     queryFn: () =>
       customFetch(`/api/v1/admin/partner-pages/${selectedId}/organization-search?q=${encodeURIComponent(search)}`, { method: "GET" }),
     enabled: !!selectedId && search.trim().length >= 2,
+  });
+  const replacementSearchResults = useQuery<{ data: SearchResult[] }>({
+    queryKey: [
+      "admin",
+      "partner-replacement-search",
+      selectedId,
+      replacementSearch.query,
+    ],
+    queryFn: () =>
+      customFetch(
+        `/api/v1/admin/partner-pages/${selectedId}/organization-search?q=${encodeURIComponent(replacementSearch.query)}`,
+        { method: "GET" },
+      ),
+    enabled:
+      !!selectedId &&
+      !!replacementSearch.memberId &&
+      replacementSearch.query.trim().length >= 2,
   });
   const competitionResults = useQuery<{ data: CompetitionSearchResult[] }>({
     queryKey: ["admin", "partner-competition-search", selectedId, competitionSearch],
@@ -1429,10 +1450,76 @@ export function AdminPartnerLanding({
                     Cleanup: {member.cleanup.summary ?? member.cleanup.reason ?? (member.cleanup.allowed === false ? "Not available" : "Available")}
                   </div>
                 )}
-                {(member.duplicateCandidates ?? []).length > 0 && (
-                  <div className="mt-2 space-y-2" data-testid={`member-duplicate-candidates-${member.id}`}>
-                    <div className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Possible replacement organizations</div>
-                    {(member.duplicateCandidates ?? []).map((candidate) => (
+                <div className="mt-3 space-y-2" data-testid={`member-duplicate-candidates-${member.id}`}>
+                  <Label htmlFor={`replacement-search-${member.id}`} className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                    Search claimed replacement organizations
+                  </Label>
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id={`replacement-search-${member.id}`}
+                      className="pl-9"
+                      value={replacementSearch.memberId === member.id ? replacementSearch.query : ""}
+                      placeholder="Type an organization name"
+                      onFocus={() =>
+                        setReplacementSearch((current) => ({
+                          memberId: member.id,
+                          query: current.memberId === member.id ? current.query : "",
+                        }))
+                      }
+                      onChange={(event) =>
+                        setReplacementSearch({
+                          memberId: member.id,
+                          query: event.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                  {replacementSearch.memberId === member.id &&
+                    replacementSearch.query.trim().length > 0 &&
+                    replacementSearch.query.trim().length < 2 && (
+                      <div className="text-xs text-muted-foreground">Type at least 2 characters.</div>
+                    )}
+                  {replacementSearch.memberId === member.id &&
+                    replacementSearch.query.trim().length >= 2 &&
+                    replacementSearchResults.isLoading && (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Searching claimed organizations…
+                      </div>
+                    )}
+                  {(() => {
+                    const suggested = member.duplicateCandidates ?? [];
+                    const searched =
+                      replacementSearch.memberId === member.id
+                        ? (replacementSearchResults.data?.data ?? []).filter(
+                            (candidate) =>
+                              candidate.hasOwner &&
+                              candidate.id !== member.organization.id,
+                          )
+                        : [];
+                    const candidates =
+                      replacementSearch.memberId === member.id &&
+                      replacementSearch.query.trim().length >= 2
+                        ? searched
+                        : suggested;
+                    const uniqueCandidates = candidates.filter(
+                      (candidate, index, all) =>
+                        all.findIndex((item) => item.id === candidate.id) === index,
+                    );
+                    if (
+                      replacementSearch.memberId === member.id &&
+                      replacementSearch.query.trim().length >= 2 &&
+                      !replacementSearchResults.isLoading &&
+                      uniqueCandidates.length === 0
+                    ) {
+                      return (
+                        <div className="rounded border border-dashed p-3 text-sm text-muted-foreground">
+                          No claimed organizations match this search.
+                        </div>
+                      );
+                    }
+                    return uniqueCandidates.map((candidate) => (
                       <div key={candidate.id} className="flex flex-wrap items-center justify-between gap-2 rounded border bg-muted/20 p-2 text-sm">
                         <div>
                           <div className="font-semibold">{candidate.name}</div>
@@ -1448,9 +1535,9 @@ export function AdminPartnerLanding({
                           Preview replacement
                         </Button>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    ));
+                  })()}
+                </div>
               </div>
               <div className="space-y-3">
                 <BrandImageField label="Organization logo" value={member.organization.logoUrl ?? ""} onChange={(value) => void updateOrgLogo(member, value)} kind="logo" idPrefix={`member-logo-${member.id}`} />

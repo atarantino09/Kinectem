@@ -75,6 +75,34 @@ beforeEach(() => {
       return detail() as never;
     }
     if (
+      path ===
+        "/api/v1/admin/partner-pages/partner-1/organization-search?q=Fox" &&
+      options?.method === "GET"
+    ) {
+      return {
+        data: [
+          {
+            id: "established-org-1",
+            name: "Fox Soccer Academy",
+            city: "Tampa",
+            state: "FL",
+            logoUrl: null,
+            hasOwner: true,
+            alreadyIncluded: false,
+          },
+          {
+            id: "ownerless-org-1",
+            name: "Fox Soccer Import",
+            city: null,
+            state: null,
+            logoUrl: null,
+            hasOwner: false,
+            alreadyIncluded: false,
+          },
+        ],
+      } as never;
+    }
+    if (
       path === "/api/v1/admin/partner-duplicate-swap-requests/swap-request-1/decision" &&
       options?.method === "POST"
     ) {
@@ -184,16 +212,7 @@ describe("AdminPartnerLanding direct directory replacement", () => {
         canDeleteStaleImport: false,
         protected: true,
         protection: ["not_import_created", "source_not_created_by_this_import"],
-        duplicateCandidates: [
-          {
-            id: "established-org-1",
-            name: "Fox Soccer Academy",
-            city: null,
-            state: null,
-            logoUrl: null,
-            alreadyIncluded: false,
-          },
-        ],
+        duplicateCandidates: [],
         organization: {
           id: "staging-org-1",
           name: "Fox Soccer Academy Premier",
@@ -210,6 +229,18 @@ describe("AdminPartnerLanding direct directory replacement", () => {
     renderWithProviders(<AdminPartnerLanding />);
 
     await user.click(await screen.findByRole("button", { name: "Edit North Stars" }));
+    await user.type(
+      await screen.findByLabelText("Search claimed replacement organizations"),
+      "Fox",
+    );
+    await waitFor(() =>
+      expect(mockedFetch).toHaveBeenCalledWith(
+        "/api/v1/admin/partner-pages/partner-1/organization-search?q=Fox",
+        { method: "GET" },
+      ),
+    );
+    expect(screen.getByText("Fox Soccer Academy")).toBeInTheDocument();
+    expect(screen.queryByText("Fox Soccer Import")).not.toBeInTheDocument();
     expect(
       await screen.findByTestId(
         "btn-preview-replace-membership-1-established-org-1",
