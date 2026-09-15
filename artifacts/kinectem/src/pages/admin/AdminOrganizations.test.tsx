@@ -35,6 +35,7 @@ let claimLinkRows: Array<Record<string, unknown>> = [];
 let orgLists: Array<Record<string, unknown>> = [];
 let bulkDeleteBody: Record<string, unknown> | null = null;
 let ownerInviteBody: Record<string, unknown> | null = null;
+let simulateDuplicateIssue = false;
 
 beforeEach(() => {
   validatedBody = null;
@@ -54,6 +55,7 @@ beforeEach(() => {
   orgLists = [];
   bulkDeleteBody = null;
   ownerInviteBody = null;
+  simulateDuplicateIssue = false;
   Object.defineProperties(HTMLElement.prototype, {
     hasPointerCapture: { configurable: true, value: () => false },
     setPointerCapture: { configurable: true, value: () => undefined },
@@ -275,9 +277,12 @@ beforeEach(() => {
         path === "/api/v1/admin/org-bulk-import/validate"
       ) {
         validatedBody = JSON.parse(String(init?.body ?? "{}"));
+        const duplicateBlocked =
+          simulateDuplicateIssue &&
+          validatedBody?.allowDuplicateNames !== true;
         return jsonResponse({
           data: {
-            valid: true,
+            valid: !duplicateBlocked,
             list: null,
             promo: {
               code: "bulk20",
@@ -285,7 +290,17 @@ beforeEach(() => {
               discountValue: 20,
             },
             organizations: (validatedBody?.organizations as unknown[]) ?? [],
-            issues: [],
+            issues: duplicateBlocked
+              ? [
+                  {
+                    scope: "organization",
+                    organizationIndex: 0,
+                    teamIndex: null,
+                    message:
+                      'Organization "Existing League" already exists. Imports never merge into an existing organization.',
+                  },
+                ]
+              : [],
           },
         });
       }
@@ -412,6 +427,7 @@ describe("AdminOrganizations bulk import", () => {
   });
 
   it("sends the explicit duplicate-name override to validation and import", async () => {
+    simulateDuplicateIssue = true;
     const user = userEvent.setup();
     renderWithProviders(<AdminOrganizations />);
 
@@ -425,11 +441,11 @@ describe("AdminOrganizations bulk import", () => {
       screen.getByTestId("input-org-bulk-list-name"),
       "Duplicate Partners",
     );
-    await user.click(
-      screen.getByTestId("checkbox-org-bulk-allow-duplicates"),
-    );
     await user.click(screen.getByTestId("btn-org-bulk-check"));
 
+    await user.click(
+      await screen.findByTestId("btn-org-bulk-override-duplicates"),
+    );
     await waitFor(() =>
       expect(screen.getByTestId("btn-org-bulk-import")).toBeEnabled(),
     );

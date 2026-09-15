@@ -270,6 +270,9 @@ export default function AdminOrganizations() {
     ],
     [parseResult, serverIssues],
   );
+  const hasDuplicateNameIssues = serverIssues.some((issue) =>
+    issue.message.includes("already exists"),
+  );
 
   const resetImport = () => {
     setParseResult(null);
@@ -305,7 +308,9 @@ export default function AdminOrganizations() {
     }
   };
 
-  const validateImport = async () => {
+  const validateImport = async (
+    overrideDuplicateNames = allowDuplicateNames,
+  ) => {
     if (!parseResult || !listName.trim()) return;
     setCheckingImport(true);
     setServerIssues([]);
@@ -318,7 +323,7 @@ export default function AdminOrganizations() {
           body: JSON.stringify({
             listName: listName.trim(),
             promoCode: promoCode || null,
-            allowDuplicateNames,
+            allowDuplicateNames: overrideDuplicateNames,
             organizations: payloadOrganizations,
           }),
         },
@@ -657,6 +662,34 @@ export default function AdminOrganizations() {
                       </div>
                     )}
 
+                    {hasDuplicateNameIssues && !allowDuplicateNames && (
+                      <div className="rounded-md border border-amber-300 bg-amber-50 p-3">
+                        <p className="text-sm font-medium text-amber-950">
+                          These names already exist, but you can create separate
+                          organization records.
+                        </p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="mt-2 border-amber-400 bg-white"
+                          onClick={() => {
+                            setAllowDuplicateNames(true);
+                            void validateImport(true);
+                          }}
+                          disabled={checkingImport}
+                          data-testid="btn-org-bulk-override-duplicates"
+                        >
+                          Override duplicates and continue
+                        </Button>
+                      </div>
+                    )}
+                    {allowDuplicateNames && (
+                      <p className="text-sm font-medium text-emerald-700">
+                        Duplicate-name override enabled. Separate organizations
+                        will be created.
+                      </p>
+                    )}
+
                     <div className="flex items-center gap-2 flex-wrap">
                       <Button
                         type="button"
@@ -696,30 +729,6 @@ export default function AdminOrganizations() {
                         </Button>
                       )}
                     </div>
-                    {parseResult && (
-                      <label className="flex items-start gap-2 rounded-md border p-3 text-sm">
-                        <input
-                          type="checkbox"
-                          className="mt-0.5 h-4 w-4"
-                          checked={allowDuplicateNames}
-                          onChange={(event) => {
-                            setAllowDuplicateNames(event.target.checked);
-                            setValidated(false);
-                            setServerIssues([]);
-                          }}
-                          data-testid="checkbox-org-bulk-allow-duplicates"
-                        />
-                        <span>
-                          <span className="font-medium">
-                            Create separate organizations even when names already exist
-                          </span>
-                          <span className="mt-1 block text-muted-foreground">
-                            This does not merge with or change existing organizations.
-                            Check the import again after changing this option.
-                          </span>
-                        </span>
-                      </label>
-                    )}
                   </>
                 ) : (
                   <div className="space-y-4" data-testid="bulk-import-success">
