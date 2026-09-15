@@ -808,6 +808,26 @@ export default function PartnerLandingPage() {
                   <CardContent className="flex h-full flex-col p-5">
                     <div className="flex items-start gap-3"><OrgLogo name={org.name} logoUrl={org.logoUrl} className="h-14 w-14 rounded-xl" /><div className="min-w-0"><h3 className="font-black text-slate-900">{formatOrgName(org.name)}</h3><p className="mt-1 flex items-center gap-1 text-sm text-slate-500"><MapPin className="h-3.5 w-3.5" />{locationOf(org)}</p></div></div>
                     <div className="mt-4 text-sm text-slate-500">{org.teams.slice(0, 3).map((team) => team.name).join(" · ") || "Team pages are ready to explore"}{org.teams.length > 3 ? ` +${org.teams.length - 3} more` : ""}</div>
+                    {org.owner && (
+                      <div
+                        className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600"
+                        data-testid={`club-owner-${org.id}`}
+                      >
+                        Current owner:{" "}
+                        {org.owner.userId ? (
+                          <Link
+                            href={`/users/${org.owner.userId}`}
+                            className="font-bold text-slate-900 hover:underline"
+                          >
+                            {org.owner.displayName}
+                          </Link>
+                        ) : (
+                          <span className="font-bold text-slate-900">
+                            {org.owner.displayName}
+                          </span>
+                        )}
+                      </div>
+                    )}
                     <div className="mt-auto flex flex-wrap gap-2 pt-5">
                       <Button
                         variant="outline"
@@ -817,6 +837,22 @@ export default function PartnerLandingPage() {
                       >
                         View club page
                       </Button>
+                      {org.owner &&
+                        me?.id !== org.owner.userId &&
+                        accessOrg?.id !== org.id && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="font-bold"
+                            onClick={() => {
+                              setAccessRequestSubmitted(false);
+                              setAccessRequestError(null);
+                              setAccessOrg(org);
+                            }}
+                          >
+                            Request admin access
+                          </Button>
+                        )}
                       {org.canRequestClaim && <Button size="sm" className="font-bold" style={{ background: page.primaryColor }} onClick={() => beginClaim(org)}>Request ownership access</Button>}
                        {org.canRequestDuplicateSwap && (data.duplicateSwapTargets ?? []).some((target) => {
                          const sourceName = normalizedOrganizationName(org.name);

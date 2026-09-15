@@ -404,6 +404,12 @@ describe("PartnerLandingPage featured competition", () => {
     await userEvent.setup().click(
       await screen.findByRole("button", { name: "Find Your Club" }),
     );
+    expect(await screen.findByTestId("club-owner-org-1")).toHaveTextContent(
+      "Current owner: Jordan Lee",
+    );
+    expect(
+      screen.getByRole("button", { name: "Request admin access" }),
+    ).toBeInTheDocument();
 
     await userEvent.setup().click(
       await screen.findByRole("button", { name: "View club page" }),

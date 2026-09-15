@@ -296,13 +296,6 @@ function replacementIdempotencyKey(): string {
   return `partner-replacement-${Date.now()}`;
 }
 
-function replacementBlocked(member: PartnerMember): boolean {
-  // Protected/content-bearing organizations can still be replaced in the
-  // directory. The API keeps their source organization and data in place;
-  // only an imported member with no provenance is unsafe to replace.
-  return !member.importOperationId;
-}
-
 function Step({
   number,
   title,
@@ -1448,7 +1441,7 @@ export function AdminPartnerLanding({
                         <Button
                           size="sm"
                           variant="outline"
-                          disabled={replacementBlocked(member) || !candidate.id || candidateAlreadyIncluded(candidate)}
+                          disabled={!candidate.id || candidateAlreadyIncluded(candidate)}
                           onClick={() => void previewReplacement(member, candidate)}
                           data-testid={`btn-preview-replace-${member.id}-${candidate.id}`}
                         >

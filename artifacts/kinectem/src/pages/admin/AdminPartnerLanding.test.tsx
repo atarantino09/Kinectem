@@ -168,3 +168,52 @@ describe("AdminPartnerLanding organization branding", () => {
     });
   });
 });
+
+describe("AdminPartnerLanding direct directory replacement", () => {
+  it("allows a platform admin to replace a protected directory row with an established organization", async () => {
+    detailMembers = [
+      {
+        id: "membership-1",
+        visible: true,
+        sourceColumn: "Fox Soccer Academy Premier",
+        importOperationId: null,
+        hasOwner: false,
+        teamCount: 3,
+        contentCount: 0,
+        duplicateName: true,
+        canDeleteStaleImport: false,
+        protected: true,
+        protection: ["not_import_created", "source_not_created_by_this_import"],
+        duplicateCandidates: [
+          {
+            id: "established-org-1",
+            name: "Fox Soccer Academy",
+            city: null,
+            state: null,
+            logoUrl: null,
+            alreadyIncluded: false,
+          },
+        ],
+        organization: {
+          id: "staging-org-1",
+          name: "Fox Soccer Academy Premier",
+          location: null,
+          city: null,
+          state: null,
+          logoUrl: null,
+          brandPrimaryColor: null,
+          brandSecondaryColor: null,
+        },
+      },
+    ];
+    const user = userEvent.setup();
+    renderWithProviders(<AdminPartnerLanding />);
+
+    await user.click(await screen.findByRole("button", { name: "Edit North Stars" }));
+    expect(
+      await screen.findByTestId(
+        "btn-preview-replace-membership-1-established-org-1",
+      ),
+    ).toBeEnabled();
+  });
+});
