@@ -17,7 +17,7 @@ import {
   rosterEntries,
   teams,
 } from "@workspace/db";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { loginAs, request, app } from "./helpers";
 
 const ADMIN_EMAIL = "andrew@kinectem.com";
@@ -199,6 +199,41 @@ describe("POST /api/v1/admin/org-bulk-import", () => {
       .where(eq(organizations.name, shouldNotExist))
       .limit(1);
     expect(rolledBack).toBeUndefined();
+  });
+
+  it("creates separate organizations when a platform admin explicitly overrides duplicate names", async () => {
+    const { agent } = await loginAs((user) => user.email === ADMIN_EMAIL);
+    const suffix = `${Date.now().toString(36)}override`;
+    const listName = `Duplicate Override List ${suffix}`;
+    const existingName = `Duplicate Override Org ${suffix}`;
+
+    await agent
+      .post("/api/v1/admin/org-quick-setup")
+      .send({ name: existingName, teams: [] });
+
+    const payload = {
+      listName,
+      allowDuplicateNames: true,
+      organizations: [{ name: existingName, teams: ["Imported Team"] }],
+    };
+    const preview = await agent
+      .post("/api/v1/admin/org-bulk-import/validate")
+      .send(payload);
+    expect(preview.status).toBe(200);
+    expect(preview.body.data.valid).toBe(true);
+    expect(preview.body.data.issues).toEqual([]);
+
+    const imported = await agent
+      .post("/api/v1/admin/org-bulk-import")
+      .send(payload);
+    expect(imported.status, JSON.stringify(imported.body)).toBe(201);
+    expect(imported.body.data.organizationCount).toBe(1);
+
+    const sameNamedOrganizations = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(sql`lower(${organizations.name}) = ${existingName.toLowerCase()}`);
+    expect(sameNamedOrganizations).toHaveLength(2);
   });
 
   it("validates and creates organizations without a promo code", async () => {

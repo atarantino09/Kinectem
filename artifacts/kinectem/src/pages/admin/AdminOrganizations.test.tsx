@@ -396,6 +396,7 @@ describe("AdminOrganizations bulk import", () => {
     expect(validatedBody).toMatchObject({
       listName: "Fall Partners",
       promoCode: "bulk20",
+      allowDuplicateNames: false,
       organizations: [
         { name: "North League", teams: ["North U12", "North U14"] },
         { name: "South League", teams: ["South U12"] },
@@ -408,6 +409,35 @@ describe("AdminOrganizations bulk import", () => {
     );
     expect(importedBody).toEqual(validatedBody);
     expect(screen.getByText(/\/claim\/token-north/)).toBeInTheDocument();
+  });
+
+  it("sends the explicit duplicate-name override to validation and import", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AdminOrganizations />);
+
+    await user.upload(
+      await screen.findByTestId("input-org-bulk-file"),
+      new File(["Existing League\nImported U12"], "duplicates.csv", {
+        type: "text/csv",
+      }),
+    );
+    await user.type(
+      screen.getByTestId("input-org-bulk-list-name"),
+      "Duplicate Partners",
+    );
+    await user.click(
+      screen.getByTestId("checkbox-org-bulk-allow-duplicates"),
+    );
+    await user.click(screen.getByTestId("btn-org-bulk-check"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("btn-org-bulk-import")).toBeEnabled(),
+    );
+    expect(validatedBody?.allowDuplicateNames).toBe(true);
+
+    await user.click(screen.getByTestId("btn-org-bulk-import"));
+    await screen.findByTestId("bulk-import-success");
+    expect(importedBody?.allowDuplicateNames).toBe(true);
   });
 
   it("validates and creates an import without a promo code", async () => {

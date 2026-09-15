@@ -198,6 +198,7 @@ export default function AdminOrganizations() {
   const [fileError, setFileError] = useState<string | null>(null);
   const [listName, setListName] = useState("");
   const [promoCode, setPromoCode] = useState("");
+  const [allowDuplicateNames, setAllowDuplicateNames] = useState(false);
   const [serverIssues, setServerIssues] = useState<BulkIssue[]>([]);
   const [checkingImport, setCheckingImport] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -276,6 +277,7 @@ export default function AdminOrganizations() {
     setFileError(null);
     setListName("");
     setPromoCode("");
+    setAllowDuplicateNames(false);
     setServerIssues([]);
     setValidated(false);
     setImportResult(null);
@@ -316,6 +318,7 @@ export default function AdminOrganizations() {
           body: JSON.stringify({
             listName: listName.trim(),
             promoCode: promoCode || null,
+            allowDuplicateNames,
             organizations: payloadOrganizations,
           }),
         },
@@ -350,6 +353,7 @@ export default function AdminOrganizations() {
           body: JSON.stringify({
             listName: listName.trim(),
             promoCode: promoCode || null,
+            allowDuplicateNames,
             organizations: payloadOrganizations,
           }),
         },
@@ -692,6 +696,30 @@ export default function AdminOrganizations() {
                         </Button>
                       )}
                     </div>
+                    {parseResult && (
+                      <label className="flex items-start gap-2 rounded-md border p-3 text-sm">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 h-4 w-4"
+                          checked={allowDuplicateNames}
+                          onChange={(event) => {
+                            setAllowDuplicateNames(event.target.checked);
+                            setValidated(false);
+                            setServerIssues([]);
+                          }}
+                          data-testid="checkbox-org-bulk-allow-duplicates"
+                        />
+                        <span>
+                          <span className="font-medium">
+                            Create separate organizations even when names already exist
+                          </span>
+                          <span className="mt-1 block text-muted-foreground">
+                            This does not merge with or change existing organizations.
+                            Check the import again after changing this option.
+                          </span>
+                        </span>
+                      </label>
+                    )}
                   </>
                 ) : (
                   <div className="space-y-4" data-testid="bulk-import-success">

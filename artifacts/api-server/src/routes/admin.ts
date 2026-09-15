@@ -2260,6 +2260,7 @@ async function bulkImportPreflight(body: unknown, checkExistingNames: boolean) {
   const raw = body as {
     listName?: unknown;
     promoCode?: unknown;
+    allowDuplicateNames?: unknown;
   } | null;
   const listName = typeof raw?.listName === "string" ? raw.listName.trim() : "";
   const issues: BulkImportIssue[] = [];
@@ -2274,6 +2275,7 @@ async function bulkImportPreflight(body: unknown, checkExistingNames: boolean) {
 
   const promoCode =
     typeof raw?.promoCode === "string" ? raw.promoCode.trim() : "";
+  const allowDuplicateNames = raw?.allowDuplicateNames === true;
   const promo = promoCode ? await findRedeemablePromo(promoCode) : null;
   if (promoCode && !promo) {
     issues.push({
@@ -2300,7 +2302,11 @@ async function bulkImportPreflight(body: unknown, checkExistingNames: boolean) {
   }
 
   const existingByName = new Map<string, { id: string; name: string }>();
-  if (checkExistingNames && parsed.organizations.length > 0) {
+  if (
+    checkExistingNames &&
+    !allowDuplicateNames &&
+    parsed.organizations.length > 0
+  ) {
     const names = parsed.organizations
       .map((organization) => organization.name)
       .filter(Boolean);
@@ -2348,6 +2354,7 @@ async function bulkImportPreflight(body: unknown, checkExistingNames: boolean) {
     promo,
     existingList,
     organizations: parsed.organizations,
+    allowDuplicateNames,
     issues,
   };
 }
@@ -2454,19 +2461,21 @@ router.post(
           }
         }
       }
-      const duplicateRows = await tx
-        .select({ id: organizations.id, name: organizations.name })
-        .from(organizations)
-        .where(
-          or(
-            ...preflight.organizations.map(
-              (organization) =>
-                sql`lower(${organizations.name}) = ${organization.name.toLowerCase()}`,
+      if (!preflight.allowDuplicateNames) {
+        const duplicateRows = await tx
+          .select({ id: organizations.id, name: organizations.name })
+          .from(organizations)
+          .where(
+            or(
+              ...preflight.organizations.map(
+                (organization) =>
+                  sql`lower(${organizations.name}) = ${organization.name.toLowerCase()}`,
+              ),
             ),
-          ),
-        );
-      if (duplicateRows.length > 0) {
-        return { conflict: duplicateRows } as const;
+          );
+        if (duplicateRows.length > 0) {
+          return { conflict: duplicateRows } as const;
+        }
       }
 
       await tx.execute(
