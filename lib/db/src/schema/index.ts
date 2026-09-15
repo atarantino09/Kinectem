@@ -531,6 +531,38 @@ export const partnerReplacementOperations = pgTable("partner_replacement_operati
   membershipIdx: index("partner_replacement_membership_idx").on(t.membershipId),
 }));
 
+export const partnerDuplicateSwapStatusEnum = pgEnum("partner_duplicate_swap_status", [
+  "pending",
+  "approved",
+  "denied",
+]);
+
+// A request is deliberately a directory-only operation. It records the
+// imported source and established target identities at submission time so an
+// approval can revalidate both sides without ever merging their data.
+export const partnerDuplicateSwapRequests = pgTable("partner_duplicate_swap_requests", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  partnerPageId: uuid("partner_page_id").references(() => partnerLandingPages.id, { onDelete: "cascade" }).notNull(),
+  sourceMembershipId: uuid("source_membership_id").references(() => partnerOrganizationMemberships.id, { onDelete: "cascade" }).notNull(),
+  sourceOrganizationId: uuid("source_organization_id").references(() => organizations.id, { onDelete: "set null" }),
+  targetOrganizationId: uuid("target_organization_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
+  requestedByUserId: uuid("requested_by_user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  decidedByUserId: uuid("decided_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  status: partnerDuplicateSwapStatusEnum("status").notNull().default("pending"),
+  idempotencyKey: text("idempotency_key").notNull(),
+  pageSnapshot: jsonb("page_snapshot").$type<Record<string, unknown>>().notNull().default({}),
+  requestedAt: timestamp("requested_at").defaultNow().notNull(),
+  decidedAt: timestamp("decided_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => ({
+  idempotencyUnique: uniqueIndex("partner_duplicate_swap_idempotency_idx").on(t.partnerPageId, t.idempotencyKey),
+  pendingUnique: uniqueIndex("partner_duplicate_swap_pending_idx")
+    .on(t.partnerPageId, t.sourceMembershipId)
+    .where(sql`${t.status} = 'pending'`),
+  pageStatusIdx: index("partner_duplicate_swap_page_status_idx").on(t.partnerPageId, t.status, t.createdAt),
+}));
+
 export const partnerImportOperations = pgTable("partner_import_operations", {
   id: uuid("id").primaryKey().defaultRandom(),
   partnerPageId: uuid("partner_page_id").references(() => partnerLandingPages.id, { onDelete: "cascade" }).notNull(),

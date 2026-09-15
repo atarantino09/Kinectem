@@ -27,12 +27,19 @@ import {
 
 type PartnerOrganization = {
   id: string;
+  membershipId?: string;
   name: string;
   location: string | null;
   city: string | null;
   state: string | null;
   logoUrl: string | null;
   canRequestClaim: boolean;
+  canRequestDuplicateSwap?: boolean;
+  duplicateSwapRequest?: {
+    id: string;
+    status: "pending" | "approved" | "denied";
+    targetOrganizationId: string;
+  } | null;
   owner: {
     userId: string | null;
     displayName: string;
@@ -68,6 +75,12 @@ type PartnerResponse = {
     } | null;
     competitions?: Array<NonNullable<PartnerResponse["data"]["competition"]>>;
     organizations: PartnerOrganization[];
+    duplicateSwapTargets?: Array<{
+      id: string;
+      name: string;
+      city: string | null;
+      state: string | null;
+    }>;
   };
 };
 
@@ -179,6 +192,8 @@ export default function PartnerLandingPage() {
   const [accessRequestPending, setAccessRequestPending] = useState(false);
   const [accessRequestSubmitted, setAccessRequestSubmitted] = useState(false);
   const [accessRequestError, setAccessRequestError] = useState<string | null>(null);
+  const [duplicateSwapTarget, setDuplicateSwapTarget] = useState<Record<string, string>>({});
+  const [duplicateSwapSubmitting, setDuplicateSwapSubmitting] = useState<string | null>(null);
   const requestPanelRef = useRef<HTMLDivElement>(null);
   const { data: whoami } = useWhoami();
   const me = whoami?.viewingAs ?? whoami?.realUser;
@@ -319,6 +334,28 @@ export default function PartnerLandingPage() {
       );
     } finally {
       setAccessRequestPending(false);
+    }
+  };
+
+  const requestDuplicateSwap = async (source: PartnerOrganization) => {
+    const targetOrganizationId = duplicateSwapTarget[source.id];
+    if (!targetOrganizationId || !source.membershipId) return;
+    setDuplicateSwapSubmitting(source.id);
+    try {
+      await customFetch(`/api/v1/partner-pages/${encodeURIComponent(slug)}/duplicate-swap-requests`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceMembershipId: source.membershipId,
+          targetOrganizationId,
+        }),
+      });
+      // Keep the public list fresh without requiring a full page reload.
+      await partner.refetch();
+    } catch (error) {
+      setClaimError(error instanceof Error ? error.message : "We couldn't submit the directory correction request.");
+    } finally {
+      setDuplicateSwapSubmitting(null);
     }
   };
 
@@ -781,6 +818,45 @@ export default function PartnerLandingPage() {
                         View club page
                       </Button>
                       {org.canRequestClaim && <Button size="sm" className="font-bold" style={{ background: page.primaryColor }} onClick={() => beginClaim(org)}>Request ownership access</Button>}
+                       {org.canRequestDuplicateSwap && (data.duplicateSwapTargets ?? []).some((target) => {
+                         const sourceName = normalizedOrganizationName(org.name);
+                         const targetName = normalizedOrganizationName(target.name);
+                         return sourceName === targetName || targetName.includes(sourceName) || sourceName.includes(targetName);
+                       }) && (
+                         <div className="w-full rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950" data-testid={`duplicate-swap-${org.id}`}>
+                           <div className="font-bold">Is this your existing club?</div>
+                           {org.duplicateSwapRequest?.status === "pending" ? (
+                             <div className="mt-1 font-semibold text-amber-800">Correction request pending platform review.</div>
+                           ) : org.duplicateSwapRequest?.status === "denied" ? (
+                             <div className="mt-1 font-semibold text-slate-700">A previous correction request was denied. Select another organization to submit a new request.</div>
+                           ) : (
+                             <div className="mt-2 flex flex-wrap gap-2">
+                               <select
+                                 className="min-h-9 min-w-0 flex-1 rounded-md border bg-white px-2 py-1"
+                                 value={duplicateSwapTarget[org.id] ?? ""}
+                                 onChange={(event) => setDuplicateSwapTarget((current) => ({ ...current, [org.id]: event.target.value }))}
+                                 aria-label={`Existing organization for ${org.name}`}
+                               >
+                                 <option value="">Choose your existing organization</option>
+                                 {(data.duplicateSwapTargets ?? [])
+                                   .filter((target) => normalizedOrganizationName(target.name) === normalizedOrganizationName(org.name) || normalizedOrganizationName(target.name).includes(normalizedOrganizationName(org.name)) || normalizedOrganizationName(org.name).includes(normalizedOrganizationName(target.name)))
+                                   .map((target) => (
+                                   <option key={target.id} value={target.id}>{target.name}</option>
+                                 ))}
+                               </select>
+                               <Button
+                                 size="sm"
+                                 variant="outline"
+                                 disabled={!duplicateSwapTarget[org.id] || duplicateSwapSubmitting === org.id}
+                                 onClick={() => void requestDuplicateSwap(org)}
+                               >
+                                 {duplicateSwapSubmitting === org.id ? "Sending…" : "Request correction"}
+                               </Button>
+                             </div>
+                           )}
+                           <p className="mt-2 text-[11px] text-amber-800/80">A platform administrator reviews this request. Nothing changes until approval.</p>
+                         </div>
+                       )}
                     </div>
                   </CardContent>
                 </Card>

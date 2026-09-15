@@ -568,6 +568,92 @@ describe("PartnerLandingPage featured competition", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("lets an eligible organization admin request a duplicate swap and shows pending state", async () => {
+    mockedWhoami.mockReturnValue({
+      data: {
+        authenticated: true,
+        realUser: {
+          id: "requester-1",
+          name: "Club Admin",
+          email: "admin@example.com",
+          role: "coach",
+        },
+        viewingAs: null,
+      },
+    } as never);
+    const initial = partnerResponse(null, [
+      {
+        id: "staging-org-1",
+        membershipId: "membership-1",
+        name: "North Stars Soccer",
+        location: "Riverside",
+        city: "Riverside",
+        state: "CA",
+        logoUrl: null,
+        canRequestClaim: false,
+        canRequestDuplicateSwap: true,
+        duplicateSwapRequest: null,
+        owner: null,
+        teams: [],
+      },
+    ]);
+    (initial.data as typeof initial.data & {
+      duplicateSwapTargets?: Array<{ id: string; name: string; city: string | null; state: string | null }>;
+    }).duplicateSwapTargets = [
+      { id: "target-org-1", name: "North Stars Soccer", city: "Riverside", state: "CA" },
+    ];
+    const pending = partnerResponse(null, [
+      {
+        ...initial.data.organizations[0],
+        duplicateSwapRequest: {
+          id: "swap-request-1",
+          status: "pending",
+          targetOrganizationId: "target-org-1",
+        },
+      },
+    ]);
+    (pending.data as typeof pending.data & {
+      duplicateSwapTargets?: Array<{ id: string; name: string; city: string | null; state: string | null }>;
+    }).duplicateSwapTargets = (initial.data as typeof initial.data & {
+      duplicateSwapTargets?: Array<{ id: string; name: string; city: string | null; state: string | null }>;
+    }).duplicateSwapTargets;
+    mockedFetch
+      .mockResolvedValueOnce(initial as never)
+      .mockResolvedValueOnce({
+        data: {
+          id: "swap-request-1",
+          status: "pending",
+          sourceMembershipId: "membership-1",
+          targetOrganizationId: "target-org-1",
+        },
+      } as never)
+      .mockResolvedValueOnce(pending as never);
+
+    const user = userEvent.setup();
+    renderWithProviders(<PartnerLandingPage />);
+    await user.click(await screen.findByRole("button", { name: "Find Your Club" }));
+    const swap = await screen.findByTestId("duplicate-swap-staging-org-1");
+    await user.selectOptions(
+      within(swap).getByRole("combobox"),
+      "target-org-1",
+    );
+    await user.click(within(swap).getByRole("button", { name: "Request correction" }));
+
+    await waitFor(() =>
+      expect(mockedFetch).toHaveBeenCalledWith(
+        "/api/v1/partner-pages/north-stars/duplicate-swap-requests",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            sourceMembershipId: "membership-1",
+            targetOrganizationId: "target-org-1",
+          }),
+        }),
+      ),
+    );
+    expect(await screen.findByText("Correction request pending platform review.")).toBeInTheDocument();
+  });
+
   it("keeps ownerless partner clubs on the existing organization-page path", async () => {
     mockedFetch.mockResolvedValue(
       partnerResponse(null, [

@@ -84,6 +84,22 @@ type PartnerDetail = PartnerSummary & {
   competition: PartnerCompetition | null;
   competitions?: PartnerCompetition[];
   members: PartnerMember[];
+  duplicateSwapRequests?: DuplicateSwapRequest[];
+};
+
+type DuplicateSwapRequest = {
+  id: string;
+  status: "pending" | "approved" | "denied";
+  sourceMembershipId: string;
+  sourceOrganizationId: string | null;
+  targetOrganizationId: string;
+  requestedByUserId: string;
+  requestedAt: string;
+  decidedAt: string | null;
+  sourceOrganization: { id: string; name: string } | null;
+  targetOrganization: { id: string; name: string } | null;
+  requester: { id: string; name: string; email: string | null } | null;
+  approver: { id: string; name: string; email: string | null } | null;
 };
 
 type PartnerCompetition = {
@@ -364,6 +380,7 @@ export function AdminPartnerLanding({
     idempotencyKey: string;
   } | null>(null);
   const [replacementSummary, setReplacementSummary] = useState<Record<string, unknown> | null>(null);
+  const [swapDecisionLoading, setSwapDecisionLoading] = useState<string | null>(null);
 
   const pages = useQuery<{ data: PartnerSummary[] }>({
     queryKey: ["admin", "partner-pages"],
@@ -878,6 +895,27 @@ export function AdminPartnerLanding({
     await refresh();
   };
 
+  const decideDuplicateSwap = async (request: DuplicateSwapRequest, decision: "approved" | "denied") => {
+    setSwapDecisionLoading(request.id);
+    try {
+      await customFetch(`/api/v1/admin/partner-duplicate-swap-requests/${request.id}/decision`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision }),
+      });
+      await refresh();
+      toast({ title: decision === "approved" ? "Directory swap approved" : "Directory swap denied" });
+    } catch (error) {
+      toast({
+        title: "Couldn't update swap request",
+        description: (error as Error).message,
+        variant: "destructive",
+      });
+    } finally {
+      setSwapDecisionLoading(null);
+    }
+  };
+
   const partnerPageSummaries = pages.data?.data ?? [];
   const normalizedPartnerPageSearch = partnerPageSearch.trim().toLowerCase();
   const filteredPartnerPages = normalizedPartnerPageSearch
@@ -974,6 +1012,7 @@ export function AdminPartnerLanding({
   }
 
   const members = detail.data?.data.members ?? [];
+  const duplicateSwapRequests = detail.data?.data.duplicateSwapRequests ?? [];
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1250,7 +1289,66 @@ export function AdminPartnerLanding({
         </div>
       </Step>
 
-      <Step number={3} title="Review and clean up the directory" done={members.length > 0}>
+      <Step number={3} title="Review duplicate swap requests">
+        {duplicateSwapRequests.length === 0 ? (
+          <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+            No partner directory correction requests for this page.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {duplicateSwapRequests.map((request) => (
+              <div key={request.id} className="rounded-lg border p-3" data-testid={`duplicate-swap-request-${request.id}`}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="font-black">
+                      {request.sourceOrganization?.name ?? "Imported staging organization"}{" "}
+                      <span className="font-normal text-muted-foreground">→</span>{" "}
+                      {request.targetOrganization?.name ?? "Existing organization"}
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      Requested by {request.requester?.name ?? request.requestedByUserId}
+                      {request.requester?.email ? ` (${request.requester.email})` : ""}
+                    </div>
+                  </div>
+                  <span className={`rounded-full px-2 py-1 text-xs font-bold ${
+                    request.status === "pending"
+                      ? "bg-amber-100 text-amber-800"
+                      : request.status === "approved"
+                        ? "bg-emerald-100 text-emerald-800"
+                        : "bg-slate-100 text-slate-700"
+                  }`}>
+                    {request.status}
+                  </span>
+                </div>
+                {request.status === "pending" && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      disabled={swapDecisionLoading === request.id}
+                      onClick={() => void decideDuplicateSwap(request, "approved")}
+                    >
+                      {swapDecisionLoading === request.id ? "Saving…" : "Approve directory swap"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={swapDecisionLoading === request.id}
+                      onClick={() => void decideDuplicateSwap(request, "denied")}
+                    >
+                      Deny
+                    </Button>
+                  </div>
+                )}
+                {request.status === "approved" && (
+                  <p className="mt-2 text-xs text-emerald-700">Only this page membership was replaced; organization data was not merged.</p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </Step>
+
+      <Step number={4} title="Review and clean up the directory" done={members.length > 0}>
         <div className="space-y-3">
           {members.map((member) => (
             <div key={member.id} className="grid gap-3 rounded-lg border p-3 lg:grid-cols-[1fr_260px_auto] lg:items-center">

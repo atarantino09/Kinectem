@@ -2700,6 +2700,65 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
         ON partner_import_suggestions (partner_page_id, last_used_at);
     `,
   },
+  {
+    // Partner landing duplicate swaps are approval-gated directory-only
+    // replacements. The source organization is never merged into the target.
+    name: "2026-09-15-partner-duplicate-swap-requests",
+    sql: `
+      DO $migration$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'partner_duplicate_swap_status') THEN
+          CREATE TYPE partner_duplicate_swap_status AS ENUM ('pending', 'approved', 'denied');
+        END IF;
+      END$migration$;
+      CREATE TABLE IF NOT EXISTS partner_duplicate_swap_requests (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        partner_page_id uuid NOT NULL REFERENCES partner_landing_pages(id) ON DELETE CASCADE,
+        source_membership_id uuid NOT NULL REFERENCES partner_organization_memberships(id) ON DELETE CASCADE,
+        source_organization_id uuid REFERENCES organizations(id) ON DELETE SET NULL,
+        target_organization_id uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        requested_by_user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        decided_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+        status partner_duplicate_swap_status NOT NULL DEFAULT 'pending',
+        idempotency_key text NOT NULL,
+        page_snapshot jsonb NOT NULL DEFAULT '{}'::jsonb,
+        requested_at timestamp NOT NULL DEFAULT now(),
+        decided_at timestamp,
+        created_at timestamp NOT NULL DEFAULT now(),
+        updated_at timestamp NOT NULL DEFAULT now()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS partner_duplicate_swap_idempotency_idx
+        ON partner_duplicate_swap_requests (partner_page_id, idempotency_key);
+      -- Older development databases briefly used targetOrganizationId in the
+      -- pending uniqueness key. Resolve any such legacy duplicates
+      -- deterministically before enforcing one pending request per slot.
+      WITH ranked AS (
+        SELECT id, row_number() OVER (
+          PARTITION BY partner_page_id, source_membership_id
+          ORDER BY created_at ASC, id ASC
+        ) AS duplicate_rank
+        FROM partner_duplicate_swap_requests
+        WHERE status = 'pending'
+      )
+      UPDATE partner_duplicate_swap_requests request
+      SET status = 'denied', decided_at = COALESCE(decided_at, now()), updated_at = now()
+      FROM ranked
+      WHERE request.id = ranked.id AND ranked.duplicate_rank > 1;
+      DROP INDEX IF EXISTS partner_duplicate_swap_pending_idx;
+      CREATE UNIQUE INDEX partner_duplicate_swap_pending_idx
+        ON partner_duplicate_swap_requests (partner_page_id, source_membership_id)
+        WHERE status = 'pending';
+      CREATE INDEX IF NOT EXISTS partner_duplicate_swap_page_status_idx
+        ON partner_duplicate_swap_requests (partner_page_id, status, created_at);
+      ALTER TABLE partner_duplicate_swap_requests
+        DROP CONSTRAINT IF EXISTS partner_duplicate_swap_requests_source_organization_id_fkey;
+      ALTER TABLE partner_duplicate_swap_requests
+        ALTER COLUMN source_organization_id DROP NOT NULL;
+      ALTER TABLE partner_duplicate_swap_requests
+        ADD CONSTRAINT partner_duplicate_swap_requests_source_organization_id_fkey
+        FOREIGN KEY (source_organization_id) REFERENCES organizations(id) ON DELETE SET NULL;
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

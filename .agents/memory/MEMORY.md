@@ -80,4 +80,4 @@
 - [Moderation scope and audit atomicity](moderation-scope-audit.md) — derive scope from persisted targets; destructive moderation and its audit record commit or roll back together.
 - [Private practice plans](private-practice-plans.md) — explicit private article kind; server-gate every read path to team members, active guardians, team staff, and org admins.
 - [Organization sport inheritance](organization-sport-inheritance.md) — a selected org sport is authoritative for all teams; clearing it preserves team labels and restores per-team editing.
-- [Partner duplicate resolution safety](partner-duplicate-resolution.md) — replacements are membership-scoped; lock org+teams, require exact import provenance, and never merge canonical org data.
+- [Partner duplicate resolution safety](partner-duplicate-resolution.md) — partner imports may stage duplicates; swaps are membership-only and require org-admin request plus platform-admin approval.

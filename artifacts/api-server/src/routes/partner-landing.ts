@@ -13,6 +13,7 @@ import {
   partnerImportDecisions,
   partnerImportSuggestions,
   partnerReplacementOperations,
+  partnerDuplicateSwapRequests,
   partnerLandingPages,
   partnerOrganizationMemberships,
   organizationFollowers,
@@ -380,6 +381,44 @@ async function adminMembers(pageId: string) {
   }));
 }
 
+async function listDuplicateSwapRequests(pageId?: string) {
+  const requests = await db
+    .select()
+    .from(partnerDuplicateSwapRequests)
+    .where(pageId ? eq(partnerDuplicateSwapRequests.partnerPageId, pageId) : undefined)
+    .orderBy(desc(partnerDuplicateSwapRequests.createdAt));
+  const ids = [...new Set(requests.flatMap((request) => [
+    request.sourceOrganizationId,
+    request.targetOrganizationId,
+    request.requestedByUserId,
+    request.decidedByUserId,
+  ].filter((id): id is string => !!id)))];
+  const [orgRows, userRows] = await Promise.all([
+    ids.length ? db.select({ id: organizations.id, name: organizations.name }).from(organizations).where(inArray(organizations.id, ids)) : [],
+    ids.length ? db.select({ id: users.id, name: users.name, email: users.email }).from(users).where(inArray(users.id, ids)) : [],
+  ]);
+  const orgNames = new Map(orgRows.map((row) => [row.id, row]));
+  const userNames = new Map(userRows.map((row) => [row.id, row]));
+  return requests.map((request) => ({
+    ...request,
+    sourceOrganization: request.sourceOrganizationId
+      ? orgNames.get(request.sourceOrganizationId) ?? null
+      : null,
+    targetOrganization: orgNames.get(request.targetOrganizationId) ?? null,
+    requester: userNames.get(request.requestedByUserId) ?? null,
+    approver: request.decidedByUserId ? userNames.get(request.decidedByUserId) ?? null : null,
+  }));
+}
+
+router.get(
+  "/admin/partner-duplicate-swap-requests",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const pageId = cleanText(req.query.pageId, 80);
+    return res.json({ data: await listDuplicateSwapRequests(pageId || undefined) });
+  }),
+);
+
 router.get(
   "/admin/partner-pages",
   requireAdmin,
@@ -462,6 +501,7 @@ router.get(
         competition: await featuredCompetition(page.id),
         competitions: await featuredCompetitions(page.id),
         members: await adminMembers(page.id),
+        duplicateSwapRequests: await listDuplicateSwapRequests(page.id),
       },
     });
   }),
@@ -1732,6 +1772,88 @@ async function memberReplacementPreview(req: any, res: any) {
   });
 }
 
+async function replacePartnerMemberInTransaction(
+  tx: any,
+  pageId: string,
+  membershipId: string,
+  candidateId: string,
+  idempotencyKey: string,
+) {
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${
+    "partner-member-replace:" + pageId + ":" + membershipId + ":" + candidateId + ":" + idempotencyKey
+  }))`);
+  const [page] = await tx.select({ id: partnerLandingPages.id }).from(partnerLandingPages)
+    .where(eq(partnerLandingPages.id, pageId)).for("update").limit(1);
+  if (!page) return { error: "Partner page not found" as const };
+  const [existingReplacement] = await tx.select().from(partnerReplacementOperations)
+    .where(and(
+      eq(partnerReplacementOperations.partnerPageId, pageId),
+      eq(partnerReplacementOperations.membershipId, membershipId),
+      eq(partnerReplacementOperations.idempotencyKey, idempotencyKey),
+    )).limit(1);
+  if (existingReplacement) {
+    if (existingReplacement.candidateOrganizationId !== candidateId) {
+      return { error: "Replacement idempotency key was already used for another organization" as const };
+    }
+    return { replayed: true as const, response: existingReplacement.result };
+  }
+  const [member] = await tx.select({
+    membership: partnerOrganizationMemberships,
+    organization: { id: organizations.id, name: organizations.name },
+  }).from(partnerOrganizationMemberships).innerJoin(
+    organizations, eq(organizations.id, partnerOrganizationMemberships.organizationId),
+  ).where(and(
+    eq(partnerOrganizationMemberships.id, membershipId),
+    eq(partnerOrganizationMemberships.partnerPageId, pageId),
+  )).for("update").limit(1);
+  if (!member) return { error: "Partner membership not found" as const };
+  const [candidate] = await tx.select({ id: organizations.id, name: organizations.name })
+    .from(organizations).where(eq(organizations.id, candidateId)).for("update").limit(1);
+  if (!candidate) return { error: "Replacement organization not found" as const };
+  if (candidate.id === member.organization.id) {
+    return { error: "Replacement organization is already selected" as const };
+  }
+  const [sibling] = await tx.select({ id: partnerOrganizationMemberships.id })
+    .from(partnerOrganizationMemberships).where(and(
+      eq(partnerOrganizationMemberships.partnerPageId, pageId),
+      eq(partnerOrganizationMemberships.organizationId, candidateId),
+      sql`${partnerOrganizationMemberships.id} <> ${membershipId}`,
+    )).limit(1);
+  if (sibling) return { error: "Replacement organization is already included on this partner page" as const };
+  const cleanup = await organizationDeleteSafety(tx, membershipId, member.organization.id);
+  const [updated] = await tx.update(partnerOrganizationMemberships).set({
+    organizationId: candidate.id,
+    importOperationId: null,
+    replacementIdempotencyKey: idempotencyKey,
+    visible: member.membership.visible,
+    position: member.membership.position,
+  }).where(and(
+    eq(partnerOrganizationMemberships.id, membershipId),
+    eq(partnerOrganizationMemberships.partnerPageId, pageId),
+  )).returning();
+  let sourceDeleted = false;
+  if (cleanup.safe) {
+    await tx.delete(organizations).where(eq(organizations.id, member.organization.id));
+    sourceDeleted = true;
+  }
+  const responseData = {
+    updated,
+    sourceDeleted,
+    sourceRetainedDirectoryOnly: !cleanup.safe,
+    cleanup,
+    summary: "Only the selected partner membership was replaced.",
+  };
+  const response = { summary: responseData.summary, data: responseData };
+  await tx.insert(partnerReplacementOperations).values({
+    partnerPageId: pageId,
+    membershipId,
+    idempotencyKey,
+    candidateOrganizationId: candidate.id,
+    result: response,
+  });
+  return response;
+}
+
 async function replacePartnerMember(req: any, res: any) {
   const pageId = p(req.params.pageId);
   const membershipId = p(req.params.membershipId);
@@ -1740,85 +1862,9 @@ async function replacePartnerMember(req: any, res: any) {
   if (!candidateId || !idempotencyKey) {
     return apiError(res, 400, "organizationId and idempotencyKey are required");
   }
-  const result = await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${
-      "partner-member-replace:" + pageId + ":" + membershipId + ":" + candidateId + ":" + idempotencyKey
-    }))`);
-    const [page] = await tx.select({ id: partnerLandingPages.id }).from(partnerLandingPages)
-      .where(eq(partnerLandingPages.id, pageId)).for("update").limit(1);
-    if (!page) return { error: "Partner page not found" as const };
-    const [existingReplacement] = await tx.select().from(partnerReplacementOperations)
-      .where(and(
-        eq(partnerReplacementOperations.partnerPageId, pageId),
-        eq(partnerReplacementOperations.membershipId, membershipId),
-        eq(partnerReplacementOperations.idempotencyKey, idempotencyKey),
-      )).limit(1);
-    if (existingReplacement) {
-      if (existingReplacement.candidateOrganizationId !== candidateId) {
-        return { error: "Replacement idempotency key was already used for another organization" as const };
-      }
-      return { replayed: true as const, response: existingReplacement.result };
-    }
-    const [member] = await tx.select({
-      membership: partnerOrganizationMemberships,
-      organization: { id: organizations.id, name: organizations.name },
-    }).from(partnerOrganizationMemberships).innerJoin(
-      organizations, eq(organizations.id, partnerOrganizationMemberships.organizationId),
-    ).where(and(
-      eq(partnerOrganizationMemberships.id, membershipId),
-      eq(partnerOrganizationMemberships.partnerPageId, pageId),
-    )).for("update").limit(1);
-    if (!member) return { error: "Partner membership not found" as const };
-    const [candidate] = await tx.select({ id: organizations.id, name: organizations.name })
-      .from(organizations).where(eq(organizations.id, candidateId)).for("update").limit(1);
-    if (!candidate) return { error: "Replacement organization not found" as const };
-    if (candidate.id === member.organization.id) {
-      return { error: "Replacement organization is already selected" as const };
-    }
-    const [sibling] = await tx.select({ id: partnerOrganizationMemberships.id })
-      .from(partnerOrganizationMemberships).where(and(
-        eq(partnerOrganizationMemberships.partnerPageId, pageId),
-        eq(partnerOrganizationMemberships.organizationId, candidateId),
-        sql`${partnerOrganizationMemberships.id} <> ${membershipId}`,
-      )).limit(1);
-    if (sibling) return { error: "Replacement organization is already included on this partner page" as const };
-    const cleanup = await organizationDeleteSafety(tx, membershipId, member.organization.id);
-    const preservedVisible = member.membership.visible;
-    const preservedPosition = member.membership.position;
-    // The membership remains the same directory slot. It no longer claims
-    // that the replacement organization was created by the old import.
-    const [updated] = await tx.update(partnerOrganizationMemberships).set({
-      organizationId: candidate.id,
-      importOperationId: null,
-      replacementIdempotencyKey: idempotencyKey,
-      visible: preservedVisible,
-      position: preservedPosition,
-    }).where(and(
-      eq(partnerOrganizationMemberships.id, membershipId),
-      eq(partnerOrganizationMemberships.partnerPageId, pageId),
-    )).returning();
-    let sourceDeleted = false;
-    if (cleanup.safe) {
-      await tx.delete(organizations).where(eq(organizations.id, member.organization.id));
-      sourceDeleted = true;
-    }
-    const responseData = {
-      updated,
-      sourceDeleted,
-      sourceRetainedDirectoryOnly: !cleanup.safe,
-      cleanup,
-      summary: "Only the selected partner membership was replaced.",
-    };
-    const response = { summary: responseData.summary, data: responseData };
-    await tx.insert(partnerReplacementOperations).values({
-      partnerPageId: pageId,
-      membershipId,
-      idempotencyKey,
-      candidateOrganizationId: candidate.id,
-      result: response,
-    });
-    return response;
-  });
+  const result = await db.transaction((tx) =>
+    replacePartnerMemberInTransaction(tx, pageId, membershipId, candidateId, idempotencyKey),
+  );
   if ("error" in result) return apiError(res, result.error === "Partner page not found" || result.error === "Partner membership not found" ? 404 : 409, String(result.error));
   if ("replayed" in result && result.replayed) {
     return res.status(200).json(result.response);
@@ -2114,6 +2160,9 @@ router.get(
     if (!page) return apiError(res, 404, "Partner page not found");
     const rows = await db
       .select({
+        membershipId: partnerOrganizationMemberships.id,
+        importOperationId: partnerOrganizationMemberships.importOperationId,
+        importCreatedByOperationId: organizations.partnerImportCreatedByOperationId,
         organization: {
           id: organizations.id,
           name: organizations.name,
@@ -2157,6 +2206,48 @@ router.get(
         asc(partnerOrganizationMemberships.createdAt),
       );
     const orgIds = rows.map((row) => row.organization.id);
+    const managedOrganizations = req.sessionUser && !req.isMasquerading
+      ? await db
+          .select({
+            id: organizations.id,
+            name: organizations.name,
+            city: organizations.city,
+            state: organizations.state,
+          })
+          .from(organizationAdmins)
+          .innerJoin(organizations, eq(organizations.id, organizationAdmins.organizationId))
+          .where(and(
+            eq(organizationAdmins.userId, req.sessionUser.id),
+            or(eq(organizationAdmins.role, "owner"), eq(organizationAdmins.role, "admin")),
+            sql`EXISTS (
+              SELECT 1 FROM organization_admins owner_admin
+              WHERE owner_admin.organization_id = ${organizations.id}
+                AND owner_admin.role = 'owner'
+            )`,
+            sql`NOT EXISTS (
+              SELECT 1 FROM partner_organization_memberships existing_member
+              WHERE existing_member.partner_page_id = ${page.id}
+                AND existing_member.organization_id = ${organizations.id}
+            )`,
+          ))
+          .orderBy(asc(organizations.name))
+      : [];
+    const pendingSwapRequests = req.sessionUser && !req.isMasquerading
+      ? await db.select({
+          sourceMembershipId: partnerDuplicateSwapRequests.sourceMembershipId,
+          targetOrganizationId: partnerDuplicateSwapRequests.targetOrganizationId,
+          status: partnerDuplicateSwapRequests.status,
+        }).from(partnerDuplicateSwapRequests).where(and(
+          eq(partnerDuplicateSwapRequests.partnerPageId, page.id),
+          eq(partnerDuplicateSwapRequests.requestedByUserId, req.sessionUser.id),
+        ))
+      : [];
+    const pendingBySource = new Map<string, (typeof pendingSwapRequests)[number]>();
+    for (const request of pendingSwapRequests) {
+      if (!pendingBySource.has(request.sourceMembershipId)) {
+        pendingBySource.set(request.sourceMembershipId, request);
+      }
+    }
     const teamRows =
       orgIds.length > 0
         ? await db
@@ -2190,7 +2281,15 @@ router.get(
         competitions: await featuredCompetitions(page.id),
         organizations: rows.map((row) => ({
           ...row.organization,
+          membershipId: row.membershipId,
           canRequestClaim: row.canRequestClaim,
+          canRequestDuplicateSwap:
+            Boolean(
+              row.importOperationId &&
+              row.importOperationId === row.importCreatedByOperationId,
+            ) &&
+            managedOrganizations.length > 0,
+          duplicateSwapRequest: pendingBySource.get(row.membershipId) ?? null,
           owner:
             row.owner.displayName == null
               ? null
@@ -2203,9 +2302,347 @@ router.get(
             .filter((team) => team.organizationId === row.organization.id)
             .map(({ id, name }) => ({ id, name })),
         })),
+        duplicateSwapTargets: managedOrganizations,
       },
     });
   }),
+);
+
+router.post(
+  "/partner-pages/:slug/duplicate-swap-requests",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Sign in before requesting a directory correction");
+    if (req.isMasquerading) return apiError(res, 403, "Exit masquerade before requesting a directory correction");
+    const slug = p(req.params.slug).toLowerCase();
+    const sourceMembershipId = cleanText(req.body?.sourceMembershipId, 80);
+    const targetOrganizationId = cleanText(req.body?.targetOrganizationId, 80);
+    if (!sourceMembershipId || !targetOrganizationId) {
+      return apiError(res, 400, "sourceMembershipId and targetOrganizationId are required");
+    }
+    const requestedKey = cleanText(req.body?.idempotencyKey, 160);
+    const idempotencyKey = requestedKey || `duplicate-swap:${me.id}:${sourceMembershipId}:${targetOrganizationId}`;
+    const result = await db.transaction(async (tx) => {
+      const [page] = await tx.select({
+        id: partnerLandingPages.id,
+        slug: partnerLandingPages.slug,
+        officialName: partnerLandingPages.officialName,
+        associationLabel: partnerLandingPages.associationLabel,
+        published: partnerLandingPages.published,
+      }).from(partnerLandingPages).where(and(
+        sql`lower(${partnerLandingPages.slug}) = ${slug}`,
+        eq(partnerLandingPages.published, true),
+      )).for("update").limit(1);
+      if (!page) return { error: "Partner page not found" as const };
+      const [replayed] = await tx.select().from(partnerDuplicateSwapRequests).where(and(
+        eq(partnerDuplicateSwapRequests.partnerPageId, page.id),
+        eq(partnerDuplicateSwapRequests.idempotencyKey, idempotencyKey),
+      )).limit(1);
+      if (replayed) {
+        if (replayed.requestedByUserId !== me.id ||
+          replayed.sourceMembershipId !== sourceMembershipId ||
+          replayed.targetOrganizationId !== targetOrganizationId) {
+          return { error: "Idempotency key was already used for a different duplicate swap request" as const };
+        }
+        return { request: replayed, created: false as const };
+      }
+      const [pending] = await tx.select().from(partnerDuplicateSwapRequests).where(and(
+        eq(partnerDuplicateSwapRequests.partnerPageId, page.id),
+        eq(partnerDuplicateSwapRequests.sourceMembershipId, sourceMembershipId),
+        eq(partnerDuplicateSwapRequests.status, "pending"),
+      )).orderBy(asc(partnerDuplicateSwapRequests.createdAt), asc(partnerDuplicateSwapRequests.id))
+        .for("update").limit(1);
+      if (pending) {
+        if (pending.requestedByUserId === me.id && pending.targetOrganizationId === targetOrganizationId) {
+          return { request: pending, created: false as const };
+        }
+        return {
+          error: "A duplicate swap request is already pending for this directory slot" as const,
+          pending,
+        };
+      }
+      const [source] = await tx.select({
+        membership: partnerOrganizationMemberships,
+        organization: {
+          id: organizations.id,
+          name: organizations.name,
+          partnerImportCreatedByOperationId: organizations.partnerImportCreatedByOperationId,
+        },
+      }).from(partnerOrganizationMemberships).innerJoin(
+        organizations, eq(organizations.id, partnerOrganizationMemberships.organizationId),
+      ).where(and(
+        eq(partnerOrganizationMemberships.id, sourceMembershipId),
+        eq(partnerOrganizationMemberships.partnerPageId, page.id),
+        eq(partnerOrganizationMemberships.visible, true),
+      )).for("update").limit(1);
+      if (!source ||
+        !source.membership.importOperationId ||
+        source.membership.importOperationId !== source.organization.partnerImportCreatedByOperationId) {
+        return { error: "This organization is not an eligible imported staging duplicate" as const };
+      }
+      const [target] = await tx.select({
+        organization: organizations,
+        adminRole: organizationAdmins.role,
+      }).from(organizations).innerJoin(
+        organizationAdmins,
+        and(
+          eq(organizationAdmins.organizationId, organizations.id),
+          eq(organizationAdmins.userId, me.id),
+          or(eq(organizationAdmins.role, "owner"), eq(organizationAdmins.role, "admin")),
+        ),
+      ).where(eq(organizations.id, targetOrganizationId)).for("update").limit(1);
+      if (!target) return { error: "You must be an owner or admin of the target organization" as const };
+      if (target.organization.id === source.organization.id) {
+        return { error: "The target organization must be different from the staging duplicate" as const };
+      }
+      if (!credibleOrganizationCollision(source.organization.name, target.organization.name)) {
+        return { error: "The selected organization is not a credible duplicate of this staging entry" as const };
+      }
+      const [targetOwner] = await tx.select({ id: organizationAdmins.userId }).from(organizationAdmins)
+        .where(and(eq(organizationAdmins.organizationId, targetOrganizationId), eq(organizationAdmins.role, "owner")))
+        .limit(1);
+      if (!targetOwner) return { error: "The target organization must be established before requesting a swap" as const };
+      const [alreadyIncluded] = await tx.select({ id: partnerOrganizationMemberships.id })
+        .from(partnerOrganizationMemberships).where(and(
+          eq(partnerOrganizationMemberships.partnerPageId, page.id),
+          eq(partnerOrganizationMemberships.organizationId, targetOrganizationId),
+        )).limit(1);
+      if (alreadyIncluded) return { error: "The target organization is already on this partner page" as const };
+      const [created] = await tx.insert(partnerDuplicateSwapRequests).values({
+        partnerPageId: page.id,
+        sourceMembershipId,
+        sourceOrganizationId: source.organization.id,
+        targetOrganizationId,
+        requestedByUserId: me.id,
+        idempotencyKey,
+        pageSnapshot: {
+          id: page.id,
+          slug: page.slug,
+          officialName: page.officialName,
+          associationLabel: page.associationLabel,
+        },
+      }).returning();
+      return { request: created, created: true as const, page, source, target: target.organization };
+    });
+    if ("error" in result) {
+      const message = String(result.error ?? "Duplicate swap request failed");
+      return apiError(res, /not found/i.test(message) ? 404 : 409, message, {
+        extras: "pending" in result && result.pending ? { pendingRequest: result.pending } : undefined,
+      });
+    }
+    if (!result.request) return apiError(res, 409, "A duplicate swap request could not be saved");
+    if (result.created) {
+      const [requester] = await db.select({ name: users.name }).from(users).where(eq(users.id, me.id)).limit(1);
+      const admins = await db.select({ email: users.email, name: users.name }).from(users)
+        .where(and(eq(users.role, "admin"), sql`${users.email} IS NOT NULL`, sql`${users.deletedAt} IS NULL`));
+      const reviewUrl = `${appBaseUrl()}/app/admin/organizations?section=partner&edit=${encodeURIComponent(result.page.slug)}`;
+      for (const admin of admins) {
+        if (!admin.email) continue;
+        try {
+          await sendEmail({
+            to: admin.email,
+            subject: `Partner directory duplicate swap request: ${result.source.organization.name}`,
+            kind: "partner_duplicate_swap_request",
+            contextLabel: result.page.officialName,
+            text: [
+              `A partner directory swap request needs review.`,
+              `Partner page: ${result.page.officialName} (${result.page.slug})`,
+              `Displayed staging organization: ${result.source.organization.name}`,
+              `Requested existing organization: ${result.target.name}`,
+              `Requester: ${requester?.name ?? "Kinectem user"} (${me.email})`,
+              `Review: ${reviewUrl}`,
+            ].join("\n"),
+          });
+        } catch (err) {
+          req.log.error({ err, requestId: result.request.id }, "Partner duplicate swap email failed after durable save");
+        }
+      }
+    }
+    return res.status(result.created ? 201 : 200).json({
+      data: {
+        id: result.request.id,
+        status: result.request.status,
+        sourceMembershipId: result.request.sourceMembershipId,
+        targetOrganizationId: result.request.targetOrganizationId,
+      },
+    });
+  }),
+);
+
+const duplicateSwapDecisionHandler = asyncHandler(async (req: any, res: any) => {
+    const requestId = p(req.params.requestId);
+    const decision = cleanText(req.body?.decision, 20).toLowerCase();
+    if (decision !== "approved" && decision !== "denied") {
+      return apiError(res, 400, "decision must be approved or denied");
+    }
+    const result = await db.transaction(async (tx) => {
+      const [request] = await tx.select().from(partnerDuplicateSwapRequests)
+        .where(eq(partnerDuplicateSwapRequests.id, requestId)).for("update").limit(1);
+      if (!request) return { error: "Duplicate swap request not found" as const };
+      const requestedStatus = decision === "approved" ? "approved" : "denied";
+      if (request.status !== "pending") {
+        if (request.status === requestedStatus) return { request, replayed: true as const };
+        return { error: `Duplicate swap request is already ${request.status}` as const };
+      }
+      if (decision === "denied") {
+        await tx.update(partnerDuplicateSwapRequests).set({
+          status: "denied",
+          decidedByUserId: req.realUser!.id,
+          decidedAt: new Date(),
+          updatedAt: new Date(),
+        }).where(and(
+          eq(partnerDuplicateSwapRequests.partnerPageId, request.partnerPageId),
+          eq(partnerDuplicateSwapRequests.sourceMembershipId, request.sourceMembershipId),
+          eq(partnerDuplicateSwapRequests.status, "pending"),
+          sql`${partnerDuplicateSwapRequests.id} <> ${request.id}`,
+        ));
+        const [updated] = await tx.update(partnerDuplicateSwapRequests).set({
+          status: "denied",
+          decidedByUserId: req.realUser!.id,
+          decidedAt: new Date(),
+          updatedAt: new Date(),
+        }).where(and(eq(partnerDuplicateSwapRequests.id, requestId), eq(partnerDuplicateSwapRequests.status, "pending"))).returning();
+        return { request: updated, replayed: false as const, decision: "denied" as const };
+      }
+      const [page] = await tx.select({
+        id: partnerLandingPages.id,
+        published: partnerLandingPages.published,
+        slug: partnerLandingPages.slug,
+      }).from(partnerLandingPages).where(eq(partnerLandingPages.id, request.partnerPageId)).for("update").limit(1);
+      const [source] = await tx.select({
+        membership: partnerOrganizationMemberships,
+        organization: {
+          id: organizations.id,
+          name: organizations.name,
+          partnerImportCreatedByOperationId: organizations.partnerImportCreatedByOperationId,
+        },
+      }).from(partnerOrganizationMemberships).innerJoin(
+        organizations, eq(organizations.id, partnerOrganizationMemberships.organizationId),
+      ).where(and(
+        eq(partnerOrganizationMemberships.id, request.sourceMembershipId),
+        eq(partnerOrganizationMemberships.partnerPageId, request.partnerPageId),
+      )).for("update").limit(1);
+      const [target] = await tx.select({ id: organizations.id, name: organizations.name }).from(organizations)
+        .where(eq(organizations.id, request.targetOrganizationId)).for("update").limit(1);
+      const [requester] = await tx.select({
+        id: users.id,
+        deletedAt: users.deletedAt,
+      }).from(users).where(eq(users.id, request.requestedByUserId)).for("update").limit(1);
+      const authorityRows = await tx.select({
+        userId: organizationAdmins.userId,
+        role: organizationAdmins.role,
+      }).from(organizationAdmins)
+        .where(eq(organizationAdmins.organizationId, request.targetOrganizationId))
+        .for("update");
+      const requesterTargetRole = authorityRows.find((row) =>
+        row.userId === request.requestedByUserId && (row.role === "owner" || row.role === "admin"));
+      const targetOwner = authorityRows.find((row) => row.role === "owner");
+      if (!page || !page.published || !source || !target ||
+        !requester || requester.deletedAt || !requesterTargetRole || !targetOwner ||
+        source.organization.id !== request.sourceOrganizationId ||
+        source.membership.importOperationId !== source.organization.partnerImportCreatedByOperationId ||
+        !source.membership.visible ||
+        source.organization.id === target.id ||
+        !credibleOrganizationCollision(source.organization.name, target.name)) {
+        return { error: "Request is no longer valid for approval" as const };
+      }
+      const [targetMembership] = await tx.select({ id: partnerOrganizationMemberships.id })
+        .from(partnerOrganizationMemberships).where(and(
+          eq(partnerOrganizationMemberships.partnerPageId, request.partnerPageId),
+          eq(partnerOrganizationMemberships.organizationId, target.id),
+        )).limit(1);
+      if (targetMembership) return { error: "Target organization is already on this partner page" as const };
+      await tx.update(partnerDuplicateSwapRequests).set({
+        status: "denied",
+        decidedByUserId: req.realUser!.id,
+        decidedAt: new Date(),
+        updatedAt: new Date(),
+      }).where(and(
+        eq(partnerDuplicateSwapRequests.partnerPageId, request.partnerPageId),
+        eq(partnerDuplicateSwapRequests.sourceMembershipId, request.sourceMembershipId),
+        eq(partnerDuplicateSwapRequests.status, "pending"),
+        sql`${partnerDuplicateSwapRequests.id} <> ${request.id}`,
+      ));
+      const replacement = await replacePartnerMemberInTransaction(
+        tx,
+        request.partnerPageId,
+        request.sourceMembershipId,
+        request.targetOrganizationId,
+        `duplicate-swap-request:${request.id}`,
+      );
+      if ("error" in replacement) return { error: replacement.error };
+      const [updated] = await tx.update(partnerDuplicateSwapRequests).set({
+        status: "approved",
+        decidedByUserId: req.realUser!.id,
+        decidedAt: new Date(),
+        updatedAt: new Date(),
+      }).where(and(eq(partnerDuplicateSwapRequests.id, requestId), eq(partnerDuplicateSwapRequests.status, "pending"))).returning();
+      return { request: updated, replacement, replayed: false as const, decision: "approved" as const };
+    });
+    if ("error" in result) {
+      const message = String(result.error ?? "Duplicate swap decision failed");
+      return apiError(res, /not found/i.test(message) ? 404 : 409, message);
+    }
+    if (result.replayed) return res.json({ data: result.request });
+    const requesterLink = `/partners/${encodeURIComponent(String(result.request.pageSnapshot?.slug ?? ""))}`;
+    try {
+      await db.insert(notifications).values({
+        userId: result.request.requestedByUserId,
+        kind: "partner_duplicate_swap_decision",
+        message: `Your partner directory duplicate swap request was ${result.request.status}.`,
+        link: requesterLink,
+        actorUserId: req.realUser!.id,
+      });
+      await dispatchNotificationEmail({
+        userId: result.request.requestedByUserId,
+        category: "team_roster",
+        build: (ctx) => ({
+          to: ctx.to,
+          subject: `Partner directory swap request ${result.request.status}`,
+          kind: "partner_duplicate_swap_decision",
+          contextLabel: "Partner directory",
+          text: [
+            `Hi ${ctx.recipientName},`,
+            "",
+            `Your partner directory duplicate swap request was ${result.request.status}.`,
+            "",
+            `Review your partner directory requests: ${appBaseUrl()}${requesterLink}`,
+            "",
+            `Manage email preferences: ${ctx.unsubscribeUrl}`,
+          ].join("\n"),
+        }),
+      });
+    } catch (err) {
+      req.log.error({ err, requestId }, "Partner duplicate swap outcome notification failed");
+    }
+    return res.json({ data: result.request, replacement: "replacement" in result ? result.replacement : null });
+});
+
+// Friendly aliases mirror the rest of the admin review API while the
+// decision endpoint remains available for clients that send an explicit
+// status.
+router.post(
+  "/admin/partner-duplicate-swap-requests/:requestId/approve",
+  requireAdmin,
+  (req, _res, next) => {
+    req.body = { ...(req.body ?? {}), decision: "approved" };
+    req.url = req.url.replace(/\/approve$/, "/decision");
+    next();
+  },
+);
+router.post(
+  "/admin/partner-duplicate-swap-requests/:requestId/deny",
+  requireAdmin,
+  (req, _res, next) => {
+    req.body = { ...(req.body ?? {}), decision: "denied" };
+    req.url = req.url.replace(/\/deny$/, "/decision");
+    next();
+  },
+);
+router.post(
+  "/admin/partner-duplicate-swap-requests/:requestId/decision",
+  requireAdmin,
+  duplicateSwapDecisionHandler,
 );
 
 router.post(
