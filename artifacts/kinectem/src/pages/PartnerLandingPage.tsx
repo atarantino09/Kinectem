@@ -445,11 +445,14 @@ export default function PartnerLandingPage() {
                 )}
               </div>
               <span className="text-center text-3xl font-light opacity-70 md:text-5xl" aria-hidden="true" data-testid="partner-logo-separator">×</span>
-              <div className="grid h-32 w-32 min-h-0 min-w-0 place-items-center overflow-hidden rounded-3xl shadow-xl md:h-40 md:w-40">
+              <div
+                className="grid h-32 w-32 min-h-0 min-w-0 place-items-center overflow-hidden rounded-3xl bg-[linear-gradient(145deg,#b400ff_0%,#6d00ff_46%,#006cff_100%)] shadow-xl [clip-path:inset(0_round_1.5rem)] md:h-40 md:w-40"
+                data-testid="kinectem-logo-tile"
+              >
                 <img
                   src={kinectemIcon}
                   alt="Kinectem logo"
-                  className="block max-h-full max-w-full object-contain"
+                  className="block h-full w-full scale-[1.025] object-cover"
                 />
               </div>
               <div className="flex min-h-[3.25rem] min-w-0 flex-col items-center justify-start text-center">

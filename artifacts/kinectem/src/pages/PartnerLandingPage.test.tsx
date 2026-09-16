@@ -366,6 +366,7 @@ describe("PartnerLandingPage featured competition", () => {
 
     const tile = await screen.findByTestId("partner-logo-tile");
     const logo = screen.getByTestId("partner-logo-image");
+    const kinectemTile = screen.getByTestId("kinectem-logo-tile");
     expect(tile).toHaveClass(
       "h-32",
       "w-32",
@@ -377,6 +378,11 @@ describe("PartnerLandingPage featured competition", () => {
     );
     expect(logo).toHaveClass("block", "h-full", "w-full", "object-contain");
     expect(logo).not.toHaveClass("object-cover");
+    expect(kinectemTile).toHaveClass(
+      "overflow-hidden",
+      "rounded-3xl",
+      "[clip-path:inset(0_round_1.5rem)]",
+    );
   });
 
   it("shows the current owner before an anonymous visitor enters a claimed club", async () => {
