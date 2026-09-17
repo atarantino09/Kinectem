@@ -116,17 +116,22 @@ export function PostClaimSetupGuide({
             <li key={step.number}>
               <button
                 type="button"
-                className="app-surface app-surface-interactive group relative flex h-full w-full flex-col items-start overflow-hidden p-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-60 sm:h-[16.5rem]"
+                className="app-surface app-surface-interactive group relative flex h-full w-full flex-col items-start overflow-hidden p-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-60 sm:h-[14.5rem]"
                 onClick={() => step.action && onAction(step.action)}
                 aria-label={step.actionLabel}
                 data-testid={`setup-step-${step.action}`}
               >
                 <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100 group-focus-visible:opacity-100" />
-                <div className="relative flex w-full items-start justify-between gap-4">
-                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-secondary shadow-sm transition-all duration-300 group-hover:-rotate-6 group-hover:scale-110 group-hover:bg-primary group-hover:shadow-md group-focus-visible:-rotate-6 group-focus-visible:scale-110 group-focus-visible:bg-primary group-focus-visible:shadow-md">
-                    <span className="text-lg font-black text-secondary-foreground transition-colors group-hover:text-primary-foreground group-focus-visible:text-primary-foreground">
-                      {step.number}
-                    </span>
+                <div className="relative flex w-full items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-secondary shadow-sm transition-all duration-300 group-hover:-rotate-6 group-hover:scale-110 group-hover:bg-primary group-hover:shadow-md group-focus-visible:-rotate-6 group-focus-visible:scale-110 group-focus-visible:bg-primary group-focus-visible:shadow-md">
+                      <span className="text-lg font-black text-secondary-foreground transition-colors group-hover:text-primary-foreground group-focus-visible:text-primary-foreground">
+                        {step.number}
+                      </span>
+                    </div>
+                    <h3 className="text-base font-black leading-tight tracking-tight text-foreground transition-colors group-hover:text-primary group-focus-visible:text-primary">
+                      {step.title}
+                    </h3>
                   </div>
                   <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border bg-card shadow-sm transition-all duration-300 group-hover:rotate-6 group-hover:scale-110 group-hover:border-primary/30 group-hover:bg-primary/5 group-hover:text-primary group-focus-visible:rotate-6 group-focus-visible:scale-110 group-focus-visible:border-primary/30 group-focus-visible:bg-primary/5 group-focus-visible:text-primary">
                     <step.Icon className="h-5 w-5 text-muted-foreground transition-colors group-hover:text-primary group-focus-visible:text-primary" />
@@ -134,10 +139,7 @@ export function PostClaimSetupGuide({
                 </div>
 
                 <div className="relative mt-3 flex flex-1 flex-col">
-                  <h3 className="text-base font-black tracking-tight text-foreground transition-colors group-hover:text-primary group-focus-visible:text-primary">
-                    {step.title}
-                  </h3>
-                  <p className="mt-1.5 text-[13px] leading-5 text-muted-foreground">
+                  <p className="text-[13px] leading-5 text-muted-foreground">
                     {step.description}
                   </p>
                 </div>
@@ -156,13 +158,18 @@ export function PostClaimSetupGuide({
         })}
         <li>
           <div
-            className="app-surface relative flex h-full flex-col overflow-hidden border-violet-200 bg-gradient-to-br from-violet-50 via-white to-blue-50 p-4 dark:border-violet-800/60 dark:from-violet-950/40 dark:via-card dark:to-blue-950/30 sm:h-[16.5rem]"
+            className="app-surface relative flex h-full flex-col overflow-hidden border-violet-200 bg-gradient-to-br from-violet-50 via-white to-blue-50 p-4 dark:border-violet-800/60 dark:from-violet-950/40 dark:via-card dark:to-blue-950/30 sm:h-[14.5rem]"
             data-testid="setup-message-game-recaps"
           >
             <div className="absolute -right-12 -top-12 h-40 w-40 rounded-full bg-violet-200/40 blur-3xl dark:bg-violet-900/40" />
-            <div className="relative flex w-full items-start justify-between gap-4">
-              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-violet-100 shadow-sm dark:bg-violet-900/50">
-                <Trophy className="h-5 w-5 text-violet-600 dark:text-violet-300" />
+            <div className="relative flex w-full items-start justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-violet-100 shadow-sm dark:bg-violet-900/50">
+                  <Trophy className="h-5 w-5 text-violet-600 dark:text-violet-300" />
+                </div>
+                <h3 className="text-base font-black leading-tight tracking-tight text-violet-950 dark:text-violet-50">
+                  Then, bring your season to life
+                </h3>
               </div>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-200/60 bg-violet-100/80 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-violet-700 shadow-sm dark:border-violet-800/60 dark:bg-violet-900/50 dark:text-violet-300">
                 <Sparkles className="h-3 w-3" />
@@ -171,10 +178,7 @@ export function PostClaimSetupGuide({
             </div>
 
             <div className="relative mt-3 flex flex-1 flex-col">
-              <h3 className="text-base font-black tracking-tight text-violet-950 dark:text-violet-50">
-                Then, bring your season to life
-              </h3>
-              <p className="mt-1.5 text-[13px] leading-5 text-violet-800/80 dark:text-violet-200/70">
+              <p className="text-[13px] leading-5 text-violet-800/80 dark:text-violet-200/70">
                 After each game, coaches visit their team page and add a few
                 notes. AI Assist turns them into a polished recap in minutes,
                 bringing the story of your season to life.
