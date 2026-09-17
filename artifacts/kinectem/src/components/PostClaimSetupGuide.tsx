@@ -119,7 +119,7 @@ export function PostClaimSetupGuide({
               ) : (
                 <button
                   type="button"
-                  className="group flex min-h-32 w-full items-start gap-3 rounded-xl border border-border bg-card p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary/50 hover:bg-primary/5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-60"
+                  className="group flex min-h-32 w-full items-start gap-3 rounded-xl border border-border bg-card p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary/50 hover:bg-primary/5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-60 sm:h-[13rem]"
                   onClick={() => step.action && onAction(step.action)}
                   aria-label={step.actionLabel}
                   data-testid={`setup-step-${step.action}`}
@@ -132,7 +132,7 @@ export function PostClaimSetupGuide({
         })}
         <li>
           <div
-            className="relative flex min-h-32 h-full overflow-hidden rounded-xl border border-violet-200 bg-gradient-to-br from-violet-50 via-white to-blue-50 p-4 shadow-sm dark:border-violet-800 dark:from-violet-950/40 dark:via-card dark:to-blue-950/30"
+            className="relative flex min-h-32 h-full overflow-hidden rounded-xl border border-violet-200 bg-gradient-to-br from-violet-50 via-white to-blue-50 p-4 shadow-sm dark:border-violet-800 dark:from-violet-950/40 dark:via-card dark:to-blue-950/30 sm:h-[13rem]"
             data-testid="setup-message-game-recaps"
           >
             <div className="absolute -right-7 -top-7 h-24 w-24 rounded-full bg-violet-200/40 blur-2xl" />
