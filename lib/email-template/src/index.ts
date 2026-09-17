@@ -83,28 +83,10 @@ export function emailDivider(): string {
 export function emailKeyValue(
   facts: { label: string; value: string }[],
 ): string {
-  const symbolForLabel = (label: string): string => {
-    const normalized = label.toLowerCase();
-    if (/email|contact/.test(normalized)) return "@";
-    if (/requester|coach|owner|person|name/.test(normalized)) return "&#9679;";
-    if (/organization|team|club/.test(normalized)) return "&#9670;";
-    if (/partner|page|site/.test(normalized)) return "&#9678;";
-    if (/submitted|date|time|when/.test(normalized)) return "&#9716;";
-    if (/title|role|position/.test(normalized)) return "&#9671;";
-    return "&#10022;";
-  };
-
   const rows = facts
     .map(
       (fact, index) => `<tr class="email-kv-row">
-  <td class="email-kv-label" width="40%" valign="top" style="padding:14px 16px;color:#64748b;font-size:13px;line-height:1.4;font-weight:700;border-bottom:${index === facts.length - 1 ? "none" : "1px solid #e2e8f0"};">
-    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
-      <tr>
-        <td width="38" valign="middle"><span class="email-kv-symbol" style="display:inline-block;width:28px;height:28px;border-radius:14px;background:#ede9fe;background-image:linear-gradient(135deg,#ddd6fe,#fce7f3);color:#7c3aed;font-size:13px;line-height:28px;font-weight:900;text-align:center;">${symbolForLabel(fact.label)}</span></td>
-        <td valign="middle" style="color:inherit;font-size:13px;line-height:1.4;font-weight:700;"><span>${escapeHtml(fact.label)}</span></td>
-      </tr>
-    </table>
-  </td>
+  <td class="email-kv-label" width="40%" valign="top" style="padding:16px;color:#64748b;font-size:13px;line-height:1.4;font-weight:700;border-bottom:${index === facts.length - 1 ? "none" : "1px solid #e2e8f0"};">${escapeHtml(fact.label)}</td>
   <td class="email-kv-value" width="60%" valign="top" style="padding:16px;color:#0f172a;font-size:15px;line-height:1.4;font-weight:600;border-bottom:${index === facts.length - 1 ? "none" : "1px solid #e2e8f0"};">${escapeHtml(fact.value)}</td>
 </tr>`,
     )
@@ -331,7 +313,6 @@ export function renderBrandedEmailHtml(options: BrandedEmailOptions): string {
     .email-kv-row td { border-bottom-color:#334155 !important; }
     .email-kv-label { color:#94a3b8 !important; }
     .email-kv-value { color:#f8fafc !important; }
-    .email-kv-symbol { background:#312e81 !important;background-image:linear-gradient(135deg,#3730a3,#831843) !important;color:#f5d0fe !important; }
 
     @media only screen and (max-width: 620px) {
       .email-kv-row td:last-child { border-bottom-color: #334155 !important; }
