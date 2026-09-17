@@ -40,7 +40,9 @@ describe("PostClaimSetupGuide", () => {
     );
 
     expect(screen.getByText("Invite parents & players")).toBeInTheDocument();
-    expect(screen.getByText(/Open Roster Outreach to use/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Open Roster Outreach for ready-to-send messages/),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Open roster invitations" }),
     ).not.toBeInTheDocument();

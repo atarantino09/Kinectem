@@ -21,13 +21,15 @@ const STEPS: Array<{
   {
     number: 1,
     title: "Claim your organization",
-    description: "Your organization is claimed and you are now an owner.",
+    description:
+      "Ownership is confirmed. You can now manage organization details, teams, coaches, outreach, and member access.",
     Icon: CheckCircle2,
   },
   {
     number: 2,
     title: "Send a pre-invite message",
-    description: "Introduce Kinectem before invitations arrive.",
+    description:
+      "Share a club-wide heads-up before invitations arrive. Explain why Kinectem is being introduced, what families should expect, and when team invites will begin.",
     action: "preInvite",
     actionLabel: "Open pre-invite message",
     Icon: Megaphone,
@@ -35,7 +37,8 @@ const STEPS: Array<{
   {
     number: 3,
     title: "Bulk add your coaches",
-    description: "Invite the right coach to every existing team at once.",
+    description:
+      "Match a coach to each existing team and send invitations in one batch. Coaches gain access to manage rosters, communicate with families, and create game recaps.",
     action: "coaches",
     actionLabel: "Open bulk coach invites",
     Icon: UserPlus,
@@ -44,7 +47,7 @@ const STEPS: Array<{
     number: 4,
     title: "Invite parents & players",
     description:
-      "Open Roster Outreach to use the ready-to-send message and team signup links.",
+      "Open Roster Outreach for ready-to-send messages and unique team signup links. Coaches can share them so parents and players join the correct team roster.",
     action: "outreach",
     actionLabel: "Open Roster Outreach",
     Icon: Mail,
@@ -119,7 +122,7 @@ export function PostClaimSetupGuide({
               ) : (
                 <button
                   type="button"
-                  className="group flex min-h-32 w-full items-start gap-3 rounded-xl border border-border bg-card p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary/50 hover:bg-primary/5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-60 sm:h-[13rem]"
+                  className="group flex min-h-32 w-full items-start gap-3 rounded-xl border border-border bg-card p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary/50 hover:bg-primary/5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-60 sm:h-[14.5rem]"
                   onClick={() => step.action && onAction(step.action)}
                   aria-label={step.actionLabel}
                   data-testid={`setup-step-${step.action}`}
@@ -132,7 +135,7 @@ export function PostClaimSetupGuide({
         })}
         <li>
           <div
-            className="relative flex min-h-32 h-full overflow-hidden rounded-xl border border-violet-200 bg-gradient-to-br from-violet-50 via-white to-blue-50 p-4 shadow-sm dark:border-violet-800 dark:from-violet-950/40 dark:via-card dark:to-blue-950/30 sm:h-[13rem]"
+            className="relative flex min-h-32 h-full overflow-hidden rounded-xl border border-violet-200 bg-gradient-to-br from-violet-50 via-white to-blue-50 p-4 shadow-sm dark:border-violet-800 dark:from-violet-950/40 dark:via-card dark:to-blue-950/30 sm:h-[14.5rem]"
             data-testid="setup-message-game-recaps"
           >
             <div className="absolute -right-7 -top-7 h-24 w-24 rounded-full bg-violet-200/40 blur-2xl" />
