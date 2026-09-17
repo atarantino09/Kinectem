@@ -12,7 +12,7 @@ export interface BrandedEmailOptions {
   bodyHtml: string;
   /** Used as the visible headline and escaped before interpolation. */
   subject: string;
-  /** Absolute app/marketing origin used for the hosted transparent lockup. */
+  /** Absolute app/marketing origin used for the hosted banner lockup. */
   baseUrl: string;
   /** Optional small label shown above the headline, such as a team name. */
   contextLabel?: string;
@@ -42,7 +42,7 @@ function unescapeHtml(value: string): string {
 
 export function emailLinkFallback(href: string): string {
   const safeHref = escapeHtml(href);
-  return `<div class="email-link-fallback" style="margin:16px 0 0;color:#64748b;font-size:13px;line-height:1.5;word-break:break-all;">Button not working? Copy and paste this link:<br /><a href="${safeHref}" style="color:#2553ed;text-decoration:none;">${safeHref}</a></div>`;
+  return `<div class="email-link-fallback" style="margin:16px 0 0;color:#64748b;font-size:13px;line-height:1.5;word-break:break-all;text-align:center;">Button not working? <a href="${safeHref}" style="color:#8b2cf5;text-decoration:underline;">Click here</a></div>`;
 }
 
 export function emailButton(input: {
@@ -57,8 +57,8 @@ export function emailButton(input: {
     <td>
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;">
         <tr>
-          <td class="email-cta-cell" align="center" bgcolor="#2553ed" style="border-radius:8px;background:#2553ed;box-shadow:0 5px 14px rgba(37,83,237,.24);">
-            <a href="${href}" style="display:inline-block;min-width:180px;padding:14px 28px;color:#ffffff;font-size:16px;line-height:22px;font-weight:700;text-align:center;text-decoration:none;border-radius:8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">${label}</a>
+          <td class="email-cta-cell" align="center" bgcolor="#8b2cf5" style="border-radius:8px;background:#8b2cf5;">
+            <a href="${href}" style="display:inline-block;min-width:180px;padding:16px 28px;color:#ffffff;font-size:16px;line-height:1.2;font-weight:700;text-align:center;text-decoration:none;border-radius:8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">${label}</a>
           </td>
         </tr>
       </table>
@@ -69,13 +69,13 @@ export function emailButton(input: {
 }
 
 export function emailSummary(text: string): string {
-  return `<div class="email-summary" style="margin:0 0 24px;padding:0 0 0 16px;border-left:4px solid #8b2cf5;font-size:18px;line-height:1.5;color:#111936;font-weight:700;">${escapeHtml(text)}</div>`;
+  return `<div class="email-summary" style="margin:0 0 24px;font-size:18px;line-height:1.5;color:#0f172a;font-weight:600;">${escapeHtml(text)}</div>`;
 }
 
 export function emailDivider(): string {
   return `<table role="presentation" class="email-divider" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 32px 0;">
   <tr>
-    <td style="border-top:2px solid #e6e9f4;font-size:0;line-height:0;">&nbsp;</td>
+    <td style="border-top:1px solid #e2e8f0;font-size:0;line-height:0;">&nbsp;</td>
   </tr>
 </table>`;
 }
@@ -85,19 +85,19 @@ export function emailKeyValue(
 ): string {
   const rows = facts
     .map(
-      (fact) => `<tr class="email-kv-row">
-  <td class="email-kv-label" width="35%" valign="top" style="padding:12px 16px;color:#4e5680;font-size:12px;line-height:1.4;font-weight:800;letter-spacing:.05em;text-transform:uppercase;border-bottom:1px solid #e6e9f4;">${escapeHtml(fact.label)}</td>
-  <td class="email-kv-value" width="65%" valign="top" style="padding:12px 16px;color:#111936;font-size:15px;line-height:1.4;font-weight:600;border-bottom:1px solid #e6e9f4;">${escapeHtml(fact.value)}</td>
+      (fact, index) => `<tr class="email-kv-row">
+  <td class="email-kv-label" width="35%" valign="top" style="padding:16px;color:#64748b;font-size:13px;line-height:1.4;font-weight:700;border-bottom:${index === facts.length - 1 ? "none" : "1px solid #e2e8f0"};">${escapeHtml(fact.label)}</td>
+  <td class="email-kv-value" width="65%" valign="top" style="padding:16px;color:#0f172a;font-size:15px;line-height:1.4;font-weight:600;border-bottom:${index === facts.length - 1 ? "none" : "1px solid #e2e8f0"};">${escapeHtml(fact.value)}</td>
 </tr>`,
     )
     .join("");
 
-  return `<table role="presentation" class="email-facts" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0;border:1px solid #e6e9f4;border-radius:12px;border-collapse:separate;border-spacing:0;background:#f7f8fc;">${rows}</table>`;
+  return `<table role="presentation" class="email-facts" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0;border:1px solid #e2e8f0;border-radius:12px;border-collapse:separate;border-spacing:0;background:#f8fafc;">${rows}</table>`;
 }
 
 export function emailCallout(bodyHtml: string): string {
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;margin:24px 0;">
-  <tr><td class="email-callout-box" style="padding:20px;border:1px solid #ddd5ff;border-left:5px solid #8b2cf5;border-radius:10px;background:#f7f4ff;color:#30385f;font-size:15px;line-height:1.6;">${bodyHtml}</td></tr>
+  <tr><td class="email-callout-box" style="padding:24px;border:1px solid #e2e8f0;border-left:4px solid #8b2cf5;border-radius:12px;background:#fafaf9;color:#334155;font-size:15px;line-height:1.6;">${bodyHtml}</td></tr>
 </table>`;
 }
 
@@ -107,32 +107,38 @@ export function emailStatusCallout(
 ): string {
   let bg = "#f8fafc";
   let border = "#e2e8f0";
+  let borderLeft = "#64748b";
   let color = "#334155";
   let statusClass = "email-status-info";
 
   if (status === "success") {
     bg = "#f0fdf4";
-    border = "#bbf7d0";
+    border = "#dcfce7";
+    borderLeft = "#22c55e";
     color = "#166534";
     statusClass = "email-status-success";
   } else if (status === "warning") {
     bg = "#fffbeb";
-    border = "#fef08a";
-    color = "#854d0e";
+    border = "#fef3c7";
+    borderLeft = "#f59e0b";
+    color = "#92400e";
     statusClass = "email-status-warning";
   } else if (status === "error") {
     bg = "#fef2f2";
-    border = "#fecaca";
+    border = "#fee2e2";
+    borderLeft = "#ef4444";
     color = "#991b1b";
     statusClass = "email-status-error";
   } else if (status === "info") {
-    bg = "#eef3ff";
-    border = "#b9c9ff";
-    color = "#1739a6";
+    bg = "#eff6ff";
+    border = "#dbeafe";
+    borderLeft = "#3b82f6";
+    color = "#1e40af";
+    statusClass = "email-status-info";
   }
 
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;margin:24px 0;">
-  <tr><td class="${statusClass}" style="padding:16px 20px;border:1px solid ${border};border-radius:12px;background:${bg};color:${color};font-size:15px;line-height:1.5;font-weight:500;">${bodyHtml}</td></tr>
+  <tr><td class="${statusClass}" style="padding:20px 24px;border:1px solid ${border};border-left:4px solid ${borderLeft};border-radius:12px;background:${bg};color:${color};font-size:15px;line-height:1.6;font-weight:500;">${bodyHtml}</td></tr>
 </table>`;
 }
 
@@ -144,21 +150,24 @@ export function emailChecklist(
     .map(
       (item, index) =>
         `<tr>
-          <td width="32" valign="top" style="padding:${index === 0 ? "0" : "12px"} 12px 0 0;">
-             <div class="email-checklist-num" style="width:24px;height:24px;border-radius:12px;background:#2553ed;color:#ffffff;font-size:12px;line-height:24px;font-weight:800;text-align:center;">${index + 1}</div>
+          <td width="36" valign="top" style="padding:${index === 0 ? "0" : "16px"} 16px 0 0;">
+             <div class="email-checklist-num" style="width:28px;height:28px;border-radius:14px;background:#f1f5f9;color:#475569;font-size:13px;line-height:28px;font-weight:700;text-align:center;">${index + 1}</div>
           </td>
-          <td class="email-checklist-text" valign="top" style="padding:${index === 0 ? "2px" : "14px"} 0 0;color:#334155;font-size:15px;line-height:1.5;">${escapeHtml(item)}</td>
+          <td class="email-checklist-text" valign="top" style="padding:${index === 0 ? "4px" : "20px"} 0 0;color:#334155;font-size:15px;line-height:1.6;">${escapeHtml(item)}</td>
         </tr>`,
     )
     .join("");
 
   const titleHtml = title
-    ? `<div class="email-checklist-title" style="margin:0 0 16px;color:#111936;font-size:15px;font-weight:800;">${escapeHtml(title)}</div>`
+    ? `<div class="email-checklist-title" style="margin:0 0 20px;color:#0f172a;font-size:16px;font-weight:700;">${escapeHtml(title)}</div>`
     : "";
 
-  return emailCallout(
-    `${titleHtml}<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">${rows}</table>`,
-  );
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;margin:24px 0;">
+  <tr><td class="email-checklist-box" style="padding:24px;border:1px solid #e2e8f0;border-radius:12px;background:#ffffff;">
+    ${titleHtml}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">${rows}</table>
+  </td></tr>
+</table>`;
 }
 
 function normalizeBaseUrl(value: string): string {
@@ -212,7 +221,7 @@ export function plainTextToHtml(text: string): string {
           const linked = escapeHtml(line).replace(
             /(https?:\/\/[^\s<]+)/g,
             (url) =>
-              `<a href="${url}" style="color:#2553ed;font-weight:600;text-decoration:none;">${url}</a>`,
+              `<a href="${url}" style="color:#8b2cf5;font-weight:600;text-decoration:none;">${url}</a>`,
           );
           return `<p>${linked}</p>`;
         })
@@ -238,13 +247,13 @@ function upgradeLegacyCtas(bodyHtml: string): string {
 /**
  * Wrap any HTML fragment in the Kinectem email presentation system.
  *
- * The logo intentionally uses the transparent public lockup rather than a
- * colored image panel. Its alt text and adjacent fallback wordmark remain
- * useful when an email client blocks remote images.
+ * The banner automatically resolves to the correct path whether baseUrl
+ * points to the root marketing site or the /app path. It provides a robust
+ * text fallback if remote images are blocked.
  */
 export function renderBrandedEmailHtml(options: BrandedEmailOptions): string {
   const baseUrl = normalizeBaseUrl(options.baseUrl);
-  const logoDarkUrl = `${baseUrl}${baseUrl.endsWith("/app") ? "" : "/app"}/logo-horizontal-mono-white-transparent.png`;
+  const bannerUrl = `${baseUrl}/email-header-banner.png`;
   const subject = escapeHtml(options.subject);
   const contextLabel = options.contextLabel?.trim();
   const preheader = escapeHtml(options.preheader?.trim() || options.subject);
@@ -264,91 +273,97 @@ export function renderBrandedEmailHtml(options: BrandedEmailOptions): string {
   @media only screen and (max-width: 620px) {
     .email-shell { width: 100% !important; }
     .email-card { border-radius: 0 !important; border: none !important; }
-    .email-content { padding: 32px 24px 36px !important; }
-    .email-header, .email-hero, .email-footer-bar { padding-left:24px !important;padding-right:24px !important; }
+    .email-hero, .email-content, .email-footer-bar { padding-left:24px !important;padding-right:24px !important; }
     .email-headline { font-size: 26px !important; }
     .email-cta > tbody > tr > td > table { width: 100% !important; }
     .email-cta-cell, .email-cta-cell a { width: 100% !important; box-sizing: border-box !important; }
     .email-body-copy p > a { display:block !important;text-align:center !important;box-sizing:border-box !important; }
     .email-kv-row td { display: block !important; width: 100% !important; border: none !important; }
-    .email-kv-row td:first-child { padding: 16px 0 4px !important; }
-    .email-kv-row td:last-child { padding: 0 0 16px !important; border-bottom: 1px solid #f1f5f9 !important; }
+    .email-kv-row td:first-child { padding: 16px 16px 4px !important; }
+    .email-kv-row td:last-child { padding: 0 16px 16px !important; border-bottom: 1px solid #e2e8f0 !important; }
     .email-kv-row:last-child td:last-child { border-bottom: none !important; }
   }
 
   .email-body-copy p { margin:0 0 16px; }
-  .email-body-copy ul, .email-body-copy ol { margin:0 0 20px;padding-left:22px; }
+  .email-body-copy ul, .email-body-copy ol { margin:0 0 20px;padding-left:24px; }
   .email-body-copy li { margin:0 0 8px; }
-  .email-body-copy blockquote { margin:20px 0;padding:16px 20px;border-left:4px solid #8b2cf5;background:#f7f4ff;color:#4e5680;border-radius:0 8px 8px 0; }
-  .email-body-copy a { color:#2553ed;font-weight:600;text-decoration:none; }
+  .email-body-copy blockquote { margin:24px 0;padding:16px 20px;border-left:4px solid #8b2cf5;background:#fafaf9;color:#334155;border-radius:0 12px 12px 0; }
+  .email-body-copy a { color:#8b2cf5;font-weight:600;text-decoration:none; }
 
   @media (prefers-color-scheme: dark) {
-    body, .email-canvas { background:#0f172a !important;color:#f8fafc !important; }
-    .email-card, .email-content { background:#111936 !important;border-color:#30385f !important; }
-    .email-header, .email-hero, .email-footer-bar { background:#080e29 !important;border-color:#30385f !important; }
-    .email-content { color:#f8fafc !important; }
+    body, .email-canvas { background:#0b1021 !important;color:#f8fafc !important; }
+    .email-card { background:#111936 !important;border-color:#1e293b !important; }
+    .email-hero, .email-content { background:#111936 !important; color:#f8fafc !important; }
     .email-headline { color:#ffffff !important; }
     .email-body-copy { color:#cbd5e1 !important; }
-    .email-body-copy blockquote { background: #172554 !important; color: #bfdbfe !important; border-left-color: #3b82f6 !important; }
+    .email-body-copy blockquote { background: #1e293b !important; color: #cbd5e1 !important; border-left-color: #a855f7 !important; }
+    .email-body-copy a { color:#a855f7 !important; }
+    .email-cta-cell a { color:#ffffff !important; }
 
-    .email-footer-bar { color:#aeb6d8 !important; }
+    .email-footer-bar { background:#0f172a !important; border-top-color:#1e293b !important; color:#94a3b8 !important; }
     .email-footer-bar div:first-child { color:#e2e8f0 !important; }
-    .email-footer { color: #94a3b8 !important; border-top-color: #334155 !important; }
+    .email-footer { color: #64748b !important; border-top-color: #1e293b !important; }
 
-    .email-summary { color:#f8fafc !important;border-left-color:#b54cff !important; }
-    .email-divider td { border-top-color: #334155 !important; }
+    .email-summary { color:#f8fafc !important; }
+    .email-divider td { border-top-color: #1e293b !important; }
 
-    .email-kv-label { color: #94a3b8 !important; }
-    .email-kv-value { color: #f1f5f9 !important; }
-    .email-kv-row td { border-bottom-color:#30385f !important; }
-    .email-facts { background:#171f43 !important;border-color:#30385f !important; }
+    .email-facts { background:#1e293b !important; border-color:#334155 !important; }
+    .email-kv-row td { border-bottom-color:#334155 !important; }
+    .email-kv-label { color:#94a3b8 !important; }
+    .email-kv-value { color:#f8fafc !important; }
 
-    .email-callout-box { background: #0f172a !important; border-color: #334155 !important; color: #cbd5e1 !important; }
+    @media only screen and (max-width: 620px) {
+      .email-kv-row td:last-child { border-bottom-color: #334155 !important; }
+    }
 
-    .email-status-success { background: #022c22 !important; border-color: #064e3b !important; color: #6ee7b7 !important; }
-    .email-status-warning { background: #422006 !important; border-color: #713f12 !important; color: #fde047 !important; }
-    .email-status-error { background: #450a0a !important; border-color: #7f1d1d !important; color: #fca5a5 !important; }
-    .email-status-info { background: #172554 !important; border-color: #1e3a8a !important; color: #93c5fd !important; }
+    .email-callout-box { background: #1e293b !important; border-color: #334155 !important; color: #cbd5e1 !important; }
 
+    .email-status-success { background:#052e16 !important; border-color:#064e3b !important; color:#6ee7b7 !important; border-left-color:#10b981 !important; }
+    .email-status-warning { background:#451a03 !important; border-color:#713f12 !important; color:#fde047 !important; border-left-color:#f59e0b !important; }
+    .email-status-error { background:#450a0a !important; border-color:#7f1d1d !important; color:#fca5a5 !important; border-left-color:#ef4444 !important; }
+    .email-status-info { background:#172554 !important; border-color:#1e3a8a !important; color:#93c5fd !important; border-left-color:#3b82f6 !important; }
+
+    .email-checklist-box { background:#1e293b !important; border-color:#334155 !important; }
     .email-checklist-title { color: #f8fafc !important; }
-    .email-checklist-num { background: #334155 !important; color: #f8fafc !important; }
-    .email-checklist-text { color: #e2e8f0 !important; }
+    .email-checklist-num { background: #334155 !important; color: #e2e8f0 !important; }
+    .email-checklist-text { color: #cbd5e1 !important; }
 
     .email-link-fallback { color: #94a3b8 !important; }
+    .email-link-fallback a { color: #a855f7 !important; }
   }
 </style>
 </head>
-<body class="email-canvas" style="margin:0;padding:0;background:#f2f4fa;color:#111936;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+<body class="email-canvas" style="margin:0;padding:0;background:#f1f5f9;color:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${preheader}</div>
-<table role="presentation" class="email-canvas" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;background:#f2f4fa;">
+<table role="presentation" class="email-canvas" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;background:#f1f5f9;">
   <tr>
     <td align="center" style="padding:40px 16px;">
       <table role="presentation" class="email-shell" width="600" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;width:100%;max-width:600px;">
         <tr>
-          <td class="email-card" style="background:#ffffff;border:1px solid #dfe3ef;border-radius:20px;overflow:hidden;box-shadow:0 10px 36px rgba(8,14,41,.08);">
+          <td class="email-card" style="background:#ffffff;border:1px solid #e2e8f0;border-radius:24px;overflow:hidden;box-shadow:0 10px 40px -10px rgba(0,0,0,0.08);">
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
               <tr>
-                  <td class="email-header" bgcolor="#080e29" style="padding:28px 48px;background:#080e29;border-bottom:4px solid #8b2cf5;">
-                    <img src="${escapeHtml(logoDarkUrl)}" width="156" height="40" alt="Kinectem" style="display:block;width:156px;max-width:100%;height:auto;border:0;outline:none;text-decoration:none;font-family:-apple-system,sans-serif;font-size:22px;font-weight:bold;color:#ffffff;" />
+                <td class="email-header" bgcolor="#0b0f19" style="background:#0b0f19;font-size:0;line-height:0;">
+                  <img src="${escapeHtml(bannerUrl)}" width="600" alt="Kinectem" style="display:block;width:100%;max-width:600px;height:auto;border:0;outline:none;text-decoration:none;color:#ffffff;font-family:-apple-system,sans-serif;font-size:24px;font-weight:bold;text-align:center;line-height:80px;background:#0b0f19;" />
                 </td>
               </tr>
             </table>
-            <div class="email-hero" style="padding:34px 48px 36px;background:#080e29;background-image:linear-gradient(120deg,#080e29 0%,#182b8d 58%,#6d28d9 100%);">
+            <div class="email-hero" style="padding:40px 48px 16px;background:#ffffff;">
               ${
                 contextLabel
-                   ? `<div style="margin:0 0 12px;font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#c9b8ff;">${escapeHtml(contextLabel)}</div>`
+                  ? `<div style="margin:0 0 12px;font-size:13px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#8b2cf5;">${escapeHtml(contextLabel)}</div>`
                   : ""
               }
-                <h1 class="email-headline" style="margin:0;color:#ffffff;font-size:32px;line-height:1.2;font-weight:800;letter-spacing:-.02em;">${subject}</h1>
+              <h1 class="email-headline" style="margin:0;color:#0f172a;font-size:30px;line-height:1.25;font-weight:800;letter-spacing:-.02em;">${subject}</h1>
             </div>
-            <div class="email-content" style="padding:36px 48px 44px;background:#ffffff;">
-              <div class="email-body-copy" style="font-size:16px;line-height:1.65;color:#334155;">
+            <div class="email-content" style="padding:16px 48px 48px;background:#ffffff;">
+              <div class="email-body-copy" style="font-size:16px;line-height:1.6;color:#334155;">
                  ${bodyHtml}
               </div>
-              ${footer ? `<div class="email-footer" style="margin:40px 0 0;padding:24px 0 0;border-top:1px solid #e2e8f0;font-size:13px;color:#64748b;line-height:1.6;">${footer}</div>` : ""}
+              ${footer ? `<div class="email-footer" style="margin:48px 0 0;padding:24px 0 0;border-top:1px solid #e2e8f0;font-size:13px;color:#64748b;line-height:1.6;">${footer}</div>` : ""}
             </div>
-              <div class="email-footer-bar" style="padding:26px 48px 30px;background:#080e29;border-top:4px solid #ff2d9a;color:#aeb6d8;font-size:13px;line-height:1.6;text-align:center;">
-               <div style="font-weight:800;color:#ffffff;font-size:14px;margin-bottom:4px;">Kinectem</div>
+            <div class="email-footer-bar" style="padding:32px 48px;background:#f8fafc;border-top:1px solid #e2e8f0;color:#64748b;font-size:13px;line-height:1.6;text-align:center;">
+              <div style="font-weight:700;color:#475569;font-size:14px;margin-bottom:4px;">Kinectem</div>
               <div>Where the story of the season comes to life.</div>
             </div>
           </td>

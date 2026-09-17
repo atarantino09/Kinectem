@@ -75,7 +75,7 @@
 - [Partner logo palette](partner-logo-palette.md) — partner-page colors come from the logo; preserve manual custom colors and use a solid treatment for one-color marks.
 - [Unclaimed organization deletion](unclaimed-org-deletion.md) — lock organization rows before the owner check, and explicitly purge polymorphic records that have no foreign keys.
 - [Branded email boundary](branded-email-boundary.md) — API email branding belongs at final delivery; scripts use the shared shell, while plaintext and compliance copy remain caller-owned.
-- [Email dark-mode branding](email-dark-mode-branding.md) — email headers must swap to the white lockup in dark mode; asset URLs must account for the app's `/app` artifact path.
+- [Email dark-mode branding](email-dark-mode-branding.md) — use the dark-backed banner masthead so logo contrast survives client dark mode; serve it from both root and `/app` artifact paths.
 - [Organization handoff prompt queue](organization-handoff-prompt-queue.md) — one-shot create/claim prompts must be consumed in priority order without deleting later onboarding signals.
 - [Claimed partner club access](claimed-partner-club-access.md) — partner-directory visitors see a safe owner identity once and can request admin access without changing ordinary org visits.
 - [Moderation scope and audit atomicity](moderation-scope-audit.md) — derive scope from persisted targets; destructive moderation and its audit record commit or roll back together.

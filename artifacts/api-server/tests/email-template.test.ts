@@ -5,7 +5,7 @@ import {
 } from "@workspace/email-template";
 
 describe("Kinectem branded email presentation", () => {
-  it("renders the responsive shell, transparent lockup, escaped hierarchy, and CTA", () => {
+  it("renders the responsive shell, branded banner, escaped hierarchy, and CTA", () => {
     const html = renderBrandedEmailHtml({
       subject: `Join <North & South>`,
       contextLabel: `Varsity <Team>`,
@@ -19,11 +19,10 @@ describe("Kinectem branded email presentation", () => {
     expect(html).toContain('alt="Kinectem"');
     expect(html).toContain("email-card");
     expect(html).toContain("email-hero");
-    expect(html).toContain('bgcolor="#080e29"');
-    expect(html).toContain("linear-gradient(120deg");
-    expect(html).toContain("border-top:4px solid #ff2d9a");
+    expect(html).toContain('bgcolor="#0b0f19"');
+    expect(html).toContain("email-header-banner.png");
     expect(html).toContain("email-cta-cell");
-    expect(html).toContain("background:#2553ed");
+    expect(html).toContain("background:#8b2cf5");
     expect(html).toContain("Join &lt;North &amp; South&gt;");
     expect(html).toContain("Varsity &lt;Team&gt;");
     expect(html).toContain("Where the story of the season comes to life.");
@@ -34,7 +33,7 @@ describe("Kinectem branded email presentation", () => {
     expect(html).toContain("@media only screen and (max-width: 620px)");
     expect(html).toContain("@media (prefers-color-scheme: dark)");
     expect(html).toContain(
-      'src="https://kinectem.example/app/logo-horizontal-mono-white-transparent.png"',
+      'src="https://kinectem.example/email-header-banner.png"',
     );
   });
 
