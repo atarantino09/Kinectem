@@ -92,6 +92,9 @@ const SettingsPage = lazy(() => import("@/pages/SettingsPage"));
 const OrgRosterOutreachPage = lazy(
   () => import("@/pages/OrgRosterOutreachPage"),
 );
+const Task1030PreviewPage = lazy(
+  () => import("@/pages/Task1030PreviewPage"),
+);
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -107,6 +110,9 @@ function Router() {
     <Suspense fallback={<PageLoader />}>
       <Switch>
         {/* Fullscreen routes (no layout) */}
+        {import.meta.env.DEV && (
+          <Route path="/preview/task-1030" component={Task1030PreviewPage} />
+        )}
         <Route path="/login" component={LoginPage} />
         <Route path="/reset-password/:token" component={ResetPasswordPage} />
         <Route
