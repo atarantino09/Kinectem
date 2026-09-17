@@ -1355,6 +1355,39 @@ describe("AdminOrganizations bulk import", () => {
     expect(screen.queryByRole("option", { name: "Claimed Club" })).not.toBeInTheDocument();
   });
 
+  it("searches organizations in the directory cleanup list by name", async () => {
+    partnerPages = [
+      {
+        id: "partner-1",
+        slug: "north-stars",
+        officialName: "North Stars",
+        associationLabel: "League / association",
+        published: false,
+        memberCount: 2,
+      },
+    ];
+    partnerDetailMembers = [
+      partnerMember("member-north", "org-north", "Brentwood SC", "import-1", []),
+      partnerMember("member-south", "org-south", "Riverside United", "import-1", []),
+    ];
+    const user = userEvent.setup();
+    renderWithProviders(<AdminOrganizations />);
+    await user.click(await screen.findByTestId("tab-org-partner"));
+    await user.click(await screen.findByRole("button", { name: /North Stars/ }));
+
+    const search = await screen.findByTestId("input-directory-organization-search");
+    await user.type(search, "river");
+
+    expect(screen.getByText("Riverside United")).toBeInTheDocument();
+    expect(screen.queryByText("Brentwood SC")).not.toBeInTheDocument();
+
+    await user.clear(search);
+    await user.type(search, "missing club");
+    expect(screen.getByTestId("empty-directory-organization-search")).toHaveTextContent(
+      "No organizations match",
+    );
+  });
+
   it("sends move and delete team bulk payloads only after delete confirmation", async () => {
     partnerPages = [
       {

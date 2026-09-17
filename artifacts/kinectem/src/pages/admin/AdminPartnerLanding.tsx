@@ -415,6 +415,7 @@ export function AdminPartnerLanding({
   const [bulkTargetOrganizationId, setBulkTargetOrganizationId] = useState("");
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
   const [deleteTeamsDialogOpen, setDeleteTeamsDialogOpen] = useState(false);
+  const [directoryOrganizationSearch, setDirectoryOrganizationSearch] = useState("");
 
   useEffect(() => {
     if (!replacement) return;
@@ -1192,6 +1193,15 @@ export function AdminPartnerLanding({
           !selectedTeamMemberIds.has(member.id),
       )
     : [];
+  const normalizedDirectoryOrganizationSearch =
+    directoryOrganizationSearch.trim().toLocaleLowerCase();
+  const filteredMembers = normalizedDirectoryOrganizationSearch
+    ? members.filter((member) =>
+        member.organization.name
+          .toLocaleLowerCase()
+          .includes(normalizedDirectoryOrganizationSearch),
+      )
+    : members;
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1537,6 +1547,23 @@ export function AdminPartnerLanding({
             <p className="mt-1 text-sm text-muted-foreground">
               Select team pages below to delete them or move them to another ownerless organization on this partner page.
             </p>
+            <div className="relative mt-3">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <Input
+                type="search"
+                className="pl-9"
+                value={directoryOrganizationSearch}
+                onChange={(event) =>
+                  setDirectoryOrganizationSearch(event.target.value)
+                }
+                placeholder="Search organizations by name"
+                aria-label="Search organizations in this directory"
+                data-testid="input-directory-organization-search"
+              />
+            </div>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
               <Button
                 type="button"
@@ -1622,7 +1649,15 @@ export function AdminPartnerLanding({
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-          {members.map((member) => (
+          {filteredMembers.length === 0 && (
+            <div
+              className="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground"
+              data-testid="empty-directory-organization-search"
+            >
+              No organizations match “{directoryOrganizationSearch.trim()}”.
+            </div>
+          )}
+          {filteredMembers.map((member) => (
             <div key={member.id} className="grid gap-3 rounded-lg border p-3 lg:grid-cols-[1fr_300px_auto] lg:items-center">
               <div>
                 <div className="flex flex-wrap items-center gap-2 font-black">{member.organization.name}{member.duplicateName && <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800">Duplicate name</span>}</div>
