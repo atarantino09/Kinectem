@@ -21,13 +21,14 @@ describe("Kinectem branded email presentation", () => {
     );
     expect(html).toContain('alt="Kinectem"');
     expect(html).toContain("email-card");
-    expect(html).toContain("email-body-copy p > a");
+    expect(html).toContain("email-cta-cell");
     expect(html).toContain("Join &lt;North &amp; South&gt;");
     expect(html).toContain("Varsity &lt;Team&gt;");
     expect(html).toContain("Where the story of the season comes to life.");
     expect(html).not.toContain("Youth sports stories, shared safely.");
     expect(html).not.toContain("Join <North & South>");
     expect(html).toContain('href="https://kinectem.example/app/invites/token"');
+    expect(html).toContain('name="color-scheme"');
   });
 
   it("turns text-only messages into escaped, linked HTML", () => {
@@ -40,6 +41,8 @@ describe("Kinectem branded email presentation", () => {
     expect(html).toContain(
       'href="https://kinectem.example/app/admin?claim=1&amp;view=review"',
     );
+    expect(html).toContain("Open in Kinectem");
+    expect(html).toContain("Button not working?");
   });
 
   it("keeps caller-owned compliance content inside the shell", () => {

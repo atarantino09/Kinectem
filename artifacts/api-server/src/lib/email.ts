@@ -16,6 +16,8 @@ import { logger } from "./logger.js";
 import { decryptSecret } from "./secret-crypto.js";
 import type { DispatchBuildContext } from "./notification-email.js";
 import {
+  emailButton,
+  emailChecklist,
   plainTextToHtml,
   renderBrandedEmailHtml,
 } from "@workspace/email-template";
@@ -258,6 +260,7 @@ export function buildOrgClaimApprovedEmail(input: {
   organizationName: string;
 }): EmailMessage {
   const setupUrl = `${appBaseUrl()}/app/organizations/${input.organizationId}?ownerSetup=1`;
+  const organizationNameHtml = escapeHtml(input.organizationName);
   return {
     to: input.to,
     subject: `You're now the owner of ${input.organizationName} on Kinectem`,
@@ -277,6 +280,20 @@ export function buildOrgClaimApprovedEmail(input: {
       "3. Add players and parents through Roster outreach using each team's secure invitation.",
       "",
       "Your organization setup checklist and page tour will remain available on the organization page if you want to return to any step later.",
+    ].join("\n"),
+    html: [
+      `<p>Your organization claim for <strong>${organizationNameHtml}</strong> has been approved.</p>`,
+      `<p>You are now the owner of the <strong>${organizationNameHtml}</strong> page on Kinectem. You can update the page, add teams, invite coaches, and bring players and parents into the right rosters.</p>`,
+      emailButton({
+        href: setupUrl,
+        label: `Finish setting up ${input.organizationName}`,
+      }),
+      emailChecklist([
+        "Review and share the pre-invite message with your club.",
+        "Bulk add coaches across your teams.",
+        "Add players and parents through Roster outreach using each team's secure invitation.",
+      ]),
+      `<p style="color:#65758b;font-size:14px;">Your setup checklist and page tour will remain available on the organization page, so you can return to any step later.</p>`,
     ].join("\n"),
   };
 }
