@@ -44,5 +44,14 @@ describe("PostClaimSetupGuide", () => {
     expect(
       screen.queryByRole("button", { name: "Open roster invitations" }),
     ).not.toBeInTheDocument();
+    const recapMessage = screen.getByTestId("setup-message-game-recaps");
+    expect(recapMessage).toHaveTextContent(
+      "Then, bring your season to life",
+    );
+    expect(recapMessage).toHaveTextContent(
+      "have each coach visit their team page",
+    );
+    expect(recapMessage).toHaveTextContent("AI Assist");
+    expect(recapMessage.tagName).toBe("DIV");
   });
 });

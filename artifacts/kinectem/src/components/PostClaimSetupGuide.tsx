@@ -3,6 +3,8 @@ import {
   ChevronRight,
   Mail,
   Megaphone,
+  Sparkles,
+  Trophy,
   UserPlus,
 } from "lucide-react";
 
@@ -128,6 +130,34 @@ export function PostClaimSetupGuide({
             </li>
           );
         })}
+        <li>
+          <div
+            className="relative flex min-h-32 h-full overflow-hidden rounded-xl border border-violet-200 bg-gradient-to-br from-violet-50 via-white to-blue-50 p-4 shadow-sm dark:border-violet-800 dark:from-violet-950/40 dark:via-card dark:to-blue-950/30"
+            data-testid="setup-message-game-recaps"
+          >
+            <div className="absolute -right-7 -top-7 h-24 w-24 rounded-full bg-violet-200/40 blur-2xl" />
+            <div className="relative flex items-start gap-3">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900 dark:text-violet-200">
+                <Trophy className="h-5 w-5" />
+              </span>
+              <span className="min-w-0">
+                <span className="block font-black">
+                  Then, bring your season to life
+                </span>
+                <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+                  Play your games, then have each coach visit their team page
+                  to create the game recap. Built-in AI Assist turns the
+                  highlights into the story of your season in just a few
+                  minutes.
+                </span>
+                <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-violet-100 px-2.5 py-1 text-[11px] font-black text-violet-700 dark:bg-violet-900 dark:text-violet-200">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  AI Assist · only a few minutes
+                </span>
+              </span>
+            </div>
+          </div>
+        </li>
       </ol>
     </div>
   );
