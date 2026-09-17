@@ -10,6 +10,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { parseOrganizationImportFile } from "@/lib/admin-org-import-file";
 import { extractBrandColorsFromDataUrl } from "@/lib/extractBrandColors";
@@ -65,6 +75,22 @@ type PartnerMember = {
     reason?: string | null;
     summary?: string | null;
   } | null;
+  provenance?: {
+    membershipImportOperationId: string | null;
+    organizationCreatedByImportOperationId: string | null;
+  };
+  teams: Array<{
+    id: string;
+    name: string;
+    organizationId?: string;
+    importOperationId: string | null;
+    provenance?: {
+      teamImportOperationId: string | null;
+      membershipImportOperationId: string | null;
+      organizationCreatedByImportOperationId: string | null;
+    };
+    canDelete?: boolean;
+  }>;
   organization: {
     id: string;
     name: string;
@@ -385,6 +411,10 @@ export function AdminPartnerLanding({
   >({});
   const [savingOrgBrand, setSavingOrgBrand] = useState<string | null>(null);
   const [swapDecisionLoading, setSwapDecisionLoading] = useState<string | null>(null);
+  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
+  const [bulkTargetOrganizationId, setBulkTargetOrganizationId] = useState("");
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
+  const [deleteTeamsDialogOpen, setDeleteTeamsDialogOpen] = useState(false);
 
   useEffect(() => {
     if (!replacement) return;
@@ -842,6 +872,46 @@ export function AdminPartnerLanding({
     await refresh();
   };
 
+  const runTeamBulkAction = async (action: "delete" | "move") => {
+    if (!selectedId || selectedTeamIds.length === 0 || bulkActionLoading) return;
+    if (action === "move" && !bulkTargetOrganizationId) return;
+    setBulkActionLoading(true);
+    try {
+      const response = await customFetch<{
+        data: { deleted: number; moved: number; protected: Array<{ id: string; reason: string }> };
+      }>(`/api/v1/admin/partner-pages/${selectedId}/teams/bulk-action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          teamIds: selectedTeamIds,
+          action,
+          ...(action === "move" ? { targetOrganizationId: bulkTargetOrganizationId } : {}),
+        }),
+      });
+      setSelectedTeamIds([]);
+      setBulkTargetOrganizationId("");
+      if (action === "delete") setDeleteTeamsDialogOpen(false);
+      await refresh();
+      const updatedCount =
+        action === "delete" ? response.data.deleted : response.data.moved;
+      toast({
+        title: action === "delete" ? "Teams deleted" : "Teams moved",
+        description:
+          response.data.protected.length > 0
+            ? `${updatedCount} updated; ${response.data.protected.length} skipped because they are no longer eligible.`
+            : `${updatedCount} team page${updatedCount === 1 ? "" : "s"} updated.`,
+      });
+    } catch (error) {
+      toast({
+        title: `Couldn't ${action} teams`,
+        description: (error as Error).message,
+        variant: "destructive",
+      });
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
   const previewReplacement = async (
     member: PartnerMember,
     candidate: OrganizationCandidate,
@@ -1110,6 +1180,63 @@ export function AdminPartnerLanding({
 
   const members = detail.data?.data.members ?? [];
   const duplicateSwapRequests = detail.data?.data.duplicateSwapRequests ?? [];
+  const selectedTeamMemberIds = new Set(
+    members
+      .filter((member) => (member.teams ?? []).some((team) => selectedTeamIds.includes(team.id)))
+      .map((member) => member.id),
+  );
+  const selectedImportOperationIds = Array.from(
+    new Set(
+      members
+        .filter((member) => selectedTeamMemberIds.has(member.id))
+        .map((member) => member.importOperationId)
+        .filter((operationId): operationId is string => Boolean(operationId)),
+    ),
+  );
+  const selectedTeams = members.flatMap((member) =>
+    (member.teams ?? [])
+      .filter((team) => selectedTeamIds.includes(team.id))
+      .map((team) => ({ member, team })),
+  );
+  const selectedTeamsHaveVerifiedImportProvenance =
+    selectedTeams.length === selectedTeamIds.length &&
+    selectedTeams.length > 0 &&
+    selectedTeams.every(
+      ({ member, team }) =>
+        !!team.importOperationId &&
+        team.importOperationId === member.importOperationId &&
+        team.provenance?.teamImportOperationId === team.importOperationId &&
+        team.provenance?.membershipImportOperationId ===
+          member.importOperationId &&
+        team.provenance?.organizationCreatedByImportOperationId ===
+          member.importOperationId,
+    );
+  const selectedMembersHaveVerifiedImportProvenance = members
+    .filter((member) => selectedTeamMemberIds.has(member.id))
+    .every(
+      (member) =>
+        !!member.importOperationId &&
+        member.provenance?.membershipImportOperationId ===
+          member.importOperationId &&
+        member.provenance?.organizationCreatedByImportOperationId ===
+          member.importOperationId,
+    );
+  const bulkMoveEligible =
+    selectedTeamMemberIds.size > 0 &&
+    selectedImportOperationIds.length === 1 &&
+    selectedTeamsHaveVerifiedImportProvenance &&
+    selectedMembersHaveVerifiedImportProvenance
+      ? members.filter(
+          (member) =>
+            !member.hasOwner &&
+            member.importOperationId === selectedImportOperationIds[0] &&
+            member.provenance?.membershipImportOperationId ===
+              selectedImportOperationIds[0] &&
+            member.provenance?.organizationCreatedByImportOperationId ===
+              selectedImportOperationIds[0] &&
+            !selectedTeamMemberIds.has(member.id),
+        )
+      : [];
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1447,11 +1574,173 @@ export function AdminPartnerLanding({
 
       <Step number={4} title="Review and clean up the directory" done={members.length > 0}>
         <div className="space-y-3">
+          <div className="rounded-lg border border-primary/25 bg-primary/5 p-3" data-testid="team-bulk-actions">
+            <div className="font-bold">Bulk team management</div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Select team pages below to delete them or move them to another ownerless organization from the same upload batch.
+            </p>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+              <Button
+                type="button"
+                size="sm"
+                variant="destructive"
+                disabled={selectedTeamIds.length === 0 || bulkActionLoading}
+                onClick={() => setDeleteTeamsDialogOpen(true)}
+                data-testid="button-delete-selected-teams"
+              >
+                <Trash2 className="mr-1 h-3.5 w-3.5" />
+                Delete selected ({selectedTeamIds.length})
+              </Button>
+              <select
+                className="min-h-9 min-w-0 flex-1 rounded-md border bg-background px-3 py-2 text-sm"
+                value={bulkTargetOrganizationId}
+                onChange={(event) => setBulkTargetOrganizationId(event.target.value)}
+                disabled={selectedTeamIds.length === 0 || bulkMoveEligible.length === 0 || bulkActionLoading}
+                aria-label="Move selected teams to organization"
+                data-testid="select-move-selected-teams-target"
+              >
+                <option value="">
+                  {selectedTeamIds.length === 0
+                    ? "Select teams to move"
+                    : bulkMoveEligible.length === 0
+                      ? "No eligible target organizations"
+                      : "Choose target organization"}
+                </option>
+                {bulkMoveEligible.map((member) => (
+                  <option key={member.organization.id} value={member.organization.id}>
+                    {member.organization.name}
+                  </option>
+                ))}
+              </select>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={!bulkTargetOrganizationId || selectedTeamIds.length === 0 || bulkActionLoading}
+                onClick={() => void runTeamBulkAction("move")}
+                data-testid="button-move-selected-teams"
+              >
+                {bulkActionLoading ? "Working…" : "Move selected"}
+              </Button>
+            </div>
+            {selectedTeamIds.length > 0 &&
+              !selectedTeamsHaveVerifiedImportProvenance && (
+              <p className="mt-2 text-xs text-amber-700" data-testid="team-bulk-move-help">
+                Move is disabled because at least one selected team was not created by the uploaded batch.
+              </p>
+            )}
+            {selectedTeamIds.length > 0 &&
+              selectedTeamsHaveVerifiedImportProvenance &&
+              selectedImportOperationIds.length === 1 &&
+              bulkMoveEligible.length === 0 && (
+              <p className="mt-2 text-xs text-muted-foreground" data-testid="team-bulk-move-help">
+                No other ownerless organizations in this uploaded batch can receive the selected teams.
+              </p>
+            )}
+          </div>
+          <AlertDialog open={deleteTeamsDialogOpen} onOpenChange={setDeleteTeamsDialogOpen}>
+            <AlertDialogContent data-testid="dialog-delete-selected-teams">
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  Permanently delete {selectedTeamIds.length} selected team
+                  {selectedTeamIds.length === 1 ? "" : "s"}?
+                </AlertDialogTitle>
+                <AlertDialogDescription asChild>
+                  <div className="space-y-2">
+                    <p>
+                      This permanent deletion removes the selected team pages and
+                      their rosters, schedules, recaps/highlights, invitations,
+                      followers, and related team data.
+                    </p>
+                    <p className="font-semibold text-destructive">
+                      This action cannot be undone.
+                    </p>
+                  </div>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel data-testid="button-cancel-delete-selected-teams">
+                  Cancel
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  data-testid="button-confirm-delete-selected-teams"
+                  disabled={bulkActionLoading || selectedTeamIds.length === 0}
+                  onClick={() => void runTeamBulkAction("delete")}
+                >
+                  Permanently delete selected teams
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
           {members.map((member) => (
             <div key={member.id} className="grid gap-3 rounded-lg border p-3 lg:grid-cols-[1fr_300px_auto] lg:items-center">
               <div>
                 <div className="flex flex-wrap items-center gap-2 font-black">{member.organization.name}{member.duplicateName && <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800">Duplicate name</span>}</div>
                 <div className="text-xs text-muted-foreground">{member.sourceColumn ?? "No import source"} · {member.teamCount} teams · {member.contentCount} posts · {member.hasOwner ? "Claimed organization" : "Ownerless import"}</div>
+                <div className="mt-3 space-y-1 rounded-md border border-dashed p-2" data-testid={`member-teams-${member.id}`}>
+                  {(member.teams ?? []).length === 0 ? (
+                    <div className="text-xs text-muted-foreground">No team pages in this organization.</div>
+                  ) : (
+                    <>
+                      {!member.hasOwner && member.teams.length > 1 && (
+                        <label className="flex min-h-9 items-center gap-2 rounded border-b px-1 pb-1 text-xs font-bold">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border"
+                            checked={member.teams.every((team) =>
+                              selectedTeamIds.includes(team.id),
+                            )}
+                            onChange={(event) =>
+                              setSelectedTeamIds((current) =>
+                                event.target.checked
+                                  ? Array.from(
+                                      new Set([
+                                        ...current,
+                                        ...member.teams.map((team) => team.id),
+                                      ]),
+                                    )
+                                  : current.filter(
+                                      (id) =>
+                                        !member.teams.some((team) => team.id === id),
+                                    ),
+                              )
+                            }
+                            aria-label={`Select all teams in ${member.organization.name}`}
+                          />
+                          Select all teams
+                        </label>
+                      )}
+                      {(member.teams ?? []).map((team) => (
+                      <label key={team.id} className="flex min-h-9 items-center gap-2 rounded px-1 text-sm hover:bg-muted/50">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border"
+                          checked={selectedTeamIds.includes(team.id)}
+                          disabled={member.hasOwner}
+                          onChange={(event) =>
+                            setSelectedTeamIds((current) =>
+                              event.target.checked
+                                ? current.includes(team.id)
+                                  ? current
+                                  : [...current, team.id]
+                                : current.filter((id) => id !== team.id),
+                            )
+                          }
+                          aria-label={`Select team ${team.name}`}
+                          data-testid={`checkbox-team-${team.id}`}
+                        />
+                        <span>{team.name}</span>
+                        {member.hasOwner && (
+                          <span className="ml-auto text-xs text-muted-foreground">
+                            Claimed
+                          </span>
+                        )}
+                      </label>
+                      ))}
+                    </>
+                  )}
+                </div>
                 {member.protected === true && (
                   <div className="mt-1 text-xs font-semibold text-amber-700">
                     Protected: {protectionLabel(member.protection)}

@@ -1379,6 +1379,16 @@ CREATE INDEX IF NOT EXISTS roster_invites_coach_invite_group_id_idx
 // hint: Logic changed on both sides. Requires understanding intent of each change.
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
+    name: "2026-10-02-team-partner-import-provenance",
+    sql: `
+      ALTER TABLE teams
+        ADD COLUMN IF NOT EXISTS partner_import_created_by_operation_id uuid;
+      CREATE INDEX IF NOT EXISTS teams_partner_import_provenance_idx
+        ON teams (partner_import_created_by_operation_id)
+        WHERE partner_import_created_by_operation_id IS NOT NULL;
+    `,
+  },
+  {
     name: "2026-04-27-task-190-post-shares-polymorphic",
     sql: TASK_190_POST_SHARES_POLYMORPHIC,
   },

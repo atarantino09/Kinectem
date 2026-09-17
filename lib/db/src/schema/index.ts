@@ -743,6 +743,10 @@ export const userPinnedOrgs = pgTable("user_pinned_orgs", {
 
 export const teams = pgTable("teams", {
   id: uuid("id").primaryKey().defaultRandom(),
+  // Immutable provenance for teams created as part of a partner import.
+  // Ordinary teams (including teams added later by an organization owner)
+  // remain NULL and must never be treated as imported directory data.
+  partnerImportCreatedByOperationId: uuid("partner_import_created_by_operation_id"),
   // Task #628 — nullable to support "solo teams" created by visiting coaches
   // through the tournament signup funnel. A solo team has NO organization
   // (`organization_id IS NULL`) and is managed by its `createdById` owner +

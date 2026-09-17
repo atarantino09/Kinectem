@@ -14,3 +14,9 @@ Partner landing preparation may intentionally create a separate staging organiza
 **Why:** Partner organizers need to publish imported club lists before every club has reconciled its Kinectem identity, while established club admins must be able to claim the correct directory slot without an automatic merge changing teams, schedules, ownership, posts, billing, branding, or competition data.
 
 **How to apply:** Keep intentional duplicate creation behind the explicit “create separate organizations” bulk-import override, never implicit. Changing the option requires revalidation. In partner-directory review, platform admins search claimed organizations by name and explicitly preview a directory-only replacement. A later public swap request changes no membership immediately; approval revalidates requester authority and import provenance under locks, then swaps only the partner membership. Competition schedule claiming remains separate.
+
+Moving teams between imported organizations requires immutable provenance on each team itself. Matching organization or directory-membership provenance is not enough because teams can be created later. Revalidate team, source, and target provenance under locks; update denormalized organization-scoped workflow rows, but leave team-scoped records attached through their team ID.
+
+**Why:** Treating every team inside an imported organization as imported can move later user-created data. Blindly rewriting organization IDs on team-scoped records can also violate one-scope-only invariants.
+
+**How to apply:** Allow moves only when the team, source organization membership, source organization, target membership, and target organization all carry the same non-null import operation. Keep ordinary ownerless-team deletion as a separate permission with explicit impact confirmation.

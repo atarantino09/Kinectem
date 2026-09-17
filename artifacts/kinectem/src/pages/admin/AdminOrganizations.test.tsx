@@ -29,6 +29,7 @@ let partnerDetailMembers: Array<Record<string, unknown>> = [];
 let partnerReplacementPreviewBody: Record<string, unknown> | null = null;
 let partnerReplacementBody: Record<string, unknown> | null = null;
 let partnerReplacementKeys: string[] = [];
+let partnerTeamBulkBody: Record<string, unknown> | null = null;
 let partnerPages: Array<Record<string, unknown>> = [];
 let partnerPublished = false;
 let claimLinkRows: Array<Record<string, unknown>> = [];
@@ -49,6 +50,7 @@ beforeEach(() => {
   partnerReplacementPreviewBody = null;
   partnerReplacementBody = null;
   partnerReplacementKeys = [];
+  partnerTeamBulkBody = null;
   partnerPages = [];
   partnerPublished = false;
   claimLinkRows = [];
@@ -256,6 +258,24 @@ beforeEach(() => {
           },
         });
       }
+      if (
+        method === "POST" &&
+        path === "/api/v1/admin/partner-pages/partner-1/teams/bulk-action"
+      ) {
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          action: "delete" | "move";
+          teamIds: string[];
+          targetOrganizationId?: string;
+        };
+        partnerTeamBulkBody = body;
+        return jsonResponse({
+          data: {
+            deleted: body.action === "delete" ? body.teamIds.length : 0,
+            moved: body.action === "move" ? body.teamIds.length : 0,
+            protected: [],
+          },
+        });
+      }
       if (method === "POST" && path === "/api/v1/admin/partner-pages") {
         partnerCreateBody = JSON.parse(String(init?.body ?? "{}"));
         return jsonResponse(
@@ -377,6 +397,59 @@ beforeEach(() => {
 });
 
 describe("AdminOrganizations bulk import", () => {
+  function partnerMember(
+    id: string,
+    organizationId: string,
+    name: string,
+    importOperationId: string | null,
+    teams: Array<{ id: string; name: string }>,
+    hasOwner = false,
+  ) {
+    return {
+      id,
+      visible: true,
+      sourceColumn: name,
+      importOperationId,
+      hasOwner,
+      teamCount: teams.length,
+      contentCount: 0,
+      duplicateName: false,
+      canDeleteStaleImport: !hasOwner,
+      teams: teams.map((team) => ({
+        ...team,
+        organizationId,
+        importOperationId,
+        provenance: {
+          teamImportOperationId: importOperationId,
+          membershipImportOperationId: importOperationId,
+          organizationCreatedByImportOperationId: importOperationId,
+        },
+        canDelete: !hasOwner,
+      })),
+      provenance: {
+        membershipImportOperationId: importOperationId,
+        organizationCreatedByImportOperationId: importOperationId,
+      },
+      organization: {
+        id: organizationId,
+        name,
+        city: null,
+        state: null,
+        location: null,
+        logoUrl: null,
+        brandPrimaryColor: null,
+        brandSecondaryColor: null,
+      },
+    };
+  }
+
+  async function openPartnerDirectory() {
+    const user = userEvent.setup();
+    await user.click(await screen.findByTestId("tab-org-partner"));
+    await user.click(await screen.findByRole("button", { name: /North Stars/ }));
+    return user;
+  }
+
   it("previews, validates, and imports every organization into one list", async () => {
     const user = userEvent.setup();
     renderWithProviders(<AdminOrganizations />);
@@ -1234,6 +1307,157 @@ describe("AdminOrganizations bulk import", () => {
     await user.click(screen.getByTestId("btn-confirm-partner-replacement"));
     expect(await screen.findByTestId("partner-replacement-summary")).toHaveTextContent(
       "One organization replaced.",
+    );
+  });
+
+  it("selects multiple teams and only offers ownerless organizations from the same upload", async () => {
+    partnerPages = [
+      {
+        id: "partner-1",
+        slug: "north-stars",
+        officialName: "North Stars",
+        associationLabel: "League / association",
+        published: false,
+        memberCount: 4,
+      },
+    ];
+    partnerDetailMembers = [
+      partnerMember("member-source", "org-source", "Imported North", "import-1", [
+        { id: "team-1", name: "North U12" },
+        { id: "team-2", name: "North U14" },
+      ]),
+      partnerMember("member-target", "org-target", "Imported South", "import-1", [
+        { id: "team-3", name: "South U12" },
+      ]),
+      partnerMember("member-other-batch", "org-other", "Other Batch", "import-2", [
+        { id: "team-4", name: "Other U12" },
+      ]),
+      partnerMember("member-claimed", "org-claimed", "Claimed Club", "import-1", [
+        { id: "team-5", name: "Claimed U12" },
+      ], true),
+    ];
+    const user = userEvent.setup();
+    renderWithProviders(<AdminOrganizations />);
+    await user.click(await screen.findByTestId("tab-org-partner"));
+    await user.click(await screen.findByRole("button", { name: /North Stars/ }));
+
+    const first = await screen.findByTestId("checkbox-team-team-1");
+    const second = screen.getByTestId("checkbox-team-team-2");
+    expect(first).toBeEnabled();
+    expect(screen.getByTestId("checkbox-team-team-5")).toBeDisabled();
+    await user.click(first);
+    await user.click(second);
+
+    const targetSelect = screen.getByTestId("select-move-selected-teams-target");
+    expect(targetSelect).toBeEnabled();
+    expect(screen.getByRole("option", { name: "Imported South" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Other Batch" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Claimed Club" })).not.toBeInTheDocument();
+  });
+
+  it("sends move and delete team bulk payloads only after delete confirmation", async () => {
+    partnerPages = [
+      {
+        id: "partner-1",
+        slug: "north-stars",
+        officialName: "North Stars",
+        associationLabel: "League / association",
+        published: false,
+        memberCount: 2,
+      },
+    ];
+    partnerDetailMembers = [
+      partnerMember("member-source", "org-source", "Imported North", "import-1", [
+        { id: "team-1", name: "North U12" },
+        { id: "team-2", name: "North U14" },
+      ]),
+      partnerMember("member-target", "org-target", "Imported South", "import-1", []),
+    ];
+    const user = userEvent.setup();
+    renderWithProviders(<AdminOrganizations />);
+    await user.click(await screen.findByTestId("tab-org-partner"));
+    await user.click(await screen.findByRole("button", { name: /North Stars/ }));
+    await user.click(await screen.findByTestId("checkbox-team-team-1"));
+    await user.selectOptions(
+      screen.getByTestId("select-move-selected-teams-target"),
+      "org-target",
+    );
+    await user.click(screen.getByTestId("button-move-selected-teams"));
+
+    await waitFor(() =>
+      expect(partnerTeamBulkBody).toEqual({
+        teamIds: ["team-1"],
+        action: "move",
+        targetOrganizationId: "org-target",
+      }),
+    );
+    expect(screen.getByTestId("checkbox-team-team-1")).not.toBeChecked();
+
+    await user.click(screen.getByTestId("checkbox-team-team-2"));
+    await user.click(screen.getByTestId("button-delete-selected-teams"));
+    const deleteDialog = screen.getByTestId("dialog-delete-selected-teams");
+    expect(deleteDialog).toHaveTextContent(
+      "Permanently delete 1 selected team?",
+    );
+    expect(deleteDialog).toHaveTextContent(
+      "rosters, schedules, recaps/highlights, invitations, followers",
+    );
+    expect(partnerTeamBulkBody).toMatchObject({ action: "move" });
+
+    await user.click(screen.getByTestId("button-cancel-delete-selected-teams"));
+    expect(screen.queryByTestId("dialog-delete-selected-teams")).not.toBeInTheDocument();
+    expect(partnerTeamBulkBody).toMatchObject({ action: "move" });
+    await user.click(screen.getByTestId("button-delete-selected-teams"));
+    await user.click(screen.getByTestId("button-confirm-delete-selected-teams"));
+    await waitFor(() =>
+      expect(partnerTeamBulkBody).toEqual({
+        teamIds: ["team-2"],
+        action: "delete",
+      }),
+    );
+  });
+
+  it("keeps delete available but disables move for a team without uploaded-batch provenance", async () => {
+    partnerPages = [
+      {
+        id: "partner-1",
+        slug: "north-stars",
+        officialName: "North Stars",
+        associationLabel: "League / association",
+        published: false,
+        memberCount: 2,
+      },
+    ];
+    partnerDetailMembers = [
+      partnerMember("member-source", "org-source", "Imported North", "import-1", [
+        { id: "team-unstamped", name: "Legacy U12" },
+      ]),
+      partnerMember("member-target", "org-target", "Imported South", "import-1", []),
+    ];
+    // This team exists on an imported organization, but was not created by
+    // that upload operation.
+    (partnerDetailMembers[0].teams as Array<Record<string, unknown>>)[0] = {
+      id: "team-unstamped",
+      name: "Legacy U12",
+      organizationId: "org-source",
+      importOperationId: null,
+      provenance: {
+        teamImportOperationId: null,
+        membershipImportOperationId: "import-1",
+        organizationCreatedByImportOperationId: "import-1",
+      },
+      canDelete: true,
+    };
+    const user = userEvent.setup();
+    renderWithProviders(<AdminOrganizations />);
+    await user.click(await screen.findByTestId("tab-org-partner"));
+    await user.click(await screen.findByRole("button", { name: /North Stars/ }));
+    await user.click(await screen.findByTestId("checkbox-team-team-unstamped"));
+
+    expect(screen.getByTestId("button-delete-selected-teams")).toBeEnabled();
+    expect(screen.getByTestId("select-move-selected-teams-target")).toBeDisabled();
+    expect(screen.getByTestId("team-bulk-move-help")).toHaveTextContent(
+      "not created by the uploaded batch",
     );
   });
 });

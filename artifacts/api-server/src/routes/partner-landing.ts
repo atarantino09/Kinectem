@@ -19,6 +19,8 @@ import {
   organizationFollowers,
   rosterEntries,
   rosterInvites,
+  organizationRosterOutreach,
+  stagedCoachInvites,
   scheduleEvents,
   scheduleRecurrences,
   teamFollowers,
@@ -325,6 +327,8 @@ async function adminMembers(pageId: string) {
         SELECT 1 FROM organization_admins oa
         WHERE oa.organization_id = ${organizations.id} AND oa.role = 'owner'
       )`,
+      organizationCreatedByImportOperationId:
+        organizations.partnerImportCreatedByOperationId,
       teamCount: sql<number>`(
         SELECT count(*)::int FROM teams t WHERE t.organization_id = ${organizations.id}
       )`,
@@ -350,6 +354,17 @@ async function adminMembers(pageId: string) {
       asc(partnerOrganizationMemberships.createdAt),
     );
   return Promise.all(rows.map(async (row) => {
+    const memberTeams = await db
+      .select({
+        id: teams.id,
+        name: teams.name,
+        organizationId: teams.organizationId,
+        partnerImportCreatedByOperationId:
+          teams.partnerImportCreatedByOperationId,
+      })
+      .from(teams)
+      .where(eq(teams.organizationId, row.organization.id))
+      .orderBy(asc(teams.name), asc(teams.id));
     const duplicateCandidates = (await rankedImportCandidates(pageId, row.organization.name))
       .filter((candidate) => candidate.id !== row.organization.id);
     const cleanup = await db.transaction((tx) =>
@@ -365,6 +380,11 @@ async function adminMembers(pageId: string) {
       createdAt: row.membership.createdAt.toISOString(),
       organization: row.organization,
       hasOwner: row.hasOwner,
+      provenance: {
+        membershipImportOperationId: row.membership.importOperationId,
+        organizationCreatedByImportOperationId:
+          row.organizationCreatedByImportOperationId,
+      },
       teamCount: Number(row.teamCount),
       contentCount: Number(row.contentCount),
       duplicateName: Number(row.duplicateCount) > 1,
@@ -379,6 +399,19 @@ async function adminMembers(pageId: string) {
           : "Keep the organization; remove only its directory membership",
       },
       canDeleteStaleImport: cleanup.safe,
+      teams: memberTeams.map((team) => ({
+        id: team.id,
+        name: team.name,
+        organizationId: team.organizationId,
+        importOperationId: team.partnerImportCreatedByOperationId,
+        provenance: {
+          teamImportOperationId: team.partnerImportCreatedByOperationId,
+          membershipImportOperationId: row.membership.importOperationId,
+          organizationCreatedByImportOperationId:
+            row.organizationCreatedByImportOperationId,
+        },
+        canDelete: !row.hasOwner,
+      })),
     };
   }));
 }
@@ -506,6 +539,216 @@ router.get(
         duplicateSwapRequests: await listDuplicateSwapRequests(page.id),
       },
     });
+  }),
+);
+
+const PartnerTeamsBulkActionBody = z.object({
+  teamIds: z.array(z.string().uuid()).min(1).max(500),
+  action: z.enum(["delete", "move"]),
+  targetOrganizationId: z.string().uuid().optional(),
+});
+
+// Team mutations on this page are deliberately stricter than ordinary team
+// administration.  They are only for the ownerless directory records that
+// platform operators imported, and all rows are locked before eligibility is
+// checked so a claim/import cannot race the operation.
+router.post(
+  "/admin/partner-pages/:pageId/teams/bulk-action",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const pageId = p(req.params.pageId);
+    const parsed = PartnerTeamsBulkActionBody.safeParse(req.body);
+    if (!parsed.success) {
+      apiError(res, 400, parsed.error.issues[0]?.message ?? "Invalid team action");
+      return;
+    }
+    const teamIds = [...new Set(parsed.data.teamIds)];
+    if (parsed.data.action === "move" && !parsed.data.targetOrganizationId) {
+      apiError(res, 400, "targetOrganizationId is required when moving teams");
+      return;
+    }
+    if (parsed.data.action === "delete" && parsed.data.targetOrganizationId) {
+      apiError(res, 400, "targetOrganizationId is only valid when moving teams");
+      return;
+    }
+    if (!(await findPage(pageId))) {
+      apiError(res, 404, "Partner page not found");
+      return;
+    }
+
+    const result = await db.transaction(async (tx) => {
+      await tx.execute(sql`
+        SELECT pg_advisory_xact_lock(hashtext(${"partner-team-bulk:" + pageId}))
+      `);
+      await tx.select({ id: partnerLandingPages.id })
+        .from(partnerLandingPages)
+        .where(eq(partnerLandingPages.id, pageId))
+        .for("update");
+
+      // Lock selected teams in deterministic order, then all participating
+      // organizations in deterministic order.  Missing ids are reported as
+      // skipped rather than making an unsafe best-effort mutation.
+      const lockedTeams = await tx
+        .select({
+          id: teams.id,
+          organizationId: teams.organizationId,
+          partnerImportCreatedByOperationId:
+            teams.partnerImportCreatedByOperationId,
+        })
+        .from(teams)
+        .where(inArray(teams.id, teamIds))
+        .orderBy(asc(teams.id))
+        .for("update");
+      const orgIds = [...new Set(lockedTeams.flatMap((team) =>
+        team.organizationId ? [team.organizationId] : [],
+      ))];
+      if (parsed.data.targetOrganizationId) orgIds.push(parsed.data.targetOrganizationId);
+      const uniqueOrgIds = [...new Set(orgIds)].sort();
+      if (uniqueOrgIds.length) {
+        await tx.select({ id: organizations.id })
+          .from(organizations)
+          .where(inArray(organizations.id, uniqueOrgIds))
+          .orderBy(asc(organizations.id))
+          .for("update");
+        // Lock the complete ownership set as well as the organization row.
+        // The organization row lock serializes inserts through the FK while
+        // these locks serialize role changes/removals.
+        await tx.select({
+          organizationId: organizationAdmins.organizationId,
+          userId: organizationAdmins.userId,
+        })
+          .from(organizationAdmins)
+          .where(inArray(organizationAdmins.organizationId, uniqueOrgIds))
+          .orderBy(
+            asc(organizationAdmins.organizationId),
+            asc(organizationAdmins.userId),
+          )
+          .for("update");
+      }
+
+      const membershipRows = uniqueOrgIds.length
+        ? await tx.select({
+            organizationId: partnerOrganizationMemberships.organizationId,
+            importOperationId: partnerOrganizationMemberships.importOperationId,
+            organizationCreatedByImportOperationId:
+              organizations.partnerImportCreatedByOperationId,
+            ownerCount: sql<number>`(
+              SELECT count(*) FROM organization_admins oa
+              WHERE oa.organization_id = ${organizations.id} AND oa.role = 'owner'
+            )::int`,
+          }).from(partnerOrganizationMemberships)
+          .innerJoin(organizations, eq(organizations.id, partnerOrganizationMemberships.organizationId))
+          .where(and(
+            eq(partnerOrganizationMemberships.partnerPageId, pageId),
+            inArray(partnerOrganizationMemberships.organizationId, uniqueOrgIds),
+          ))
+          .for("update")
+        : [];
+      const membershipByOrg = new Map(membershipRows.map((row) => [row.organizationId, row]));
+      const protectedIds: Array<{ id: string; reason: string }> = [];
+      for (const id of teamIds) {
+        if (!lockedTeams.some((team) => team.id === id))
+          protectedIds.push({ id, reason: "team_not_found" });
+      }
+      const actionable: typeof lockedTeams = [];
+      for (const team of lockedTeams) {
+        if (!team.organizationId) {
+          protectedIds.push({ id: team.id, reason: "team_has_no_organization" });
+          continue;
+        }
+        const source = membershipByOrg.get(team.organizationId);
+        if (!source) {
+          protectedIds.push({ id: team.id, reason: "source_organization_not_on_page" });
+          continue;
+        }
+        if (Number(source.ownerCount) > 0) {
+          protectedIds.push({ id: team.id, reason: "source_organization_claimed" });
+          continue;
+        }
+        if (parsed.data.action === "move") {
+          const target = membershipByOrg.get(parsed.data.targetOrganizationId!);
+          if (!target) {
+            protectedIds.push({ id: team.id, reason: "target_organization_not_on_page" });
+            continue;
+          }
+          if (team.organizationId === parsed.data.targetOrganizationId) {
+            protectedIds.push({ id: team.id, reason: "already_in_target_organization" });
+            continue;
+          }
+          if (Number(target.ownerCount) > 0) {
+            protectedIds.push({ id: team.id, reason: "target_organization_claimed" });
+            continue;
+          }
+          const sameProvenance =
+            !!source.importOperationId &&
+            team.partnerImportCreatedByOperationId === source.importOperationId &&
+            source.importOperationId === source.organizationCreatedByImportOperationId &&
+            target.importOperationId === source.importOperationId &&
+            target.organizationCreatedByImportOperationId === source.importOperationId;
+          if (!sameProvenance) {
+            protectedIds.push({ id: team.id, reason: "organizations_have_different_import_provenance" });
+            continue;
+          }
+        }
+        actionable.push(team);
+      }
+      if (parsed.data.action === "delete") {
+        const deleted = await tx.delete(teams)
+          .where(inArray(teams.id, actionable.map((team) => team.id)))
+          .returning({ id: teams.id });
+        return {
+          requested: teamIds.length,
+          deleted: deleted.length,
+          moved: 0,
+          protected: protectedIds,
+          skippedIds: protectedIds.map((item) => item.id),
+        };
+      }
+      const ids = actionable.map((team) => team.id);
+      if (ids.length) {
+        const targetOutreach = await tx
+          .select({ teamId: organizationRosterOutreach.teamId })
+          .from(organizationRosterOutreach)
+          .where(and(
+            eq(organizationRosterOutreach.organizationId, parsed.data.targetOrganizationId!),
+            inArray(organizationRosterOutreach.teamId, ids),
+          ));
+        if (targetOutreach.length) {
+          const conflicts = new Set(targetOutreach.map((row) => row.teamId));
+          for (const id of conflicts) {
+            protectedIds.push({ id, reason: "target_organization_already_has_team_outreach" });
+          }
+          // Never partially move a team whose composite outreach key would
+          // collide; remove it from this mutation while preserving the
+          // already-computed safe result for the other teams.
+          const safeIds = ids.filter((id) => !conflicts.has(id));
+          ids.splice(0, ids.length, ...safeIds);
+        }
+      }
+      if (ids.length) {
+        await tx.update(teams)
+          .set({ organizationId: parsed.data.targetOrganizationId! })
+          .where(inArray(teams.id, ids));
+        // schedule_events denormalizes organization_id for org-scoped reads.
+        await tx.update(scheduleEvents)
+          .set({ organizationId: parsed.data.targetOrganizationId! })
+          .where(inArray(scheduleEvents.teamId, ids));
+        await tx.update(organizationRosterOutreach)
+          .set({ organizationId: parsed.data.targetOrganizationId! })
+          .where(inArray(organizationRosterOutreach.teamId, ids));
+        await tx.update(stagedCoachInvites)
+          .set({ organizationId: parsed.data.targetOrganizationId! })
+          .where(inArray(stagedCoachInvites.teamId, ids));
+      }
+      return {
+        requested: teamIds.length,
+        deleted: 0,
+        moved: ids.length,
+        protected: protectedIds,
+        skippedIds: protectedIds.map((item) => item.id),
+      };
+    });
+    res.json({ data: result });
   }),
 );
 
@@ -1222,6 +1465,7 @@ router.post(
             await tx.insert(teams).values({
               organizationId,
               name: teamName,
+              partnerImportCreatedByOperationId: operation.id,
             });
           }
         } else {
