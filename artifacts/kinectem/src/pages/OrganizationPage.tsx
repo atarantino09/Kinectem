@@ -67,7 +67,6 @@ import { PersonaPill } from "@/components/PersonaPill";
 import { OrgLogo } from "@/components/OrgLogoFallback";
 import { OrgAdminPanel } from "@/components/OrgAdminPanel";
 import {
-  OrgSetupChecklist,
   RolesPermissionsCard,
 } from "@/components/OrgSetupChecklist";
 import { CreateTeamDialog } from "@/components/CreateTeamDialog";
@@ -100,6 +99,7 @@ import { useWhoami } from "@/hooks/useWhoami";
 import { OrgClaimBanner } from "@/components/ClaimTokenBanner";
 import { OrgPageShareDialog } from "@/components/OrgPageShareDialog";
 import { OrgPreInviteDialog } from "@/components/OrgPreInviteDialog";
+import { PostClaimSetupGuide } from "@/components/PostClaimSetupGuide";
 
 type TeamRailItem = {
   id: string;
@@ -142,6 +142,7 @@ export default function OrganizationPage() {
   const [preInviteOpen, setPreInviteOpen] = useState(false);
   const [preInviteAutomatic, setPreInviteAutomatic] = useState(false);
   const [setupGuideOpen, setSetupGuideOpen] = useState(false);
+  const [setupGuideAutomatic, setSetupGuideAutomatic] = useState(false);
   const [rolesGuideOpen, setRolesGuideOpen] = useState(false);
   const [handoffAdvance, setHandoffAdvance] = useState(0);
   // Task #443 — celebratory popup shown once right after a successful
@@ -174,6 +175,22 @@ export default function OrganizationPage() {
         sessionStorage.removeItem(ownershipKey);
         setOwnershipHandoffOpen(true);
         setManageMembersOpen(true);
+        setFirstRunResolved(false);
+        return;
+      }
+    } catch {
+      // sessionStorage unavailable; continue to the existing prompts.
+    }
+    try {
+      const setupGuideKey = `kinectem:post-claim-setup-guide:${orgId}`;
+      if (sessionStorage.getItem(setupGuideKey) === "1") {
+        sessionStorage.removeItem(setupGuideKey);
+        // The new guide replaces the old automatic pre-invite/coach prompts;
+        // their tools remain available from the guide itself.
+        sessionStorage.removeItem(`kinectem:pre-invite-org:${orgId}`);
+        sessionStorage.removeItem(`kinectem:coach-setup:${orgId}`);
+        setSetupGuideAutomatic(true);
+        setSetupGuideOpen(true);
         setFirstRunResolved(false);
         return;
       }
@@ -324,6 +341,10 @@ export default function OrganizationPage() {
     try {
       sessionStorage.setItem(`kinectem:pre-invite-org:${orgId}`, "1");
       sessionStorage.setItem(`kinectem:coach-setup:${orgId}`, "1");
+      sessionStorage.setItem(
+        `kinectem:post-claim-setup-guide:${orgId}`,
+        "1",
+      );
       // Approval is a new-owner milestone even if this browser previously
       // completed a tour on another organization.
       localStorage.removeItem(ORG_TOUR_KEY);
@@ -844,49 +865,46 @@ export default function OrganizationPage() {
         />
       )}
       {isOrgManager && (
-        <Dialog open={setupGuideOpen} onOpenChange={setSetupGuideOpen}>
+        <Dialog
+          open={setupGuideOpen}
+          onOpenChange={(open) => {
+            setSetupGuideOpen(open);
+            if (!open && setupGuideAutomatic) {
+              setSetupGuideAutomatic(false);
+              setFirstRunResolved(true);
+            }
+          }}
+        >
           <DialogContent
             className="sm:max-w-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto"
             data-testid="dialog-org-setup-guide"
           >
             <DialogHeader>
               <DialogTitle className="font-black tracking-tight">
-                Get your org set up
+                Finish setting up your organization
               </DialogTitle>
               <DialogDescription>
-                Complete the recommended launch steps for your organization.
+                Claiming is complete. Click any unfinished step to go directly
+                to it.
               </DialogDescription>
             </DialogHeader>
-            <OrgSetupChecklist
-              orgId={orgId}
-              showRolesPermissions={false}
-              actions={{
-                onEditLogo: () => {
-                  setSetupGuideOpen(false);
-                  setEditOpen(true);
-                },
-                onCreateTeam: () => {
-                  setSetupGuideOpen(false);
-                  setCreateTeamOpen(true);
-                },
-                onManageMembers: () => {
-                  setSetupGuideOpen(false);
-                  setManageMembersOpen(true);
-                },
-                onPromoteAdmin: () => {
-                  setSetupGuideOpen(false);
-                  setManageMembersOpen(true);
-                },
-                onGoToTeams: () => {
-                  setSetupGuideOpen(false);
-                  const toggle = document.querySelector<HTMLButtonElement>(
-                    '[data-testid="btn-toggle-teams"][aria-expanded="false"]',
-                  );
-                  if (toggle) toggle.click();
-                  document
-                    .querySelector('[data-testid="rail-teams"]')
-                    ?.scrollIntoView({ behavior: "smooth", block: "start" });
-                },
+            <PostClaimSetupGuide
+              organizationName={organization.name}
+              hasTeams={teams.length > 0}
+              onAction={(action) => {
+                setSetupGuideAutomatic(false);
+                setSetupGuideOpen(false);
+                setFirstRunResolved(true);
+                if (action === "preInvite") {
+                  setPreInviteAutomatic(false);
+                  setPreInviteOpen(true);
+                } else if (action === "coaches") {
+                  setBulkCoachesOpen(true);
+                } else if (action === "outreach") {
+                  navigate(`/organizations/${orgId}/roster-outreach`);
+                } else if (action === "roster" && teams[0]) {
+                  navigate(`/teams/${teams[0].id}?inviteRoster=1`);
+                }
               }}
             />
           </DialogContent>

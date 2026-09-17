@@ -3,7 +3,11 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { renderWithProviders } from "@/test";
-import { setMockSearch, wouterMock } from "@/test/mocks/wouter";
+import {
+  getMockLocation,
+  setMockSearch,
+  wouterMock,
+} from "@/test/mocks/wouter";
 import { useToastMock } from "@/test/mocks/toast";
 
 // ---------------------------------------------------------------------------
@@ -33,7 +37,6 @@ vi.mock("@/components/OrgAdminPanel", () => ({
   OrgAdminPanel: () => null,
 }));
 vi.mock("@/components/OrgSetupChecklist", () => ({
-  OrgSetupChecklist: () => <div data-testid="mock-org-setup-checklist" />,
   RolesPermissionsCard: () => <div data-testid="mock-roles-permissions" />,
 }));
 vi.mock("@/components/ManageMembersDialog", () => ({
@@ -353,7 +356,10 @@ describe("OrganizationPage — admin control gating", () => {
 
     await user.click(screen.getByTestId("btn-org-setup-guide"));
     expect(screen.getByTestId("dialog-org-setup-guide")).toBeInTheDocument();
-    expect(screen.getByTestId("mock-org-setup-checklist")).toBeInTheDocument();
+    expect(screen.getByTestId("post-claim-setup-guide")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Open pre-invite message" }),
+    ).toBeInTheDocument();
     expect(
       screen.queryByTestId("card-org-setup-checklist"),
     ).not.toBeInTheDocument();
@@ -481,7 +487,44 @@ describe("OrganizationPage — admin control gating", () => {
     await user.click(
       screen.getByRole("button", { name: "Close member management" }),
     );
-    expect(await screen.findByTestId("dialog-org-pre-invite")).toBeInTheDocument();
+    expect(await screen.findByTestId("dialog-org-setup-guide")).toBeInTheDocument();
+    expect(screen.getByTestId("setup-step-claim-complete")).toHaveTextContent(
+      "Complete",
+    );
+  });
+
+  it("opens the setup guide after a secure claim and routes directly to roster invitations", async () => {
+    const user = userEvent.setup();
+    installHandlers({
+      role: "owner",
+      teams: [{ id: "team-1", name: "U12 Blue" }],
+    });
+    sessionStorage.setItem(`kinectem:ownership-handoff:${ORG_ID}`, "1");
+    sessionStorage.setItem(
+      `kinectem:post-claim-setup-guide:${ORG_ID}`,
+      "1",
+    );
+    sessionStorage.setItem(`kinectem:pre-invite-org:${ORG_ID}`, "1");
+    sessionStorage.setItem(`kinectem:coach-setup:${ORG_ID}`, "1");
+
+    renderWithProviders(<OrganizationPage />);
+    expect(await screen.findByTestId("dialog-manage-members")).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Close member management" }),
+    );
+
+    expect(await screen.findByTestId("dialog-org-setup-guide")).toBeInTheDocument();
+    expect(
+      sessionStorage.getItem(`kinectem:pre-invite-org:${ORG_ID}`),
+    ).toBeNull();
+    expect(
+      sessionStorage.getItem(`kinectem:coach-setup:${ORG_ID}`),
+    ).toBeNull();
+
+    await user.click(
+      screen.getByRole("button", { name: "Open roster invitations" }),
+    );
+    expect(getMockLocation()).toBe("/teams/team-1?inviteRoster=1");
   });
 
   it("lets a manager manually reopen the pre-invite message", async () => {

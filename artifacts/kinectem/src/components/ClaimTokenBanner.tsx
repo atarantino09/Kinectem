@@ -156,6 +156,10 @@ export function OrgClaimBanner({ orgId }: { orgId: string }) {
           `kinectem:ownership-handoff:${res.organizationId}`,
           "1",
         );
+        sessionStorage.setItem(
+          `kinectem:post-claim-setup-guide:${res.organizationId}`,
+          "1",
+        );
       } catch {
         // sessionStorage unavailable — the owner can invite coaches later.
       }

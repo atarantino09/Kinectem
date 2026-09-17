@@ -2022,7 +2022,10 @@ async function notifyOrgClaimDecision(
         decision === "approved"
           ? `Your claim for ${orgName} was approved. You're now the owner of the page.`
           : `Your claim for ${orgName} was declined by a moderator.`,
-      link: `/organizations/${claim.organizationId}`,
+      link:
+        decision === "approved"
+          ? `/organizations/${claim.organizationId}?ownerSetup=1`
+          : `/organizations/${claim.organizationId}`,
       actorUserId: req.realUser!.id,
     });
   } catch (err) {

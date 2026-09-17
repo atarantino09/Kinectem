@@ -90,7 +90,7 @@ export default function TeamPage() {
   // links so a click on the bell lands on the Roster panel (instead of
   // Posts) with the invitee's pending row scrolled into view. A bare
   // `/teams/:id` URL keeps the historical "open Posts" default.
-  const { showRoster, highlightEntryId, wantsWelcome, wantsTour } = useMemo(() => {
+  const { showRoster, highlightEntryId, wantsWelcome, wantsTour, wantsRosterInvite } = useMemo(() => {
     const sp = new URLSearchParams(search ?? "");
     const entryId = sp.get("entryId");
     return {
@@ -98,6 +98,7 @@ export default function TeamPage() {
       highlightEntryId: entryId,
       wantsWelcome: sp.get("welcome") === "1",
       wantsTour: sp.get("showAround") === "1",
+      wantsRosterInvite: sp.get("inviteRoster") === "1",
     };
   }, [search]);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -192,6 +193,15 @@ export default function TeamPage() {
           m.status !== "pending" &&
           COACH_LEVEL_POSITIONS.includes((m.position ?? "").toLowerCase()),
       ));
+
+  useEffect(() => {
+    if (!wantsRosterInvite || !canManage) return;
+    setInviteOpen(true);
+    const sp = new URLSearchParams(search ?? "");
+    sp.delete("inviteRoster");
+    const qs = sp.toString();
+    navigate(`/teams/${teamId}${qs ? `?${qs}` : ""}`, { replace: true });
+  }, [canManage, navigate, search, teamId, wantsRosterInvite]);
 
   // Who can send a team broadcast: same as `canManage` (org admins + coach-
   // level staff) plus the team's accepted `manager`-position staff. Mirrors
