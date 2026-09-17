@@ -178,7 +178,6 @@ export default function OrganizationPage() {
       if (sessionStorage.getItem(ownershipKey) === "1") {
         sessionStorage.removeItem(ownershipKey);
         setOwnershipHandoffOpen(true);
-        setManageMembersOpen(true);
         setFirstRunResolved(false);
         return;
       }
@@ -382,7 +381,6 @@ export default function OrganizationPage() {
     );
     setFirstRunResolved(false);
     setOwnershipHandoffOpen(true);
-    setManageMembersOpen(true);
   }, [
     isManagerRole,
     me?.id,
@@ -833,21 +831,56 @@ export default function OrganizationPage() {
           onOpenChange={setEditOpen}
         />
       )}
+      {isOrgManager && (
+        <Dialog
+          open={ownershipHandoffOpen}
+          onOpenChange={(open) => {
+            setOwnershipHandoffOpen(open);
+            if (!open) setHandoffAdvance((value) => value + 1);
+          }}
+        >
+          <DialogContent
+            className="sm:max-w-lg"
+            data-testid="dialog-owner-approval"
+          >
+            <DialogHeader className="pr-7">
+              <div className="mb-2 grid h-11 w-11 place-items-center rounded-full bg-emerald-100 text-emerald-700">
+                <Shield className="h-5 w-5" />
+              </div>
+              <DialogTitle className="font-black tracking-tight">
+                Your organization claim is approved
+              </DialogTitle>
+              <DialogDescription className="text-sm leading-relaxed">
+                You now manage {formatOrgName(organization.name)}. Because
+                unclaimed organizations do not yet have rostered players or
+                staff, you can delete incorrect teams already listed, edit team
+                names, and create additional teams. Once a team has rostered
+                members, archive it instead of deleting it.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="brand"
+                onClick={() => {
+                  setOwnershipHandoffOpen(false);
+                  setHandoffAdvance((value) => value + 1);
+                }}
+                data-testid="btn-dismiss-owner-approval"
+              >
+                Continue
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
       {me?.id && isOrgManager && (
         <ManageMembersDialog
           open={manageMembersOpen}
-          onOpenChange={(open) => {
-            setManageMembersOpen(open);
-            if (!open && ownershipHandoffOpen) {
-              setOwnershipHandoffOpen(false);
-              setHandoffAdvance((value) => value + 1);
-            }
-          }}
+          onOpenChange={setManageMembersOpen}
           orgId={orgId}
           orgName={organization.name}
           myUserId={me.id}
           myRole={organization.role!}
-          ownershipHandoff={ownershipHandoffOpen}
           onBulkAddCoaches={() => setBulkCoachesOpen(true)}
         />
       )}

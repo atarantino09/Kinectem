@@ -514,31 +514,30 @@ describe("OrganizationPage — admin control gating", () => {
 
     renderWithProviders(<OrganizationPage />);
 
-    expect(await screen.findByTestId("dialog-manage-members")).toBeInTheDocument();
-    expect(screen.getByTestId("ownership-handoff-message")).toHaveTextContent(
-      "You are now the owner of this entire organization",
+    expect(await screen.findByTestId("dialog-owner-approval")).toBeInTheDocument();
+    expect(screen.getByTestId("dialog-owner-approval")).toHaveTextContent(
+      "Your organization claim is approved",
     );
-    expect(screen.getByTestId("ownership-handoff-message")).toHaveTextContent(
+    expect(screen.getByTestId("dialog-owner-approval")).toHaveTextContent(
       "delete incorrect teams already listed",
     );
-    expect(screen.getByTestId("ownership-handoff-message")).toHaveTextContent(
+    expect(screen.getByTestId("dialog-owner-approval")).toHaveTextContent(
       "edit team names",
     );
-    expect(screen.getByTestId("ownership-handoff-message")).toHaveTextContent(
+    expect(screen.getByTestId("dialog-owner-approval")).toHaveTextContent(
       "create additional teams",
     );
-    expect(screen.getByTestId("ownership-handoff-message")).toHaveTextContent(
+    expect(screen.getByTestId("dialog-owner-approval")).toHaveTextContent(
       "archive it instead of deleting it",
     );
+    expect(screen.queryByTestId("team-tour")).not.toBeInTheDocument();
     expect(screen.queryByTestId("dialog-org-pre-invite")).not.toBeInTheDocument();
     expect(localStorage.getItem(ORG_TOUR_STORAGE_KEY)).toBeNull();
     expect(
       sessionStorage.getItem(`kinectem:coach-setup:${ORG_ID}`),
     ).toBe("1");
 
-    await user.click(
-      screen.getByRole("button", { name: "Close member management" }),
-    );
+    await user.click(screen.getByTestId("btn-dismiss-owner-approval"));
     expect(await screen.findByTestId("dialog-org-setup-guide")).toBeInTheDocument();
     expect(screen.getByTestId("setup-step-claim-complete")).toHaveTextContent(
       "Complete",
@@ -560,10 +559,9 @@ describe("OrganizationPage — admin control gating", () => {
     sessionStorage.setItem(`kinectem:coach-setup:${ORG_ID}`, "1");
 
     renderWithProviders(<OrganizationPage />);
-    expect(await screen.findByTestId("dialog-manage-members")).toBeInTheDocument();
-    await user.click(
-      screen.getByRole("button", { name: "Close member management" }),
-    );
+    expect(await screen.findByTestId("dialog-owner-approval")).toBeInTheDocument();
+    expect(screen.queryByTestId("team-tour")).not.toBeInTheDocument();
+    await user.click(screen.getByTestId("btn-dismiss-owner-approval"));
 
     expect(await screen.findByTestId("dialog-org-setup-guide")).toBeInTheDocument();
     expect(
