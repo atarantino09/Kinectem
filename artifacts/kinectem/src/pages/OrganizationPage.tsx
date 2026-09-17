@@ -145,6 +145,8 @@ export default function OrganizationPage() {
   const [preInviteAutomatic, setPreInviteAutomatic] = useState(false);
   const [setupGuideOpen, setSetupGuideOpen] = useState(false);
   const [setupGuideAutomatic, setSetupGuideAutomatic] = useState(false);
+  const [setupGuideReminderVisible, setSetupGuideReminderVisible] =
+    useState(false);
   const [rolesGuideOpen, setRolesGuideOpen] = useState(false);
   const [handoffAdvance, setHandoffAdvance] = useState(0);
   // Task #443 — celebratory popup shown once right after a successful
@@ -191,6 +193,8 @@ export default function OrganizationPage() {
         // their tools remain available from the guide itself.
         sessionStorage.removeItem(`kinectem:pre-invite-org:${orgId}`);
         sessionStorage.removeItem(`kinectem:coach-setup:${orgId}`);
+        localStorage.setItem(`kinectem:org-setup-active:${orgId}`, "1");
+        setSetupGuideReminderVisible(true);
         setSetupGuideAutomatic(true);
         setSetupGuideOpen(true);
         setFirstRunResolved(false);
@@ -250,6 +254,16 @@ export default function OrganizationPage() {
     if (name) setWelcomeOrgName(name);
     setFirstRunResolved(true);
   }, [orgId, handoffAdvance]);
+  useEffect(() => {
+    if (!orgId) return;
+    try {
+      setSetupGuideReminderVisible(
+        localStorage.getItem(`kinectem:org-setup-active:${orgId}`) === "1",
+      );
+    } catch {
+      // Storage can be unavailable in private browsing.
+    }
+  }, [orgId]);
   useEffect(() => {
     if (previewSetupGuide) setSetupGuideOpen(true);
   }, [previewSetupGuide]);
@@ -350,6 +364,8 @@ export default function OrganizationPage() {
         `kinectem:post-claim-setup-guide:${orgId}`,
         "1",
       );
+      localStorage.setItem(`kinectem:org-setup-active:${orgId}`, "1");
+      setSetupGuideReminderVisible(true);
       // Approval is a new-owner milestone even if this browser previously
       // completed a tour on another organization.
       localStorage.removeItem(ORG_TOUR_KEY);
@@ -884,7 +900,7 @@ export default function OrganizationPage() {
             className="sm:max-w-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto"
             data-testid="dialog-org-setup-guide"
           >
-            <DialogHeader>
+            <DialogHeader className="pr-7">
               <DialogTitle className="font-black tracking-tight">
                 Finish setting up your organization
               </DialogTitle>
@@ -934,6 +950,57 @@ export default function OrganizationPage() {
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">
         {/* Main column */}
         <div className="space-y-6 min-w-0">
+          {isOrgManager && !isUnclaimed && setupGuideReminderVisible && (
+            <div
+              className="relative overflow-hidden rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-50 via-white to-violet-50 p-4 shadow-sm dark:border-blue-900/60 dark:from-blue-950/40 dark:via-card dark:to-violet-950/30"
+              data-testid="banner-org-setup-guide"
+            >
+              <div className="absolute -right-10 -top-10 h-28 w-28 rounded-full bg-blue-200/40 blur-3xl dark:bg-blue-900/30" />
+              <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center">
+                <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-blue-100 text-blue-700 ring-1 ring-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:ring-blue-800">
+                  <ListPlus className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-black tracking-tight text-foreground">
+                    Finish setting up {formatOrgName(organization.name)}
+                  </p>
+                  <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                    Send your pre-invite message, add coaches, and invite every
+                    team. Keep this reminder here until your club is ready.
+                  </p>
+                </div>
+                <div className="flex shrink-0 flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="brand"
+                    onClick={() => setSetupGuideOpen(true)}
+                    data-testid="btn-continue-org-setup"
+                  >
+                    Continue setup
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      try {
+                        localStorage.removeItem(
+                          `kinectem:org-setup-active:${orgId}`,
+                        );
+                      } catch {
+                        // The visible state can still be dismissed this session.
+                      }
+                      setSetupGuideReminderVisible(false);
+                    }}
+                    data-testid="btn-finish-org-setup"
+                  >
+                    Mark setup complete
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
           {/* Task #836 — persistent re-entry into coach setup while staged
               coach suggestions remain. Hidden while the dialog itself is
               pending/open to avoid a redundant prompt. */}

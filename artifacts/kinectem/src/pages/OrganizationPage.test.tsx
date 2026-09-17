@@ -460,6 +460,32 @@ describe("OrganizationPage — admin control gating", () => {
     expect(screen.getByTestId("post-claim-setup-guide")).toBeInTheDocument();
   });
 
+  it("keeps the post-claim setup reminder on the org page until the owner marks it complete", async () => {
+    const user = userEvent.setup();
+    installHandlers({ role: "owner" });
+    localStorage.setItem(`kinectem:org-setup-active:${ORG_ID}`, "1");
+
+    renderWithProviders(<OrganizationPage />);
+
+    const reminder = await screen.findByTestId("banner-org-setup-guide");
+    expect(reminder).toHaveTextContent(
+      /Finish setting up Westfield Athletic Club/i,
+    );
+    expect(reminder).toHaveTextContent(
+      "Keep this reminder here until your club is ready.",
+    );
+
+    await user.click(screen.getByTestId("btn-continue-org-setup"));
+    expect(screen.getByTestId("dialog-org-setup-guide")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Close" }));
+
+    await user.click(screen.getByTestId("btn-finish-org-setup"));
+    expect(screen.queryByTestId("banner-org-setup-guide")).not.toBeInTheDocument();
+    expect(
+      localStorage.getItem(`kinectem:org-setup-active:${ORG_ID}`),
+    ).toBeNull();
+  });
+
   it("opens the create/claim pre-invite once, then continues the existing prompt sequence", async () => {
     const user = userEvent.setup();
     installHandlers({ role: "owner", teams: [{ id: "team-1", name: "U12 Blue" }] });
@@ -524,6 +550,9 @@ describe("OrganizationPage — admin control gating", () => {
     );
 
     expect(await screen.findByTestId("dialog-org-setup-guide")).toBeInTheDocument();
+    expect(
+      localStorage.getItem(`kinectem:org-setup-active:${ORG_ID}`),
+    ).toBe("1");
     expect(
       sessionStorage.getItem(`kinectem:pre-invite-org:${ORG_ID}`),
     ).toBeNull();
