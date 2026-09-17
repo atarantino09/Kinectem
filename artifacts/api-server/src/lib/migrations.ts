@@ -1389,6 +1389,34 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
     `,
   },
   {
+    name: "2026-09-17-backfill-historical-team-partner-import-provenance",
+    sql: `
+      UPDATE teams t
+      SET partner_import_created_by_operation_id =
+        o.partner_import_created_by_operation_id
+      FROM organizations o
+      WHERE t.organization_id = o.id
+        AND t.partner_import_created_by_operation_id IS NULL
+        AND o.partner_import_created_by_operation_id IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM organization_admins oa
+          WHERE oa.organization_id = o.id
+            AND oa.role = 'owner'
+        )
+        AND EXISTS (
+          SELECT 1
+          FROM partner_organization_memberships pom
+          WHERE pom.organization_id = o.id
+            AND pom.import_operation_id =
+              o.partner_import_created_by_operation_id
+            AND t.created_at BETWEEN
+              pom.created_at - interval '1 minute'
+              AND pom.created_at + interval '10 minutes'
+        );
+    `,
+  },
+  {
     name: "2026-04-27-task-190-post-shares-polymorphic",
     sql: TASK_190_POST_SHARES_POLYMORPHIC,
   },
