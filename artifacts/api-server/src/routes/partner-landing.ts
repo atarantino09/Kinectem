@@ -592,8 +592,6 @@ router.post(
         .select({
           id: teams.id,
           organizationId: teams.organizationId,
-          partnerImportCreatedByOperationId:
-            teams.partnerImportCreatedByOperationId,
         })
         .from(teams)
         .where(inArray(teams.id, teamIds))
@@ -629,9 +627,6 @@ router.post(
       const membershipRows = uniqueOrgIds.length
         ? await tx.select({
             organizationId: partnerOrganizationMemberships.organizationId,
-            importOperationId: partnerOrganizationMemberships.importOperationId,
-            organizationCreatedByImportOperationId:
-              organizations.partnerImportCreatedByOperationId,
             ownerCount: sql<number>`(
               SELECT count(*) FROM organization_admins oa
               WHERE oa.organization_id = ${organizations.id} AND oa.role = 'owner'
@@ -677,16 +672,6 @@ router.post(
           }
           if (Number(target.ownerCount) > 0) {
             protectedIds.push({ id: team.id, reason: "target_organization_claimed" });
-            continue;
-          }
-          const sameProvenance =
-            !!source.importOperationId &&
-            team.partnerImportCreatedByOperationId === source.importOperationId &&
-            source.importOperationId === source.organizationCreatedByImportOperationId &&
-            target.importOperationId === source.importOperationId &&
-            target.organizationCreatedByImportOperationId === source.importOperationId;
-          if (!sameProvenance) {
-            protectedIds.push({ id: team.id, reason: "organizations_have_different_import_provenance" });
             continue;
           }
         }

@@ -64,7 +64,7 @@ afterEach(async () => {
 });
 
 describe("partner page team bulk actions", () => {
-  it("moves ownerless teams between organizations from the same import", async () => {
+  it("moves ownerless teams between organizations on the partner page", async () => {
     const s = await scenario();
     const { user: admin } = await loginAs((u) => u.role === "admin");
     const [team] = await db.insert(teams).values({
@@ -153,7 +153,7 @@ describe("partner page team bulk actions", () => {
     expect((await db.select().from(teamFollowers).where(eq(teamFollowers.teamId, team.id))).length).toBe(0);
   });
 
-  it("protects teams when ownership changes or import provenance no longer matches", async () => {
+  it("protects claimed organizations but allows cross-batch moves", async () => {
     const s = await scenario();
     const [claimedTeam, mismatchedTeam] = await db.insert(teams).values([
       {
@@ -217,10 +217,14 @@ describe("partner page team bulk actions", () => {
         targetOrganizationId: differentTarget.id,
       });
     expect(provenanceResponse.status, provenanceResponse.text).toBe(200);
-    expect(provenanceResponse.body.data.moved).toBe(0);
-    expect(provenanceResponse.body.data.protected[0]).toMatchObject({
-      id: mismatchedTeam.id,
-      reason: "organizations_have_different_import_provenance",
+    expect(provenanceResponse.body.data).toMatchObject({
+      requested: 1,
+      moved: 1,
+      deleted: 0,
+      protected: [],
     });
+    const [movedTeam] = await db.select({ organizationId: teams.organizationId })
+      .from(teams).where(eq(teams.id, mismatchedTeam.id));
+    expect(movedTeam?.organizationId).toBe(differentTarget.id);
   });
 });

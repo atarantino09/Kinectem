@@ -1185,58 +1185,13 @@ export function AdminPartnerLanding({
       .filter((member) => (member.teams ?? []).some((team) => selectedTeamIds.includes(team.id)))
       .map((member) => member.id),
   );
-  const selectedImportOperationIds = Array.from(
-    new Set(
-      members
-        .filter((member) => selectedTeamMemberIds.has(member.id))
-        .map((member) => member.importOperationId)
-        .filter((operationId): operationId is string => Boolean(operationId)),
-    ),
-  );
-  const selectedTeams = members.flatMap((member) =>
-    (member.teams ?? [])
-      .filter((team) => selectedTeamIds.includes(team.id))
-      .map((team) => ({ member, team })),
-  );
-  const selectedTeamsHaveVerifiedImportProvenance =
-    selectedTeams.length === selectedTeamIds.length &&
-    selectedTeams.length > 0 &&
-    selectedTeams.every(
-      ({ member, team }) =>
-        !!team.importOperationId &&
-        team.importOperationId === member.importOperationId &&
-        team.provenance?.teamImportOperationId === team.importOperationId &&
-        team.provenance?.membershipImportOperationId ===
-          member.importOperationId &&
-        team.provenance?.organizationCreatedByImportOperationId ===
-          member.importOperationId,
-    );
-  const selectedMembersHaveVerifiedImportProvenance = members
-    .filter((member) => selectedTeamMemberIds.has(member.id))
-    .every(
-      (member) =>
-        !!member.importOperationId &&
-        member.provenance?.membershipImportOperationId ===
-          member.importOperationId &&
-        member.provenance?.organizationCreatedByImportOperationId ===
-          member.importOperationId,
-    );
-  const bulkMoveEligible =
-    selectedTeamMemberIds.size > 0 &&
-    selectedImportOperationIds.length === 1 &&
-    selectedTeamsHaveVerifiedImportProvenance &&
-    selectedMembersHaveVerifiedImportProvenance
-      ? members.filter(
-          (member) =>
-            !member.hasOwner &&
-            member.importOperationId === selectedImportOperationIds[0] &&
-            member.provenance?.membershipImportOperationId ===
-              selectedImportOperationIds[0] &&
-            member.provenance?.organizationCreatedByImportOperationId ===
-              selectedImportOperationIds[0] &&
-            !selectedTeamMemberIds.has(member.id),
-        )
-      : [];
+  const bulkMoveEligible = selectedTeamMemberIds.size > 0
+    ? members.filter(
+        (member) =>
+          !member.hasOwner &&
+          !selectedTeamMemberIds.has(member.id),
+      )
+    : [];
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1580,7 +1535,7 @@ export function AdminPartnerLanding({
           >
             <div className="font-bold">Bulk team management</div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Select team pages below to delete them or move them to another ownerless organization from the same upload batch.
+              Select team pages below to delete them or move them to another ownerless organization on this partner page.
             </p>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
               <Button
@@ -1626,18 +1581,9 @@ export function AdminPartnerLanding({
                 {bulkActionLoading ? "Working…" : "Move selected"}
               </Button>
             </div>
-            {selectedTeamIds.length > 0 &&
-              !selectedTeamsHaveVerifiedImportProvenance && (
-              <p className="mt-2 text-xs text-amber-700" data-testid="team-bulk-move-help">
-                Move is disabled because at least one selected team was not created by the uploaded batch.
-              </p>
-            )}
-            {selectedTeamIds.length > 0 &&
-              selectedTeamsHaveVerifiedImportProvenance &&
-              selectedImportOperationIds.length === 1 &&
-              bulkMoveEligible.length === 0 && (
+            {selectedTeamIds.length > 0 && bulkMoveEligible.length === 0 && (
               <p className="mt-2 text-xs text-muted-foreground" data-testid="team-bulk-move-help">
-                No other ownerless organizations in this uploaded batch can receive the selected teams.
+                No other ownerless organizations on this partner page can receive the selected teams.
               </p>
             )}
           </div>

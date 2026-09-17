@@ -1310,7 +1310,7 @@ describe("AdminOrganizations bulk import", () => {
     );
   });
 
-  it("selects multiple teams and only offers ownerless organizations from the same upload", async () => {
+  it("selects multiple teams and offers every ownerless organization on the partner page", async () => {
     partnerPages = [
       {
         id: "partner-1",
@@ -1351,7 +1351,7 @@ describe("AdminOrganizations bulk import", () => {
     const targetSelect = screen.getByTestId("select-move-selected-teams-target");
     expect(targetSelect).toBeEnabled();
     expect(screen.getByRole("option", { name: "Imported South" })).toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: "Other Batch" })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Other Batch" })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "Claimed Club" })).not.toBeInTheDocument();
   });
 
@@ -1417,7 +1417,7 @@ describe("AdminOrganizations bulk import", () => {
     );
   });
 
-  it("keeps delete available but disables move for a team without uploaded-batch provenance", async () => {
+  it("allows a team without upload provenance to move to another ownerless organization", async () => {
     partnerPages = [
       {
         id: "partner-1",
@@ -1455,9 +1455,8 @@ describe("AdminOrganizations bulk import", () => {
     await user.click(await screen.findByTestId("checkbox-team-team-unstamped"));
 
     expect(screen.getByTestId("button-delete-selected-teams")).toBeEnabled();
-    expect(screen.getByTestId("select-move-selected-teams-target")).toBeDisabled();
-    expect(screen.getByTestId("team-bulk-move-help")).toHaveTextContent(
-      "not created by the uploaded batch",
-    );
+    expect(screen.getByTestId("select-move-selected-teams-target")).toBeEnabled();
+    expect(screen.getByRole("option", { name: "Imported South" })).toBeInTheDocument();
+    expect(screen.queryByTestId("team-bulk-move-help")).not.toBeInTheDocument();
   });
 });
