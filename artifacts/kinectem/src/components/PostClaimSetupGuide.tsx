@@ -45,9 +45,9 @@ const STEPS: Array<{
   },
   {
     number: 4,
-    title: "Invite parents & players",
+    title: "Invite every team",
     description:
-      "Open Roster Outreach for ready-to-send messages and unique team signup links. Coaches can share them so parents and players join the correct team roster.",
+      "As club admin, paste each team's ready-made message and unique link into BYGA, PlayMetrics, LeagueApps, or your usual channel. Families join the right roster automatically—under a minute per team.",
     action: "outreach",
     actionLabel: "Open Roster Outreach",
     Icon: Mail,
@@ -148,10 +148,9 @@ export function PostClaimSetupGuide({
                   Then, bring your season to life
                 </span>
                 <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
-                  Play your games, then have each coach visit their team page
-                  to create the game recap. Built-in AI Assist turns the
-                  highlights into the story of your season in just a few
-                  minutes.
+                  After each game, coaches visit their team page and add a few
+                  notes. AI Assist turns them into a polished recap in minutes,
+                  bringing the story of your season to life.
                 </span>
                 <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-violet-100 px-2.5 py-1 text-[11px] font-black text-violet-700 dark:bg-violet-900 dark:text-violet-200">
                   <Sparkles className="h-3.5 w-3.5" />

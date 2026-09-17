@@ -5,7 +5,7 @@ description: Ordering rule for one-shot organization create and claim onboarding
 
 Treat organization create/claim handoff prompts as a queue: after an ownership grant, show owner/member management first with explicit initial-owner guidance. For pre-built organization claims, show the post-claim setup guide next; it replaces the separate automatic pre-invite and coach prompts while keeping both tools available as direct guide actions. Other creation, bulk-team, welcome, and guided-tour prompts continue afterward.
 
-The post-claim guide has four total steps: claimed organization, pre-invite message, bulk coaches, then Roster Outreach. Roster Outreach is the parent/player invitation step; do not add a separate roster-invitation step. Fill the remaining grid position with a non-clickable message telling coaches to create game recaps from team pages with AI Assist after games.
+The post-claim guide has four total steps: claimed organization, pre-invite message, bulk coaches, then Roster Outreach. In step 4, the claiming club admin personally copies each team's message/link into their existing team channel; do not delegate it to coaches or add a separate roster-invitation step. Fill the remaining grid position with a non-clickable message telling coaches to add a few game notes on team pages and create recaps with AI Assist after games; do not imply video highlights are required.
 
 **Why:** Multiple one-shot signals can exist at the same time. Consuming or clearing all signals when the first dialog opens silently drops required onboarding steps, while opening them together stacks dialogs.
 

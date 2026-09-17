@@ -39,9 +39,9 @@ describe("PostClaimSetupGuide", () => {
       />,
     );
 
-    expect(screen.getByText("Invite parents & players")).toBeInTheDocument();
+    expect(screen.getByText("Invite every team")).toBeInTheDocument();
     expect(
-      screen.getByText(/Open Roster Outreach for ready-to-send messages/),
+      screen.getByText(/As club admin, paste each team's ready-made message/),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Open roster invitations" }),
@@ -51,8 +51,10 @@ describe("PostClaimSetupGuide", () => {
       "Then, bring your season to life",
     );
     expect(recapMessage).toHaveTextContent(
-      "have each coach visit their team page",
+      "coaches visit their team page",
     );
+    expect(recapMessage).toHaveTextContent("add a few notes");
+    expect(recapMessage).not.toHaveTextContent("highlights");
     expect(recapMessage).toHaveTextContent("AI Assist");
     expect(recapMessage.tagName).toBe("DIV");
   });
