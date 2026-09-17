@@ -1574,7 +1574,10 @@ export function AdminPartnerLanding({
 
       <Step number={4} title="Review and clean up the directory" done={members.length > 0}>
         <div className="space-y-3">
-          <div className="rounded-lg border border-primary/25 bg-primary/5 p-3" data-testid="team-bulk-actions">
+          <div
+            className="sticky top-20 z-20 rounded-lg border border-primary/25 bg-background/95 p-3 shadow-md backdrop-blur supports-[backdrop-filter]:bg-background/90"
+            data-testid="team-bulk-actions"
+          >
             <div className="font-bold">Bulk team management</div>
             <p className="mt-1 text-sm text-muted-foreground">
               Select team pages below to delete them or move them to another ownerless organization from the same upload batch.
