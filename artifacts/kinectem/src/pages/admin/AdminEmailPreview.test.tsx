@@ -10,14 +10,14 @@ vi.mock("@/components/AdminLayout", () => ({
 }));
 
 describe("AdminEmailPreview", () => {
-  it("renders the live branded staff invite output without a send action", () => {
+  it("renders the default coach invite preview without a send action", () => {
     renderWithProviders(<AdminEmailPreview />);
 
     expect(screen.getByTestId("admin-email-preview")).toBeInTheDocument();
     expect(screen.getByText("Preview only")).toBeInTheDocument();
-    expect(screen.getByText("Coach invite email")).toBeInTheDocument();
+    expect(screen.getByText("Email template preview")).toBeInTheDocument();
 
-    const iframe = screen.getByTitle("Coach invitation email preview");
+    const iframe = screen.getByTitle("Coach invitation preview");
     const html = iframe.getAttribute("srcdoc") ?? "";
     expect(html).toContain(
       "You&#39;re invited to join Varsity Football on Kinectem",
@@ -35,7 +35,35 @@ describe("AdminEmailPreview", () => {
     expect(html).toContain(
       "permanent, searchable archive of the team&#39;s journey",
     );
-    expect(screen.queryByRole("button", { name: /send/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /send/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("switches between different email templates", () => {
+    renderWithProviders(<AdminEmailPreview />);
+
+    // Switch to Partner claim
+    fireEvent.click(screen.getByTestId("button-template-partner_claim"));
+    const iframe2 = screen.getByTitle("Partner claim preview");
+    expect(iframe2.getAttribute("srcdoc")).toContain(
+      "Partner club claim request: West Point",
+    );
+    expect(iframe2.getAttribute("srcdoc")).toContain("Andrew Tarantino");
+
+    // Switch to Owner approval
+    fireEvent.click(screen.getByTestId("button-template-owner_approval"));
+    const iframe3 = screen.getByTitle("Owner approval preview");
+    expect(iframe3.getAttribute("srcdoc")).toContain(
+      "Ownership Request: U14 Lightning",
+    );
+
+    // Switch to Schedule change
+    fireEvent.click(screen.getByTestId("button-template-schedule_change"));
+    const iframe4 = screen.getByTitle("Schedule change preview");
+    expect(iframe4.getAttribute("srcdoc")).toContain(
+      "Schedule Update: Wildcats Game",
+    );
   });
 
   it("switches the framed preview between desktop and mobile widths", () => {
@@ -49,5 +77,23 @@ describe("AdminEmailPreview", () => {
 
     fireEvent.click(screen.getByTestId("button-preview-desktop"));
     expect(stage).toHaveAttribute("data-viewport", "desktop");
+  });
+
+  it("switches the framed preview between light and dark themes", () => {
+    renderWithProviders(<AdminEmailPreview />);
+
+    const stage = screen.getByTestId("email-preview-stage");
+    expect(stage).toHaveAttribute("data-theme", "light");
+
+    fireEvent.click(screen.getByTestId("button-preview-dark"));
+    expect(stage).toHaveAttribute("data-theme", "dark");
+
+    const iframe = screen.getByTitle("Coach invitation preview");
+    const html = iframe.getAttribute("srcdoc") ?? "";
+    expect(html).toContain("@media all");
+    expect(html).not.toContain("@media (prefers-color-scheme: dark)");
+
+    fireEvent.click(screen.getByTestId("button-preview-light"));
+    expect(stage).toHaveAttribute("data-theme", "light");
   });
 });

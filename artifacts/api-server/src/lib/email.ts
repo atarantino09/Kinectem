@@ -18,6 +18,9 @@ import type { DispatchBuildContext } from "./notification-email.js";
 import {
   emailButton,
   emailChecklist,
+  emailKeyValue,
+  emailStatusCallout,
+  emailSummary,
   plainTextToHtml,
   renderBrandedEmailHtml,
 } from "@workspace/email-template";
@@ -282,17 +285,26 @@ export function buildOrgClaimApprovedEmail(input: {
       "Your organization setup checklist and page tour will remain available on the organization page if you want to return to any step later.",
     ].join("\n"),
     html: [
-      `<p>Your organization claim for <strong>${organizationNameHtml}</strong> has been approved.</p>`,
+      emailStatusCallout(
+        "success",
+        `Your organization claim for <strong>${organizationNameHtml}</strong> has been approved.`,
+      ),
+      emailSummary(
+        `You now control the ${input.organizationName} page and its team setup.`,
+      ),
       `<p>You are now the owner of the <strong>${organizationNameHtml}</strong> page on Kinectem. You can update the page, add teams, invite coaches, and bring players and parents into the right rosters.</p>`,
       emailButton({
         href: setupUrl,
         label: `Finish setting up ${input.organizationName}`,
       }),
-      emailChecklist([
-        "Review and share the pre-invite message with your club.",
-        "Bulk add coaches across your teams.",
-        "Add players and parents through Roster outreach using each team's secure invitation.",
-      ]),
+      emailChecklist(
+        [
+          "Review and share the pre-invite message with your club.",
+          "Bulk add coaches across your teams.",
+          "Add players and parents through Roster outreach using each team's secure invitation.",
+        ],
+        "Recommended launch order",
+      ),
       `<p style="color:#65758b;font-size:14px;">Your setup checklist and page tour will remain available on the organization page, so you can return to any step later.</p>`,
     ].join("\n"),
   };
@@ -827,15 +839,10 @@ function buildScheduleReminderBody(ev: ScheduleEmailEvent): {
 } {
   const url = buildScheduleUrl(ev.teamId);
   const team = ev.teamName?.trim() ? ev.teamName.trim() : "your team";
-  const teamHtml = escapeHtml(team);
-  const whatHtml = escapeHtml(ev.whatLabel);
-  const whenHtml = escapeHtml(ev.whenText);
   const locLine = ev.locationName?.trim()
     ? `\nWhere: ${ev.locationName.trim()}`
     : "";
-  const locHtml = ev.locationName?.trim()
-    ? `<p>Where: ${escapeHtml(ev.locationName.trim())}</p>`
-    : "";
+  const locHtml = ev.locationName?.trim() ? ev.locationName.trim() : null;
   return {
     subject: `Reminder: ${ev.whatLabel} — ${ev.whenText}`,
     text: `A quick reminder about an upcoming ${team} event.
@@ -845,12 +852,13 @@ When: ${ev.whenText}${locLine}
 
 See the full schedule:
 ${url}`,
-    html: `<p>A quick reminder about an upcoming <strong>${teamHtml}</strong> event.</p>
-<p>What: ${whatHtml}</p>
-<p>When: ${whenHtml}</p>
-${locHtml}
-<p>See the full schedule:</p>
-<p><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></p>`,
+    html: `${emailSummary(`Upcoming ${team} event`)}
+${emailKeyValue([
+  { label: "What", value: ev.whatLabel },
+  { label: "When", value: ev.whenText },
+  ...(locHtml ? [{ label: "Where", value: locHtml }] : []),
+])}
+${emailButton({ href: url, label: "View full schedule" })}`,
   };
 }
 
@@ -863,20 +871,13 @@ function buildScheduleChangeBody(
 ): { subject: string; text: string; html: string } {
   const url = buildScheduleUrl(ev.teamId);
   const team = ev.teamName?.trim() ? ev.teamName.trim() : "your team";
-  const teamHtml = escapeHtml(team);
-  const whatHtml = escapeHtml(ev.whatLabel);
-  const whenHtml = escapeHtml(ev.whenText);
   const verb = ev.status === "canceled" ? "canceled" : "postponed";
   const locLine = ev.locationName?.trim()
     ? `\nWhere: ${ev.locationName.trim()}`
     : "";
-  const locHtml = ev.locationName?.trim()
-    ? `<p>Where: ${escapeHtml(ev.locationName.trim())}</p>`
-    : "";
+  const locHtml = ev.locationName?.trim() ? ev.locationName.trim() : null;
   const reasonLine = ev.reason?.trim() ? `\n\nReason: ${ev.reason.trim()}` : "";
-  const reasonHtml = ev.reason?.trim()
-    ? `<p><em>Reason: ${escapeHtml(ev.reason.trim())}</em></p>`
-    : "";
+  const reasonHtml = ev.reason?.trim() ? ev.reason.trim() : null;
   return {
     subject: `${ev.status === "canceled" ? "Canceled" : "Postponed"}: ${ev.whatLabel} — ${ev.whenText}`,
     text: `An upcoming ${team} event has been ${verb}.
@@ -886,13 +887,17 @@ When: ${ev.whenText}${locLine}${reasonLine}
 
 See the full schedule:
 ${url}`,
-    html: `<p>An upcoming <strong>${teamHtml}</strong> event has been <strong>${verb}</strong>.</p>
-<p>What: ${whatHtml}</p>
-<p>When: ${whenHtml}</p>
-${locHtml}
-${reasonHtml}
-<p>See the full schedule:</p>
-<p><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></p>`,
+    html: `${emailStatusCallout(
+      ev.status === "canceled" ? "error" : "warning",
+      `This ${escapeHtml(team)} event has been <strong>${verb}</strong>.`,
+    )}
+${emailKeyValue([
+  { label: "What", value: ev.whatLabel },
+  { label: "When", value: ev.whenText },
+  ...(locHtml ? [{ label: "Where", value: locHtml }] : []),
+  ...(reasonHtml ? [{ label: "Reason", value: reasonHtml }] : []),
+])}
+${emailButton({ href: url, label: "View full schedule" })}`,
   };
 }
 
