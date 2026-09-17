@@ -18,6 +18,7 @@ import {
   ArrowLeft,
   Lock,
   ClipboardCheck,
+  Handshake,
 } from "lucide-react";
 import { useWhoami } from "@/hooks/useWhoami";
 import { useEffect } from "react";
@@ -42,6 +43,12 @@ const NAV = [
   { href: "/admin/daily-digest", label: "Daily digest", icon: CalendarClock },
   { href: "/admin/promo-codes", label: "Promo codes", icon: Tag },
   { href: "/admin/organizations", label: "Organizations", icon: Building2 },
+  {
+    href: "/admin/organizations?section=partner",
+    label: "Partner landing page",
+    icon: Handshake,
+    testId: "partner-landing",
+  },
   { href: "/admin/schedule", label: "Schedule", icon: CalendarDays },
   { href: "/admin/tournaments", label: "Tournaments", icon: Trophy },
   { href: "/admin/announcements", label: "Announcements", icon: Megaphone },
@@ -114,13 +121,19 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
           Admin
         </div>
         {NAV.map((item) => {
+          const partnerSectionActive =
+            location.startsWith("/admin/organizations") &&
+            new URLSearchParams(window.location.search).get("section") ===
+              "partner";
           const active =
             item.href === "/admin"
               ? location === "/admin" || location === "/admin/"
               : item.href === "/admin/email"
                 ? location === item.href
+              : item.href === "/admin/organizations?section=partner"
+                ? partnerSectionActive
               : item.href === "/admin/organizations"
-                ? location.startsWith(item.href) ||
+                ? (!partnerSectionActive && location.startsWith(item.href)) ||
                   location === "/admin/org-quick-setup" ||
                   location === "/admin/org-claim-links"
                 : location.startsWith(item.href);
@@ -134,7 +147,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
                   ? "bg-primary text-primary-foreground"
                   : "hover:bg-muted text-foreground"
               }`}
-              data-testid={`admin-nav-${item.href.split("/").pop() || "dashboard"}`}
+              data-testid={`admin-nav-${item.testId ?? item.href.split("/").pop() ?? "dashboard"}`}
             >
               <Icon className="w-4 h-4" /> {item.label}
             </Link>
