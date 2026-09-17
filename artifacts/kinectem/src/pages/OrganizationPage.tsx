@@ -124,6 +124,8 @@ export default function OrganizationPage() {
   const searchParams = new URLSearchParams(search.replace(/^\?/, ""));
   const showAroundQuery = searchParams.get("showAround") === "1";
   const ownerSetupQuery = searchParams.get("ownerSetup") === "1";
+  const previewSetupGuide =
+    import.meta.env.DEV && searchParams.get("previewSetupGuide") === "1";
   const [, navigate] = useLocation();
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -248,6 +250,9 @@ export default function OrganizationPage() {
     if (name) setWelcomeOrgName(name);
     setFirstRunResolved(true);
   }, [orgId, handoffAdvance]);
+  useEffect(() => {
+    if (previewSetupGuide) setSetupGuideOpen(true);
+  }, [previewSetupGuide]);
   const isLg = useIsLg();
   const { data: me } = useGetLoggedInUser();
   const { data: who, isLoading: whoamiLoading } = useWhoami();
@@ -864,7 +869,7 @@ export default function OrganizationPage() {
           }}
         />
       )}
-      {isOrgManager && (
+      {(isOrgManager || previewSetupGuide) && (
         <Dialog
           open={setupGuideOpen}
           onOpenChange={(open) => {

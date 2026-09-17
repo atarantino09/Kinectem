@@ -450,6 +450,16 @@ describe("OrganizationPage — admin control gating", () => {
     expect(screen.queryByTestId("org-guides-actions")).not.toBeInTheDocument();
   });
 
+  it("allows a read-only visual preview of the setup guide in development", async () => {
+    installHandlers({ role: null, teams: [{ id: "team-1", name: "U12 Blue" }] });
+    setMockSearch("previewSetupGuide=1");
+
+    renderWithProviders(<OrganizationPage />);
+
+    expect(await screen.findByTestId("dialog-org-setup-guide")).toBeInTheDocument();
+    expect(screen.getByTestId("post-claim-setup-guide")).toBeInTheDocument();
+  });
+
   it("opens the create/claim pre-invite once, then continues the existing prompt sequence", async () => {
     const user = userEvent.setup();
     installHandlers({ role: "owner", teams: [{ id: "team-1", name: "U12 Blue" }] });
