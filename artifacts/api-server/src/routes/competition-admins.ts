@@ -129,6 +129,16 @@ async function listAdminRows(target: Target) {
     .orderBy(desc(competitionAdmins.createdAt));
 }
 
+async function targetOwnerIsPlatformAdmin(target: Target): Promise<boolean> {
+  if (!target.ownerUserId) return false;
+  const [owner] = await db
+    .select({ role: users.role })
+    .from(users)
+    .where(eq(users.id, target.ownerUserId))
+    .limit(1);
+  return owner?.role === "admin";
+}
+
 async function isExistingAdmin(target: Target, userId: string): Promise<boolean> {
   if (target.kind === "hub") {
     const [row] = await db
@@ -223,8 +233,12 @@ for (const { kind, base } of KINDS) {
         : null;
       res.json({
         data: [
-          ...(ownerRow ? [adminMemberJson(ownerRow, true, null)] : []),
-          ...adminRows.map((r) => adminMemberJson(r.u, false, r.createdAt)),
+          ...(ownerRow && ownerRow.role !== "admin"
+            ? [adminMemberJson(ownerRow, true, null)]
+            : []),
+          ...adminRows
+            .filter((r) => r.u.role !== "admin")
+            .map((r) => adminMemberJson(r.u, false, r.createdAt)),
         ],
         viewerIsOwner: isTargetOwner(me, target),
       });
@@ -408,6 +422,8 @@ for (const { kind, base } of KINDS) {
       }
 
       const rawToken = generateToken();
+      const willBecomeOwner =
+        target.kind === "hub" && (await targetOwnerIsPlatformAdmin(target));
       const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 24 * 3600 * 1000);
       const [invite] = await db
         .insert(competitionAdminInvites)
@@ -431,6 +447,7 @@ for (const { kind, base } of KINDS) {
           targetKind: target.kind,
           inviterDisplayName: displayName(me),
           token: rawToken,
+          willBecomeOwner,
         });
         emailSent = true;
       } catch (err) {
@@ -443,6 +460,7 @@ for (const { kind, base } of KINDS) {
         ...inviteJson(invite, me),
         emailSent,
         acceptUrl: buildCompetitionAdminInviteUrl(rawToken),
+        willBecomeOwner,
       });
     }),
   );
@@ -572,6 +590,8 @@ router.get(
     }
     const target = await inviteTarget(row.i);
     if (!target) return notFound(res);
+    const willBecomeOwner =
+      target.kind === "hub" && (await targetOwnerIsPlatformAdmin(target));
     res.json({
       id: row.i.id,
       status: wireStatus,
@@ -585,6 +605,7 @@ router.get(
       invitedBy: row.inviter
         ? { id: row.inviter.id, displayName: displayName(row.inviter) }
         : null,
+      willBecomeOwner,
     });
   }),
 );
@@ -635,14 +656,65 @@ router.post(
         })
         .where(eq(competitionAdminInvites.id, row.i.id));
 
+    let accessRole: "owner" | "admin" = "admin";
+    if (target.kind === "hub") {
+      const becameOwner = await db.transaction(async (tx) => {
+        const [lockedHub] = await tx
+          .select()
+          .from(competitionOrganizers)
+          .where(eq(competitionOrganizers.id, target.id))
+          .for("update")
+          .limit(1);
+        if (!lockedHub) return false;
+        const [currentOwner] = await tx
+          .select({ role: users.role })
+          .from(users)
+          .where(eq(users.id, lockedHub.ownerUserId))
+          .limit(1);
+        if (currentOwner?.role !== "admin") return false;
+
+        await tx
+          .update(competitionOrganizers)
+          .set({ ownerUserId: me.id, updatedAt: new Date() })
+          .where(eq(competitionOrganizers.id, target.id));
+        await tx
+          .delete(organizerAdmins)
+          .where(
+            and(
+              eq(organizerAdmins.organizerId, target.id),
+              or(
+                eq(organizerAdmins.userId, me.id),
+                eq(organizerAdmins.userId, lockedHub.ownerUserId),
+              ),
+            ),
+          );
+        await tx
+          .update(competitionAdminInvites)
+          .set({
+            status: "accepted",
+            acceptedAt: new Date(),
+            resolvedUserId: me.id,
+            updatedAt: new Date(),
+          })
+          .where(eq(competitionAdminInvites.id, row.i.id));
+        return true;
+      });
+      if (becameOwner) accessRole = "owner";
+    }
+
     // Owner or already an admin — resolve the invite without inserting a
     // duplicate membership row (idempotent accept).
-    if (target.ownerUserId !== me.id && !(await isExistingAdmin(target, me.id))) {
+    if (
+      accessRole !== "owner" &&
+      target.ownerUserId !== me.id &&
+      !(await isExistingAdmin(target, me.id))
+    ) {
       await insertAdmin(target, me.id, row.i.invitedById ?? me.id);
     }
-    await markAccepted();
+    if (accessRole !== "owner") await markAccepted();
     res.json({
       ok: true,
+      accessRole,
       target: {
         kind: target.kind,
         id: target.id,

@@ -215,6 +215,86 @@ describe("competition & hub admins (Task #745)", () => {
     expect(res.body.data[0].userId).toBe(owner.user.id);
   });
 
+  it("hands a platform-owned hub to an invited owner without listing platform admins", async () => {
+    const { admin } = await setup();
+    const platformAdmin = await loginAs("sam@kinectem.demo");
+    const hub = await createHub(platformAdmin.agent, uniq("Hand-off hub"));
+    createdHubs.push(hub.id);
+
+    await db
+      .insert(organizerAdmins)
+      .values({
+        organizerId: hub.id,
+        userId: platformAdmin.user.id,
+        grantedById: platformAdmin.user.id,
+      })
+      .onConflictDoNothing();
+
+    const before = await platformAdmin.agent.get(
+      `/api/v1/organizers/${hub.id}/admins`,
+    );
+    expect(before.status).toBe(200);
+    expect(before.body.viewerIsOwner).toBe(true);
+    expect(
+      before.body.data.some(
+        (row: { userId: string }) => row.userId === platformAdmin.user.id,
+      ),
+    ).toBe(false);
+
+    const invite = await platformAdmin.agent
+      .post(`/api/v1/organizers/${hub.id}/admin-invites`)
+      .send({ email: admin.user.email });
+    expect(invite.status).toBe(201);
+    expect(invite.body.willBecomeOwner).toBe(true);
+    const token = String(invite.body.acceptUrl).split("/admin-invites/")[1];
+
+    const preview = await admin.agent.get(
+      `/api/v1/admin-invites/${token}/preview`,
+    );
+    expect(preview.status).toBe(200);
+    expect(preview.body.willBecomeOwner).toBe(true);
+
+    const accept = await admin.agent.post(
+      `/api/v1/admin-invites/${token}/accept`,
+    );
+    expect(accept.status).toBe(200);
+    expect(accept.body.accessRole).toBe("owner");
+
+    const [savedHub] = await db
+      .select({ ownerUserId: competitionOrganizers.ownerUserId })
+      .from(competitionOrganizers)
+      .where(eq(competitionOrganizers.id, hub.id));
+    expect(savedHub.ownerUserId).toBe(admin.user.id);
+    const memberships = await db
+      .select()
+      .from(organizerAdmins)
+      .where(eq(organizerAdmins.organizerId, hub.id));
+    expect(
+      memberships.some((row) => row.userId === admin.user.id),
+    ).toBe(false);
+    expect(
+      memberships.some((row) => row.userId === platformAdmin.user.id),
+    ).toBe(false);
+
+    const after = await admin.agent.get(`/api/v1/organizers/${hub.id}/admins`);
+    expect(after.status).toBe(200);
+    expect(after.body.data[0]).toMatchObject({
+      userId: admin.user.id,
+      isOwner: true,
+    });
+    expect(
+      after.body.data.some(
+        (row: { userId: string }) => row.userId === platformAdmin.user.id,
+      ),
+    ).toBe(false);
+
+    const supportStillWorks = await platformAdmin.agent.get(
+      `/api/v1/organizers/${hub.id}/admins`,
+    );
+    expect(supportStillWorks.status).toBe(200);
+    expect(supportStillWorks.body.viewerIsOwner).toBe(true);
+  });
+
   it("blocks non-managers from viewing or adding admins", async () => {
     const { owner, admin, outsider } = await setup();
     const comp = await createCompetition(owner.agent, uniq("Comp"));

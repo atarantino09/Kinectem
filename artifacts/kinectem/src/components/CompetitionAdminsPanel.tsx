@@ -237,7 +237,7 @@ export function CompetitionAdminsPanel({
   const description = (
     <p className="text-sm text-muted-foreground">
       {kind === "hub"
-        ? "Admins can manage this hub and every competition in it — including ones added later."
+        ? "The owner manages this hub and every competition in it. Platform admins keep support access but are not shown here."
         : "Admins can manage this competition: schedule, branding, claims, and recap curation."}
     </p>
   );
@@ -361,7 +361,7 @@ export function CompetitionAdminsPanel({
         {/* Invite by email */}
         <div className="space-y-2">
           <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">
-            Or invite by email
+            {kind === "hub" ? "Invite the owner by email" : "Or invite by email"}
           </p>
           <form
             className="flex gap-2"
@@ -405,7 +405,7 @@ export function CompetitionAdminsPanel({
                       {i.invitedEmail}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Pending
+                       Pending{kind === "hub" ? " owner invite" : ""}
                       {i.invitedBy ? ` · invited by ${i.invitedBy.displayName}` : ""}
                     </p>
                   </div>

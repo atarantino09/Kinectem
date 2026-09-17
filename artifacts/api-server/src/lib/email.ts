@@ -405,20 +405,28 @@ export async function sendCompetitionAdminInviteEmail(
     targetKind: "hub" | "competition";
     inviterDisplayName: string;
     token: string;
+    willBecomeOwner?: boolean;
   },
 ): Promise<void> {
-  const { targetName, targetKind, inviterDisplayName, token } = args;
+  const {
+    targetName,
+    targetKind,
+    inviterDisplayName,
+    token,
+    willBecomeOwner = false,
+  } = args;
   const url = buildCompetitionAdminInviteUrl(token);
   const kindLabel = targetKind === "hub" ? "competition hub" : "competition";
   // S5 — escape user-controlled values for the HTML body.
   const nameHtml = escapeHtml(targetName);
   const inviterHtml = escapeHtml(inviterDisplayName);
+  const roleLabel = willBecomeOwner ? "owner" : "admin";
   await sendEmail({
     to,
     kind: "competition_admin_invite",
     contextLabel: targetName,
     subject: `${inviterDisplayName} invited you to help run ${targetName} on Kinectem`,
-    text: `${inviterDisplayName} invited you to be an admin of the ${kindLabel} ${targetName} on Kinectem.
+    text: `${inviterDisplayName} invited you to be the ${roleLabel} of the ${kindLabel} ${targetName} on Kinectem.
 
 ${KINECTEM_INVITE_CONTEXT}
 
@@ -426,7 +434,7 @@ Open this link to accept:
 ${url}
 
 If you don't have a Kinectem account yet, you can sign up from the same link.`,
-    html: `<p><strong>${inviterHtml}</strong> invited you to be an admin of the ${kindLabel} <strong>${nameHtml}</strong> on Kinectem.</p>
+    html: `<p><strong>${inviterHtml}</strong> invited you to be the ${roleLabel} of the ${kindLabel} <strong>${nameHtml}</strong> on Kinectem.</p>
 <p>${escapeHtml(KINECTEM_INVITE_CONTEXT)}</p>
 <p>Open this link to accept:</p>
 <p><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></p>

@@ -26,10 +26,12 @@ interface InvitePreview {
     slug: string;
   };
   invitedBy: { id: string; displayName: string } | null;
+  willBecomeOwner?: boolean;
 }
 
 interface AcceptResponse {
   ok: true;
+  accessRole: "owner" | "admin";
   target: InvitePreview["target"];
 }
 
@@ -59,7 +61,9 @@ export default function AdminInviteAcceptPage() {
         { method: "POST" },
       ),
     onSuccess: (r) => {
-      toast({ title: `You're now an admin of ${r.target.name}` });
+      toast({
+        title: `You're now ${r.accessRole === "owner" ? "the owner" : "an admin"} of ${r.target.name}`,
+      });
       qc.invalidateQueries({ queryKey: ["my", "organizers"] });
       qc.invalidateQueries({ queryKey: ["my", "competitions"] });
       navigate(
@@ -112,6 +116,7 @@ export default function AdminInviteAcceptPage() {
   const TargetIcon = invite.target.kind === "hub" ? Building2 : Trophy;
   const targetLabel =
     invite.target.kind === "hub" ? "Competition hub" : "Competition";
+  const roleLabel = invite.willBecomeOwner ? "Owner" : "Admin";
 
   return (
     <div className="min-h-screen max-w-xl mx-auto p-6 space-y-4">
@@ -136,7 +141,7 @@ export default function AdminInviteAcceptPage() {
                   variant="secondary"
                   className="text-[10px] font-bold gap-1"
                 >
-                  <ShieldCheck className="w-3 h-3" /> Admin
+                  <ShieldCheck className="w-3 h-3" /> {roleLabel}
                 </Badge>
               </div>
             </div>
@@ -149,7 +154,9 @@ export default function AdminInviteAcceptPage() {
           ) : null}
           <p className="text-sm text-muted-foreground">
             {invite.target.kind === "hub"
-              ? "As a hub admin you can manage every competition in this hub — schedules, branding, claims, and recap curation."
+              ? invite.willBecomeOwner
+                ? "As the hub owner, you can manage this hub and every competition in it — including schedules, branding, claims, and recap curation."
+                : "As a hub admin you can manage every competition in this hub — schedules, branding, claims, and recap curation."
               : "As an admin you can manage this competition — schedule, branding, claims, and recap curation."}
           </p>
           {!me ? (
@@ -177,7 +184,7 @@ export default function AdminInviteAcceptPage() {
             >
               {accept.isPending
                 ? "Accepting…"
-                : `Become an admin of ${invite.target.name}`}
+                : `Become ${invite.willBecomeOwner ? "the owner" : "an admin"} of ${invite.target.name}`}
             </Button>
           )}
         </CardContent>
