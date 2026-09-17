@@ -4,39 +4,47 @@ import {
   useGetOrCreateTeamJoinLink,
   useListRosterInvites,
   useArchiveTeam,
+  useDeleteTeam,
   useUnarchiveTeam,
   getListRosterInvitesQueryKey,
   getGetTeamByIdQueryKey,
   getListOrgTeamsQueryKey,
   getListArchivedOrgTeamsQueryKey,
 } from "@workspace/api-client-react";
+import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
-import { Link2, Shield, Copy, Archive } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Link2, Shield, Copy, Archive, Trash2 } from "lucide-react";
 import { timeAgo } from "@/lib/format";
 
 export function TeamAdminPanel({
   teamId,
-  isOwner,
   isArchived,
   organizationId,
+  memberCount,
 }: {
   teamId: string;
-  isOwner: boolean;
   isArchived: boolean;
   organizationId: string;
+  memberCount: number;
 }) {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [linkToken, setLinkToken] = useState<string | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const { data: invitesResp } = useListRosterInvites(teamId);
   const invites = invitesResp?.data ?? [];
@@ -93,7 +101,30 @@ export function TeamAdminPanel({
         toast({ title: "Couldn't unarchive team", variant: "destructive" }),
     },
   });
-  const archivePending = archive.isPending || unarchive.isPending;
+  const deleteTeam = useDeleteTeam({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getListOrgTeamsQueryKey(organizationId) });
+        qc.invalidateQueries({
+          queryKey: getListArchivedOrgTeamsQueryKey(organizationId),
+        });
+        toast({ title: "Team permanently deleted" });
+        setLocation(`/organizations/${organizationId}`);
+      },
+      onError: () => {
+        invalidateAfterArchive();
+        setDeleteDialogOpen(false);
+        toast({
+          title: "This team can’t be deleted",
+          description:
+            "It may now have rostered players or staff. Archive it instead.",
+          variant: "destructive",
+        });
+      },
+    },
+  });
+  const archivePending =
+    archive.isPending || unarchive.isPending || deleteTeam.isPending;
 
   const fullLink = linkToken
     ? `${window.location.origin}${import.meta.env.BASE_URL}invites/${linkToken}`
@@ -118,52 +149,77 @@ export function TeamAdminPanel({
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <h3 className="font-black tracking-tight text-sm flex items-center gap-2">
-                <Archive className="w-3.5 h-3.5" />
-                {isArchived ? "Team Archived" : "Archive Team"}
+                {memberCount === 0 && !isArchived ? (
+                  <Trash2 className="w-3.5 h-3.5" />
+                ) : (
+                  <Archive className="w-3.5 h-3.5" />
+                )}
+                {isArchived
+                  ? "Team Archived"
+                  : memberCount === 0
+                    ? "Delete Empty Team"
+                    : "Archive Team"}
               </h3>
               <p className="text-xs text-muted-foreground mt-1">
                 {isArchived
                   ? "This team is hidden from members and discovery. Unarchive to restore it."
-                  : "Hides the team from members and discovery. Writes are blocked until unarchived."}
+                  : memberCount === 0
+                    ? "This team has no rostered players or staff, so an organization admin can permanently delete it."
+                    : `This team has ${memberCount} rostered ${memberCount === 1 ? "member" : "members"}, so it cannot be deleted. Archive it to hide it from members and discovery.`}
               </p>
             </div>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span>
-                    <Button
-                      variant={isArchived ? "brand" : "outline"}
-                      size="sm"
-                      disabled={!isOwner || archivePending}
-                      onClick={() => {
-                        if (!isOwner) return;
-                        if (isArchived) unarchive.mutate({ teamId });
-                        else archive.mutate({ teamId });
-                      }}
-                      data-testid={
-                        isArchived
-                          ? "button-unarchive-team"
-                          : "button-archive-team"
-                      }
-                    >
-                      {archivePending
-                        ? "Working…"
-                        : isArchived
-                          ? "Unarchive"
-                          : "Archive"}
-                    </Button>
-                  </span>
-                </TooltipTrigger>
-                {!isOwner && (
-                  <TooltipContent>
-                    Only the org owner can archive a team
-                  </TooltipContent>
-                )}
-              </Tooltip>
-            </TooltipProvider>
+            <Button
+              variant={memberCount === 0 && !isArchived ? "destructive" : isArchived ? "brand" : "outline"}
+              size="sm"
+              disabled={archivePending}
+              onClick={() => {
+                if (isArchived) unarchive.mutate({ teamId });
+                else if (memberCount === 0) setDeleteDialogOpen(true);
+                else archive.mutate({ teamId });
+              }}
+              data-testid={
+                isArchived
+                  ? "button-unarchive-team"
+                  : memberCount === 0
+                    ? "button-delete-empty-team"
+                    : "button-archive-team"
+              }
+            >
+              {archivePending
+                ? "Working…"
+                : isArchived
+                  ? "Unarchive"
+                  : memberCount === 0
+                    ? "Delete team"
+                    : "Archive"}
+            </Button>
           </div>
         </CardContent>
       </Card>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent data-testid="dialog-delete-empty-team">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Permanently delete this empty team?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This team has no rostered players or staff. Deleting it permanently
+              removes the team page and any related team data. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete-empty-team">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteTeam.mutate({ teamId })}
+              data-testid="button-confirm-delete-empty-team"
+            >
+              Permanently delete team
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Card className="rounded-xl border border-border">
         <CardContent className="p-4 space-y-3">

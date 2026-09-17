@@ -180,7 +180,6 @@ export default function TeamPage() {
     "admin";
   const isAdmin =
     org?.role === "owner" || org?.role === "admin" || isPlatformAdmin;
-  const isOwner = org?.role === "owner";
   const COACH_LEVEL_POSITIONS = ["coach", "assistant_coach", "admin"];
   const allMembersForGate = (membersResp?.data ?? []) as RosterMember[];
   const canManage =
@@ -595,9 +594,12 @@ export default function TeamPage() {
         {expanded === "admin" && isAdmin && (
           <TeamAdminPanel
             teamId={teamId}
-            isOwner={isOwner}
             isArchived={!!team.archivedAt}
             organizationId={orgRef?.id ?? ""}
+            memberCount={
+              (team as { memberCount?: number }).memberCount ??
+              allMembersForGate.length
+            }
           />
         )}
       </div>

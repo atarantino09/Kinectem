@@ -4505,7 +4505,11 @@ export const UpdateTeamResponse = zod.object({
 });
 
 /**
- * @summary Delete a team
+ * Organization owners and admins may permanently delete a team only
+when it has no rostered players or staff. Teams with roster entries
+must be archived instead.
+
+ * @summary Permanently delete an empty team
  */
 export const DeleteTeamParams = zod.object({
   teamId: zod.coerce.string().uuid(),
@@ -4514,13 +4518,10 @@ export const DeleteTeamParams = zod.object({
 /**
  * Soft-archives a team. Hides it from non-managers on every read and
 discovery surface and blocks new posts, invites, and follows.
-Authorized only for the org owner of the team's organization;
-org admins (non-owners) get a 403 with `code: "owner_only"` so
-the UI can render an inline "Only the org owner can archive a
-team" note. Idempotent — archiving an already-archived team
-returns the current team.
+Authorized for organization owners and admins. Idempotent —
+archiving an already-archived team returns the current team.
 
- * @summary Archive a team (org owner only)
+ * @summary Archive a team
  */
 export const ArchiveTeamParams = zod.object({
   teamId: zod.coerce.string().uuid(),
@@ -4591,11 +4592,10 @@ export const ArchiveTeamResponse = zod.object({
 });
 
 /**
- * Restores an archived team to its previous public state. Same
-owner-only authorization as `/archive` (admins → 403
-`owner_only`). Idempotent.
+ * Restores an archived team to its previous public state. Organization
+owners and admins may use this endpoint. Idempotent.
 
- * @summary Unarchive a team (org owner only)
+ * @summary Unarchive a team
  */
 export const UnarchiveTeamParams = zod.object({
   teamId: zod.coerce.string().uuid(),

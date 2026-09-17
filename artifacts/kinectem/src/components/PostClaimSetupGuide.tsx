@@ -22,7 +22,7 @@ const STEPS: Array<{
     number: 1,
     title: "Claim your organization",
     description:
-      "Ownership is confirmed. You can now manage organization details, teams, coaches, outreach, and member access.",
+      "Ownership is confirmed. Review the teams already listed: you can add new teams, permanently delete mistaken teams that have no rostered players or staff, and archive any team that already has members.",
     Icon: CheckCircle2,
   },
   {

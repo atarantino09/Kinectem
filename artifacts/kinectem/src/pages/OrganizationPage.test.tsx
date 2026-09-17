@@ -53,7 +53,9 @@ vi.mock("@/components/ManageMembersDialog", () => ({
       <div data-testid="dialog-manage-members">
         {ownershipHandoff && (
           <div data-testid="ownership-handoff-message">
-            You are now the owner of this entire organization
+            You are now the owner of this entire organization. You can add any
+            missing teams, permanently delete empty teams created by mistake,
+            and archive teams that already have rostered members.
           </div>
         )}
         <button type="button" onClick={() => onOpenChange(false)}>
@@ -513,6 +515,15 @@ describe("OrganizationPage — admin control gating", () => {
     expect(await screen.findByTestId("dialog-manage-members")).toBeInTheDocument();
     expect(screen.getByTestId("ownership-handoff-message")).toHaveTextContent(
       "You are now the owner of this entire organization",
+    );
+    expect(screen.getByTestId("ownership-handoff-message")).toHaveTextContent(
+      "add any missing teams",
+    );
+    expect(screen.getByTestId("ownership-handoff-message")).toHaveTextContent(
+      "delete empty teams created by mistake",
+    );
+    expect(screen.getByTestId("ownership-handoff-message")).toHaveTextContent(
+      "archive teams that already have rostered members",
     );
     expect(screen.queryByTestId("dialog-org-pre-invite")).not.toBeInTheDocument();
     expect(localStorage.getItem(ORG_TOUR_STORAGE_KEY)).toBeNull();

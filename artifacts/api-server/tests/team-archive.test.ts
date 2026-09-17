@@ -8,6 +8,7 @@ import {
   adminActivityLog,
   db,
   organizationAdmins,
+  teams,
 } from "@workspace/db";
 import { app, loginAs, request } from "./helpers";
 
@@ -47,6 +48,43 @@ async function archiveTeam(teamId: string) {
 }
 
 describe("team archive flow", () => {
+  describe("DELETE /teams/:teamId", () => {
+    it("lets an organization admin permanently delete an empty team", async () => {
+      const org = await getOrg();
+      const [emptyTeam] = await db
+        .insert(teams)
+        .values({
+          organizationId: org.id,
+          name: `Empty mistaken team ${Date.now()}`,
+        })
+        .returning();
+      const { agent } = await loginAs((u) => u.email === "coach@kinectem.demo");
+
+      const res = await agent.delete(`/api/v1/teams/${emptyTeam.id}`);
+
+      expect(res.status).toBe(204);
+      const remaining = await db
+        .select({ id: teams.id })
+        .from(teams)
+        .where(eq(teams.id, emptyTeam.id));
+      expect(remaining).toHaveLength(0);
+    });
+
+    it("refuses permanent deletion when the team has rostered members", async () => {
+      const org = await getOrg();
+      const [target] = await getTeams(org.id);
+      const { agent } = await loginAs((u) => u.email === "coach@kinectem.demo");
+
+      const res = await agent.delete(`/api/v1/teams/${target.id}`);
+
+      expect(res.status).toBe(409);
+      expect(res.body).toMatchObject({
+        code: "team_has_members",
+      });
+      expect(res.body.memberCount).toBeGreaterThan(0);
+    });
+  });
+
   describe("POST /teams/:teamId/archive permissions", () => {
     it("lets the org owner archive and unarchive (idempotent)", async () => {
       const org = await getOrg();
@@ -82,18 +120,17 @@ describe("team archive flow", () => {
       expect(unarchiveRows1.length).toBe(1);
     });
 
-    it("forbids org admins (non-owners) with code: owner_only", async () => {
+    it("lets organization admins archive teams", async () => {
       const org = await getOrg();
       const teamsList = await getTeams(org.id);
       const target = teamsList[0];
       // coachDavis is an org admin (not owner) of Westfield.
       const { agent } = await loginAs((u) => u.email === "coach@kinectem.demo");
       const res = await agent.post(`/api/v1/teams/${target.id}/archive`);
-      expect(res.status).toBe(403);
-      expect(res.body?.code).toBe("owner_only");
+      expect(res.status).toBe(200);
     });
 
-    it("forbids plain org members with code: owner_only", async () => {
+    it("forbids plain organization members", async () => {
       const org = await getOrg();
       const teamsList = await getTeams(org.id);
       const target = teamsList[0];
@@ -103,7 +140,7 @@ describe("team archive flow", () => {
       await addOrgMember(org.id, user.id);
       const res = await agent.post(`/api/v1/teams/${target.id}/archive`);
       expect(res.status).toBe(403);
-      expect(res.body?.code).toBe("owner_only");
+      expect(res.body?.code).toBe("FORBIDDEN");
     });
 
     it("returns 404 to non-members of the org (no existence leak)", async () => {
@@ -141,15 +178,14 @@ describe("team archive flow", () => {
       return target.id;
     }
 
-    it("forbids org admins (non-owners) with code: owner_only", async () => {
+    it("lets organization admins unarchive teams", async () => {
       const teamId = await setupArchivedTeam();
       const { agent } = await loginAs((u) => u.email === "coach@kinectem.demo");
       const res = await agent.post(`/api/v1/teams/${teamId}/unarchive`);
-      expect(res.status).toBe(403);
-      expect(res.body?.code).toBe("owner_only");
+      expect(res.status).toBe(200);
     });
 
-    it("forbids plain org members with code: owner_only", async () => {
+    it("forbids plain organization members", async () => {
       const teamId = await setupArchivedTeam();
       const org = await getOrg();
       const { agent, user } = await loginAs(
@@ -158,7 +194,7 @@ describe("team archive flow", () => {
       await addOrgMember(org.id, user.id);
       const res = await agent.post(`/api/v1/teams/${teamId}/unarchive`);
       expect(res.status).toBe(403);
-      expect(res.body?.code).toBe("owner_only");
+      expect(res.body?.code).toBe("FORBIDDEN");
     });
 
     it("returns 404 to non-members of the org (no existence leak)", async () => {

@@ -405,6 +405,59 @@ router.patch(
   }),
 );
 
+router.delete(
+  "/teams/:teamId",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const teamId = String(req.params.teamId);
+    const [existing] = await db
+      .select()
+      .from(teams)
+      .where(eq(teams.id, teamId))
+      .limit(1);
+    if (!existing) return notFound(res);
+    if (!(await canManageOrganization(me.id, existing.organizationId))) {
+      return notFound(res);
+    }
+
+    const result = await db.transaction(async (tx) => {
+      const [lockedTeam] = await tx
+        .select()
+        .from(teams)
+        .where(eq(teams.id, teamId))
+        .for("update")
+        .limit(1);
+      if (!lockedTeam) return { kind: "not_found" as const };
+
+      const [{ memberCount }] = await tx
+        .select({ memberCount: sql<number>`count(*)::int` })
+        .from(rosterEntries)
+        .where(eq(rosterEntries.teamId, teamId));
+      if (memberCount > 0) {
+        return { kind: "has_members" as const, memberCount };
+      }
+
+      await tx.delete(teams).where(eq(teams.id, teamId));
+      return { kind: "deleted" as const };
+    });
+
+    if (result.kind === "not_found") return notFound(res);
+    if (result.kind === "has_members") {
+      return apiError(
+        res,
+        409,
+        "Teams with rostered players or staff cannot be deleted. Archive this team instead.",
+        {
+          code: "team_has_members",
+          extras: { memberCount: result.memberCount },
+        },
+      );
+    }
+    res.status(204).end();
+  }),
+);
+
 router.get(
   "/teams/:teamId/members",
   asyncHandler(async (req, res) => {
@@ -1617,13 +1670,8 @@ router.get(
 // ---------------------------------------------------------------------------
 // Task #472 — Archive / unarchive a team.
 //
-// Owner-only on purpose: archiving hides the team across the whole product
-// and blocks writes, so it sits at the same level of authority as deleting
-// the team. Org admins can do most other team admin (edit, manage roster,
-// approve recaps) but explicitly NOT this — the UI shows them a disabled
-// button with a "Only the org owner can archive a team" hint, and the
-// server returns the same forbid with `code: "owner_only"` so a hand-rolled
-// request gets the same answer.
+// Organization owners and admins can archive teams. Permanent deletion is
+// separately restricted to teams with no roster rows.
 //
 // Both endpoints are idempotent. Each archive/unarchive transition writes a
 // row to `admin_activity_log` so the org has a paper trail; we insert the
@@ -1635,7 +1683,7 @@ router.get(
 async function loadTeamForArchiveAction(
   req: Request,
   res: Parameters<typeof apiError>[0],
-): Promise<{ team: typeof teams.$inferSelect; ownerId: string } | null> {
+): Promise<{ team: typeof teams.$inferSelect; actorId: string } | null> {
   const me = req.sessionUser;
   if (!me) {
     apiError(res, 401, "Not authenticated");
@@ -1651,15 +1699,12 @@ async function loadTeamForArchiveAction(
     notFound(res);
     return null;
   }
+  if (await canManageOrganization(me.id, t.organizationId)) {
+    return { team: t, actorId: me.id };
+  }
   const role = await getOrgRole(me.id, t.organizationId);
-  if (role === "owner") return { team: t, ownerId: me.id };
-  if (role === "admin" || role === "member") {
-    apiError(
-      res,
-      403,
-      "Only the org owner can archive a team",
-      { code: "owner_only" },
-    );
+  if (role === "member") {
+    apiError(res, 403, "Only organization admins can archive a team");
     return null;
   }
   // Not a member of the org at all → opaque 404 so we don't leak the
@@ -1673,17 +1718,17 @@ router.post(
   asyncHandler(async (req, res) => {
     const ctx = await loadTeamForArchiveAction(req, res);
     if (!ctx) return undefined;
-    const { team, ownerId } = ctx;
+    const { team, actorId } = ctx;
     let updated = team;
     if (!team.archivedAt) {
       const [row] = await db
         .update(teams)
-        .set({ archivedAt: new Date(), archivedByUserId: ownerId })
+        .set({ archivedAt: new Date(), archivedByUserId: actorId })
         .where(eq(teams.id, team.id))
         .returning();
       updated = row ?? team;
       await db.insert(adminActivityLog).values({
-        adminUserId: ownerId,
+        adminUserId: actorId,
         actionType: "archive_team",
         targetType: "team",
         targetId: team.id,
@@ -1697,7 +1742,7 @@ router.post(
           teamId: updated.id,
           organizationId: updated.organizationId,
           teamName: updated.name,
-          actorUserId: ownerId,
+          actorUserId: actorId,
       });
     }
     // Task #628 — solo teams (no org) 403 in loadTeamForArchiveAction, so by
@@ -1724,7 +1769,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const ctx = await loadTeamForArchiveAction(req, res);
     if (!ctx) return undefined;
-    const { team, ownerId } = ctx;
+    const { team, actorId } = ctx;
     let updated = team;
     if (team.archivedAt) {
       const [row] = await db
@@ -1734,7 +1779,7 @@ router.post(
         .returning();
       updated = row ?? team;
       await db.insert(adminActivityLog).values({
-        adminUserId: ownerId,
+        adminUserId: actorId,
         actionType: "unarchive_team",
         targetType: "team",
         targetId: team.id,
@@ -1748,7 +1793,7 @@ router.post(
           teamId: updated.id,
           organizationId: updated.organizationId,
           teamName: updated.name,
-          actorUserId: ownerId,
+          actorUserId: actorId,
       });
     }
     // Task #628 — solo teams 403 earlier; guard keeps the nullable type honest.

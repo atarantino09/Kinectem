@@ -357,7 +357,10 @@ export function ManageMembersDialog({
                     the club&apos;s long-term owner, invite the actual owner,
                     director, board members, or other trusted administrators
                     now. After the right person joins, you can transfer
-                    ownership to them from this window.
+                    ownership to them from this window. You can also review the
+                    existing team pages, add any missing teams, permanently
+                    delete empty teams created by mistake, and archive teams
+                    that already have rostered members.
                   </p>
                 </div>
               </div>

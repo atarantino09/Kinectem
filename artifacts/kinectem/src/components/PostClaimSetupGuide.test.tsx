@@ -18,6 +18,15 @@ describe("PostClaimSetupGuide", () => {
     expect(screen.getByTestId("setup-step-claim-complete")).toHaveTextContent(
       "Complete",
     );
+    expect(screen.getByTestId("setup-step-claim-complete")).toHaveTextContent(
+      "add new teams",
+    );
+    expect(screen.getByTestId("setup-step-claim-complete")).toHaveTextContent(
+      "delete mistaken teams",
+    );
+    expect(screen.getByTestId("setup-step-claim-complete")).toHaveTextContent(
+      "archive any team that already has members",
+    );
 
     const actions = [
       ["Open pre-invite message", "preInvite"],
