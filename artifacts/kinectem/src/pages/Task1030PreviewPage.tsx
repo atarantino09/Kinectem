@@ -35,7 +35,7 @@ export default function Task1030PreviewPage() {
           className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl"
           data-testid="dialog-task-1030-preview"
         >
-          <DialogHeader>
+          <DialogHeader className="pr-7">
             <DialogTitle className="font-black tracking-tight">
               Finish setting up your organization
             </DialogTitle>

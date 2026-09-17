@@ -800,7 +800,7 @@ export default function OrganizationPage() {
             className="sm:max-w-lg max-h-[85vh] overflow-y-auto"
             data-testid="dialog-admin-queue"
           >
-            <DialogHeader>
+            <DialogHeader className="pr-7">
               <DialogTitle className="flex items-center gap-2 font-black tracking-tight">
                 <Shield className="w-4 h-4 text-primary" />
                 Admin Queue
