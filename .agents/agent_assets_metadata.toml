@@ -287,3 +287,17 @@ mtime_ms = 1789394360970
 storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:59b3789f-cce8-49cf-88a3-887151719960/2da10e65-bcdf-41e6-97b5-ab69dbbb0fb3/f4c5dcf9-bae4-4ef4-a20f-4f373e47c912"
 storage_version_token = "1789394832770876"
 content_type = "image/png"
+
+[[outputs]]
+id = "b7DPPrpWu8WH0cZMZmRUi"
+uri = "file://screenshots/team-cleanup-preview.html"
+type = "text"
+title = "Team Cleanup — Complete Preview"
+description = "Clickable visual review of empty-team deletion, rostered-team archiving, post-claim setup guidance, and ownership-handoff messaging."
+logical_id = "d948bc67-a941-4987-8823-f1737ebc7f39"
+content_hash = "sha256:e6b251e5ef1f14a975fa978f2896cda424129f16ef38cd262ca00a0b6b0e0b27"
+size = 7168
+mtime_ms = 1789672400361
+storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:59b3789f-cce8-49cf-88a3-887151719960/d948bc67-a941-4987-8823-f1737ebc7f39/3615f844-0063-4607-8014-016944c190ff"
+storage_version_token = "1789672405043498"
+content_type = "text/html"

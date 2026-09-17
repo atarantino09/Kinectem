@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Kinectem team cleanup preview</title>
+  <style>
+    *{box-sizing:border-box} body{margin:0;background:#f7f7fb;color:#171322;font:14px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    header{height:68px;background:#fff;border-bottom:1px solid #e7e5ed;display:flex;align-items:center;padding:0 32px;gap:13px;position:sticky;top:0;z-index:2}
+    .mark{font-size:35px;font-style:italic;font-weight:900;color:#6937eb;letter-spacing:-6px}.brand{font-size:23px;font-weight:850}
+    main{max-width:1180px;margin:0 auto;padding:42px 24px 70px}.eyebrow{font-size:12px;font-weight:850;color:#7543e9;text-transform:uppercase;letter-spacing:.12em}
+    h1{font-size:38px;line-height:1.05;margin:8px 0 12px;letter-spacing:-.035em}.lede{color:#696272;font-size:16px;margin:0 0 30px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:22px}.panel{background:#fff;border:1px solid #e2dfe8;border-radius:18px;padding:22px;box-shadow:0 8px 30px rgba(32,21,58,.06)}
+    .wide{grid-column:1/-1}.label{display:flex;align-items:center;gap:9px;font-size:18px;font-weight:850;margin-bottom:16px}.shield{color:#7543e9}.card{border:1px solid #e4e1e9;border-radius:13px;padding:17px}
+    .row{display:flex;justify-content:space-between;align-items:center;gap:20px}.title{font-weight:850;font-size:14px}.desc{color:#6b6472;font-size:12px;margin:4px 0 0;max-width:560px}
+    button{border:0;border-radius:8px;padding:10px 15px;font-weight:750;white-space:nowrap}.danger{background:#df3038;color:white}.outline{background:white;border:1px solid #ded9e6;color:#28222f}
+    .modal{margin-top:18px;border:1px solid #ddd8e5;border-radius:15px;padding:22px;background:#fff;box-shadow:0 15px 42px rgba(26,17,44,.13)}.modal h2{font-size:18px;margin:0 0 7px}.modal p{color:#706879;margin:0 0 20px}.actions{display:flex;justify-content:flex-end;gap:9px}
+    .banner{background:linear-gradient(100deg,#f1ebff,#fbf9ff);border:1px solid #ded0ff;border-radius:16px;padding:18px;display:flex;gap:13px}.spark{width:42px;height:42px;border-radius:50%;background:#e8ddff;color:#6937eb;display:grid;place-items:center;font-size:20px}.banner h2{font-size:16px;margin:0}.banner p{margin:4px 0 0;color:#6b6472;font-size:12px}
+    .complete{margin-top:13px;border:1px solid #b9e8cb;border-radius:16px;padding:17px;background:linear-gradient(100deg,#edfff3,#f8fffa);display:flex;gap:13px}.check{width:40px;height:40px;border-radius:50%;background:#d4f7df;color:#168a48;display:grid;place-items:center;font-weight:900}.complete h3{margin:0;color:#164e2d}.pill{font-size:10px;background:#c9f1d6;color:#176b3b;border-radius:30px;padding:3px 8px;margin-left:8px;text-transform:uppercase;letter-spacing:.08em}.complete p{margin:4px 0 0;color:#34714d;font-size:13px}
+    .handoff{border:1px solid #f1bf57;background:#fff8df;border-radius:13px;padding:17px;display:flex;gap:12px}.crown{color:#cc8500;font-size:22px}.handoff h3{margin:0 0 5px}.handoff p{margin:0;color:#654b19}
+    .note{font-size:12px;color:#81798a;margin-top:12px}.tabs{display:flex;gap:7px;margin-bottom:18px}.tab{font-weight:750;color:#6e6678;background:#eeeaf4;border-radius:30px;padding:7px 11px}.tab.on{color:#fff;background:#7543e9}
+    @media(max-width:760px){.grid{grid-template-columns:1fr}.wide{grid-column:auto}.row{align-items:flex-start;flex-direction:column}.row button{width:100%}h1{font-size:31px}}
+  </style>
+</head>
+<body>
+  <header><span class="mark">K</span><span class="brand">Kinectem</span></header>
+  <main>
+    <div class="eyebrow">Last task · complete visual review</div>
+    <h1>Safe team cleanup after an organization claim</h1>
+    <p class="lede">These are the four admin-facing states added or updated in the running product.</p>
+    <div class="grid">
+      <section class="panel">
+        <div class="tabs"><span class="tab on">Empty team</span><span class="tab">Admin Tools</span></div>
+        <div class="label"><span class="shield">◆</span> Admin Tools</div>
+        <div class="card">
+          <div class="row">
+            <div><div class="title">▣ &nbsp; Delete Empty Team</div><p class="desc">This team has no rostered players or staff, so an organization admin can permanently delete it.</p></div>
+            <button class="danger">Delete team</button>
+          </div>
+        </div>
+        <div class="modal">
+          <h2>Permanently delete this empty team?</h2>
+          <p>This team has no rostered players or staff. Deleting it permanently removes the team page and any related team data. This cannot be undone.</p>
+          <div class="actions"><button class="outline">Cancel</button><button class="danger">Permanently delete team</button></div>
+        </div>
+      </section>
+      <section class="panel">
+        <div class="tabs"><span class="tab on">Rostered team</span><span class="tab">Admin Tools</span></div>
+        <div class="label"><span class="shield">◆</span> Admin Tools</div>
+        <div class="card">
+          <div class="row">
+            <div><div class="title">▰ &nbsp; Archive Team</div><p class="desc">This team has 18 rostered members, so it cannot be deleted. Archive it to hide it from members and discovery.</p></div>
+            <button class="outline">Archive</button>
+          </div>
+        </div>
+        <p class="note">The server independently checks the roster again before any permanent deletion, so stale page data cannot delete a newly rostered team.</p>
+      </section>
+      <section class="panel wide">
+        <div class="tabs"><span class="tab on">After claim</span><span class="tab">Setup guide</span></div>
+        <div class="banner">
+          <div class="spark">✦</div><div><h2>Your teams are already loaded. Finish setting up Metro United in three quick actions.</h2><p>Every unfinished step below is clickable and opens the exact tool you need.</p></div>
+        </div>
+        <div class="complete">
+          <div class="check">✓</div><div><h3>Claim your organization <span class="pill">Complete</span></h3><p>Ownership is confirmed. Review the teams already listed: you can add new teams, permanently delete mistaken teams that have no rostered players or staff, and archive any team that already has members.</p></div>
+        </div>
+      </section>
+      <section class="panel wide">
+        <div class="tabs"><span class="tab on">After claim</span><span class="tab">Ownership handoff</span></div>
+        <div class="handoff">
+          <div class="crown">♛</div><div><h3>You are now the owner of this entire organization</h3><p>This is broader than coach or team access. If you are not the club's long-term owner, invite the actual owner, director, board members, or other trusted administrators now. After the right person joins, you can transfer ownership to them from this window. You can also review the existing team pages, add any missing teams, permanently delete empty teams created by mistake, and archive teams that already have rostered members.</p></div>
+        </div>
+      </section>
+    </div>
+  </main>
+</body>
+</html>
