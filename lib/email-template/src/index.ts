@@ -52,10 +52,10 @@ export function emailButton(input: {
 }): string {
   const href = escapeHtml(input.href);
   const label = escapeHtml(input.label);
-  return `<table role="presentation" class="email-cta" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:32px 0;">
+  return `<table role="presentation" class="email-cta" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:28px 0 12px;">
   <tr>
-    <td>
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;">
+    <td align="center">
+      <table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;margin:0 auto;">
         <tr>
           <td class="email-cta-cell" align="center" bgcolor="#8b2cf5" style="border-radius:8px;background:#8b2cf5;">
             <a href="${href}" style="display:inline-block;min-width:180px;padding:16px 28px;color:#ffffff;font-size:16px;line-height:1.2;font-weight:700;text-align:center;text-decoration:none;border-radius:8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">${label}</a>
