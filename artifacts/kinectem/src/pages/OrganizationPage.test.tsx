@@ -503,7 +503,7 @@ describe("OrganizationPage — admin control gating", () => {
     );
   });
 
-  it("opens the setup guide after a secure claim and routes directly to roster invitations", async () => {
+  it("opens the setup guide after a secure claim and routes directly to Roster Outreach", async () => {
     const user = userEvent.setup();
     installHandlers({
       role: "owner",
@@ -532,9 +532,11 @@ describe("OrganizationPage — admin control gating", () => {
     ).toBeNull();
 
     await user.click(
-      screen.getByRole("button", { name: "Open roster invitations" }),
+      screen.getByRole("button", { name: "Open Roster Outreach" }),
     );
-    expect(getMockLocation()).toBe("/teams/team-1?inviteRoster=1");
+    expect(getMockLocation()).toBe(
+      `/organizations/${ORG_ID}/roster-outreach`,
+    );
   });
 
   it("lets a manager manually reopen the pre-invite message", async () => {

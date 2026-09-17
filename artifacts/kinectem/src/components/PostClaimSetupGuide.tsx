@@ -4,10 +4,9 @@ import {
   Mail,
   Megaphone,
   UserPlus,
-  Users,
 } from "lucide-react";
 
-type SetupAction = "preInvite" | "coaches" | "outreach" | "roster";
+type SetupAction = "preInvite" | "coaches" | "outreach";
 
 const STEPS: Array<{
   number: number;
@@ -41,37 +40,28 @@ const STEPS: Array<{
   },
   {
     number: 4,
-    title: "Open Roster Outreach",
-    description: "Use the ready-to-send message and team signup links.",
+    title: "Invite parents & players",
+    description:
+      "Open Roster Outreach to use the ready-to-send message and team signup links.",
     action: "outreach",
     actionLabel: "Open Roster Outreach",
     Icon: Mail,
-  },
-  {
-    number: 5,
-    title: "Invite parents & players",
-    description: "Open a team roster and send family invitations.",
-    action: "roster",
-    actionLabel: "Open roster invitations",
-    Icon: Users,
   },
 ];
 
 export function PostClaimSetupGuide({
   organizationName,
-  hasTeams,
   onAction,
 }: {
   organizationName: string;
-  hasTeams: boolean;
   onAction: (action: SetupAction) => void;
 }) {
   return (
     <div className="space-y-4" data-testid="post-claim-setup-guide">
       <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
         <p className="text-sm font-bold">
-          Your teams are already loaded. Finish setting up {organizationName}
-          in four quick actions.
+          Your teams are already loaded. Finish setting up{" "}
+          {organizationName} in three quick actions.
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
           Every unfinished step below is clickable and opens the exact tool you
@@ -82,7 +72,6 @@ export function PostClaimSetupGuide({
       <ol className="grid gap-3 sm:grid-cols-2">
         {STEPS.map((step) => {
           const done = step.number === 1;
-          const unavailable = step.action === "roster" && !hasTeams;
           const content = (
             <>
               <span
@@ -100,9 +89,7 @@ export function PostClaimSetupGuide({
                   {step.title}
                 </span>
                 <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
-                  {unavailable
-                    ? "Add a team before opening roster invitations."
-                    : step.description}
+                  {step.description}
                 </span>
                 <span
                   className={`mt-2 block text-xs font-black ${
@@ -112,7 +99,7 @@ export function PostClaimSetupGuide({
                   {done ? "Complete" : step.actionLabel}
                 </span>
               </span>
-              {!done && !unavailable && (
+              {!done && (
                 <ChevronRight className="mt-2 h-5 w-5 shrink-0 text-primary transition-transform group-hover:translate-x-1" />
               )}
             </>
@@ -131,7 +118,6 @@ export function PostClaimSetupGuide({
                 <button
                   type="button"
                   className="group flex min-h-32 w-full items-start gap-3 rounded-xl border border-border bg-card p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary/50 hover:bg-primary/5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={unavailable}
                   onClick={() => step.action && onAction(step.action)}
                   aria-label={step.actionLabel}
                   data-testid={`setup-step-${step.action}`}

@@ -11,7 +11,6 @@ describe("PostClaimSetupGuide", () => {
     renderWithProviders(
       <PostClaimSetupGuide
         organizationName="Westfield Athletic Club"
-        hasTeams
         onAction={onAction}
       />,
     );
@@ -24,7 +23,6 @@ describe("PostClaimSetupGuide", () => {
       ["Open pre-invite message", "preInvite"],
       ["Open bulk coach invites", "coaches"],
       ["Open Roster Outreach", "outreach"],
-      ["Open roster invitations", "roster"],
     ] as const;
 
     for (const [label, action] of actions) {
@@ -33,19 +31,18 @@ describe("PostClaimSetupGuide", () => {
     }
   });
 
-  it("explains why roster invitations are unavailable without teams", () => {
+  it("combines Roster Outreach and family invitations into the final step", () => {
     renderWithProviders(
       <PostClaimSetupGuide
         organizationName="Westfield Athletic Club"
-        hasTeams={false}
         onAction={vi.fn()}
       />,
     );
 
+    expect(screen.getByText("Invite parents & players")).toBeInTheDocument();
+    expect(screen.getByText(/Open Roster Outreach to use/)).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Open roster invitations" }),
-    ).toBeDisabled();
-    expect(screen.getByText("Add a team before opening roster invitations."))
-      .toBeInTheDocument();
+      screen.queryByRole("button", { name: "Open roster invitations" }),
+    ).not.toBeInTheDocument();
   });
 });

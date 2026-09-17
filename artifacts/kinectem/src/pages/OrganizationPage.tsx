@@ -895,7 +895,6 @@ export default function OrganizationPage() {
             </DialogHeader>
             <PostClaimSetupGuide
               organizationName={organization.name}
-              hasTeams={teams.length > 0}
               onAction={(action) => {
                 setSetupGuideAutomatic(false);
                 setSetupGuideOpen(false);
@@ -907,8 +906,6 @@ export default function OrganizationPage() {
                   setBulkCoachesOpen(true);
                 } else if (action === "outreach") {
                   navigate(`/organizations/${orgId}/roster-outreach`);
-                } else if (action === "roster" && teams[0]) {
-                  navigate(`/teams/${teams[0].id}?inviteRoster=1`);
                 }
               }}
             />

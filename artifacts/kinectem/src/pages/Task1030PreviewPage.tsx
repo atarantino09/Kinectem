@@ -46,11 +46,10 @@ export default function Task1030PreviewPage() {
           </DialogHeader>
           <PostClaimSetupGuide
             organizationName="Westfield Athletic Club"
-            hasTeams
             onAction={(action) =>
               toast({
                 title: "Preview only",
-                description: `This would open the ${action === "preInvite" ? "pre-invite message" : action === "coaches" ? "bulk coach invitation" : action === "outreach" ? "Roster Outreach" : "team roster invitation"} tool.`,
+                description: `This would open the ${action === "preInvite" ? "pre-invite message" : action === "coaches" ? "bulk coach invitation" : "Roster Outreach"} tool.`,
               })
             }
           />
