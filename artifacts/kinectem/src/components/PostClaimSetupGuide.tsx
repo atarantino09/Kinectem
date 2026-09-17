@@ -22,7 +22,7 @@ const STEPS: Array<{
     number: 1,
     title: "Claim your organization",
     description:
-      "Ownership is confirmed. Review the teams already listed: you can add new teams, permanently delete mistaken teams that have no rostered players or staff, and archive any team that already has members.",
+      "Ownership is confirmed. Because unclaimed organizations do not yet have rostered players or staff, you can delete incorrect teams already listed, edit team names, and create additional teams. Once a team has rostered members, archive it instead of deleting it.",
     Icon: CheckCircle2,
   },
   {

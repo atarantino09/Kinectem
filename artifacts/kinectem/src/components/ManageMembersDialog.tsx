@@ -358,9 +358,11 @@ export function ManageMembersDialog({
                     director, board members, or other trusted administrators
                     now. After the right person joins, you can transfer
                     ownership to them from this window. You can also review the
-                    existing team pages, add any missing teams, permanently
-                    delete empty teams created by mistake, and archive teams
-                    that already have rostered members.
+                    existing team pages. Because unclaimed organizations do
+                    not yet have rostered players or staff, you can delete
+                    incorrect teams already listed, edit team names, and
+                    create additional teams. Once a team has rostered members,
+                    archive it instead of deleting it.
                   </p>
                 </div>
               </div>

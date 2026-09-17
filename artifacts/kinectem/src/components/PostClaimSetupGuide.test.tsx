@@ -19,13 +19,16 @@ describe("PostClaimSetupGuide", () => {
       "Complete",
     );
     expect(screen.getByTestId("setup-step-claim-complete")).toHaveTextContent(
-      "add new teams",
+      "delete incorrect teams already listed",
     );
     expect(screen.getByTestId("setup-step-claim-complete")).toHaveTextContent(
-      "delete mistaken teams",
+      "edit team names",
     );
     expect(screen.getByTestId("setup-step-claim-complete")).toHaveTextContent(
-      "archive any team that already has members",
+      "create additional teams",
+    );
+    expect(screen.getByTestId("setup-step-claim-complete")).toHaveTextContent(
+      "archive it instead of deleting it",
     );
 
     const actions = [
