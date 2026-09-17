@@ -11,17 +11,19 @@ describe("Kinectem branded email presentation", () => {
       contextLabel: `Varsity <Team>`,
       baseUrl: "https://kinectem.example/",
       bodyHtml:
-        '<p>Approved body copy.</p><p><a href="https://kinectem.example/app/invites/token">Accept invite →</a></p>',
+        '<p>Approved body copy.</p><p><a href="https://kinectem.example/app/invites/token">https://kinectem.example/app/invites/token</a></p>',
     });
 
     expect(html).toContain("<!doctype html>");
     expect(html).toContain('name="viewport"');
-    expect(html).toContain(
-      'src="https://kinectem.example/logo-horizontal.png"',
-    );
     expect(html).toContain('alt="Kinectem"');
     expect(html).toContain("email-card");
+    expect(html).toContain("email-hero");
+    expect(html).toContain('bgcolor="#080e29"');
+    expect(html).toContain("linear-gradient(120deg");
+    expect(html).toContain("border-top:4px solid #ff2d9a");
     expect(html).toContain("email-cta-cell");
+    expect(html).toContain("background:#2553ed");
     expect(html).toContain("Join &lt;North &amp; South&gt;");
     expect(html).toContain("Varsity &lt;Team&gt;");
     expect(html).toContain("Where the story of the season comes to life.");
@@ -29,6 +31,11 @@ describe("Kinectem branded email presentation", () => {
     expect(html).not.toContain("Join <North & South>");
     expect(html).toContain('href="https://kinectem.example/app/invites/token"');
     expect(html).toContain('name="color-scheme"');
+    expect(html).toContain("@media only screen and (max-width: 620px)");
+    expect(html).toContain("@media (prefers-color-scheme: dark)");
+    expect(html).toContain(
+      'src="https://kinectem.example/app/logo-horizontal-mono-white-transparent.png"',
+    );
   });
 
   it("turns text-only messages into escaped, linked HTML", () => {

@@ -240,7 +240,6 @@ describe("invite email Kinectem context", () => {
 
     const email = lastSentEmail();
     expect(email.text).toBe(text);
-    expect(email.html).toContain("logo-horizontal.png");
     expect(email.html).toContain("logo-horizontal-mono-white-transparent.png");
     expect(email.html).toContain("Partner claim: &lt;North &amp; South&gt;");
     expect(email.html).toContain(">Organization</td>");

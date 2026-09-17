@@ -26,7 +26,7 @@ describe("AdminEmailPreview", () => {
       "Coach Mike Davis has invited you to join Varsity Football on Kinectem as a Coach.",
     );
     expect(html).toContain("hit the AI Assist button");
-    expect(html).toContain("logo-horizontal.png");
+    expect(html).toContain("logo-horizontal-mono-white-transparent.png");
     expect(html).toContain("email-card");
     expect(html).toContain("/invites/preview-coach-invite");
     expect(html).toContain(

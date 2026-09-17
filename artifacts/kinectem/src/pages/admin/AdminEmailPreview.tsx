@@ -17,6 +17,7 @@ import {
 import {
   emailButton,
   emailCallout,
+  emailChecklist,
   emailKeyValue,
   emailStatusCallout,
   emailSummary,
@@ -160,6 +161,7 @@ ${emailKeyValue([
   { label: "Opponent", value: "Wildcats" },
 ])}
 <p style="margin: 0 0 16px;">Please arrive 30 minutes early for warmups. Make sure your player brings both home and away jerseys.</p>
+${emailChecklist(["Arrive 30 minutes early", "Bring home and away jerseys", "Check the updated field location"], "Before the game")}
 ${emailButton({ href: `${baseUrl}/schedule/preview`, label: "View Updated Schedule" })}
 `;
       return renderBrandedEmailHtml({
