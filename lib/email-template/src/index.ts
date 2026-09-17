@@ -57,8 +57,8 @@ export function emailButton(input: {
     <td align="center">
       <table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;margin:0 auto;">
         <tr>
-          <td class="email-cta-cell" align="center" bgcolor="#8b2cf5" style="border-radius:8px;background:#8b2cf5;">
-            <a href="${href}" style="display:inline-block;min-width:180px;padding:16px 28px;color:#ffffff;font-size:16px;line-height:1.2;font-weight:700;text-align:center;text-decoration:none;border-radius:8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">${label}</a>
+          <td class="email-cta-cell" align="center" bgcolor="#8b2cf5" style="border-radius:12px;background:#8b2cf5;background-image:linear-gradient(135deg,#7c3aed 0%,#a21caf 55%,#ec4899 100%);box-shadow:0 10px 24px rgba(139,44,245,.28);">
+            <a href="${href}" style="display:inline-block;min-width:190px;padding:16px 30px;color:#ffffff;font-size:16px;line-height:1.2;font-weight:800;text-align:center;text-decoration:none;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;letter-spacing:.01em;">${label}&nbsp;&nbsp;&#8594;</a>
           </td>
         </tr>
       </table>
@@ -83,11 +83,29 @@ export function emailDivider(): string {
 export function emailKeyValue(
   facts: { label: string; value: string }[],
 ): string {
+  const symbolForLabel = (label: string): string => {
+    const normalized = label.toLowerCase();
+    if (/email|contact/.test(normalized)) return "@";
+    if (/requester|coach|owner|person|name/.test(normalized)) return "&#9679;";
+    if (/organization|team|club/.test(normalized)) return "&#9670;";
+    if (/partner|page|site/.test(normalized)) return "&#9678;";
+    if (/submitted|date|time|when/.test(normalized)) return "&#9716;";
+    if (/title|role|position/.test(normalized)) return "&#9671;";
+    return "&#10022;";
+  };
+
   const rows = facts
     .map(
       (fact, index) => `<tr class="email-kv-row">
-  <td class="email-kv-label" width="35%" valign="top" style="padding:16px;color:#64748b;font-size:13px;line-height:1.4;font-weight:700;border-bottom:${index === facts.length - 1 ? "none" : "1px solid #e2e8f0"};">${escapeHtml(fact.label)}</td>
-  <td class="email-kv-value" width="65%" valign="top" style="padding:16px;color:#0f172a;font-size:15px;line-height:1.4;font-weight:600;border-bottom:${index === facts.length - 1 ? "none" : "1px solid #e2e8f0"};">${escapeHtml(fact.value)}</td>
+  <td class="email-kv-label" width="40%" valign="top" style="padding:14px 16px;color:#64748b;font-size:13px;line-height:1.4;font-weight:700;border-bottom:${index === facts.length - 1 ? "none" : "1px solid #e2e8f0"};">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+      <tr>
+        <td width="38" valign="middle"><span class="email-kv-symbol" style="display:inline-block;width:28px;height:28px;border-radius:14px;background:#ede9fe;background-image:linear-gradient(135deg,#ddd6fe,#fce7f3);color:#7c3aed;font-size:13px;line-height:28px;font-weight:900;text-align:center;">${symbolForLabel(fact.label)}</span></td>
+        <td valign="middle" style="color:inherit;font-size:13px;line-height:1.4;font-weight:700;"><span>${escapeHtml(fact.label)}</span></td>
+      </tr>
+    </table>
+  </td>
+  <td class="email-kv-value" width="60%" valign="top" style="padding:16px;color:#0f172a;font-size:15px;line-height:1.4;font-weight:600;border-bottom:${index === facts.length - 1 ? "none" : "1px solid #e2e8f0"};">${escapeHtml(fact.value)}</td>
 </tr>`,
     )
     .join("");
@@ -294,6 +312,8 @@ export function renderBrandedEmailHtml(options: BrandedEmailOptions): string {
     body, .email-canvas { background:#0b1021 !important;color:#f8fafc !important; }
     .email-card { background:#111936 !important;border-color:#1e293b !important; }
     .email-hero, .email-content { background:#111936 !important; color:#f8fafc !important; }
+    .email-hero { background-image:linear-gradient(180deg,#1a1f4d 0%,#111936 100%) !important; }
+    .email-content { background-image:linear-gradient(180deg,#111936 0%,#10162f 100%) !important; }
     .email-headline { color:#ffffff !important; }
     .email-body-copy { color:#cbd5e1 !important; }
     .email-body-copy blockquote { background: #1e293b !important; color: #cbd5e1 !important; border-left-color: #a855f7 !important; }
@@ -311,6 +331,7 @@ export function renderBrandedEmailHtml(options: BrandedEmailOptions): string {
     .email-kv-row td { border-bottom-color:#334155 !important; }
     .email-kv-label { color:#94a3b8 !important; }
     .email-kv-value { color:#f8fafc !important; }
+    .email-kv-symbol { background:#312e81 !important;background-image:linear-gradient(135deg,#3730a3,#831843) !important;color:#f5d0fe !important; }
 
     @media only screen and (max-width: 620px) {
       .email-kv-row td:last-child { border-bottom-color: #334155 !important; }
@@ -347,8 +368,11 @@ export function renderBrandedEmailHtml(options: BrandedEmailOptions): string {
                   <img src="${escapeHtml(bannerUrl)}" width="600" alt="Kinectem" style="display:block;width:100%;max-width:600px;height:auto;border:0;outline:none;text-decoration:none;color:#ffffff;font-family:-apple-system,sans-serif;font-size:24px;font-weight:bold;text-align:center;line-height:80px;background:#0b0f19;" />
                 </td>
               </tr>
+              <tr>
+                <td height="6" style="height:6px;font-size:0;line-height:0;background:#8b2cf5;background-image:linear-gradient(90deg,#6d28d9 0%,#8b2cf5 38%,#ec4899 72%,#f97316 100%);">&nbsp;</td>
+              </tr>
             </table>
-            <div class="email-hero" style="padding:40px 48px 16px;background:#ffffff;">
+            <div class="email-hero" style="padding:40px 48px 20px;background:#ffffff;background-image:linear-gradient(180deg,#faf5ff 0%,#ffffff 85%);">
               ${
                 contextLabel
                   ? `<div style="margin:0 0 12px;font-size:13px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#8b2cf5;">${escapeHtml(contextLabel)}</div>`

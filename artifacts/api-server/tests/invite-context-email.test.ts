@@ -242,10 +242,10 @@ describe("invite email Kinectem context", () => {
     expect(email.text).toBe(text);
     expect(email.html).toContain("email-header-banner.png");
     expect(email.html).toContain("Partner claim: &lt;North &amp; South&gt;");
-    expect(email.html).toContain(">Organization</td>");
+    expect(email.html).toContain(">Organization</span>");
     expect(email.html).toContain("&lt;North &amp; South&gt;");
-    expect(email.html).toContain(">Requester</td>");
-    expect(email.html).toContain("Review request</a>");
+    expect(email.html).toContain(">Requester</span>");
+    expect(email.html).toContain("Review request");
     expect(email.html).not.toContain("<North & South>");
     expect(email.html).toContain(
       'href="https://kinectem.example/app/admin?claim=1&amp;view=review"',
