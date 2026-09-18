@@ -206,6 +206,10 @@ export function emailChecklist(
 </table>`;
 }
 
+function normalizeBaseUrl(value: string): string {
+  return value.replace(/\/+$/, "");
+}
+
 /**
  * Convert a plaintext-only message to a safe HTML fragment. Newlines are
  * preserved as paragraphs/line breaks, and the source is escaped first so
@@ -279,10 +283,13 @@ function upgradeLegacyCtas(bodyHtml: string): string {
 /**
  * Wrap any HTML fragment in the Kinectem email presentation system.
  *
- * The wordmark is rendered as email-safe HTML instead of a remote image so
- * clients that block images still show a centered, balanced brand header.
+ * The compact logo asset is centered inside a fixed-height header. Keeping the
+ * image itself smaller than the header ensures blocked-image alt text remains
+ * centered instead of creating a large empty banner.
  */
 export function renderBrandedEmailHtml(options: BrandedEmailOptions): string {
+  const baseUrl = normalizeBaseUrl(options.baseUrl);
+  const logoUrl = `${baseUrl}/email-header-logo.png`;
   const subject = escapeHtml(options.subject);
   const contextLabel = options.contextLabel?.trim();
   const preheader = escapeHtml(options.preheader?.trim() || options.subject);
@@ -388,8 +395,8 @@ export function renderBrandedEmailHtml(options: BrandedEmailOptions): string {
           <td class="email-card" style="background:#ffffff;border:1px solid #e2e8f0;border-radius:24px;overflow:hidden;box-shadow:0 10px 40px -10px rgba(0,0,0,0.08);">
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
               <tr>
-                <td class="email-header" align="center" valign="middle" height="92" bgcolor="#0b0f19" style="height:92px;padding:0 24px;background:#0b0f19;text-align:center;">
-                  <div class="email-wordmark" style="margin:0;color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:31px;line-height:1;font-weight:800;letter-spacing:-.04em;text-align:center;"><span style="color:#a855f7;font-size:38px;font-style:italic;">K</span>inectem</div>
+                <td class="email-header" align="center" valign="middle" height="92" bgcolor="#0b1228" style="height:92px;padding:0 24px;background:#0b1228;text-align:center;">
+                  <img class="email-wordmark" src="${escapeHtml(logoUrl)}" width="238" height="50" alt="Kinectem" style="display:block;width:238px;max-width:72%;height:auto;margin:0 auto;border:0;outline:none;text-decoration:none;color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:21px;line-height:50px;font-weight:800;text-align:center;background:#0b1228;" />
                 </td>
               </tr>
               <tr>

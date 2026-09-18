@@ -1,10 +1,10 @@
 ---
 name: Email header wordmark
-description: Why branded email headers use a centered HTML wordmark instead of a remote banner image.
+description: Why branded email headers use a tightly cropped, centered logo asset.
 ---
 
-Render the Kinectem email masthead wordmark as centered, email-safe HTML rather than relying on a remote banner image.
+Render the real Kinectem logo from a tightly cropped asset, centered inside a compact, fixed-height masthead. Do not recreate the wordmark with styled HTML text.
 
-**Why:** Desktop email clients such as Yahoo may block remote content while preserving the image's declared dimensions. The result is a large empty banner with tiny alt text in the upper-left, even when the image-based treatment looks acceptable on mobile.
+**Why:** Desktop email clients such as Yahoo may block remote content while preserving the image's declared dimensions. A full-width banner leaves a large empty area with tiny alt text, while a hand-built text approximation does not match the real brand mark.
 
-**How to apply:** Keep the masthead compact, centered, and table-backed. Do not restore a remote-image-only header unless the blocked-image state is also visually balanced.
+**How to apply:** Keep the logo image substantially smaller than its table-backed masthead and center both the image and its fallback. Serve the cropped asset from both root and `/app` artifact paths.
