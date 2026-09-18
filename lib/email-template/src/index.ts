@@ -306,7 +306,6 @@ export function renderBrandedEmailHtml(options: BrandedEmailOptions): string {
     .email-headline { font-size: 26px !important; }
     .email-cta > tbody > tr > td > table { width: 100% !important; }
     .email-cta-cell, .email-cta-cell a { width: 100% !important; box-sizing: border-box !important; }
-    .email-body-copy p > a { display:block !important;text-align:center !important;box-sizing:border-box !important; }
     .email-kv-row td { display: block !important; width: 100% !important; border: none !important; }
     .email-kv-row td:first-child { padding: 16px 16px 4px !important; }
     .email-kv-row td:last-child { padding: 0 16px 16px !important; border-bottom: 1px solid #e2e8f0 !important; }

@@ -33,6 +33,7 @@ describe("Kinectem branded email presentation", () => {
     expect(html).toContain('href="https://kinectem.example/app/invites/token"');
     expect(html).toContain('name="color-scheme"');
     expect(html).toContain("@media only screen and (max-width: 620px)");
+    expect(html).not.toContain(".email-body-copy p > a");
     expect(html).toContain("@media (prefers-color-scheme: dark)");
     expect(html).toContain(".email-muted { color:#94a3b8 !important; }");
     expect(html).not.toContain("<img");
