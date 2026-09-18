@@ -51,11 +51,18 @@ describe("AdminEmailPreview", () => {
     );
     expect(iframe2.getAttribute("srcdoc")).toContain("Andrew Tarantino");
 
-    // Switch to Owner approval
-    fireEvent.click(screen.getByTestId("button-template-owner_approval"));
-    const iframe3 = screen.getByTitle("Owner approval preview");
-    expect(iframe3.getAttribute("srcdoc")).toContain(
-      "Ownership Request: U14 Lightning",
+    // Switch to the organization claim approval baseline.
+    fireEvent.click(screen.getByTestId("button-template-org_claim_approved"));
+    const iframe3 = screen.getByTitle("Organization claim approved preview");
+    const claimHtml = iframe3.getAttribute("srcdoc") ?? "";
+    expect(claimHtml).toContain("Ownership approved");
+    expect(claimHtml).toContain("What ownership enables");
+    expect(claimHtml).toContain("Finish your setup");
+    expect(claimHtml.indexOf("Ownership approved")).toBeLessThan(
+      claimHtml.indexOf("What ownership enables"),
+    );
+    expect(claimHtml.indexOf("What ownership enables")).toBeLessThan(
+      claimHtml.indexOf("Finish your setup"),
     );
 
     // Switch to Schedule change

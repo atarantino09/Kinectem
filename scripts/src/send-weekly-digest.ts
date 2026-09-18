@@ -103,9 +103,9 @@ export function buildWeeklyDigestEmail(args: {
     .join("");
   const bodyHtml = `<p>Hi ${escapeHtml(greeting)},</p>
 <p>${escapeHtml(intro)}</p>
+${emailSection("This week's activity", `<p style="margin:0;">${totalRecaps} recap${totalRecaps === 1 ? "" : "s"} and ${totalAnnouncements} announcement${totalAnnouncements === 1 ? "" : "s"} from ${activity.length} team${activity.length === 1 ? "" : "s"}.</p>`)}
 ${items}
-${emailButton({ href: feedUrl, label: "Catch up on Kinectem" })}
-<p class="email-muted" style="color:#6b7280;font-size:13px">${totalRecaps} recap${totalRecaps === 1 ? "" : "s"} and ${totalAnnouncements} announcement${totalAnnouncements === 1 ? "" : "s"} this week.</p>
+${emailSection("Catch up", emailButton({ href: feedUrl, label: "Catch up on Kinectem" }))}
 <p>— The Kinectem Team</p>`;
   const html = wrapHtml(bodyHtml, recipient.unsubscribeUrl, subject);
 

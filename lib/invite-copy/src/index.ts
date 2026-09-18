@@ -204,9 +204,8 @@ export function buildStaffInviteHtml(vars: StaffInviteVars): string {
       "About Kinectem",
       `<p>${escapeHtml(STAFF_ABOUT)}</p><p>${escapeHtml(staffAiAssistParagraph(vars))}</p><p>${escapeHtml(STAFF_ARCHIVE)}</p>`,
     ),
-    emailSection("Your invitation", `<p>${escapeHtml(STAFF_SETUP)}</p>`),
-    `<p>Check out <a href="${LEARN_MORE_URL}">www.kinectem.com</a> to learn even more prior to signing up.</p>`,
-    emailButton({ href: vars.link, label: ctaLabel }),
+    emailSection("Accept your invitation", `<p>${escapeHtml(STAFF_SETUP)}</p>${emailButton({ href: vars.link, label: ctaLabel })}`),
+    `<p class="email-muted" style="color:#65758b;font-size:14px;">Check out <a href="${LEARN_MORE_URL}">www.kinectem.com</a> to learn even more prior to signing up.</p>`,
     `<p>— ${escapeHtml(vars.inviterName)}</p>`,
   ].join("\n");
 }
@@ -253,9 +252,8 @@ export function buildCoachInviteHtml({ coachName, link }: CoachInviteVars): stri
     `<p>${escapeHtml(INTRO_PARAGRAPHS[1])}</p>`,
     emailSection("Your player's account", `<p>${escapeHtml(INTRO_PARAGRAPHS[2])}</p>`),
     emailSection(CONTROL_INTRO, emailChecklist(BULLETS)),
-    `<p>${escapeHtml(AFTER_BULLETS)}</p>`,
-    `<p>Check out <a href="${LEARN_MORE_URL}">www.kinectem.com</a> to learn even more prior to signing up.</p>`,
-    emailButton({ href: link, label: ctaLabel }),
+    emailSection("Set up your player's account", `<p>${escapeHtml(AFTER_BULLETS)}</p>${emailButton({ href: link, label: ctaLabel })}`),
+    `<p class="email-muted" style="color:#65758b;font-size:14px;">Check out <a href="${LEARN_MORE_URL}">www.kinectem.com</a> to learn even more prior to signing up.</p>`,
     `<p>— Coach ${escapeHtml(coachName)}</p>`,
   ].join("\n");
 }
@@ -278,9 +276,8 @@ export function buildMultiTeamStaffInviteHtml(
       "About Kinectem",
       `<p>${escapeHtml(STAFF_ABOUT)}</p><p>${escapeHtml(staffAiAssistParagraph({ roleLabel: vars.roleLabel }))}</p><p>${escapeHtml(STAFF_ARCHIVE)}</p>`,
     ),
-    emailSection("Your invitation", `<p>${escapeHtml(STAFF_SETUP)}</p>`),
-    `<p>Check out <a href="${LEARN_MORE_URL}">www.kinectem.com</a> to learn even more prior to signing up.</p>`,
-    emailButton({ href: vars.link, label: ctaLabel }),
+    emailSection("Accept your invitation", `<p>${escapeHtml(STAFF_SETUP)}</p>${emailButton({ href: vars.link, label: ctaLabel })}`),
+    `<p class="email-muted" style="color:#65758b;font-size:14px;">Check out <a href="${LEARN_MORE_URL}">www.kinectem.com</a> to learn even more prior to signing up.</p>`,
     `<p>— ${escapeHtml(vars.inviterName)}</p>`,
   ].join("\n");
 }

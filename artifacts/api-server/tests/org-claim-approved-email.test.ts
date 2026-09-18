@@ -19,5 +19,17 @@ describe("organization claim approval email", () => {
     expect(email.text).toContain("Bulk add coaches");
     expect(email.text).toContain("players and parents through Roster outreach");
     expect(email.kind).toBe("org_claim_approved");
+    const html = email.html ?? "";
+    expect(html).toContain("Ownership approved");
+    expect(html).toContain("What ownership enables");
+    expect(html).toContain("Finish your setup");
+    expect(html.indexOf("Ownership approved")).toBeLessThan(
+      html.indexOf("What ownership enables"),
+    );
+    expect(html.indexOf("What ownership enables")).toBeLessThan(
+      html.indexOf("Finish your setup"),
+    );
+    expect(html.match(/Westfield Athletic Club/g)?.length).toBe(1);
+    expect(html).not.toMatch(/[★✓●]/);
   });
 });

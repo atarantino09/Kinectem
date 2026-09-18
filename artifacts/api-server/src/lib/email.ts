@@ -264,7 +264,6 @@ export function buildOrgClaimApprovedEmail(input: {
   organizationName: string;
 }): EmailMessage {
   const setupUrl = `${appBaseUrl()}/app/organizations/${input.organizationId}?ownerSetup=1`;
-  const organizationNameHtml = escapeHtml(input.organizationName);
   return {
     to: input.to,
     subject: `You're now the owner of ${input.organizationName} on Kinectem`,
@@ -286,27 +285,32 @@ export function buildOrgClaimApprovedEmail(input: {
       "Your organization setup checklist and page tour will remain available on the organization page if you want to return to any step later.",
     ].join("\n"),
     html: [
-      emailStatusCallout(
-        "success",
-        `Your organization claim for <strong>${organizationNameHtml}</strong> has been approved.`,
+      emailSection(
+        "Ownership approved",
+        emailStatusCallout(
+          "success",
+          "Your claim is approved. You now have owner access.",
+        ),
       ),
-      emailSummary(
-        `You now control the ${input.organizationName} page and its team setup.`,
+      emailSection(
+        "What ownership enables",
+        `<p style="margin:0;">Update the organization page, add teams, invite coaches, and bring players and parents into the right rosters.</p>`,
       ),
-      `<p>You are now the owner of the <strong>${organizationNameHtml}</strong> page on Kinectem. You can update the page, add teams, invite coaches, and bring players and parents into the right rosters.</p>`,
-      emailButton({
-        href: setupUrl,
-        label: `Finish setting up ${input.organizationName}`,
-      }),
-      emailChecklist(
+      emailSection(
+        "Finish your setup",
         [
-          "Review and share the pre-invite message with your club.",
-          "Bulk add coaches across your teams.",
-          "Add players and parents through Roster outreach using each team's secure invitation.",
-        ],
-        "Recommended launch order",
+          `<p style="margin:0 0 18px;">Start with the recommended launch order. Your checklist and page tour will remain available if you return later.</p>`,
+          emailButton({
+            href: setupUrl,
+            label: `Finish setting up ${input.organizationName}`,
+          }),
+          emailChecklist([
+            "Review and share the pre-invite message with your club.",
+            "Bulk add coaches across your teams.",
+            "Add players and parents through Roster outreach using each team's secure invitation.",
+          ]),
+        ].join(""),
       ),
-      `<p class="email-muted" style="color:#65758b;font-size:14px;">Your setup checklist and page tour will remain available on the organization page, so you can return to any step later.</p>`,
     ].join("\n"),
   };
 }
@@ -341,10 +345,11 @@ export function buildOrgOwnerInvitationEmail(input: {
       "This link is a private invitation. Please do not forward it. It stops working after the organization has an owner.",
     ].join("\n"),
     html: [
-       emailSection("Claim your organization", `<p>You've been invited to become the owner of <strong>${escapeHtml(input.organizationName)}</strong> on Kinectem.</p>
-<p>Kinectem gives your club one recognizable home for recaps, player histories, and team updates without replacing the tools you already use.</p>
-${emailButton({ href: claimUrl, label: "Claim organization" })}
-${emailChecklist(
+      emailSection("Your invitation", `<p>You've been invited to become the owner of <strong>${escapeHtml(input.organizationName)}</strong> on Kinectem.</p>
+<p style="margin-bottom:0;">Kinectem gives your club one recognizable home for recaps, player histories, and team updates without replacing the tools you already use.</p>`),
+      emailSection("Claim your organization", `${emailButton({ href: claimUrl, label: "Claim organization" })}
+<p class="email-muted" style="color:#65758b;font-size:14px;margin-bottom:0;">This private invitation should not be forwarded. It stops working after the organization has an owner.</p>`),
+      emailSection("What happens next", emailChecklist(
   [
     "Open the link and sign in or create your Kinectem profile.",
     `Confirm that you want to become the owner of ${input.organizationName}.`,
@@ -354,8 +359,7 @@ ${emailChecklist(
     "Complete the organization setup checklist.",
   ],
   "Setup steps",
-)}
-<p class="email-muted" style="color:#65758b;font-size:14px;">This private invitation should not be forwarded. It stops working after the organization has an owner.</p>`),
+)),
     ].join("\n"),
   };
 }
@@ -764,10 +768,11 @@ ${url}
 After you submit consent, we'll email you ONE more time at this address with a "confirm" link. The account stays disabled until you click that second link — that two-step "email plus" pattern is how we verify the consent really came from you.
 
 If you don't recognize this signup, ignore this email and the account will stay locked.`,
-    html: emailSection(`Consent for ${athleteName}'s account`, `<p><strong>${escapeHtml(athleteName)}</strong> listed you as their parent or guardian when signing up for Kinectem.</p>
-${emailStatusCallout("warning", "Because they are under 13, COPPA requires verifiable consent before personal information can be collected.")}
-${emailButton({ href: url, label: "Review notice and consent" })}
-<p class="email-muted" style="color:#65758b;font-size:14px;">After you submit consent, we'll email one more time with a confirm link. The account stays disabled until you click that second link; this two-step process verifies that the consent came from you. If you don't recognize this signup, ignore this email and the account will stay locked.</p>`),
+    html: [
+      emailSection(`Consent for ${athleteName}'s account`, `<p><strong>${escapeHtml(athleteName)}</strong> listed you as their parent or guardian when signing up for Kinectem.</p>${emailStatusCallout("warning", "Because they are under 13, COPPA requires verifiable consent before personal information can be collected.")}`),
+      emailSection("Review and grant consent", emailButton({ href: url, label: "Review notice and consent" })),
+      emailSection("What happens next", `<p style="margin:0;">After you submit consent, we'll email one more time with a confirm link. The account stays disabled until you click that second link; this two-step process verifies that the consent came from you.</p><p class="email-muted" style="color:#65758b;font-size:14px;margin-bottom:0;">If you don't recognize this signup, ignore this email and the account will stay locked.</p>`),
+    ].join("\n"),
   });
 }
 
@@ -791,10 +796,11 @@ ${url}
 The account will stay disabled until you click. The link is good for 7 days.
 
 If you didn't grant consent, do nothing — without this second click the account will not be activated.`,
-    html: emailSection(`Finish enabling ${athleteName}'s account`, `<p>Thanks — we received your consent for <strong>${escapeHtml(athleteName)}</strong>'s Kinectem account.</p>
-${emailStatusCallout("warning", "The account stays disabled until you complete this second verification step. The link is good for 7 days.")}
-${emailButton({ href: url, label: "Finish verification" })}
-<p class="email-muted" style="color:#65758b;font-size:14px;">If you didn't grant consent, do nothing. Without this second click the account will not be activated.</p>`),
+    html: [
+      emailSection("Consent received", `<p>Thanks — we received your consent for <strong>${escapeHtml(athleteName)}</strong>'s Kinectem account.</p>${emailStatusCallout("warning", "The account stays disabled until you complete this second verification step. The link is good for 7 days.")}`),
+      emailSection("Finish verification", emailButton({ href: url, label: "Finish verification" })),
+      emailSection("If this wasn't you", `<p style="margin:0;">If you didn't grant consent, do nothing. Without this second click the account will not be activated.</p>`),
+    ].join("\n"),
   });
 }
 

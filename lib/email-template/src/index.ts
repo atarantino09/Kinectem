@@ -58,7 +58,7 @@ export function emailButton(input: {
       <table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;margin:0 auto;">
         <tr>
           <td class="email-cta-cell" align="center" bgcolor="#8b2cf5" style="border-radius:12px;background:#8b2cf5;background-image:linear-gradient(135deg,#7c3aed 0%,#a21caf 55%,#ec4899 100%);box-shadow:0 10px 24px rgba(139,44,245,.28);">
-            <a href="${href}" style="display:inline-block;min-width:190px;padding:16px 30px;color:#ffffff;font-size:16px;line-height:1.2;font-weight:800;text-align:center;text-decoration:none;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;letter-spacing:.01em;">${label}&nbsp;&nbsp;&#8594;</a>
+            <a href="${href}" style="display:inline-block;min-width:190px;padding:16px 30px;color:#ffffff;font-size:16px;line-height:1.2;font-weight:800;text-align:center;text-decoration:none;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;letter-spacing:.01em;">${label}</a>
           </td>
         </tr>
       </table>
@@ -95,10 +95,12 @@ export function emailSection(
       ? { title: optionsOrTitle, bodyHtml: positionalBodyHtml ?? "" }
       : optionsOrTitle;
   const eyebrow = options.eyebrow?.trim();
-  return `<table role="presentation" class="email-section" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;margin:24px 0;">
-  <tr><td class="email-section-box" style="padding:24px;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc;">
-    ${eyebrow ? `<div class="email-section-eyebrow" style="margin:0 0 8px;color:#8b2cf5;font-size:12px;line-height:1.4;font-weight:800;letter-spacing:.06em;text-transform:uppercase;">${escapeHtml(eyebrow)}</div>` : ""}
-    <div class="email-section-title" style="margin:0 0 14px;color:#0f172a;font-size:16px;line-height:1.4;font-weight:750;">${escapeHtml(options.title)}</div>
+  return `<table role="presentation" class="email-section" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;margin:28px 0;border:1px solid #cbd5e1;border-radius:14px;background:#ffffff;box-shadow:0 4px 14px rgba(15,23,42,.06);">
+  <tr><td class="email-section-heading" style="padding:16px 22px;border-bottom:2px solid #8b2cf5;border-radius:13px 13px 0 0;background:#f1f5f9;">
+    ${eyebrow ? `<div class="email-section-eyebrow" style="margin:0 0 5px;color:#7c3aed;font-size:11px;line-height:1.4;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">${escapeHtml(eyebrow)}</div>` : ""}
+    <div class="email-section-title" style="margin:0;color:#0f172a;font-size:18px;line-height:1.3;font-weight:800;">${escapeHtml(options.title)}</div>
+  </td></tr>
+  <tr><td class="email-section-box" style="padding:22px;background:#ffffff;border-radius:0 0 13px 13px;">
     <div class="email-section-body" style="color:#334155;font-size:15px;line-height:1.6;">${options.bodyHtml}</div>
   </td></tr>
 </table>`;
@@ -314,9 +316,10 @@ export function renderBrandedEmailHtml(options: BrandedEmailOptions): string {
     .email-kv-row td:first-child { padding: 16px 16px 4px !important; }
     .email-kv-row td:last-child { padding: 0 16px 16px !important; border-bottom: 1px solid #e2e8f0 !important; }
     .email-kv-row:last-child td:last-child { border-bottom: none !important; }
-     .email-section { margin:20px 0 !important; }
-     .email-section-box { padding:20px !important; }
-     .email-section-title { font-size:15px !important; }
+     .email-section { margin:22px 0 !important; }
+     .email-section-heading { padding:14px 18px !important; }
+     .email-section-box { padding:18px !important; }
+     .email-section-title { font-size:17px !important; }
   }
 
   .email-body-copy p { margin:0 0 16px; }
@@ -364,7 +367,9 @@ export function renderBrandedEmailHtml(options: BrandedEmailOptions): string {
     .email-checklist-title { color: #f8fafc !important; }
     .email-checklist-num { background: #334155 !important; color: #e2e8f0 !important; }
     .email-checklist-text { color: #cbd5e1 !important; }
-     .email-section-box { background:#1e293b !important; border-color:#334155 !important; }
+     .email-section { background:#172033 !important; border-color:#475569 !important; box-shadow:none !important; }
+     .email-section-heading { background:#253149 !important; border-bottom-color:#c084fc !important; }
+     .email-section-box { background:#172033 !important; }
      .email-section-eyebrow { color:#c084fc !important; }
      .email-section-title { color:#f8fafc !important; }
      .email-section-body { color:#cbd5e1 !important; }

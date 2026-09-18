@@ -48,7 +48,7 @@ type PreviewTheme = "light" | "dark";
 type TemplateId =
   | "coach_invite"
   | "partner_claim"
-  | "owner_approval"
+  | "org_claim_approved"
   | "schedule_change"
   | "guardian_consent"
   | "billing_trial"
@@ -122,30 +122,24 @@ ${emailButton({ href: `${baseUrl}/admin/moderation?tab=org-claims`, label: "Revi
       });
     },
   },
-  owner_approval: {
-    label: "Owner approval",
-    description: "Request to claim team ownership.",
+  org_claim_approved: {
+    label: "Organization claim approved",
+    description: "Approved ownership and launch steps.",
     icon: ShieldCheck,
     details: [
-      { label: "Requester", value: "David Chen" },
-      { label: "Team", value: "U14 Lightning" },
-      { label: "Requested role", value: "Owner" },
+      { label: "Organization", value: "West Point" },
+      { label: "Outcome", value: "Ownership approved" },
+      { label: "Next step", value: "Finish organization setup" },
     ],
     getHtml: (baseUrl) => {
       const bodyHtml = `
-${emailSummary("David Chen is requesting ownership access to the U14 Lightning team page.")}
-<p style="margin: 0 0 16px;">As the current administrator of this team, you need to approve or deny this request. Granting ownership will allow David to manage the roster, update the schedule, and assign coaches.</p>
-${emailKeyValue([
-  { label: "Requester", value: "David Chen" },
-  { label: "Current role", value: "Parent" },
-  { label: "Requested role", value: "Owner" },
-])}
-${emailCallout(`<strong>Note:</strong> Ownership should only be granted to verified coaches or club staff.`)}
-${emailButton({ href: `${baseUrl}/team/approve-preview`, label: "Review Request" })}
+${emailSection("Ownership approved", emailStatusCallout("success", "Your claim is approved. You now have owner access."))}
+${emailSection("What ownership enables", `<p style="margin:0;">Update the organization page, add teams, invite coaches, and bring players and parents into the right rosters.</p>`)}
+${emailSection("Finish your setup", `<p style="margin:0 0 18px;">Start with the recommended launch order. Your checklist and page tour will remain available if you return later.</p>${emailButton({ href: `${baseUrl}/organizations/west-point?ownerSetup=1`, label: "Finish setting up West Point" })}${emailChecklist(["Review and share the pre-invite message with your club.", "Bulk add coaches across your teams.", "Add players and parents through Roster outreach using each team's secure invitation."])}`)}
 `;
       return renderBrandedEmailHtml({
-        subject: "Ownership Request: U14 Lightning",
-        contextLabel: "Action Required",
+        subject: "You're now the owner of West Point on Kinectem",
+        contextLabel: "West Point",
         bodyHtml,
         baseUrl,
       });

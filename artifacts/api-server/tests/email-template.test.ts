@@ -68,16 +68,26 @@ describe("Kinectem branded email presentation", () => {
   });
 
   it("renders titled content sections without decorative symbols", () => {
-    const html = emailSection({
+    const section = emailSection({
       eyebrow: "Billing details",
       title: "Your plan at a glance",
       bodyHtml: "<p>Annual plan information.</p>",
+    });
+    const html = renderBrandedEmailHtml({
+      subject: "Billing details",
+      baseUrl: "https://kinectem.example",
+      bodyHtml: section,
     });
 
     expect(html).toContain('class="email-section"');
     expect(html).toContain("Billing details");
     expect(html).toContain("Your plan at a glance");
     expect(html).toContain("Annual plan information.");
-    expect(html).not.toMatch(/[★✓●]/);
+    expect(html).toContain('class="email-section-heading"');
+    expect(html).toContain("border-bottom:2px solid #8b2cf5");
+    expect(html).toContain(".email-section-heading { background:#253149");
+    expect(html).toContain(".email-section-title { font-size:17px");
+    expect(html).not.toMatch(/[★✓●→]/);
+    expect(html).not.toContain("&#8594;");
   });
 });
