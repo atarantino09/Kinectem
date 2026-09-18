@@ -14,6 +14,8 @@ export interface BrandedEmailOptions {
   subject: string;
   /** Absolute app/marketing origin used for the hosted banner lockup. */
   baseUrl: string;
+  /** Override for delivery-time inline images, such as a SendGrid CID URL. */
+  logoSrc?: string;
   /** Optional small label shown above the headline, such as a team name. */
   contextLabel?: string;
   /** Optional preheader text for inbox previews. */
@@ -289,7 +291,7 @@ function upgradeLegacyCtas(bodyHtml: string): string {
  */
 export function renderBrandedEmailHtml(options: BrandedEmailOptions): string {
   const baseUrl = normalizeBaseUrl(options.baseUrl);
-  const logoUrl = `${baseUrl}/email-header-logo.png`;
+  const logoUrl = options.logoSrc ?? `${baseUrl}/email-header-logo.png`;
   const subject = escapeHtml(options.subject);
   const contextLabel = options.contextLabel?.trim();
   const preheader = escapeHtml(options.preheader?.trim() || options.subject);

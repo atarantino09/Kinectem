@@ -14,6 +14,7 @@ import { db, emailProviderKeys } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { logger } from "./logger.js";
 import { decryptSecret } from "./secret-crypto.js";
+import { KINECTEM_EMAIL_LOGO_BASE64 } from "./email-logo.js";
 import type { DispatchBuildContext } from "./notification-email.js";
 import {
   emailButton,
@@ -54,6 +55,7 @@ export type EmailMessage = {
 };
 
 const SENDGRID_URL = "https://api.sendgrid.com/v3/mail/send";
+const EMAIL_LOGO_CID = "kinectem-email-logo";
 
 // Admin-entered SendGrid credentials set from the admin Email settings UI.
 // When a complete row exists (encrypted key + verified sender) it is the
@@ -192,6 +194,7 @@ export async function sendEmail(message: EmailMessage): Promise<void> {
     subject: message.subject,
     baseUrl: appBaseUrl(),
     contextLabel: message.contextLabel,
+    logoSrc: `cid:${EMAIL_LOGO_CID}`,
   });
 
   const body = {
@@ -208,6 +211,15 @@ export async function sendEmail(message: EmailMessage): Promise<void> {
     content: [
       { type: "text/plain", value: message.text },
       { type: "text/html", value: html },
+    ],
+    attachments: [
+      {
+        content: KINECTEM_EMAIL_LOGO_BASE64,
+        type: "image/png",
+        filename: "kinectem-email-logo.png",
+        disposition: "inline",
+        content_id: EMAIL_LOGO_CID,
+      },
     ],
   };
 

@@ -72,6 +72,7 @@ describe("coach invite email (task #636)", () => {
     subject: string;
     text: string;
     html: string | undefined;
+    attachments: Array<Record<string, string>>;
   } {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -87,6 +88,7 @@ describe("coach invite email (task #636)", () => {
       subject: body.subject,
       text,
       html,
+      attachments: body.attachments,
     };
   }
 
@@ -119,7 +121,16 @@ describe("coach invite email (task #636)", () => {
     expect(sent.subject).toBe(COACH_INVITE_SUBJECT);
     expect(sent.text).toBe(buildCoachInviteText(vars));
     expect(sent.html).toContain(buildCoachInviteHtml(vars));
-    expect(sent.html).toContain("email-header-logo.png");
+    expect(sent.html).toContain('src="cid:kinectem-email-logo"');
+    expect(sent.attachments).toEqual([
+      expect.objectContaining({
+        type: "image/png",
+        filename: "kinectem-email-logo.png",
+        disposition: "inline",
+        content_id: "kinectem-email-logo",
+      }),
+    ]);
+    expect(sent.attachments[0].content.length).toBeGreaterThan(1_000);
     expect(sent.html).toContain("email-card");
 
     // The unknown address has no Kinectem account, so no roster entry /
