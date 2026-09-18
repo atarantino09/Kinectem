@@ -6,8 +6,8 @@
 // the athlete AND their parent (if linked). Coaches are emailed directly.
 //
 // Emails carry the location NAME only (never the full address) and a link into
-// the team's Schedule tab. Date/time is formatted in UTC with an explicit zone
-// label because events are stored as instants and we have no per-team timezone.
+// the team's Schedule tab. Timed events use Kinectem's current Eastern Time
+// schedule convention so the email matches the wall-clock time shown in-app.
 
 import { db, rosterEntries } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
@@ -47,7 +47,9 @@ function whatLabel(info: ScheduleEmailEventInfo): string {
   return base;
 }
 
-function whenText(info: ScheduleEmailEventInfo): string {
+export function scheduleEmailWhenText(
+  info: Pick<ScheduleEmailEventInfo, "startAt" | "allDay">,
+): string {
   if (info.allDay) {
     return (
       new Intl.DateTimeFormat("en-US", {
@@ -66,7 +68,7 @@ function whenText(info: ScheduleEmailEventInfo): string {
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
-    timeZone: "UTC",
+    timeZone: "America/New_York",
     timeZoneName: "short",
   }).format(info.startAt);
 }
@@ -100,7 +102,7 @@ export async function notifyTeamOfScheduleReminder(
     teamId: info.teamId,
     teamName: info.teamName,
     whatLabel: whatLabel(info),
-    whenText: whenText(info),
+    whenText: scheduleEmailWhenText(info),
     locationName: info.locationName,
   };
   await dispatchNotificationEmailToMany({
@@ -124,7 +126,7 @@ export async function notifyTeamOfScheduleChange(
     teamId: info.teamId,
     teamName: info.teamName,
     whatLabel: whatLabel(info),
-    whenText: whenText(info),
+    whenText: scheduleEmailWhenText(info),
     locationName: info.locationName,
     status: info.status,
     reason: info.reason,

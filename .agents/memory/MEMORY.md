@@ -35,6 +35,7 @@
 - [Combined recap article context](combined-recap-article-context.md) — selected news is re-fetched server-side only at generation; bounded excerpts, metadata fallback, and untrusted AI treatment are mandatory.
 - [Game-recap reminder scheduler](game-recap-reminder.md) — DB-sweep nudge ~2h post-game; atomic claim must re-check game_recap_id/status; release stamp on send failure to retry.
 - [Team Schedule visibility parity](team-schedule-visibility.md) — schedule is members-only incl. parents of active athletes; client gates must mirror server canViewTeamSchedule or parents get locked out.
+- [Schedule email timezone](schedule-email-timezone.md) — timed schedule emails currently use America/New_York to match the app’s Eastern wall clock; all-day dates remain UTC-stable.
 - [Notification email dispatch gate](notification-prefs-dispatch.md) — gated email routes minor→guardian & gates on recipient prefs; test pitfall: getOrCreatePreferences before set-flag-false or lazy all-on row re-sends.
 - [Daily admin digest](daily-admin-digest.md) — operator-facing ops email (no guardian routing/unsubscribe); itemize only public/masked names, keep free-text UGC count-only; pure builder shared by preview + cron.
 - [Roster invite paired records](roster-invite-paired-records.md) — known-email team invites create roster_invites + pending roster_entries; revoke must drop the paired pending entry & re-invite guard only skips on `accepted`, else re-invites silently no-op.
