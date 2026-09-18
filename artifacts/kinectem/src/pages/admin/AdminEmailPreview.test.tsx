@@ -64,6 +64,26 @@ describe("AdminEmailPreview", () => {
     expect(iframe4.getAttribute("srcdoc")).toContain(
       "Schedule Update: Wildcats Game",
     );
+
+    fireEvent.click(screen.getByTestId("button-template-guardian_consent"));
+    expect(screen.getByTitle("Guardian consent preview").getAttribute("srcdoc")).toContain(
+      "Confirm Maya&#39;s participation",
+    );
+
+    fireEvent.click(screen.getByTestId("button-template-billing_trial"));
+    expect(screen.getByTitle("Trial ending preview").getAttribute("srcdoc")).toContain(
+      "Your Club Pro trial ends soon",
+    );
+
+    fireEvent.click(screen.getByTestId("button-template-weekly_digest"));
+    expect(screen.getByTitle("Weekly digest preview").getAttribute("srcdoc")).toContain(
+      "Your U14 Lightning week",
+    );
+
+    fireEvent.click(screen.getByTestId("button-template-activity_notification"));
+    expect(screen.getByTitle("Activity notification preview").getAttribute("srcdoc")).toContain(
+      "New team update",
+    );
   });
 
   it("switches the framed preview between desktop and mobile widths", () => {

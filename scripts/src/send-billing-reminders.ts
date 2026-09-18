@@ -29,7 +29,13 @@ import {
   users,
 } from "@workspace/db";
 import { and, eq, isNull, isNotNull, inArray, lte, gte } from "drizzle-orm";
-import { renderBrandedEmailHtml } from "@workspace/email-template";
+import {
+  emailButton,
+  emailKeyValue,
+  emailSection,
+  emailStatusCallout,
+  renderBrandedEmailHtml,
+} from "@workspace/email-template";
 import { pathToFileURL } from "node:url";
 
 type PlanTier = "starter" | "pro" | "elite";
@@ -183,10 +189,21 @@ Thanks for being one of our founding organizations — here's to a great season 
 — The Kinectem Team`;
 
   const bodyHtml = `<p>Hi ${escapeHtml(greeting)},</p>
-<p>It's been a joy watching <strong>${escapeHtml(args.orgName)}</strong> bring its teams, players, and families onto Kinectem. 🎉</p>
-<p>Your free period wraps up on <strong>${escapeHtml(dateLabel)}</strong>, when annual billing begins for your <strong>${escapeHtml(planName)}</strong> plan (${escapeHtml(price)}/yr). To keep everything running without a hitch — no lost access, no interruptions for your coaches or parents — just add a card on file now. <strong>You won't be charged until ${escapeHtml(dateLabel)}</strong>, and you can cancel any time during your free period at no cost.</p>
-<p><a href="${escapeHtml(url)}">Add your card →</a></p>
-<p>It takes about 30 seconds, it's fully secure, and you can change your plan any time before billing starts.</p>
+<p>It's been a joy watching <strong>${escapeHtml(args.orgName)}</strong> bring its teams, players, and families onto Kinectem.</p>
+${emailStatusCallout("warning", `<strong>Action needed:</strong> add a card on file before your free period ends to keep access uninterrupted. You will not be charged until ${escapeHtml(dateLabel)}.`)}
+${emailSection({
+  eyebrow: "Billing details",
+  title: "Your plan at a glance",
+  bodyHtml: emailKeyValue([
+    { label: "Billing starts", value: dateLabel },
+    { label: "Plan", value: planName },
+    { label: "Annual amount", value: `${price}/yr` },
+  ]),
+})}
+${emailSection({
+  title: "Add your card",
+  bodyHtml: `<p>It takes about 30 seconds, it's fully secure, and you can change your plan or cancel any time before billing starts at no cost.</p>${emailButton({ href: url, label: "Add your card" })}`,
+})}
 <p>Thanks for being one of our founding organizations — here's to a great season ahead.</p>
 <p>— The Kinectem Team</p>`;
   const html = renderBrandedEmailHtml({

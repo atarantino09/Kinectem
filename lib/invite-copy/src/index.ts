@@ -11,6 +11,13 @@
 //
 // Keep the wording here and nowhere else. Surfaces render from these pieces.
 
+import {
+  emailButton,
+  emailChecklist,
+  emailSection,
+  emailSummary,
+} from "@workspace/email-template";
+
 export const COACH_INVITE_SUBJECT = "Our game recaps are now on Kinectem!";
 
 /**
@@ -189,16 +196,17 @@ export function buildStaffInviteText(vars: StaffInviteVars): string {
  * system-generated.
  */
 export function buildStaffInviteHtml(vars: StaffInviteVars): string {
-  const linkAttr = escapeHtml(vars.link);
+  const ctaLabel = STAFF_CTA_LABEL.replace(/ →$/, "");
   return [
     `<p>${escapeHtml(STAFF_GREETING)}</p>`,
-    `<p>${escapeHtml(staffInviteLine(vars))}</p>`,
-    `<p>${escapeHtml(STAFF_ABOUT)}</p>`,
-    `<p>${escapeHtml(staffAiAssistParagraph(vars))}</p>`,
-    `<p>${escapeHtml(STAFF_ARCHIVE)}</p>`,
-    `<p>${escapeHtml(STAFF_SETUP)}</p>`,
+    emailSummary(staffInviteLine(vars)),
+    emailSection(
+      "About Kinectem",
+      `<p>${escapeHtml(STAFF_ABOUT)}</p><p>${escapeHtml(staffAiAssistParagraph(vars))}</p><p>${escapeHtml(STAFF_ARCHIVE)}</p>`,
+    ),
+    emailSection("Your invitation", `<p>${escapeHtml(STAFF_SETUP)}</p>`),
     `<p>Check out <a href="${LEARN_MORE_URL}">www.kinectem.com</a> to learn even more prior to signing up.</p>`,
-    `<p><a href="${linkAttr}">${escapeHtml(STAFF_CTA_LABEL)}</a></p>`,
+    emailButton({ href: vars.link, label: ctaLabel }),
     `<p>— ${escapeHtml(vars.inviterName)}</p>`,
   ].join("\n");
 }
@@ -238,17 +246,16 @@ export function buildCoachInviteText({ coachName, link }: CoachInviteVars): stri
  * The coach name is escaped (user-controlled); the link is system-generated.
  */
 export function buildCoachInviteHtml({ coachName, link }: CoachInviteVars): string {
-  const linkAttr = escapeHtml(link);
-  const bulletItems = BULLETS.map((b) => `<li>${escapeHtml(b)}</li>`).join("\n");
+  const ctaLabel = CTA_LABEL.replace(/ →$/, "");
   return [
     `<p>${escapeHtml(GREETING)}</p>`,
-    `<p>${escapeHtml(INTRO_PARAGRAPHS[0])}</p>`,
+    emailSummary(INTRO_PARAGRAPHS[0]),
     `<p>${escapeHtml(INTRO_PARAGRAPHS[1])}</p>`,
-    `<p>${escapeHtml(INTRO_PARAGRAPHS[2])}</p>`,
-    `<p>${escapeHtml(CONTROL_INTRO)}</p>`,
-    `<ul>\n${bulletItems}\n</ul>`,
+    emailSection("Your player's account", `<p>${escapeHtml(INTRO_PARAGRAPHS[2])}</p>`),
+    emailSection(CONTROL_INTRO, emailChecklist(BULLETS)),
+    `<p>${escapeHtml(AFTER_BULLETS)}</p>`,
     `<p>Check out <a href="${LEARN_MORE_URL}">www.kinectem.com</a> to learn even more prior to signing up.</p>`,
-    `<p><a href="${linkAttr}">${escapeHtml(CTA_LABEL)}</a></p>`,
+    emailButton({ href: link, label: ctaLabel }),
     `<p>— Coach ${escapeHtml(coachName)}</p>`,
   ].join("\n");
 }
@@ -256,21 +263,24 @@ export function buildCoachInviteHtml({ coachName, link }: CoachInviteVars): stri
 export function buildMultiTeamStaffInviteHtml(
   vars: MultiTeamStaffInviteVars,
 ): string {
-  const list = vars.teamNames
-    .map((name) => `<li>${escapeHtml(name)}</li>`)
-    .join("\n");
-  const linkAttr = escapeHtml(vars.link);
+  const list = vars.teamNames.map((name) => escapeHtml(name));
+  const ctaLabel = STAFF_CTA_LABEL.replace(/ →$/, "");
   return [
     `<p>${escapeHtml(STAFF_GREETING)}</p>`,
-    `<p>${escapeHtml(`${vars.inviterName} has invited you to join ${vars.organizationName} on Kinectem as ${withArticle(vars.roleLabel)}.`)}</p>`,
-    "<p>You'll be joining these teams:</p>",
-    `<ul>\n${list}\n</ul>`,
-    `<p>${escapeHtml(STAFF_ABOUT)}</p>`,
-    `<p>${escapeHtml(staffAiAssistParagraph({ roleLabel: vars.roleLabel }))}</p>`,
-    `<p>${escapeHtml(STAFF_ARCHIVE)}</p>`,
-    `<p>${escapeHtml(STAFF_SETUP)}</p>`,
+    emailSummary(
+      `${vars.inviterName} has invited you to join ${vars.organizationName} on Kinectem as ${withArticle(vars.roleLabel)}.`,
+    ),
+    emailSection(
+      "You'll be joining these teams:",
+      `<ul>\n${list.map((name) => `<li>${name}</li>`).join("\n")}\n</ul>`,
+    ),
+    emailSection(
+      "About Kinectem",
+      `<p>${escapeHtml(STAFF_ABOUT)}</p><p>${escapeHtml(staffAiAssistParagraph({ roleLabel: vars.roleLabel }))}</p><p>${escapeHtml(STAFF_ARCHIVE)}</p>`,
+    ),
+    emailSection("Your invitation", `<p>${escapeHtml(STAFF_SETUP)}</p>`),
     `<p>Check out <a href="${LEARN_MORE_URL}">www.kinectem.com</a> to learn even more prior to signing up.</p>`,
-    `<p><a href="${linkAttr}">${escapeHtml(STAFF_CTA_LABEL)}</a></p>`,
+    emailButton({ href: vars.link, label: ctaLabel }),
     `<p>— ${escapeHtml(vars.inviterName)}</p>`,
   ].join("\n");
 }

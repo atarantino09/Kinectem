@@ -29,6 +29,7 @@ import {
   unsubscribeText,
   type ResolvedRecipient,
 } from "./lib/email-campaign";
+import { emailButton, emailSection } from "@workspace/email-template";
 
 const WINDOW_DAYS = 7;
 
@@ -94,14 +95,17 @@ export function buildWeeklyDigestEmail(args: {
         a.announcementCount > 0
           ? `<li>${a.announcementCount} new announcement${a.announcementCount === 1 ? "" : "s"}</li>`
           : "";
-      return `<li style="margin-bottom:8px"><strong>${escapeHtml(a.teamName)}</strong><ul>${recapItems}${moreRecaps}${announce}</ul></li>`;
+      return emailSection({
+        title: a.teamName,
+        bodyHtml: `<ul>${recapItems}${moreRecaps}${announce}</ul>`,
+      });
     })
     .join("");
   const bodyHtml = `<p>Hi ${escapeHtml(greeting)},</p>
 <p>${escapeHtml(intro)}</p>
-<ul>${items}</ul>
-<p><a href="${escapeHtml(feedUrl)}">Catch up on Kinectem →</a></p>
-<p style="color:#6b7280;font-size:13px">${totalRecaps} recap${totalRecaps === 1 ? "" : "s"} and ${totalAnnouncements} announcement${totalAnnouncements === 1 ? "" : "s"} this week.</p>
+${items}
+${emailButton({ href: feedUrl, label: "Catch up on Kinectem" })}
+<p class="email-muted" style="color:#6b7280;font-size:13px">${totalRecaps} recap${totalRecaps === 1 ? "" : "s"} and ${totalAnnouncements} announcement${totalAnnouncements === 1 ? "" : "s"} this week.</p>
 <p>— The Kinectem Team</p>`;
   const html = wrapHtml(bodyHtml, recipient.unsubscribeUrl, subject);
 

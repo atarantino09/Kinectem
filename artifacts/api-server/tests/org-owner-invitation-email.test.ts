@@ -23,6 +23,12 @@ describe("organization owner invitation email", () => {
     expect(email.text).toContain("Bulk add coaches");
     expect(email.text).toContain("players and parents through Roster outreach");
     expect(email.text).toContain("Please do not forward it");
+    expect(email.html).toContain('class="email-section"');
+    expect(email.html).toContain('class="email-checklist-box"');
+    expect(email.html).toContain("Claim organization");
+    expect(email.html).toContain(
+      "players and parents through Roster outreach using each team&#39;s secure invitation",
+    );
     expect(email.kind).toBe("org_owner_invitation");
   });
 });

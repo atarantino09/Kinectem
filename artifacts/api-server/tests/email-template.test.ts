@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  emailSection,
   plainTextToHtml,
   renderBrandedEmailHtml,
 } from "@workspace/email-template";
@@ -32,6 +33,7 @@ describe("Kinectem branded email presentation", () => {
     expect(html).toContain('name="color-scheme"');
     expect(html).toContain("@media only screen and (max-width: 620px)");
     expect(html).toContain("@media (prefers-color-scheme: dark)");
+    expect(html).toContain(".email-muted { color:#94a3b8 !important; }");
     expect(html).toContain(
       'src="https://kinectem.example/email-header-banner.png"',
     );
@@ -63,5 +65,19 @@ describe("Kinectem branded email presentation", () => {
     expect(html).toContain("Manage preferences");
     expect(html).toContain("Unsubscribe");
     expect(html).toContain("</html>");
+  });
+
+  it("renders titled content sections without decorative symbols", () => {
+    const html = emailSection({
+      eyebrow: "Billing details",
+      title: "Your plan at a glance",
+      bodyHtml: "<p>Annual plan information.</p>",
+    });
+
+    expect(html).toContain('class="email-section"');
+    expect(html).toContain("Billing details");
+    expect(html).toContain("Your plan at a glance");
+    expect(html).toContain("Annual plan information.");
+    expect(html).not.toMatch(/[★✓●]/);
   });
 });

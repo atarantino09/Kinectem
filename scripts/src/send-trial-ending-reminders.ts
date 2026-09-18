@@ -25,7 +25,13 @@ import {
   users,
 } from "@workspace/db";
 import { and, eq, isNull, isNotNull, inArray, lte, gte } from "drizzle-orm";
-import { renderBrandedEmailHtml } from "@workspace/email-template";
+import {
+  emailButton,
+  emailKeyValue,
+  emailSection,
+  emailStatusCallout,
+  renderBrandedEmailHtml,
+} from "@workspace/email-template";
 import { pathToFileURL } from "node:url";
 
 type PlanTier = "starter" | "pro" | "elite";
@@ -203,9 +209,20 @@ If everything looks good, there's nothing to do. Thanks for building your club's
 — The Kinectem Team`;
 
   const bodyHtml = `<p>Hi ${escapeHtml(greeting)},</p>
-<p>Your free period for <strong>${escapeHtml(args.orgName)}</strong> ends soon. On <strong>${escapeHtml(dateLabel)}</strong>, the card on file will be charged <strong>${escapeHtml(charge)}</strong> for your first year on the <strong>${escapeHtml(planName)}</strong> plan.${escapeHtml(promoLine)}</p>
-<p>Want to make a change first? You can switch plans — or cancel billing entirely and pay nothing — any time before ${escapeHtml(dateLabel)}:</p>
-<p><a href="${escapeHtml(url)}">Manage your plan →</a></p>
+${emailStatusCallout("warning", `<strong>Upcoming charge:</strong> your free period for <strong>${escapeHtml(args.orgName)}</strong> ends soon. ${escapeHtml(promoLine.trim())}`)}
+${emailSection({
+  eyebrow: "Billing details",
+  title: "Your first charge",
+  bodyHtml: emailKeyValue([
+    { label: "Charge date", value: dateLabel },
+    { label: "Plan", value: planName },
+    { label: "First-year amount", value: charge },
+  ]),
+})}
+${emailSection({
+  title: "Review your plan",
+  bodyHtml: `<p>You can switch plans or cancel billing entirely and pay nothing any time before ${escapeHtml(dateLabel)}.</p>${emailButton({ href: url, label: "Manage your plan" })}`,
+})}
 <p>If everything looks good, there's nothing to do. Thanks for building your club's story on Kinectem!</p>
 <p>— The Kinectem Team</p>`;
   const html = renderBrandedEmailHtml({

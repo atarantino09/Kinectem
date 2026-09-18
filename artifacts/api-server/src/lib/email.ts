@@ -19,6 +19,7 @@ import {
   emailButton,
   emailChecklist,
   emailKeyValue,
+  emailSection,
   emailStatusCallout,
   emailSummary,
   plainTextToHtml,
@@ -305,7 +306,7 @@ export function buildOrgClaimApprovedEmail(input: {
         ],
         "Recommended launch order",
       ),
-      `<p style="color:#65758b;font-size:14px;">Your setup checklist and page tour will remain available on the organization page, so you can return to any step later.</p>`,
+      `<p class="email-muted" style="color:#65758b;font-size:14px;">Your setup checklist and page tour will remain available on the organization page, so you can return to any step later.</p>`,
     ].join("\n"),
   };
 }
@@ -338,6 +339,23 @@ export function buildOrgOwnerInvitationEmail(input: {
       "6. Complete any remaining items in the organization setup checklist.",
       "",
       "This link is a private invitation. Please do not forward it. It stops working after the organization has an owner.",
+    ].join("\n"),
+    html: [
+       emailSection("Claim your organization", `<p>You've been invited to become the owner of <strong>${escapeHtml(input.organizationName)}</strong> on Kinectem.</p>
+<p>Kinectem gives your club one recognizable home for recaps, player histories, and team updates without replacing the tools you already use.</p>
+${emailButton({ href: claimUrl, label: "Claim organization" })}
+${emailChecklist(
+  [
+    "Open the link and sign in or create your Kinectem profile.",
+    `Confirm that you want to become the owner of ${input.organizationName}.`,
+    "Review and share the pre-invite message with your club.",
+    "Bulk add coaches across your teams.",
+    "Add players and parents through Roster outreach using each team's secure invitation.",
+    "Complete the organization setup checklist.",
+  ],
+  "Setup steps",
+)}
+<p class="email-muted" style="color:#65758b;font-size:14px;">This private invitation should not be forwarded. It stops working after the organization has an owner.</p>`),
     ].join("\n"),
   };
 }
@@ -410,12 +428,11 @@ Open this link to accept:
 ${url}
 
 If you don't have a Kinectem account yet, you can sign up from the same link.`,
-    html: `<p><strong>${inviterHtml}</strong> invited you to join <strong>${orgHtml}</strong> on Kinectem as ${roleLabel}.</p>
+    html: emailSection(`Join ${organizationName}`, `<p><strong>${inviterHtml}</strong> invited you to join <strong>${orgHtml}</strong> on Kinectem as ${roleLabel}.</p>
 <p>${escapeHtml(KINECTEM_INVITE_CONTEXT)}</p>
 ${noteHtml}
-<p>Open this link to accept:</p>
-<p><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></p>
-<p>If you don't have a Kinectem account yet, you can sign up from the same link.</p>`,
+${emailButton({ href: url, label: "Accept invitation" })}
+<p class="email-muted" style="color:#65758b;font-size:14px;">If you don't have a Kinectem account yet, you can sign up from the same link.</p>`),
   });
 }
 
@@ -463,11 +480,10 @@ Open this link to accept:
 ${url}
 
 If you don't have a Kinectem account yet, you can sign up from the same link.`,
-    html: `<p><strong>${inviterHtml}</strong> invited you to be the ${roleLabel} of the ${kindLabel} <strong>${nameHtml}</strong> on Kinectem.</p>
+    html: emailSection(`Help run ${targetName}`, `<p><strong>${inviterHtml}</strong> invited you to be the ${roleLabel} of the ${kindLabel} <strong>${nameHtml}</strong> on Kinectem.</p>
 <p>${escapeHtml(KINECTEM_INVITE_CONTEXT)}</p>
-<p>Open this link to accept:</p>
-<p><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></p>
-<p>If you don't have a Kinectem account yet, you can sign up from the same link.</p>`,
+${emailButton({ href: url, label: "Accept invitation" })}
+<p class="email-muted" style="color:#65758b;font-size:14px;">If you don't have a Kinectem account yet, you can sign up from the same link.</p>`),
   });
 }
 
@@ -619,9 +635,8 @@ Open the post to approve or remove the tag:
 ${postUrl}
 
 If you'd rather not see these emails, change tag-consent settings on your Kinectem profile.`,
-      html: `<p>Someone tagged you in <strong>${titleHtml}</strong> on Kinectem. Because you (or your guardian) ask to approve tags first, the tag is waiting for your review.</p>
-<p>Open the post to approve or remove the tag:</p>
-<p><a href="${escapeHtml(postUrl)}">${escapeHtml(postUrl)}</a></p>
+    html: `<p>Someone tagged you in <strong>${titleHtml}</strong> on Kinectem. Because you (or your guardian) ask to approve tags first, the tag is waiting for your review.</p>
+${emailButton({ href: postUrl, label: "Review tag" })}
 <p>If you'd rather not see these emails, change tag-consent settings on your Kinectem profile.</p>`,
     });
     return;
@@ -637,8 +652,7 @@ ${postUrl}
 
 If you'd rather not be tagged, you can remove the tag from the post page.`,
     html: `<p>You were tagged in <strong>${titleHtml}</strong> on Kinectem.</p>
-<p>Open the post to see it:</p>
-<p><a href="${escapeHtml(postUrl)}">${escapeHtml(postUrl)}</a></p>
+${emailButton({ href: postUrl, label: "Open the post" })}
 <p>If you'd rather not be tagged, you can remove the tag from the post page.</p>`,
   });
 }
@@ -658,10 +672,10 @@ Open this link within the next hour to choose a new password:
 ${url}
 
 If you didn't request this, you can ignore this email and your password will stay the same.`,
-    html: `<p>Someone asked to reset the password for your Kinectem account.</p>
-<p>Open this link within the next hour to choose a new password:</p>
-<p><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></p>
-<p>If you didn't request this, you can ignore this email and your password will stay the same.</p>`,
+    html: emailSection("Reset your password", `<p>Someone asked to reset the password for your Kinectem account.</p>
+${emailStatusCallout("warning", "This secure link expires in one hour.")}
+${emailButton({ href: url, label: "Reset password" })}
+<p class="email-muted" style="color:#65758b;font-size:14px;">If you didn't request this, you can ignore this email and your password will stay the same.</p>`),
   });
 }
 
@@ -681,10 +695,10 @@ Because they are under 13, the account cannot be used until you confirm it. Open
 ${url}
 
 If you don't recognize this signup, you can ignore this email and the account will stay locked.`,
-    html: `<p><strong>${escapeHtml(athleteName)}</strong> just signed up for Kinectem and listed you as their parent or guardian.</p>
-<p>Because they are under 13, the account cannot be used until you confirm it. Open this link to confirm:</p>
-<p><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></p>
-<p>If you don't recognize this signup, you can ignore this email and the account will stay locked.</p>`,
+    html: emailSection(`Confirm ${athleteName}'s account`, `<p><strong>${escapeHtml(athleteName)}</strong> just signed up for Kinectem and listed you as their parent or guardian.</p>
+${emailStatusCallout("warning", "Because they are under 13, the account cannot be used until you confirm it.")}
+${emailButton({ href: url, label: "Confirm account" })}
+<p class="email-muted" style="color:#65758b;font-size:14px;">If you don't recognize this signup, you can ignore this email and the account will stay locked.</p>`),
   });
 }
 
@@ -719,13 +733,11 @@ ${url}
 If you don't have a Kinectem account yet, sign up using this email address (${to}) and the invitation will be waiting for you.
 
 If you don't recognize this invitation, you can ignore this email or decline it in the app.`,
-    html: `<p><strong>${escapeHtml(args.inviterName)}</strong> invited you to join Kinectem as <strong>${escapeHtml(args.childName)}</strong>'s ${roleLabel}.</p>
+    html: emailSection(`Join ${args.childName}'s family`, `<p><strong>${escapeHtml(args.inviterName)}</strong> invited you to join Kinectem as <strong>${escapeHtml(args.childName)}</strong>'s ${roleLabel}.</p>
 <p>${escapeHtml(KINECTEM_INVITE_CONTEXT)}</p>
 <p>Once you accept, you'll see ${escapeHtml(args.childName)} on your Family dashboard, follow their teams automatically, and receive updates about their activity.</p>
-<p>To accept or decline, open your Family dashboard:</p>
-<p><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></p>
-<p>If you don't have a Kinectem account yet, sign up using this email address (${escapeHtml(to)}) and the invitation will be waiting for you.</p>
-<p>If you don't recognize this invitation, you can ignore this email or decline it in the app.</p>`,
+${emailButton({ href: url, label: "Open Family dashboard" })}
+<p class="email-muted" style="color:#65758b;font-size:14px;">If you don't have an account yet, sign up using this email address (${escapeHtml(to)}). If you don't recognize this invitation, ignore it or decline it in the app.</p>`),
   });
 }
 
@@ -752,12 +764,10 @@ ${url}
 After you submit consent, we'll email you ONE more time at this address with a "confirm" link. The account stays disabled until you click that second link — that two-step "email plus" pattern is how we verify the consent really came from you.
 
 If you don't recognize this signup, ignore this email and the account will stay locked.`,
-    html: `<p><strong>${escapeHtml(athleteName)}</strong> listed you as their parent or guardian when signing up for Kinectem.</p>
-<p>Because they are under 13, federal law (COPPA) requires us to get your verifiable consent before we collect personal information from them.</p>
-<p>Please open this link to read the full notice and grant consent:</p>
-<p><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></p>
-<p>After you submit consent, we'll email you ONE more time at this address with a &quot;confirm&quot; link. The account stays disabled until you click that second link — that two-step &quot;email plus&quot; pattern is how we verify the consent really came from you.</p>
-<p>If you don't recognize this signup, ignore this email and the account will stay locked.</p>`,
+    html: emailSection(`Consent for ${athleteName}'s account`, `<p><strong>${escapeHtml(athleteName)}</strong> listed you as their parent or guardian when signing up for Kinectem.</p>
+${emailStatusCallout("warning", "Because they are under 13, COPPA requires verifiable consent before personal information can be collected.")}
+${emailButton({ href: url, label: "Review notice and consent" })}
+<p class="email-muted" style="color:#65758b;font-size:14px;">After you submit consent, we'll email one more time with a confirm link. The account stays disabled until you click that second link; this two-step process verifies that the consent came from you. If you don't recognize this signup, ignore this email and the account will stay locked.</p>`),
   });
 }
 
@@ -781,11 +791,10 @@ ${url}
 The account will stay disabled until you click. The link is good for 7 days.
 
 If you didn't grant consent, do nothing — without this second click the account will not be activated.`,
-    html: `<p>Thanks — we received your consent for <strong>${escapeHtml(athleteName)}</strong>'s Kinectem account.</p>
-<p>To finish (and to verify it really came from you), open this link:</p>
-<p><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></p>
-<p>The account will stay disabled until you click. The link is good for 7 days.</p>
-<p>If you didn't grant consent, do nothing — without this second click the account will not be activated.</p>`,
+    html: emailSection(`Finish enabling ${athleteName}'s account`, `<p>Thanks — we received your consent for <strong>${escapeHtml(athleteName)}</strong>'s Kinectem account.</p>
+${emailStatusCallout("warning", "The account stays disabled until you complete this second verification step. The link is good for 7 days.")}
+${emailButton({ href: url, label: "Finish verification" })}
+<p class="email-muted" style="color:#65758b;font-size:14px;">If you didn't grant consent, do nothing. Without this second click the account will not be activated.</p>`),
   });
 }
 
@@ -807,10 +816,10 @@ You can revoke consent at any time, which will immediately disable the account a
 ${revokeUrl}
 
 You can also manage the account from your Family page after signing in to Kinectem.`,
-    html: `<p><strong>${escapeHtml(athleteName)}</strong>'s Kinectem account has been activated.</p>
-<p>You can revoke consent at any time, which will immediately disable the account and stop any further data collection. Keep this link handy for that:</p>
-<p><a href="${escapeHtml(revokeUrl)}">${escapeHtml(revokeUrl)}</a></p>
-<p>You can also manage the account from your Family page after signing in to Kinectem.</p>`,
+    html: emailSection(`${athleteName}'s account is active`, `<p><strong>${escapeHtml(athleteName)}</strong>'s Kinectem account has been activated.</p>
+<p>You can revoke consent at any time, which will immediately disable the account and stop any further data collection.</p>
+${emailButton({ href: revokeUrl, label: "Keep revoke link" })}
+<p class="email-muted" style="color:#65758b;font-size:14px;">You can also manage the account from your Family page after signing in to Kinectem.</p>`),
   });
 }
 
@@ -1006,7 +1015,7 @@ We're glad you're here.
 <li>Complete your profile so teammates can find you</li>
 <li>Check your team's schedule so you never miss a game</li>
 </ul>
-<p><a href="${escapeHtml(url)}">Jump in →</a></p>
+${emailButton({ href: url, label: "Open Kinectem" })}
 <p>We're glad you're here.<br/>— The Kinectem Team</p>${foot.html}`,
   };
 }
@@ -1038,7 +1047,7 @@ Keep them coming — every recap helps families relive the season.
 — The Kinectem Team${foot.text}`,
     html: `<p>Congratulations — ${whoseHtml} first recap is published on Kinectem!</p>
 <p><strong>${titleHtml}</strong></p>
-<p><a href="${escapeHtml(args.recapUrl)}">See it →</a></p>${ALBUM_INVITE_HTML}
+${emailButton({ href: args.recapUrl, label: "See the recap" })}${ALBUM_INVITE_HTML}
 <p>Keep them coming — every recap helps families relive the season.<br/>— The Kinectem Team</p>${foot.html}`,
   };
 }
@@ -1064,7 +1073,7 @@ export function buildFollowEmail(
 ${args.requested ? "Review the request:" : "See their profile:"}
 ${args.profileUrl}${foot.text}`,
     html: `<p><strong>${actorHtml}</strong> ${verb} ${whoseHtml} Kinectem profile.</p>
-<p><a href="${escapeHtml(args.profileUrl)}">${args.requested ? "Review the request" : "See their profile"} →</a></p>${foot.html}`,
+${emailButton({ href: args.profileUrl, label: args.requested ? "Review the request" : "See their profile" })}${foot.html}`,
   };
 }
 
@@ -1090,7 +1099,7 @@ export function buildCommentEmail(
 See it:
 ${args.postUrl}${foot.text}`,
     html: `<p><strong>${actorHtml}</strong> ${whatHtml} on Kinectem.</p>
-<p><a href="${escapeHtml(args.postUrl)}">See it →</a></p>${foot.html}`,
+${emailButton({ href: args.postUrl, label: "See it" })}${foot.html}`,
   };
 }
 
@@ -1110,7 +1119,7 @@ export function buildReactionEmail(
 See it:
 ${args.postUrl}${foot.text}`,
     html: `<p><strong>${actorHtml}</strong> liked ${subjectPossessiveHtml(ctx)} post on Kinectem.</p>
-<p><a href="${escapeHtml(args.postUrl)}">See it →</a></p>${foot.html}`,
+${emailButton({ href: args.postUrl, label: "See the post" })}${foot.html}`,
   };
 }
 
@@ -1145,7 +1154,7 @@ export function buildTagEmail(
 Open the post:
 ${args.postUrl}${albumText}${foot.text}`,
     html: `<p>${whoHtml} ${wasWere} tagged in <strong>${titleHtml}</strong> on Kinectem.</p>
-<p><a href="${escapeHtml(args.postUrl)}">Open the post →</a></p>${albumHtml}${foot.html}`,
+${emailButton({ href: args.postUrl, label: "Open the post" })}${albumHtml}${foot.html}`,
   };
 }
 
@@ -1182,7 +1191,7 @@ See it:
 ${args.postUrl}${albumText}${foot.text}`,
     html: `<p><strong>${actorHtml}</strong> posted a new ${escapeHtml(args.contentLabel)} for <strong>${teamHtml}</strong> on Kinectem.</p>
 <p><strong>${titleHtml}</strong></p>
-<p><a href="${escapeHtml(args.postUrl)}">See it →</a></p>${albumHtml}${foot.html}`,
+${emailButton({ href: args.postUrl, label: "See it" })}${albumHtml}${foot.html}`,
   };
 }
 
@@ -1202,7 +1211,7 @@ export function buildRosterEmail(
 Open Kinectem:
 ${args.link}${foot.text}`,
     html: `<p>${escapeHtml(args.message)}</p>
-<p><a href="${escapeHtml(args.link)}">Open Kinectem →</a></p>${foot.html}`,
+${emailButton({ href: args.link, label: "Open Kinectem" })}${foot.html}`,
   };
 }
 
@@ -1234,7 +1243,7 @@ Read it:
 ${args.link}${foot.text}`,
     html: `<p><strong>${senderHtml}</strong> posted an announcement for <strong>${scopeHtml}</strong> on Kinectem:</p>
 <blockquote>${previewHtml}</blockquote>
-<p><a href="${escapeHtml(args.link)}">Read it →</a></p>${foot.html}`,
+${emailButton({ href: args.link, label: "Read it" })}${foot.html}`,
   };
 }
 
@@ -1260,7 +1269,7 @@ export function buildGameRecapReminderEmail(
 Write it here:
 ${args.teamUrl}${foot.text}`,
     html: `<p><strong>${teamHtml}</strong>'s game${oppHtml} has wrapped up — don't forget to write the game recap while it's fresh.</p>
-<p><a href="${escapeHtml(args.teamUrl)}">Write it →</a></p>${foot.html}`,
+${emailButton({ href: args.teamUrl, label: "Write the recap" })}${foot.html}`,
   };
 }
 
@@ -1316,9 +1325,11 @@ Open your Family page to send ${athleteName} a new link so they don't lose acces
 ${url}
 
 If you no longer want to confirm this account, you can ignore this email and it will stay locked.`,
-    html: `<p>The guardian-confirmation link for <strong>${escapeHtml(athleteName)}</strong>'s Kinectem account has expired before it was confirmed.</p>
-<p>Open your Family page to send ${escapeHtml(athleteName)} a new link so they don't lose access:</p>
-<p><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></p>
-<p>If you no longer want to confirm this account, you can ignore this email and it will stay locked.</p>`,
+    html: emailSection(
+      "Send a new confirmation link",
+      `<p>The guardian-confirmation link for <strong>${escapeHtml(athleteName)}</strong>'s Kinectem account expired before it was confirmed.</p>
+${emailButton({ href: url, label: "Open Family page" })}
+<p class="email-muted" style="color:#65758b;font-size:14px;">If you no longer want to confirm this account, you can ignore this email and it will stay locked.</p>`,
+    ),
   });
 }

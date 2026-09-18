@@ -229,7 +229,7 @@ export function wrapHtml(
   subject = "Kinectem update",
 ): string {
   const footerHtml = `<hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0" />
-<p style="font-size:12px;color:#6b7280">You're receiving this because email updates are on for your Kinectem account. <a href="${escapeHtml(unsubscribeUrl)}">Unsubscribe from these emails</a>.</p>`;
+<p class="email-muted" style="font-size:12px;color:#6b7280">You're receiving this because email updates are on for your Kinectem account. <a href="${escapeHtml(unsubscribeUrl)}">Unsubscribe from these emails</a>.</p>`;
   return renderBrandedEmailHtml({
     bodyHtml,
     subject,

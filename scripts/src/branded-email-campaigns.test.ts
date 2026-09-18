@@ -31,7 +31,7 @@ const recipient: ResolvedRecipient = {
 
 function assertBranded(html: string, subject: string): void {
   assert.match(html, /<!doctype html>/);
-  assert.match(html, /logo-horizontal\.png/);
+  assert.match(html, /email-header-banner\.png/);
   assert.ok(html.includes(subject));
   assert.match(html, /class="email-card"/);
 }
@@ -107,6 +107,9 @@ test("billing reminder keeps its transaction text and organization context", () 
   assert.match(email.text, /North & South <Club>/);
   assert.match(email.html, /North &amp; South &lt;Club&gt;/);
   assert.match(email.html, /\/app\/organizations\/org-id\/subscribe/);
+  assert.match(email.html, /class="email-facts"/);
+  assert.match(email.html, /Your plan at a glance/);
+  assert.match(email.html, /cancel any time before billing starts at no cost/);
 });
 
 test("trial-ending reminder keeps pricing copy and organization context", () => {
@@ -123,6 +126,7 @@ test("trial-ending reminder keeps pricing copy and organization context", () => 
   assert.match(email.text, /North & South <Club>/);
   assert.match(email.html, /North &amp; South &lt;Club&gt;/);
   assert.match(email.html, /Manage your plan/);
+  assert.match(email.html, /Your first charge/);
 });
 
 test("daily operator digest retains compliance copy inside the Operations shell", () => {

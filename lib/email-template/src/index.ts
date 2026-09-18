@@ -72,6 +72,38 @@ export function emailSummary(text: string): string {
   return `<div class="email-summary" style="margin:0 0 24px;font-size:18px;line-height:1.5;color:#0f172a;font-weight:600;">${escapeHtml(text)}</div>`;
 }
 
+/**
+ * A compact, table-backed card for grouping related email content. The title
+ * is plain text so callers cannot accidentally introduce markup; bodyHtml is
+ * intentionally trusted because it is assembled from the other primitives.
+ */
+export interface EmailSectionOptions {
+  title: string;
+  bodyHtml: string;
+  /** Optional short category label above the section title. */
+  eyebrow?: string;
+}
+
+export function emailSection(options: EmailSectionOptions): string;
+export function emailSection(title: string, bodyHtml: string): string;
+export function emailSection(
+  optionsOrTitle: EmailSectionOptions | string,
+  positionalBodyHtml?: string,
+): string {
+  const options =
+    typeof optionsOrTitle === "string"
+      ? { title: optionsOrTitle, bodyHtml: positionalBodyHtml ?? "" }
+      : optionsOrTitle;
+  const eyebrow = options.eyebrow?.trim();
+  return `<table role="presentation" class="email-section" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;margin:24px 0;">
+  <tr><td class="email-section-box" style="padding:24px;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc;">
+    ${eyebrow ? `<div class="email-section-eyebrow" style="margin:0 0 8px;color:#8b2cf5;font-size:12px;line-height:1.4;font-weight:800;letter-spacing:.06em;text-transform:uppercase;">${escapeHtml(eyebrow)}</div>` : ""}
+    <div class="email-section-title" style="margin:0 0 14px;color:#0f172a;font-size:16px;line-height:1.4;font-weight:750;">${escapeHtml(options.title)}</div>
+    <div class="email-section-body" style="color:#334155;font-size:15px;line-height:1.6;">${options.bodyHtml}</div>
+  </td></tr>
+</table>`;
+}
+
 export function emailDivider(): string {
   return `<table role="presentation" class="email-divider" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 32px 0;">
   <tr>
@@ -282,6 +314,9 @@ export function renderBrandedEmailHtml(options: BrandedEmailOptions): string {
     .email-kv-row td:first-child { padding: 16px 16px 4px !important; }
     .email-kv-row td:last-child { padding: 0 16px 16px !important; border-bottom: 1px solid #e2e8f0 !important; }
     .email-kv-row:last-child td:last-child { border-bottom: none !important; }
+     .email-section { margin:20px 0 !important; }
+     .email-section-box { padding:20px !important; }
+     .email-section-title { font-size:15px !important; }
   }
 
   .email-body-copy p { margin:0 0 16px; }
@@ -329,6 +364,11 @@ export function renderBrandedEmailHtml(options: BrandedEmailOptions): string {
     .email-checklist-title { color: #f8fafc !important; }
     .email-checklist-num { background: #334155 !important; color: #e2e8f0 !important; }
     .email-checklist-text { color: #cbd5e1 !important; }
+     .email-section-box { background:#1e293b !important; border-color:#334155 !important; }
+     .email-section-eyebrow { color:#c084fc !important; }
+     .email-section-title { color:#f8fafc !important; }
+     .email-section-body { color:#cbd5e1 !important; }
+     .email-muted { color:#94a3b8 !important; }
 
     .email-link-fallback { color: #94a3b8 !important; }
     .email-link-fallback a { color: #a855f7 !important; }

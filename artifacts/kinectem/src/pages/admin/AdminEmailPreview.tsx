@@ -2,10 +2,13 @@ import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import {
   ArrowLeft,
+  BarChart3,
   Building2,
   CalendarClock,
   CheckCircle2,
+  CreditCard,
   Eye,
+  Bell,
   Mail,
   Monitor,
   Moon,
@@ -19,6 +22,7 @@ import {
   emailCallout,
   emailChecklist,
   emailKeyValue,
+  emailSection,
   emailStatusCallout,
   emailSummary,
   renderBrandedEmailHtml,
@@ -45,7 +49,11 @@ type TemplateId =
   | "coach_invite"
   | "partner_claim"
   | "owner_approval"
-  | "schedule_change";
+  | "schedule_change"
+  | "guardian_consent"
+  | "billing_trial"
+  | "weekly_digest"
+  | "activity_notification";
 
 const TEMPLATES: Record<
   TemplateId,
@@ -166,6 +174,131 @@ ${emailButton({ href: `${baseUrl}/schedule/preview`, label: "View Updated Schedu
 `;
       return renderBrandedEmailHtml({
         subject: "Schedule Update: Wildcats Game",
+        contextLabel: "U14 Lightning",
+        bodyHtml,
+        baseUrl,
+      });
+    },
+  },
+  guardian_consent: {
+    label: "Guardian consent",
+    description: "Consent request for a young athlete.",
+    icon: ShieldCheck,
+    details: [
+      { label: "Guardian", value: "Jordan Lee" },
+      { label: "Athlete", value: "Maya Lee" },
+      { label: "Team", value: "U14 Lightning" },
+    ],
+    getHtml: (baseUrl) => {
+      const bodyHtml = `
+${emailSection({
+  eyebrow: "Guardian action",
+  title: "Confirm Maya's participation",
+  bodyHtml: `<p style="margin: 0;">Jordan, please review and confirm the consent details for Maya Lee before the U14 Lightning season begins.</p>`,
+})}
+${emailKeyValue([
+  { label: "Athlete", value: "Maya Lee" },
+  { label: "Team", value: "U14 Lightning" },
+  { label: "Requested by", value: "Coach Mike Davis" },
+  { label: "Due", value: "September 22, 2026" },
+])}
+${emailStatusCallout("info", "You can review or withdraw consent from your family settings at any time.")}
+${emailButton({ href: `${baseUrl}/consent/preview`, label: "Review consent" })}
+`;
+      return renderBrandedEmailHtml({
+        subject: "Guardian consent requested for Maya Lee",
+        contextLabel: "U14 Lightning",
+        bodyHtml,
+        baseUrl,
+      });
+    },
+  },
+  billing_trial: {
+    label: "Trial ending",
+    description: "Billing reminder for an organization.",
+    icon: CreditCard,
+    details: [
+      { label: "Organization", value: "West Point" },
+      { label: "Plan", value: "Club Pro" },
+      { label: "Trial ends", value: "October 1, 2026" },
+    ],
+    getHtml: (baseUrl) => {
+      const bodyHtml = `
+${emailSection({
+  eyebrow: "Billing reminder",
+  title: "Your Club Pro trial ends soon",
+  bodyHtml: `<p style="margin: 0;">Your West Point trial ends on October 1. Keep team pages, schedules, and family communication in one place by choosing a plan before then.</p>`,
+})}
+${emailKeyValue([
+  { label: "Organization", value: "West Point" },
+  { label: "Current plan", value: "Club Pro trial" },
+  { label: "Trial ends", value: "October 1, 2026" },
+])}
+${emailButton({ href: `${baseUrl}/settings/billing`, label: "Review billing" })}
+`;
+      return renderBrandedEmailHtml({
+        subject: "Your West Point trial ends October 1",
+        contextLabel: "West Point",
+        bodyHtml,
+        baseUrl,
+      });
+    },
+  },
+  weekly_digest: {
+    label: "Weekly digest",
+    description: "A concise summary for families and staff.",
+    icon: BarChart3,
+    details: [
+      { label: "Recipient", value: "Jordan Lee" },
+      { label: "Team", value: "U14 Lightning" },
+      { label: "Period", value: "September 12–18, 2026" },
+    ],
+    getHtml: (baseUrl) => {
+      const bodyHtml = `
+${emailSection({
+  eyebrow: "Weekly digest",
+  title: "Your U14 Lightning week",
+  bodyHtml: `<p style="margin: 0;">Here is the latest activity from your team, ready for a quick scan.</p>`,
+})}
+${emailKeyValue([
+  { label: "Upcoming", value: "2 events" },
+  { label: "Team updates", value: "3 new posts" },
+  { label: "Attendance", value: "Maya marked available" },
+])}
+${emailSection({
+  title: "Next up",
+  bodyHtml: `<p style="margin: 0;">Saturday practice at North Park, 10:00 AM</p>`,
+})}
+${emailButton({ href: `${baseUrl}/team/preview`, label: "Open team activity" })}
+`;
+      return renderBrandedEmailHtml({
+        subject: "Your U14 Lightning weekly digest",
+        contextLabel: "U14 Lightning",
+        bodyHtml,
+        baseUrl,
+      });
+    },
+  },
+  activity_notification: {
+    label: "Activity notification",
+    description: "Short alert for a new team update.",
+    icon: Bell,
+    details: [
+      { label: "Recipient", value: "Jordan Lee" },
+      { label: "Posted by", value: "Coach Mike Davis" },
+      { label: "Team", value: "U14 Lightning" },
+    ],
+    getHtml: (baseUrl) => {
+      const bodyHtml = `
+${emailSection({
+  eyebrow: "New team update",
+  title: "Practice starts 30 minutes later",
+  bodyHtml: `<p style="margin: 0;">Coach Mike Davis posted an update for U14 Lightning. Practice now begins at 6:30 PM today at North Park.</p>`,
+})}
+${emailButton({ href: `${baseUrl}/team/preview`, label: "View update" })}
+`;
+      return renderBrandedEmailHtml({
+        subject: "New update from U14 Lightning",
         contextLabel: "U14 Lightning",
         bodyHtml,
         baseUrl,

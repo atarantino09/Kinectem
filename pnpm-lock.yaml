@@ -994,7 +994,11 @@ importers:
 
   lib/email-template: {}
 
-  lib/invite-copy: {}
+  lib/invite-copy:
+    dependencies:
+      '@workspace/email-template':
+        specifier: workspace:*
+        version: link:../email-template
 
   lib/user-hard-delete:
     dependencies:

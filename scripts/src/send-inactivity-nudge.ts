@@ -33,6 +33,7 @@ import {
   unsubscribeText,
   type ResolvedRecipient,
 } from "./lib/email-campaign";
+import { emailButton, emailSection } from "@workspace/email-template";
 
 const DEFAULT_DAYS = 21;
 
@@ -67,8 +68,10 @@ Jump back in: ${url}
 — The Kinectem Team${unsubscribeText(recipient.unsubscribeUrl)}`;
 
   const bodyHtml = `<p>Hi ${escapeHtml(greeting)},</p>
-<p>${escapeHtml(lead)}</p>
-<p><a href="${escapeHtml(url)}">Jump back into Kinectem →</a></p>
+${emailSection({
+  title: "Your teams have updates",
+  bodyHtml: `<p>${escapeHtml(lead)}</p>${emailButton({ href: url, label: "Jump back into Kinectem" })}`,
+})}
 <p>— The Kinectem Team</p>`;
   const html = wrapHtml(bodyHtml, recipient.unsubscribeUrl, subject);
 
