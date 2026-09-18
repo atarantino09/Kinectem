@@ -291,7 +291,7 @@ function upgradeLegacyCtas(bodyHtml: string): string {
  */
 export function renderBrandedEmailHtml(options: BrandedEmailOptions): string {
   const baseUrl = normalizeBaseUrl(options.baseUrl);
-  const logoUrl = options.logoSrc ?? `${baseUrl}/email-header-logo.png`;
+  const logoUrl = options.logoSrc ?? `${baseUrl}/email-header-banner.png`;
   const subject = escapeHtml(options.subject);
   const contextLabel = options.contextLabel?.trim();
   const preheader = escapeHtml(options.preheader?.trim() || options.subject);
@@ -397,8 +397,8 @@ export function renderBrandedEmailHtml(options: BrandedEmailOptions): string {
           <td class="email-card" style="background:#ffffff;border:1px solid #e2e8f0;border-radius:24px;overflow:hidden;box-shadow:0 10px 40px -10px rgba(0,0,0,0.08);">
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
               <tr>
-                <td class="email-header" align="center" valign="middle" height="92" bgcolor="#0b1228" style="height:92px;padding:0 24px;background:#0b1228;text-align:center;">
-                  <img class="email-wordmark" src="${escapeHtml(logoUrl)}" width="238" height="50" alt="Kinectem" style="display:block;width:238px;max-width:72%;height:auto;margin:0 auto;border:0;outline:none;text-decoration:none;color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:21px;line-height:50px;font-weight:800;text-align:center;background:#0b1228;" />
+                <td class="email-header" align="center" valign="middle" bgcolor="#0b1228" style="padding:0;background:#0b1228;text-align:center;font-size:0;line-height:0;">
+                  <img class="email-wordmark" src="${escapeHtml(logoUrl)}" width="600" height="150" alt="Kinectem" style="display:block;width:100%;max-width:600px;height:auto;margin:0;border:0;outline:none;text-decoration:none;color:#ffffff;background:#0b1228;" />
                 </td>
               </tr>
               <tr>

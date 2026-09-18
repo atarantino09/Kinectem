@@ -216,7 +216,7 @@ export async function sendEmail(message: EmailMessage): Promise<void> {
       {
         content: KINECTEM_EMAIL_LOGO_BASE64,
         type: "image/png",
-        filename: "kinectem-email-logo.png",
+        filename: "kinectem-email-banner.png",
         disposition: "inline",
         content_id: EMAIL_LOGO_CID,
       },

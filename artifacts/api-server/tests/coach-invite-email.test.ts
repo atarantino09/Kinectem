@@ -125,7 +125,7 @@ describe("coach invite email (task #636)", () => {
     expect(sent.attachments).toEqual([
       expect.objectContaining({
         type: "image/png",
-        filename: "kinectem-email-logo.png",
+        filename: "kinectem-email-banner.png",
         disposition: "inline",
         content_id: "kinectem-email-logo",
       }),
