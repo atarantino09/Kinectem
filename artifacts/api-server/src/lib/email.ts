@@ -304,11 +304,15 @@ export function buildOrgClaimApprovedEmail(input: {
             href: setupUrl,
             label: `Finish setting up ${input.organizationName}`,
           }),
-          emailChecklist([
-            "Review and share the pre-invite message with your club.",
-            "Bulk add coaches across your teams.",
-            "Add players and parents through Roster outreach using each team's secure invitation.",
-          ]),
+          emailChecklist(
+            [
+              "Review and share the pre-invite message with your club.",
+              "Bulk add coaches across your teams.",
+              "Add players and parents through Roster outreach using each team's secure invitation.",
+            ],
+            undefined,
+            { embedded: true },
+          ),
         ].join(""),
       ),
     ].join("\n"),
@@ -349,17 +353,21 @@ export function buildOrgOwnerInvitationEmail(input: {
 <p style="margin-bottom:0;">Kinectem gives your club one recognizable home for recaps, player histories, and team updates without replacing the tools you already use.</p>`),
       emailSection("Claim your organization", `${emailButton({ href: claimUrl, label: "Claim organization" })}
 <p class="email-muted" style="color:#65758b;font-size:14px;margin-bottom:0;">This private invitation should not be forwarded. It stops working after the organization has an owner.</p>`),
-      emailSection("What happens next", emailChecklist(
-  [
-    "Open the link and sign in or create your Kinectem profile.",
-    `Confirm that you want to become the owner of ${input.organizationName}.`,
-    "Review and share the pre-invite message with your club.",
-    "Bulk add coaches across your teams.",
-    "Add players and parents through Roster outreach using each team's secure invitation.",
-    "Complete the organization setup checklist.",
-  ],
-  "Setup steps",
-)),
+      emailSection(
+        "What happens next",
+        emailChecklist(
+          [
+            "Open the link and sign in or create your Kinectem profile.",
+            `Confirm that you want to become the owner of ${input.organizationName}.`,
+            "Review and share the pre-invite message with your club.",
+            "Bulk add coaches across your teams.",
+            "Add players and parents through Roster outreach using each team's secure invitation.",
+            "Complete the organization setup checklist.",
+          ],
+          undefined,
+          { embedded: true },
+        ),
+      ),
     ].join("\n"),
   };
 }

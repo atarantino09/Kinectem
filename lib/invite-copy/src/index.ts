@@ -251,7 +251,7 @@ export function buildCoachInviteHtml({ coachName, link }: CoachInviteVars): stri
     emailSummary(INTRO_PARAGRAPHS[0]),
     `<p>${escapeHtml(INTRO_PARAGRAPHS[1])}</p>`,
     emailSection("Your player's account", `<p>${escapeHtml(INTRO_PARAGRAPHS[2])}</p>`),
-    emailSection(CONTROL_INTRO, emailChecklist(BULLETS)),
+    emailSection(CONTROL_INTRO, emailChecklist(BULLETS, undefined, { embedded: true })),
     emailSection("Set up your player's account", `<p>${escapeHtml(AFTER_BULLETS)}</p>${emailButton({ href: link, label: ctaLabel })}`),
     `<p class="email-muted" style="color:#65758b;font-size:14px;">Check out <a href="${LEARN_MORE_URL}">www.kinectem.com</a> to learn even more prior to signing up.</p>`,
     `<p>— Coach ${escapeHtml(coachName)}</p>`,

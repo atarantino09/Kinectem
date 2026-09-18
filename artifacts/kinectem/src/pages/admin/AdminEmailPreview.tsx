@@ -135,7 +135,7 @@ ${emailButton({ href: `${baseUrl}/admin/moderation?tab=org-claims`, label: "Revi
       const bodyHtml = `
 ${emailSection("Ownership approved", emailStatusCallout("success", "Your claim is approved. You now have owner access."))}
 ${emailSection("What ownership enables", `<p style="margin:0;">Update the organization page, add teams, invite coaches, and bring players and parents into the right rosters.</p>`)}
-${emailSection("Finish your setup", `<p style="margin:0 0 18px;">Start with the recommended launch order. Your checklist and page tour will remain available if you return later.</p>${emailButton({ href: `${baseUrl}/organizations/west-point?ownerSetup=1`, label: "Finish setting up West Point" })}${emailChecklist(["Review and share the pre-invite message with your club.", "Bulk add coaches across your teams.", "Add players and parents through Roster outreach using each team's secure invitation."])}`)}
+${emailSection("Finish your setup", `<p style="margin:0 0 18px;">Start with the recommended launch order. Your checklist and page tour will remain available if you return later.</p>${emailButton({ href: `${baseUrl}/organizations/west-point?ownerSetup=1`, label: "Finish setting up West Point" })}${emailChecklist(["Review and share the pre-invite message with your club.", "Bulk add coaches across your teams.", "Add players and parents through Roster outreach using each team's secure invitation."], undefined, { embedded: true })}`)}
 `;
       return renderBrandedEmailHtml({
         subject: "You're now the owner of West Point on Kinectem",

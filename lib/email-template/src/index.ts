@@ -179,15 +179,16 @@ export function emailStatusCallout(
 export function emailChecklist(
   items: readonly string[],
   title?: string,
+  options?: { embedded?: boolean },
 ): string {
   const rows = items
     .map(
       (item, index) =>
-        `<tr>
-          <td width="36" valign="top" style="padding:${index === 0 ? "0" : "16px"} 16px 0 0;">
+        `<tr class="email-checklist-row">
+          <td width="42" valign="top" style="padding:${index === 0 ? "0" : "14px"} 14px ${index === items.length - 1 ? "0" : "14px"} 0;border-bottom:${index === items.length - 1 ? "none" : "1px solid #e2e8f0"};">
              <div class="email-checklist-num" style="width:28px;height:28px;border-radius:14px;background:#f1f5f9;color:#475569;font-size:13px;line-height:28px;font-weight:700;text-align:center;">${index + 1}</div>
           </td>
-          <td class="email-checklist-text" valign="top" style="padding:${index === 0 ? "4px" : "20px"} 0 0;color:#334155;font-size:15px;line-height:1.6;">${escapeHtml(item)}</td>
+          <td class="email-checklist-text" valign="top" style="padding:${index === 0 ? "2px" : "16px"} 0 ${index === items.length - 1 ? "0" : "14px"};border-bottom:${index === items.length - 1 ? "none" : "1px solid #e2e8f0"};color:#334155;font-size:15px;line-height:1.55;">${escapeHtml(item)}</td>
         </tr>`,
     )
     .join("");
@@ -196,8 +197,9 @@ export function emailChecklist(
     ? `<div class="email-checklist-title" style="margin:0 0 20px;color:#0f172a;font-size:16px;font-weight:700;">${escapeHtml(title)}</div>`
     : "";
 
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;margin:24px 0;">
-  <tr><td class="email-checklist-box" style="padding:24px;border:1px solid #e2e8f0;border-radius:12px;background:#ffffff;">
+  const embedded = options?.embedded === true;
+  return `<table role="presentation" class="email-checklist${embedded ? " email-checklist-embedded" : ""}" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;margin:${embedded ? "20px 0 0" : "24px 0"};">
+  <tr><td class="email-checklist-box" style="padding:${embedded ? "0" : "22px"};border:${embedded ? "none" : "1px solid #e2e8f0"};border-radius:${embedded ? "0" : "12px"};background:${embedded ? "transparent" : "#ffffff"};">
     ${titleHtml}
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">${rows}</table>
   </td></tr>
@@ -320,6 +322,8 @@ export function renderBrandedEmailHtml(options: BrandedEmailOptions): string {
      .email-section-heading { padding:14px 18px !important; }
      .email-section-box { padding:18px !important; }
      .email-section-title { font-size:17px !important; }
+     .email-checklist-row td:first-child { width:38px !important;padding-right:10px !important; }
+     .email-checklist-text { font-size:15px !important;line-height:1.5 !important; }
   }
 
   .email-body-copy p { margin:0 0 16px; }
@@ -367,6 +371,8 @@ export function renderBrandedEmailHtml(options: BrandedEmailOptions): string {
     .email-checklist-title { color: #f8fafc !important; }
     .email-checklist-num { background: #334155 !important; color: #e2e8f0 !important; }
     .email-checklist-text { color: #cbd5e1 !important; }
+    .email-checklist-row td { border-bottom-color:#334155 !important; }
+    .email-checklist-embedded .email-checklist-box { background:transparent !important;border:none !important; }
      .email-section { background:#172033 !important; border-color:#475569 !important; box-shadow:none !important; }
      .email-section-heading { background:#253149 !important; border-bottom-color:#c084fc !important; }
      .email-section-box { background:#172033 !important; }

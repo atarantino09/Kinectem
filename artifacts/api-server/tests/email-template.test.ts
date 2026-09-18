@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  emailChecklist,
   emailSection,
   plainTextToHtml,
   renderBrandedEmailHtml,
@@ -89,5 +90,19 @@ describe("Kinectem branded email presentation", () => {
     expect(html).toContain(".email-section-title { font-size:17px");
     expect(html).not.toMatch(/[★✓●→]/);
     expect(html).not.toContain("&#8594;");
+  });
+
+  it("balances embedded checklists without nesting another card", () => {
+    const checklist = emailChecklist(
+      ["First step", "Second step", "Third step"],
+      undefined,
+      { embedded: true },
+    );
+
+    expect(checklist).toContain("email-checklist-embedded");
+    expect(checklist).toContain("margin:20px 0 0");
+    expect(checklist).toContain("padding:0;border:none");
+    expect(checklist).toContain('class="email-checklist-row"');
+    expect(checklist).not.toContain("padding:24px");
   });
 });
