@@ -288,6 +288,8 @@ export function BulkAddCoachesDialog({
       );
 
   const done = !busy && results !== null;
+  const hasEmailedInvites =
+    results?.some((result) => result.status === "emailed") ?? false;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -524,6 +526,27 @@ export function BulkAddCoachesDialog({
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {done && hasEmailedInvites && (
+          <div
+            className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100"
+            role="status"
+            data-testid="bulk-coaches-junk-folder-reminder"
+          >
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+            <div className="space-y-1 text-sm leading-relaxed">
+              <p className="font-bold">
+                Invite emails can land in Junk or Spam.
+              </p>
+              <p>
+                Follow up with each coach to make sure they received their
+                invite. If they did not, open their individual team page, go to{" "}
+                <strong>Pending invites</strong>, copy the invite link, and send
+                it to the coach directly.
+              </p>
+            </div>
           </div>
         )}
 
