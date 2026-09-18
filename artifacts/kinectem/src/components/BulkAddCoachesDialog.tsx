@@ -541,8 +541,9 @@ export function BulkAddCoachesDialog({
                 Invite emails can land in Junk or Spam.
               </p>
               <p>
-                Follow up with each coach to make sure they received their
-                invite. If they did not, open their individual team page, go to{" "}
+                Follow up with each coach and ask them to check their{" "}
+                <strong>Junk or Spam folder</strong>. If the invite is still not
+                there, open their individual team page, go to{" "}
                 <strong>Pending invites</strong>, copy the invite link, and send
                 it to the coach directly.
               </p>
