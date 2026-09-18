@@ -18,11 +18,11 @@ describe("Kinectem branded email presentation", () => {
 
     expect(html).toContain("<!doctype html>");
     expect(html).toContain('name="viewport"');
-    expect(html).toContain('alt="Kinectem"');
+    expect(html).toContain('class="email-wordmark"');
     expect(html).toContain("email-card");
     expect(html).toContain("email-hero");
     expect(html).toContain('bgcolor="#0b0f19"');
-    expect(html).toContain("email-header-banner.png");
+    expect(html).toContain('align="center" valign="middle" height="92"');
     expect(html).toContain("email-cta-cell");
     expect(html).toContain("background:#8b2cf5");
     expect(html).toContain("Join &lt;North &amp; South&gt;");
@@ -35,9 +35,7 @@ describe("Kinectem branded email presentation", () => {
     expect(html).toContain("@media only screen and (max-width: 620px)");
     expect(html).toContain("@media (prefers-color-scheme: dark)");
     expect(html).toContain(".email-muted { color:#94a3b8 !important; }");
-    expect(html).toContain(
-      'src="https://kinectem.example/email-header-banner.png"',
-    );
+    expect(html).not.toContain("<img");
   });
 
   it("turns text-only messages into escaped, linked HTML", () => {

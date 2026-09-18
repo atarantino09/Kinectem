@@ -119,7 +119,7 @@ describe("coach invite email (task #636)", () => {
     expect(sent.subject).toBe(COACH_INVITE_SUBJECT);
     expect(sent.text).toBe(buildCoachInviteText(vars));
     expect(sent.html).toContain(buildCoachInviteHtml(vars));
-    expect(sent.html).toContain("email-header-banner.png");
+    expect(sent.html).toContain('class="email-wordmark"');
     expect(sent.html).toContain("email-card");
 
     // The unknown address has no Kinectem account, so no roster entry /
