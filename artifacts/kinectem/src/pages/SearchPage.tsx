@@ -1,4 +1,5 @@
-import { Link, useSearch } from "wouter";
+import { useEffect, useState } from "react";
+import { Link, useLocation, useSearch } from "wouter";
 import { formatOrgName } from "@/lib/format";
 import { useCrossEntitySearch, queryOpts } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,11 +17,57 @@ import {
 import { SuggestionsPanel } from "@/components/SuggestionsPanel";
 import { BrandPageHeader } from "@/components/BrandPageHeader";
 import { EmptyState } from "@/components/EmptyState";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 export default function SearchPage() {
   const search = useSearch();
   const params = new URLSearchParams(search);
   const q = params.get("q")?.trim() ?? "";
+  const [, setLocation] = useLocation();
+  const [draft, setDraft] = useState(q);
+
+  useEffect(() => {
+    setDraft(q);
+  }, [q]);
+
+  const searchForm = (
+    <form
+      className="flex items-center gap-2"
+      onSubmit={(event) => {
+        event.preventDefault();
+        const nextQuery = draft.trim();
+        setLocation(
+          nextQuery ? `/search?q=${encodeURIComponent(nextQuery)}` : "/search",
+        );
+      }}
+      role="search"
+    >
+      <div className="relative min-w-0 flex-1">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          autoFocus
+          type="search"
+          inputMode="search"
+          enterKeyHint="search"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder="Search athletes, teams, organizations…"
+          aria-label="Search athletes, teams, and organizations"
+          className="h-11 bg-card pl-9"
+          data-testid="input-search-page"
+        />
+      </div>
+      <Button
+        type="submit"
+        variant="brand"
+        className="h-11 shrink-0 px-4 font-bold"
+        data-testid="button-search-page"
+      >
+        Search
+      </Button>
+    </form>
+  );
 
   const enabled = q.length >= 3;
   const { data, isLoading } = useCrossEntitySearch(
@@ -36,6 +83,7 @@ export default function SearchPage() {
           title={<span className="brand-gradient-text">Search</span>}
           description="Type at least 3 characters to search athletes, teams, and organizations."
         />
+        {searchForm}
         <SuggestionsPanel
           heading="Suggested for you"
           subheading="Discover organizations, teams, and athletes to follow."
@@ -81,6 +129,7 @@ export default function SearchPage() {
         }
         description="Find the people, teams, organizations, and competitions that power your feed."
       />
+      {searchForm}
 
       {isLoading ? (
         <>
