@@ -29,7 +29,10 @@ import { useToast } from "@/hooks/use-toast";
 import { OrgLogo } from "@/components/OrgLogoFallback";
 import {
   shrinkImageToDataUrl,
-  IMAGE_UPLOAD_MAX_BYTES,
+  DATA_URL_MAX_LENGTH,
+  isUnsupportedHeicImage,
+  classifyImageFile,
+  UnsupportedImageFormatError,
 } from "@/lib/shrinkImage";
 import { US_STATES, US_ZIP_PATTERN } from "@/lib/usStates";
 import { normalizeWebsite } from "@/lib/normalizeWebsite";
@@ -168,12 +171,25 @@ export function EditOrgDialog({
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
+    const imageClass = classifyImageFile(file);
+    if (imageClass === "heic") {
+      toast({
+        title: "This photo format isn't supported",
+        description: "Try saving it as a JPG or PNG.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (imageClass !== "supported") {
       toast({ title: "Please pick an image file", variant: "destructive" });
       return;
     }
-    if (file.size > IMAGE_UPLOAD_MAX_BYTES) {
-      toast({ title: "Image must be under 5 MB", variant: "destructive" });
+    if (isUnsupportedHeicImage(file)) {
+      toast({
+        title: "This photo format isn't supported",
+        description: "Try saving it as a JPG or PNG.",
+        variant: "destructive",
+      });
       return;
     }
     // Logos upload as-is (no forced square crop) so the whole mark is kept.
@@ -183,6 +199,11 @@ export function EditOrgDialog({
     setUploading(true);
     try {
       const dataUrl = await shrinkImageToDataUrl(file);
+      if (dataUrl.length > DATA_URL_MAX_LENGTH) {
+        throw new Error(
+          "That logo is still too large after compression. Try a smaller image.",
+        );
+      }
       // Task #812 — auto-pick brand colors from the new logo. Extraction is
       // best-effort: we need at least two distinct usable colors (transparent
       // / near-white / near-gray pixels are already skipped) or we leave the
@@ -225,7 +246,15 @@ export function EditOrgDialog({
       );
     } catch (err) {
       toast({
-        title: apiErrorMessage(err) ?? "Failed to upload logo",
+        title:
+          err instanceof UnsupportedImageFormatError
+            ? "This photo format isn't supported"
+            : apiErrorMessage(err) ??
+              (err instanceof Error ? err.message : "Failed to upload logo"),
+        description:
+          err instanceof UnsupportedImageFormatError
+            ? "Try saving it as a JPG or PNG."
+            : undefined,
         variant: "destructive",
       });
     } finally {

@@ -19,7 +19,9 @@ import { useToast } from "@/hooks/use-toast";
 import { Label } from "@/components/ui/label";
 import {
   shrinkImageToDataUrl,
-  IMAGE_UPLOAD_MAX_BYTES,
+  DATA_URL_MAX_LENGTH,
+  isUnsupportedHeicImage,
+  UnsupportedImageFormatError,
 } from "@/lib/shrinkImage";
 import { extractBrandColorsFromDataUrl } from "@/lib/extractBrandColors";
 import { BrandColorSwapButton } from "@/components/BrandColorSwapButton";
@@ -348,18 +350,27 @@ export function OrgClaimLinksContent({
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
+    if (file.type && !file.type.startsWith("image/")) {
       toast({ title: "Please pick an image file", variant: "destructive" });
       return;
     }
-    if (file.size > IMAGE_UPLOAD_MAX_BYTES) {
-      toast({ title: "Image must be under 5 MB", variant: "destructive" });
+    if (isUnsupportedHeicImage(file)) {
+      toast({
+        title: "That photo format isn't supported",
+        description: "Please choose a JPG or PNG version.",
+        variant: "destructive",
+      });
       return;
     }
     setLogoBusy(true);
     const uploadSeq = ++logoUploadSeq.current;
     try {
       const dataUrl = await shrinkImageToDataUrl(file);
+      if (dataUrl.length > DATA_URL_MAX_LENGTH) {
+        throw new Error(
+          "That image is still too large after compression. Please choose a smaller image.",
+        );
+      }
       if (uploadSeq !== logoUploadSeq.current) return; // superseded upload
       setLogoDataUrl(dataUrl);
       try {
@@ -378,9 +389,21 @@ export function OrgClaimLinksContent({
       } catch {
         // Color extraction is best-effort; the logo itself still uploaded.
       }
-    } catch {
+    } catch (err) {
       if (uploadSeq === logoUploadSeq.current) {
-        toast({ title: "Couldn't read that image", variant: "destructive" });
+        toast({
+          title:
+            err instanceof UnsupportedImageFormatError
+              ? "That photo format isn't supported"
+              : err instanceof Error
+                ? err.message
+                : "Couldn't read that image",
+          description:
+            err instanceof UnsupportedImageFormatError
+              ? "Please choose a JPG or PNG version."
+              : undefined,
+          variant: "destructive",
+        });
       }
     } finally {
       // Only the latest upload may clear the busy flag — a superseded job

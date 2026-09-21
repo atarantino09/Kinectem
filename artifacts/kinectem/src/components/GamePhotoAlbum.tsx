@@ -27,7 +27,11 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearch } from "wouter";
 import { timeAgo } from "@/lib/format";
-import { shrinkImage } from "@/lib/shrinkImage";
+import {
+  shrinkImage,
+  isUnsupportedHeicImage,
+  classifyImageFile,
+} from "@/lib/shrinkImage";
 import { apiErrorMessage } from "@/lib/api-errors";
 
 export const ALBUM_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
@@ -292,21 +296,24 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
     const picked: File[] = [];
     for (const f of Array.from(fileList)) {
       const fileType = normalizeMediaType(f.type);
-      if (!ALLOWED_MEDIA_TYPES.has(fileType)) {
+      const imageClass = classifyImageFile(f);
+      const isImage = imageClass === "supported";
+      const isHeic = imageClass === "heic";
+      const isVideo = fileType.startsWith("video/");
+      if (isHeic || (!isImage && !isVideo)) {
         toast({
           title: "That file format isn’t supported",
-          description: `${f.name}: choose a JPEG/PNG photo or an MP4/MOV video.`,
+          description: isHeic
+            ? `${f.name}: choose a JPEG or PNG photo.`
+            : `${f.name}: choose a JPEG/PNG photo or an MP4/MOV video.`,
           variant: "destructive",
         });
         continue;
       }
-      if (f.size > ALBUM_UPLOAD_MAX_BYTES) {
-        const isVideo = fileType.startsWith("video/");
+      if (isVideo && !ALLOWED_MEDIA_TYPES.has(fileType)) {
         toast({
-          title: `${isVideo ? "Video" : "Photo"} too large`,
-          description: isVideo
-            ? `${f.name} is over 10 MB. Choose a shorter clip or trim it in your phone’s Photos/Gallery app.`
-            : `${f.name} is over 10 MB. Choose a smaller photo.`,
+          title: "That file format isn’t supported",
+          description: `${f.name}: choose a JPEG/PNG photo or an MP4/MOV video.`,
           variant: "destructive",
         });
         continue;
@@ -316,13 +323,43 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
     if (picked.length === 0) return;
     const createdObjectUrls: string[] = [];
     try {
-      const prepared = await Promise.all(
-        picked.map((f) =>
-          normalizeMediaType(f.type).startsWith("image/")
-            ? shrinkImage(f)
-            : Promise.resolve(f),
-        ),
-      );
+      const prepared: File[] = [];
+      for (const f of picked) {
+        let processed = f;
+        if (classifyImageFile(f) === "supported") {
+          if (isUnsupportedHeicImage(f)) {
+            toast({
+              title: "That photo format isn’t supported",
+              description: `${f.name}: choose a JPEG or PNG photo.`,
+              variant: "destructive",
+            });
+            continue;
+          }
+          try {
+            processed = await shrinkImage(f);
+          } catch {
+            toast({
+              title: "Couldn't process that photo",
+              description: `${f.name} couldn't be prepared. Choose a different JPEG or PNG.`,
+              variant: "destructive",
+            });
+            continue;
+          }
+        }
+        if (processed.size > ALBUM_UPLOAD_MAX_BYTES) {
+          const isVideo = normalizeMediaType(processed.type).startsWith("video/");
+          toast({
+            title: `${isVideo ? "Video" : "Photo"} too large`,
+            description: isVideo
+              ? `${f.name} is over 10 MB. Choose a shorter clip or trim it in your phone’s Photos/Gallery app.`
+              : `${f.name} is still over 10 MB after processing. Choose a smaller photo.`,
+            variant: "destructive",
+          });
+          continue;
+        }
+        prepared.push(processed);
+      }
+      if (prepared.length === 0) return;
       const previewItems = await Promise.all(
         prepared.map(
           (f): Promise<PreviewItem> => {

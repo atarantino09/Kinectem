@@ -7,7 +7,8 @@ import { Upload, X } from "lucide-react";
 import {
   shrinkImageToDataUrl,
   isUnsupportedHeicImage,
-  IMAGE_UPLOAD_MAX_BYTES,
+  DATA_URL_MAX_LENGTH,
+  UnsupportedImageFormatError,
   BANNER_SHRINK_MAX_DIMENSION,
   BANNER_SHRINK_OUTPUT_QUALITY,
 } from "@/lib/shrinkImage";
@@ -35,18 +36,14 @@ export function BrandImageField({
   const isDataUrl = value.startsWith("data:");
 
   const pickFile = async (file: File) => {
+    if (file.type && !file.type.startsWith("image/")) {
+      toast({ title: "Please choose an image file", variant: "destructive" });
+      return;
+    }
     if (isUnsupportedHeicImage(file)) {
       toast({
         title: "That photo format isn't supported",
         description: "Please choose a JPG or PNG version.",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (file.size > IMAGE_UPLOAD_MAX_BYTES) {
-      toast({
-        title: "That image is too large",
-        description: "Please choose an image under 5 MB.",
         variant: "destructive",
       });
       return;
@@ -62,11 +59,24 @@ export function BrandImageField({
             }
           : undefined,
       );
+      if (dataUrl.length > DATA_URL_MAX_LENGTH) {
+        throw new Error(
+          "That image is still too large after compression. Please choose a smaller image.",
+        );
+      }
       onChange(dataUrl);
-    } catch {
+    } catch (err) {
       toast({
-        title: "Couldn't read that image",
-        description: "Please try a different file.",
+        title:
+          err instanceof UnsupportedImageFormatError
+            ? "That photo format isn't supported"
+            : err instanceof Error
+              ? err.message
+              : "Couldn't read that image",
+        description:
+          err instanceof UnsupportedImageFormatError
+            ? "Please choose a JPG or PNG version."
+            : undefined,
         variant: "destructive",
       });
     } finally {

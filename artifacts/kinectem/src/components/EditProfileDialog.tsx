@@ -46,7 +46,13 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Camera, ChevronDown, Loader2, Pencil, Plus, Trophy, X } from "lucide-react";
-import { shrinkImageToFit, IMAGE_UPLOAD_MAX_BYTES } from "@/lib/shrinkImage";
+import {
+  shrinkImageToFit,
+  isUnsupportedHeicImage,
+  classifyImageFile,
+  normalizeImageFileMime,
+  UnsupportedImageFormatError,
+} from "@/lib/shrinkImage";
 import { US_STATES } from "@/lib/usStates";
 import { SPORTS } from "@/lib/sports";
 import { DOB_MONTHS, DOB_DAYS, DOB_YEARS, parseDob } from "@/lib/dob";
@@ -54,7 +60,6 @@ import { ImageCropDialog } from "@/components/LazyImageCropDialog";
 
 const MAX_USER_SPORTS = 5;
 
-const AVATAR_MAX_BYTES = IMAGE_UPLOAD_MAX_BYTES;
 const AVATAR_ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
 // Task #432 / #506 — Birthday is composed from three Select dropdowns
@@ -339,16 +344,18 @@ export function EditProfileDialog({
   const onPickFile = () => fileInputRef.current?.click();
 
   const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const selectedFile = e.target.files?.[0];
     if (e.target) e.target.value = "";
-    if (!file) return;
+    if (!selectedFile) return;
     setAvatarError(null);
-    if (!AVATAR_ACCEPTED_TYPES.includes(file.type)) {
-      setAvatarError("Use a JPG, PNG, WebP, or GIF image.");
+    const imageClass = classifyImageFile(selectedFile);
+    if (imageClass === "heic") {
+      setAvatarError("This photo format isn't supported. Try a JPG or PNG.");
       return;
     }
-    if (file.size > AVATAR_MAX_BYTES) {
-      setAvatarError("Image must be under 5 MB.");
+    const file = normalizeImageFileMime(selectedFile);
+    if (imageClass !== "supported") {
+      setAvatarError("Use a JPG, PNG, WebP, or GIF image.");
       return;
     }
     // Read the file as a data URL and hand it to the crop dialog. The
@@ -387,9 +394,13 @@ export function EditProfileDialog({
       setCropSrc(null);
     } catch (err) {
       if (uploadGenRef.current !== myGen) return;
-      setAvatarError(
-        err instanceof Error ? err.message : "Upload failed. Try again.",
-      );
+       setAvatarError(
+         err instanceof UnsupportedImageFormatError
+           ? "This photo format isn't supported. Try a JPG or PNG."
+           : err instanceof Error
+             ? err.message
+             : "Upload failed. Try again.",
+       );
       // Re-throw so the crop dialog stays open and the user can retry
       // without re-picking the file.
       throw err;

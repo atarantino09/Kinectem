@@ -27,7 +27,10 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   shrinkImageToDataUrl,
-  IMAGE_UPLOAD_MAX_BYTES,
+  DATA_URL_MAX_LENGTH,
+  isUnsupportedHeicImage,
+  classifyImageFile,
+  UnsupportedImageFormatError,
   BANNER_SHRINK_MAX_DIMENSION,
   BANNER_SHRINK_OUTPUT_QUALITY,
 } from "@/lib/shrinkImage";
@@ -119,12 +122,25 @@ export function CreateTeamDialog({
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
+    const imageClass = classifyImageFile(file);
+    if (imageClass === "heic") {
+      toast({
+        title: "This photo format isn't supported",
+        description: "Try saving it as a JPG or PNG.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (imageClass !== "supported") {
       toast({ title: "Please pick an image file", variant: "destructive" });
       return;
     }
-    if (file.size > IMAGE_UPLOAD_MAX_BYTES) {
-      toast({ title: "Image must be under 5 MB", variant: "destructive" });
+    if (isUnsupportedHeicImage(file)) {
+      toast({
+        title: "This photo format isn't supported",
+        description: "Try saving it as a JPG or PNG.",
+        variant: "destructive",
+      });
       return;
     }
     // No crop step: the whole photo is staged as-is (aspect preserved)
@@ -135,9 +151,26 @@ export function CreateTeamDialog({
         maxDimension: BANNER_SHRINK_MAX_DIMENSION,
         quality: BANNER_SHRINK_OUTPUT_QUALITY,
       });
+      if (dataUrl.length > DATA_URL_MAX_LENGTH) {
+        throw new Error(
+          "That photo is still too large after compression. Try a smaller image.",
+        );
+      }
       setBannerDataUrl(dataUrl);
-    } catch {
-      toast({ title: "Failed to read team photo", variant: "destructive" });
+    } catch (err) {
+      toast({
+        title:
+          err instanceof UnsupportedImageFormatError
+            ? "This photo format isn't supported"
+            : err instanceof Error
+              ? err.message
+              : "Failed to read team photo",
+        description:
+          err instanceof UnsupportedImageFormatError
+            ? "Try saving it as a JPG or PNG."
+            : undefined,
+        variant: "destructive",
+      });
     } finally {
       setPhotoBusy(false);
     }

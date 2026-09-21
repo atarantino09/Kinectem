@@ -46,7 +46,11 @@ import {
 } from "lucide-react";
 import { timeAgo, getInitials } from "@/lib/format";
 import { linkify } from "@/lib/linkify";
-import { shrinkImage, IMAGE_UPLOAD_MAX_BYTES } from "@/lib/shrinkImage";
+import {
+  shrinkImage,
+  isUnsupportedHeicImage,
+  classifyImageFile,
+} from "@/lib/shrinkImage";
 import { AvatarLightbox } from "@/components/AvatarLightbox";
 
 function isDeleted(
@@ -55,8 +59,14 @@ function isDeleted(
   return (m as DeletedMessageStub).deleted === true;
 }
 
-const ATTACHMENT_MAX_BYTES = IMAGE_UPLOAD_MAX_BYTES;
+const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
 const ATTACHMENT_MAX_COUNT = 10;
+const ATTACHMENT_IMAGE_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
 
 type AttachmentDraft = {
   localId: string;
@@ -546,18 +556,25 @@ function NewMessageDialog({
     const incoming = Array.from(files).slice(0, room);
     const validFiles: File[] = [];
     for (const file of incoming) {
-      if (!file.type.startsWith("image/")) {
+      const imageClass = classifyImageFile(file);
+      if (imageClass === "heic") {
         toast({
-          title: "Only images are supported",
-          description: `${file.name} was skipped.`,
+          title: "Unsupported image format",
+          description: `${file.name}: use a JPG, PNG, WebP, or GIF photo.`,
           variant: "destructive",
         });
         continue;
       }
-      if (file.size > ATTACHMENT_MAX_BYTES) {
+      if (imageClass !== "supported" || !ATTACHMENT_IMAGE_TYPES.has(file.type.toLowerCase())) {
+        // MIME-empty files are classified by extension; they are valid here
+        // even though the picker did not provide a MIME value.
+        if (imageClass === "supported") {
+          validFiles.push(file);
+          continue;
+        }
         toast({
-          title: "Image too large",
-          description: `${file.name} exceeds the 5 MB limit.`,
+          title: "Unsupported image format",
+          description: `${file.name}: use a JPG, PNG, WebP, or GIF photo.`,
           variant: "destructive",
         });
         continue;
@@ -565,12 +582,39 @@ function NewMessageDialog({
       validFiles.push(file);
     }
     if (validFiles.length === 0) return;
-    const shrunk = await Promise.all(validFiles.map((f) => shrinkImage(f)));
-    const accepted: AttachmentDraft[] = shrunk.map((file) => ({
-      localId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      file,
-      previewUrl: URL.createObjectURL(file),
-    }));
+    const accepted: AttachmentDraft[] = [];
+    for (const original of validFiles) {
+      if (isUnsupportedHeicImage(original)) {
+        toast({
+          title: "Unsupported image format",
+          description: `${original.name}: use a JPG, PNG, or WebP photo.`,
+          variant: "destructive",
+        });
+        continue;
+      }
+      try {
+        const file = await shrinkImage(original);
+        if (file.size > ATTACHMENT_MAX_BYTES) {
+          toast({
+            title: "Image too large",
+            description: `${original.name} is still over 10 MB after processing. Choose a smaller photo.`,
+            variant: "destructive",
+          });
+          continue;
+        }
+        accepted.push({
+          localId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          file,
+          previewUrl: URL.createObjectURL(file),
+        });
+      } catch {
+        toast({
+          title: "Couldn't process image",
+          description: `${original.name} couldn't be prepared for upload. Try a JPG or PNG.`,
+          variant: "destructive",
+        });
+      }
+    }
     setAttachments((prev) => [...prev, ...accepted]);
   };
 

@@ -55,6 +55,10 @@ export function MediaSection({
   allowVideoUpload?: boolean;
 }) {
   const photoInputRef = useRef<HTMLInputElement | null>(null);
+  const photosRef = useRef(photos);
+  const lastEmittedPhotosRef = useRef<string[] | null>(null);
+  const photoSelectionQueueRef = useRef(Promise.resolve());
+  if (photos !== lastEmittedPhotosRef.current) photosRef.current = photos;
   const videoInputRef = useRef<HTMLInputElement | null>(null);
   const { toast } = useToast();
   // Index currently being dragged. Tracked in state so the source tile
@@ -147,8 +151,10 @@ export function MediaSection({
     onVideoAssetIdChange?.("");
   };
 
-  const onFiles = async (files: FileList | null) => {
+  const onFiles = (files: FileList | null) => {
     if (!files || files.length === 0) return;
+    photoSelectionQueueRef.current = photoSelectionQueueRef.current.then(
+      async () => {
 
     // Phone cameras commonly produce photos larger than 5 MB. Process those
     // originals before enforcing the encoded post limits; rejecting the raw
@@ -185,7 +191,7 @@ export function MediaSection({
     // Task #692 — the whole recap (all photos) is sent inline in one JSON
     // body. Keep both each encoded image and the combined set within the
     // server's limits after compression.
-    let running = photos.reduce((sum, photo) => sum + photo.length, 0);
+    let running = photosRef.current.reduce((sum, photo) => sum + photo.length, 0);
     const fits: string[] = [];
     let rejectedForSpace = 0;
     let unsupported = 0;
@@ -214,7 +220,12 @@ export function MediaSection({
       fits.push(result.dataUrl);
     }
 
-    if (fits.length > 0) onPhotosChange([...photos, ...fits]);
+    if (fits.length > 0) {
+      const next = [...photosRef.current, ...fits];
+      photosRef.current = next;
+      lastEmittedPhotosRef.current = next;
+      onPhotosChange(next);
+    }
     if (unsupported > 0) {
       toast({
         title:
@@ -247,10 +258,15 @@ export function MediaSection({
         variant: "destructive",
       });
     }
+      },
+    );
   };
 
   const removeAt = (idx: number) => {
-    onPhotosChange(photos.filter((_, i) => i !== idx));
+    const next = photosRef.current.filter((_, i) => i !== idx);
+    photosRef.current = next;
+    lastEmittedPhotosRef.current = next;
+    onPhotosChange(next);
   };
 
   // Move the photo at `from` to position `to`. Used by both the
@@ -265,6 +281,8 @@ export function MediaSection({
     const next = photos.slice();
     const [picked] = next.splice(from, 1);
     next.splice(clamped, 0, picked);
+    photosRef.current = next;
+    lastEmittedPhotosRef.current = next;
     onPhotosChange(next);
   };
 

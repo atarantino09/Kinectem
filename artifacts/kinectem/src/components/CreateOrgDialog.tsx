@@ -30,7 +30,6 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   shrinkImageToDataUrl,
-  IMAGE_UPLOAD_MAX_BYTES,
   DATA_URL_MAX_LENGTH,
   isUnsupportedHeicImage,
   UnsupportedImageFormatError,
@@ -136,10 +135,6 @@ export function CreateOrgDialog({
         description: "Save the photo as JPG or PNG and try again.",
         variant: "destructive",
       });
-      return;
-    }
-    if (file.size > IMAGE_UPLOAD_MAX_BYTES) {
-      toast({ title: "Image must be under 5 MB", variant: "destructive" });
       return;
     }
     // Logos upload as-is (no forced square crop) so the whole mark is kept.

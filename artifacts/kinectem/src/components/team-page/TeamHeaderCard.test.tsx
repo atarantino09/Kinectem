@@ -4,6 +4,26 @@ import userEvent from "@testing-library/user-event";
 
 import { renderWithProviders } from "@/test";
 import { TeamHeaderCard } from "./TeamHeaderCard";
+import { customFetch } from "@workspace/api-client-react";
+import { shrinkImageToDataUrl } from "@/lib/shrinkImage";
+
+vi.mock("@workspace/api-client-react", () => ({
+  customFetch: vi.fn(),
+  getGetTeamByIdQueryKey: (id: string) => ["team", id],
+}));
+
+vi.mock("@/lib/shrinkImage", () => ({
+  shrinkImageToDataUrl: vi.fn(),
+  DATA_URL_MAX_LENGTH: 20 * 1024 * 1024,
+  BANNER_SHRINK_MAX_DIMENSION: 2048,
+  BANNER_SHRINK_OUTPUT_QUALITY: 0.92,
+  isUnsupportedHeicImage: () => false,
+  classifyImageFile: () => "supported",
+  UnsupportedImageFormatError: class extends Error {},
+}));
+
+const mockCustomFetch = vi.mocked(customFetch);
+const mockShrinkImageToDataUrl = vi.mocked(shrinkImageToDataUrl);
 
 const team = {
   id: "team-1",
@@ -43,6 +63,31 @@ function renderHeader(
 }
 
 describe("TeamHeaderCard action hierarchy", () => {
+  it("compresses a raw photo over 5 MB before PATCHing the banner", async () => {
+    const user = userEvent.setup();
+    mockCustomFetch.mockResolvedValue({});
+    mockShrinkImageToDataUrl.mockResolvedValue("data:image/jpeg;base64,compressed");
+    renderHeader({ isAdmin: true });
+
+    await user.click(screen.getByTestId("btn-inline-add-team-photo"));
+    const file = new File([new Uint8Array(5 * 1024 * 1024 + 1)], "phone.jpg", {
+      type: "image/jpeg",
+    });
+    await user.upload(screen.getByTestId("input-inline-team-photo"), file);
+
+    expect(mockShrinkImageToDataUrl).toHaveBeenCalledWith(file, {
+      maxDimension: 2048,
+      quality: 0.92,
+    });
+    expect(mockCustomFetch).toHaveBeenCalledWith(
+      "/api/v1/teams/team-1",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ bannerUrl: "data:image/jpeg;base64,compressed" }),
+      }),
+    );
+  });
+
   it("places a public viewer's community actions in the magenta menu", async () => {
     const user = userEvent.setup();
     const onToggleFollow = vi.fn();

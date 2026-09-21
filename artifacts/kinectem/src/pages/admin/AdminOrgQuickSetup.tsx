@@ -17,7 +17,10 @@ import { useToast } from "@/hooks/use-toast";
 import { US_STATES } from "@/lib/usStates";
 import {
   shrinkImageToDataUrl,
-  IMAGE_UPLOAD_MAX_BYTES,
+  DATA_URL_MAX_LENGTH,
+  isUnsupportedHeicImage,
+  classifyImageFile,
+  UnsupportedImageFormatError,
 } from "@/lib/shrinkImage";
 import {
   BulkPairEditor,
@@ -200,18 +203,36 @@ export default function AdminOrgQuickSetup() {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
+    const imageClass = classifyImageFile(file);
+    if (imageClass === "heic") {
+      toast({
+        title: "That photo format isn't supported",
+        description: "Please choose a JPG or PNG version.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (imageClass !== "supported") {
       toast({ title: "Please pick an image file", variant: "destructive" });
       return;
     }
-    if (file.size > IMAGE_UPLOAD_MAX_BYTES) {
-      toast({ title: "Image must be under 5 MB", variant: "destructive" });
+    if (isUnsupportedHeicImage(file)) {
+      toast({
+        title: "That photo format isn't supported",
+        description: "Please choose a JPG or PNG version.",
+        variant: "destructive",
+      });
       return;
     }
     setLogoBusy(true);
     const uploadSeq = ++logoUploadSeq.current;
     try {
       const dataUrl = await shrinkImageToDataUrl(file);
+      if (dataUrl.length > DATA_URL_MAX_LENGTH) {
+        throw new Error(
+          "That image is still too large after compression. Please choose a smaller image.",
+        );
+      }
       if (uploadSeq !== logoUploadSeq.current) return; // superseded upload
       setLogoDataUrl(dataUrl);
       // Auto-pick brand colors from the logo. The user can still change or
@@ -232,8 +253,20 @@ export default function AdminOrgQuickSetup() {
       } catch {
         // Color extraction is best-effort; the logo itself still uploaded.
       }
-    } catch {
-      toast({ title: "Couldn't read that image", variant: "destructive" });
+    } catch (err) {
+      toast({
+        title:
+          err instanceof UnsupportedImageFormatError
+            ? "That photo format isn't supported"
+            : err instanceof Error
+              ? err.message
+              : "Couldn't read that image",
+        description:
+          err instanceof UnsupportedImageFormatError
+            ? "Please choose a JPG or PNG version."
+            : undefined,
+        variant: "destructive",
+      });
     } finally {
       setLogoBusy(false);
     }

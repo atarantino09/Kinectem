@@ -19,6 +19,11 @@ import {
   inboxQueryKey,
   unreadCountQueryKey,
 } from "./broadcastsApi";
+import {
+  isUnsupportedHeicImage,
+  shrinkImage,
+  classifyImageFile,
+} from "@/lib/shrinkImage";
 
 const MAX_BODY_LEN = 4000;
 
@@ -70,14 +75,25 @@ export function BroadcastComposeDialog({ open, onOpenChange, target }: Props) {
     onOpenChange(next);
   };
 
-  const onPickFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onPickFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const picked = Array.from(e.target.files ?? []);
     if (fileInputRef.current) fileInputRef.current.value = "";
     if (picked.length === 0) return;
 
     const accepted: File[] = [];
     for (const f of picked) {
-      if (!ALLOWED_ATTACHMENT_TYPES.includes(f.type)) {
+      const imageClass = classifyImageFile(f);
+      if (imageClass === "heic") {
+        toast({
+          title: "Unsupported image format",
+          description: `${f.name}: use a JPG, PNG, or WebP photo.`,
+          variant: "destructive",
+        });
+        continue;
+      }
+      const isImage = imageClass === "supported";
+      const isPdf = f.type.toLowerCase() === "application/pdf";
+      if ((!isImage && !isPdf) || (!isImage && !ALLOWED_ATTACHMENT_TYPES.includes(f.type))) {
         toast({
           title: "Unsupported file",
           description: `${f.name} must be a JPEG, PNG, WebP, or PDF.`,
@@ -85,15 +101,44 @@ export function BroadcastComposeDialog({ open, onOpenChange, target }: Props) {
         });
         continue;
       }
-      if (f.size > MAX_ATTACHMENT_BYTES) {
-        toast({
-          title: "File too large",
-          description: `${f.name} is over the 10 MB limit.`,
-          variant: "destructive",
-        });
-        continue;
+      if (isImage) {
+        if (isUnsupportedHeicImage(f)) {
+          toast({
+            title: "Unsupported image format",
+            description: `${f.name}: use a JPG, PNG, or WebP photo.`,
+            variant: "destructive",
+          });
+          continue;
+        }
+        try {
+          const processed = await shrinkImage(f);
+          if (processed.size > MAX_ATTACHMENT_BYTES) {
+            toast({
+              title: "Image too large",
+              description: `${f.name} is still over 10 MB after processing. Choose a smaller photo.`,
+              variant: "destructive",
+            });
+            continue;
+          }
+          accepted.push(processed);
+        } catch {
+          toast({
+            title: "Couldn't process image",
+            description: `${f.name} couldn't be prepared. Try a JPG or PNG.`,
+            variant: "destructive",
+          });
+        }
+      } else {
+        if (f.size > MAX_ATTACHMENT_BYTES) {
+          toast({
+            title: "File too large",
+            description: `${f.name} is over the 10 MB limit.`,
+            variant: "destructive",
+          });
+          continue;
+        }
+        accepted.push(f);
       }
-      accepted.push(f);
     }
 
     setFiles((prev) => {

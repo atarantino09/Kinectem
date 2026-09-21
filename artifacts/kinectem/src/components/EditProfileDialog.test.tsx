@@ -4,6 +4,7 @@ import type { PrivateUserResponse } from "@workspace/api-client-react";
 
 const mutateMock = vi.fn();
 const toastMock = vi.fn();
+const cropDialogPropsMock = vi.fn();
 
 vi.mock("@workspace/api-client-react", async () => {
   const actual = await vi.importActual<
@@ -12,6 +13,8 @@ vi.mock("@workspace/api-client-react", async () => {
   return {
     ...actual,
     useUpdateUser: () => ({ mutate: mutateMock }),
+    useGetUserSports: () => ({ data: [] }),
+    useUpdateUserSports: () => ({ mutateAsync: vi.fn() }),
   };
 });
 
@@ -29,8 +32,11 @@ vi.mock("@/hooks/use-toast", () => ({
   useToast: () => ({ toast: toastMock }),
 }));
 
-vi.mock("@/components/ImageCropDialog", () => ({
-  ImageCropDialog: () => null,
+vi.mock("@/components/LazyImageCropDialog", () => ({
+  ImageCropDialog: (props: unknown) => {
+    cropDialogPropsMock(props);
+    return null;
+  },
 }));
 
 import { EditProfileDialog } from "./EditProfileDialog";
@@ -69,6 +75,29 @@ describe("EditProfileDialog — birthday + visibility (Tasks #431/#432)", () => 
   beforeEach(() => {
     mutateMock.mockReset();
     toastMock.mockReset();
+    cropDialogPropsMock.mockReset();
+  });
+
+  it("opens the cropper for a supported photo larger than 5 MB", async () => {
+    render(<EditProfileDialog user={makeUser()} open onOpenChange={() => {}} />);
+    const input = screen.getByTestId("input-avatar-file");
+    const file = new File(
+      [new Uint8Array(5 * 1024 * 1024 + 1)],
+      "phone-photo.jpg",
+      { type: "image/jpeg" },
+    );
+
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await vi.waitFor(() =>
+      expect(cropDialogPropsMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          open: true,
+          src: expect.stringContaining("data:image/jpeg;base64,"),
+        }),
+      ),
+    );
+    expect(screen.queryByText("Image must be under 5 MB.")).not.toBeInTheDocument();
   });
 
   it("keeps the visibility dropdown clickable even when no date is set (#432)", () => {

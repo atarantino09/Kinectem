@@ -48,6 +48,75 @@ export const DATA_URL_MAX_LENGTH = 20 * 1024 * 1024;
 // this cap, so a saved photo never silently disappears into initials.
 export const AVATAR_DISPLAY_MAX_DATA_URL_LENGTH = 512 * 1024;
 
+const SUPPORTED_IMAGE_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
+const SUPPORTED_IMAGE_EXTENSIONS = /\.(jpe?g|png|webp|gif)$/i;
+const HEIC_IMAGE_EXTENSIONS = /\.(heic|heif)$/i;
+
+export type ImageFileClassification =
+  | "supported"
+  | "heic"
+  | "unsupported"
+  | "not-image";
+
+/**
+ * Classify a user-selected file before an upload flow applies its own
+ * size/transport rules. A number of mobile pickers leave `File.type` empty,
+ * so known photo extensions are deliberately considered when MIME is absent.
+ */
+export function classifyImageFile(file: File): ImageFileClassification {
+  const mime = (file.type || "").split(";")[0].trim().toLowerCase();
+  const name = file.name || "";
+  if (mime === "image/heic" || mime === "image/heif" ||
+      mime === "image/heic-sequence" || mime === "image/heif-sequence" ||
+      (!mime && HEIC_IMAGE_EXTENSIONS.test(name))) {
+    return "heic";
+  }
+  if (SUPPORTED_IMAGE_MIME_TYPES.has(mime) ||
+      (!mime && SUPPORTED_IMAGE_EXTENSIONS.test(name))) {
+    return "supported";
+  }
+  if (mime.startsWith("image/") || (!mime && /\.[^.]+$/.test(name))) {
+    return "unsupported";
+  }
+  return "not-image";
+}
+
+export function isSupportedImageFile(file: File): boolean {
+  return classifyImageFile(file) === "supported";
+}
+
+/**
+ * Mobile pickers sometimes provide a valid photo with an empty MIME type.
+ * Normalize those files before any early return or upload so asset endpoints
+ * and downstream renderers receive the real image type instead of
+ * application/octet-stream.
+ */
+export function normalizeImageFileMime(file: File): File {
+  if (file.type || classifyImageFile(file) !== "supported") return file;
+  const extension = file.name.toLowerCase().match(/\.([^.]+)$/)?.[1];
+  const mimeType =
+    extension === "jpg" || extension === "jpeg"
+      ? "image/jpeg"
+      : extension === "png"
+        ? "image/png"
+        : extension === "webp"
+          ? "image/webp"
+          : extension === "gif"
+            ? "image/gif"
+            : "";
+  if (!mimeType) return file;
+  return new File([file], file.name, {
+    type: mimeType,
+    lastModified: file.lastModified,
+  });
+}
+
 // Avatars are square-cropped and rendered small (largest on-screen use is a
 // few hundred CSS px), so a 512 px longest edge is already retina-crisp. We
 // step down dimension then quality until the encoded data URL fits the cap.
@@ -211,6 +280,7 @@ export async function shrinkImage(
   file: File,
   options?: ShrinkOptions,
 ): Promise<File> {
+  file = normalizeImageFileMime(file);
   if (isUnsupportedHeicImage(file)) {
     throw new UnsupportedImageFormatError();
   }
@@ -272,6 +342,7 @@ export async function shrinkImageToFit(
   file: File,
   maxDataUrlLength: number = AVATAR_DISPLAY_MAX_DATA_URL_LENGTH,
 ): Promise<File> {
+  file = normalizeImageFileMime(file);
   if (isUnsupportedHeicImage(file)) {
     throw new UnsupportedImageFormatError();
   }

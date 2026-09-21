@@ -21,8 +21,10 @@ import { Button } from "@/components/ui/button";
 import { ImagePlus, Video, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
+  DATA_URL_MAX_LENGTH,
+  POST_IMAGES_TOTAL_MAX_LENGTH,
+  UnsupportedImageFormatError,
   shrinkImageToDataUrl,
-  IMAGE_UPLOAD_MAX_BYTES,
 } from "@/lib/shrinkImage";
 
 export function NewOrgPostDialog({
@@ -44,10 +46,13 @@ export function NewOrgPostDialog({
   const [photos, setPhotos] = useState<string[]>([]);
   const [videoUrl, setVideoUrl] = useState("");
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const photosRef = useRef<string[]>([]);
+  const photoSelectionQueueRef = useRef(Promise.resolve());
 
   const reset = () => {
     setTitle("");
     setBody("");
+    photosRef.current = [];
     setPhotos([]);
     setVideoUrl("");
   };
@@ -57,39 +62,114 @@ export function NewOrgPostDialog({
     onOpenChange(next);
   };
 
-  const onFiles = async (files: FileList | null) => {
+  const onFiles = (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    const accepted: File[] = [];
-    let rejectedTooLarge = 0;
-    for (const f of Array.from(files)) {
-      if (!f.type.startsWith("image/")) continue;
-      if (f.size > IMAGE_UPLOAD_MAX_BYTES) {
-        rejectedTooLarge += 1;
-        continue;
-      }
-      accepted.push(f);
-    }
-    if (rejectedTooLarge > 0) {
-      toast({
-        title:
-          rejectedTooLarge === 1
-            ? "Photo too large"
-            : `${rejectedTooLarge} photos too large`,
-        description: "Images must be under 5 MB.",
-        variant: "destructive",
-      });
-    }
-    if (accepted.length === 0) return;
-    try {
-      const next = await Promise.all(accepted.map((f) => shrinkImageToDataUrl(f)));
-      setPhotos((prev) => [...prev, ...next]);
-    } catch {
-      toast({ title: "Couldn't read those photos", variant: "destructive" });
-    }
+    photoSelectionQueueRef.current = photoSelectionQueueRef.current.then(
+      async () => {
+        const selected = Array.from(files).filter(
+          (file) =>
+            file.type.startsWith("image/") ||
+            /\.(jpe?g|png|webp|gif|heic|heif)$/i.test(file.name),
+        );
+        if (selected.length === 0) {
+          toast({
+            title: "Choose an image file",
+            description: "Select a JPG, PNG, WebP, or GIF photo.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        const processed = await Promise.all(
+          selected.map(async (file) => {
+            try {
+              return {
+                status: "ready" as const,
+                dataUrl: await shrinkImageToDataUrl(file),
+              };
+            } catch (error) {
+              return { status: "failed" as const, error };
+            }
+          }),
+        );
+
+        let running = photosRef.current.reduce(
+          (sum, photo) => sum + photo.length,
+          0,
+        );
+        const fits: string[] = [];
+        let rejectedForSpace = 0;
+        let unsupported = 0;
+        let unreadable = 0;
+        for (const result of processed) {
+          if (result.status === "failed") {
+            if (
+              result.error instanceof UnsupportedImageFormatError ||
+              (result.error as { name?: unknown } | null)?.name ===
+                "UnsupportedImageFormatError"
+            ) {
+              unsupported += 1;
+            } else {
+              unreadable += 1;
+            }
+            continue;
+          }
+          if (
+            result.dataUrl.length > DATA_URL_MAX_LENGTH ||
+            running + result.dataUrl.length > POST_IMAGES_TOTAL_MAX_LENGTH
+          ) {
+            rejectedForSpace += 1;
+            continue;
+          }
+          running += result.dataUrl.length;
+          fits.push(result.dataUrl);
+        }
+
+        if (fits.length > 0) {
+          const next = [...photosRef.current, ...fits];
+          photosRef.current = next;
+          setPhotos(next);
+        }
+        if (unsupported > 0) {
+          toast({
+            title:
+              unsupported === 1
+                ? "That photo format isn't supported"
+                : `${unsupported} photo formats aren't supported`,
+            description:
+              "Choose a JPG, PNG, WebP, or GIF. For an iPhone HEIC photo, export or share it as JPG first.",
+            variant: "destructive",
+          });
+        }
+        if (unreadable > 0) {
+          toast({
+            title:
+              unreadable === 1
+                ? "Couldn't read that photo"
+                : `Couldn't read ${unreadable} photos`,
+            description: "Try selecting the photo again or choose a different one.",
+            variant: "destructive",
+          });
+        }
+        if (rejectedForSpace > 0) {
+          toast({
+            title:
+              rejectedForSpace === 1
+                ? "Photo too large to add"
+                : `${rejectedForSpace} photos too large to add`,
+            description:
+              "Kinectem couldn't make these photos small enough for this post. Remove some photos or choose smaller ones.",
+            variant: "destructive",
+          });
+        }
+      },
+    );
   };
 
   const removePhoto = (idx: number) => {
-    setPhotos((prev) => prev.filter((_, i) => i !== idx));
+    const next = photosRef.current.filter((_, i) => i !== idx);
+    photosRef.current = next;
+    setPhotos(next);
   };
 
   const onSubmit = async () => {
@@ -186,6 +266,7 @@ export function NewOrgPostDialog({
                 accept="image/*"
                 multiple
                 className="hidden"
+                data-testid="input-org-post-photos"
                 onChange={(e) => {
                   onFiles(e.target.files);
                   e.target.value = "";
@@ -222,6 +303,10 @@ export function NewOrgPostDialog({
                 ))}
               </div>
             )}
+            <p className="text-xs text-muted-foreground">
+              Photos are compressed automatically. Use JPG, PNG, WebP, or GIF;
+              iPhone HEIC photos must be exported as JPG first.
+            </p>
             <div>
               <Label
                 htmlFor="orgPostVideoUrl"

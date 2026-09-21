@@ -34,7 +34,8 @@ import {
 import {
   shrinkImageToDataUrl,
   isUnsupportedHeicImage,
-  IMAGE_UPLOAD_MAX_BYTES,
+  DATA_URL_MAX_LENGTH,
+  UnsupportedImageFormatError,
 } from "@/lib/shrinkImage";
 import { Link } from "wouter";
 import { Palette, Upload } from "lucide-react";
@@ -253,6 +254,10 @@ export default function AdminCompetitionClaimLinks() {
   const uploadRowLogo = async (file: File) => {
     const id = logoTargetId;
     if (!id) return;
+    if (file.type && !file.type.startsWith("image/")) {
+      toast({ title: "Please choose an image file", variant: "destructive" });
+      return;
+    }
     if (isUnsupportedHeicImage(file)) {
       toast({
         title: "That photo format isn't supported",
@@ -261,17 +266,14 @@ export default function AdminCompetitionClaimLinks() {
       });
       return;
     }
-    if (file.size > IMAGE_UPLOAD_MAX_BYTES) {
-      toast({
-        title: "That image is too large",
-        description: "Please choose an image under 5 MB.",
-        variant: "destructive",
-      });
-      return;
-    }
     setLogoUploadingId(id);
     try {
       const dataUrl = await shrinkImageToDataUrl(file);
+      if (dataUrl.length > DATA_URL_MAX_LENGTH) {
+        throw new Error(
+          "That image is still too large after compression. Please choose a smaller image.",
+        );
+      }
       await customFetch(`/api/v1/admin/competition-claim-links/${id}/logo`, {
         method: "PATCH",
         body: JSON.stringify({ logoUrl: dataUrl }),
@@ -282,8 +284,16 @@ export default function AdminCompetitionClaimLinks() {
       toast({ title: "Logo updated" });
     } catch (err) {
       toast({
-        title: "Couldn't upload logo",
-        description: err instanceof Error ? err.message : undefined,
+        title:
+          err instanceof UnsupportedImageFormatError
+            ? "That photo format isn't supported"
+            : "Couldn't upload logo",
+        description:
+          err instanceof UnsupportedImageFormatError
+            ? "Please choose a JPG or PNG version."
+            : err instanceof Error
+              ? err.message
+              : undefined,
         variant: "destructive",
       });
     } finally {

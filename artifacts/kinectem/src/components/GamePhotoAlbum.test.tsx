@@ -47,6 +47,9 @@ vi.mock("@/hooks/use-toast", () => ({
 
 vi.mock("@/lib/shrinkImage", () => ({
   shrinkImage: (file: File) => Promise.resolve(file),
+  isUnsupportedHeicImage: () => false,
+  classifyImageFile: (file: File) =>
+    file.type.startsWith("image/") ? "supported" : "not-image",
 }));
 
 import {
