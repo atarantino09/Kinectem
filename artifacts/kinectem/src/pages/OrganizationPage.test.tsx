@@ -105,9 +105,11 @@ interface OrgFixture {
   description: null;
   website: null;
   logoUrl: null;
-  city: null;
-  state: null;
-  zipCode: null;
+  city: string | null;
+  state: string | null;
+  zipCode: string | null;
+  brandPrimaryColor?: string | null;
+  brandSecondaryColor?: string | null;
 }
 
 const useGetLoggedInUserMock = vi.fn();
@@ -195,6 +197,7 @@ function installHandlers({
   role,
   extraAdmin = false,
   teams = [],
+  organization = {},
 }: {
   role: Role;
   extraAdmin?: boolean;
@@ -205,9 +208,10 @@ function installHandlers({
     bannerUrl?: string | null;
     followerCount?: number | null;
   }>;
+  organization?: Partial<OrgFixture>;
 }) {
   useGetOrganizationByIdMock.mockReturnValue({
-    data: organizationFixture(role),
+    data: { ...organizationFixture(role), ...organization },
     isLoading: false,
   });
   useListOrgTeamsMock.mockReturnValue({ data: { data: teams } });
@@ -264,19 +268,61 @@ describe("OrganizationPage — admin control gating", () => {
     expect(screen.getByText("EP3 U17B National 1")).toBeInTheDocument();
   });
 
-  it("gives the organization identity a full hero row for a prominent name", async () => {
+  it("keeps the default hero title below the branding boundary while only the logo overlaps", async () => {
     installHandlers({ role: "owner" });
 
     renderWithProviders(<OrganizationPage />);
 
     const identity = await screen.findByTestId("org-header-identity");
     expect(identity).toHaveClass("w-full");
+    expect(identity).toHaveClass("items-start");
+    expect(screen.getByTestId("org-hero-default-gradient")).toBeInTheDocument();
+    expect(screen.getByTestId("org-header-content")).not.toHaveClass("-mt-16");
+    expect(screen.getByTestId("org-header-content")).not.toHaveClass("sm:-mt-20");
+    expect(screen.getByTestId("org-header-logo")).toHaveClass("-mt-12");
+    expect(screen.getByTestId("org-header-logo")).toHaveClass("sm:-mt-16");
+    expect(screen.getByTestId("org-header-title")).toHaveClass("pt-3");
+    expect(screen.getByTestId("org-header-title")).toHaveClass("sm:pt-4");
     const heading = screen.getByRole("heading", {
       name: "WESTFIELD ATHLETIC CLUB",
     });
     const visibleName = heading.querySelector("span:not([aria-hidden])");
     if (!visibleName) throw new Error("Organization name text did not render");
     expect(visibleName).toHaveStyle({ fontSize: "36px" });
+  });
+
+  it("keeps a long branded organization name in the readable content region", async () => {
+    installHandlers({
+      role: "owner",
+      organization: {
+        name: "Rutgers Prep Argonauts",
+        slug: "rutgers-prep-argonauts",
+        city: "Somerset",
+        state: "NJ",
+        zipCode: "08873",
+        brandPrimaryColor: "#9d003d",
+        brandSecondaryColor: "#8b7b6c",
+      },
+    });
+
+    renderWithProviders(<OrganizationPage />);
+
+    expect(await screen.findByTestId("org-hero-brand-gradient")).toBeInTheDocument();
+    const titleRegion = screen.getByTestId("org-header-title");
+    expect(titleRegion).toHaveClass("min-w-0", "flex-1", "pt-3", "sm:pt-4");
+    expect(
+      within(titleRegion).getByRole("heading", {
+        name: "RUTGERS PREP ARGONAUTS",
+      }),
+    ).toBeInTheDocument();
+    expect(within(titleRegion).getByText("@rutgers-prep-argonauts")).toBeInTheDocument();
+    expect(within(titleRegion).getByTestId("text-org-address")).toHaveTextContent(
+      "Somerset, NJ 08873",
+    );
+    expect(screen.getByTestId("persona-pill-organization")).toHaveTextContent(
+      "ORGANIZATION",
+    );
+    expect(screen.getByTestId("org-header-action-menus")).toHaveClass("justify-end");
   });
 
   it("groups a manager's controls into color-coded menus", async () => {

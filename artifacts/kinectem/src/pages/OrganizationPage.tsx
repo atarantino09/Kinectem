@@ -1087,15 +1087,24 @@ export default function OrganizationPage() {
                   data-testid="org-hero-brand-gradient"
                 />
               ) : (
-                <div className="h-32 bg-gradient-to-br from-primary/30 via-primary/10 to-primary/5 relative" />
+                <div
+                  className="h-32 bg-gradient-to-br from-primary/30 via-primary/10 to-primary/5 relative"
+                  data-testid="org-hero-default-gradient"
+                />
               );
             })()}
-            <div className="px-4 sm:px-6 pb-4 sm:pb-6 -mt-16 sm:-mt-20 space-y-4 relative z-10">
+            <div
+              className="px-4 sm:px-6 pb-4 sm:pb-6 space-y-4 relative z-10"
+              data-testid="org-header-content"
+            >
               <div
-                className="flex w-full items-end gap-3 sm:gap-4 min-w-0"
+                className="flex w-full items-start gap-3 sm:gap-4 min-w-0"
                 data-testid="org-header-identity"
               >
-                <div className="shrink-0">
+                <div
+                  className="-mt-12 sm:-mt-16 shrink-0"
+                  data-testid="org-header-logo"
+                >
                   <AvatarLightbox
                     avatarUrl={organization.logoUrl}
                     displayName={formatOrgName(organization.name)}
@@ -1115,7 +1124,10 @@ export default function OrganizationPage() {
                     </div>
                   </AvatarLightbox>
                 </div>
-                <div className="pb-1 sm:pb-2 min-w-0 flex-1">
+                <div
+                  className="min-w-0 flex-1 pt-3 sm:pt-4"
+                  data-testid="org-header-title"
+                >
                   <FitText
                     as="h1"
                     max={36}
