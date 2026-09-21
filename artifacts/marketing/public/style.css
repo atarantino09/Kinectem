@@ -2013,3 +2013,9 @@ section { padding: 84px 0; }
 .persona-image-wrapper--athlete img {
   object-position: 10% 20%;
 }
+
+/* Keep the AI Assist prompt legible at the smaller persona-card size. */
+.persona-image-wrapper--coach img {
+  transform: scale(1.42);
+  transform-origin: center;
+}
