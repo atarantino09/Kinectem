@@ -11,9 +11,10 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
-  shrinkImageToDataUrl,
-  IMAGE_UPLOAD_MAX_BYTES,
+  DATA_URL_MAX_LENGTH,
   POST_IMAGES_TOTAL_MAX_LENGTH,
+  UnsupportedImageFormatError,
+  shrinkImageToDataUrl,
 } from "@/lib/shrinkImage";
 import { VideoEmbed, getEmbedSrc } from "@/components/VideoEmbed";
 import {
@@ -148,61 +149,103 @@ export function MediaSection({
 
   const onFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    const accepted: File[] = [];
-    let rejectedTooLarge = 0;
-    for (const f of Array.from(files)) {
-      if (!f.type.startsWith("image/")) continue;
-      if (f.size > IMAGE_UPLOAD_MAX_BYTES) {
-        rejectedTooLarge += 1;
+
+    // Phone cameras commonly produce photos larger than 5 MB. Process those
+    // originals before enforcing the encoded post limits; rejecting the raw
+    // camera file here prevents the existing downscaler from doing its job.
+    // Some mobile pickers omit MIME type, so recognize common image extensions
+    // as well.
+    const selected = Array.from(files).filter(
+      (file) =>
+        file.type.startsWith("image/") ||
+        /\.(jpe?g|png|webp|gif|heic|heif)$/i.test(file.name),
+    );
+    if (selected.length === 0) {
+      toast({
+        title: "Choose an image file",
+        description: "Select a JPG, PNG, WebP, or GIF photo.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const processed = await Promise.all(
+      selected.map(async (file) => {
+        try {
+          return {
+            status: "ready" as const,
+            dataUrl: await shrinkImageToDataUrl(file),
+          };
+        } catch (error) {
+          return { status: "failed" as const, error };
+        }
+      }),
+    );
+
+    // Task #692 — the whole recap (all photos) is sent inline in one JSON
+    // body. Keep both each encoded image and the combined set within the
+    // server's limits after compression.
+    let running = photos.reduce((sum, photo) => sum + photo.length, 0);
+    const fits: string[] = [];
+    let rejectedForSpace = 0;
+    let unsupported = 0;
+    let unreadable = 0;
+    for (const result of processed) {
+      if (result.status === "failed") {
+        if (
+          result.error instanceof UnsupportedImageFormatError ||
+          (result.error as { name?: unknown } | null)?.name ===
+            "UnsupportedImageFormatError"
+        ) {
+          unsupported += 1;
+        } else {
+          unreadable += 1;
+        }
         continue;
       }
-      accepted.push(f);
+      if (
+        result.dataUrl.length > DATA_URL_MAX_LENGTH ||
+        running + result.dataUrl.length > POST_IMAGES_TOTAL_MAX_LENGTH
+      ) {
+        rejectedForSpace += 1;
+        continue;
+      }
+      running += result.dataUrl.length;
+      fits.push(result.dataUrl);
     }
-    if (rejectedTooLarge > 0) {
+
+    if (fits.length > 0) onPhotosChange([...photos, ...fits]);
+    if (unsupported > 0) {
       toast({
         title:
-          rejectedTooLarge === 1
-            ? "Photo too large"
-            : `${rejectedTooLarge} photos too large`,
-        description: "Images must be under 5 MB.",
+          unsupported === 1
+            ? "That photo format isn't supported"
+            : `${unsupported} photo formats aren't supported`,
+        description:
+          "Choose a JPG, PNG, WebP, or GIF. For an iPhone HEIC photo, export or share it as JPG first.",
         variant: "destructive",
       });
     }
-    if (accepted.length === 0) return;
-    try {
-      const shrunk = await Promise.all(
-        accepted.map((f) => shrinkImageToDataUrl(f)),
-      );
-      // Task #692 — the whole recap (all photos) is sent inline in one JSON
-      // body, so keep the COMBINED size within the server's posts body limit
-      // (POST_IMAGES_TOTAL_MAX_LENGTH). Accept photos in order until the next
-      // one would push the total over the cap; reject the overflow with a clear
-      // message instead of letting the request fail with a server-side 413.
-      let running = photos.reduce((sum, p) => sum + p.length, 0);
-      const fits: string[] = [];
-      let rejectedForSpace = 0;
-      for (const dataUrl of shrunk) {
-        if (running + dataUrl.length > POST_IMAGES_TOTAL_MAX_LENGTH) {
-          rejectedForSpace += 1;
-          continue;
-        }
-        running += dataUrl.length;
-        fits.push(dataUrl);
-      }
-      if (fits.length > 0) onPhotosChange([...photos, ...fits]);
-      if (rejectedForSpace > 0) {
-        toast({
-          title:
-            rejectedForSpace === 1
-              ? "Photo too large to add"
-              : `${rejectedForSpace} photos too large to add`,
-          description:
-            "These photos would make the post too big. Remove some photos or choose smaller ones.",
-          variant: "destructive",
-        });
-      }
-    } catch {
-      toast({ title: "Couldn't read those photos", variant: "destructive" });
+    if (unreadable > 0) {
+      toast({
+        title:
+          unreadable === 1
+            ? "Couldn't read that photo"
+            : `Couldn't read ${unreadable} photos`,
+        description: "Try selecting the photo again or choose a different one.",
+        variant: "destructive",
+      });
+    }
+    if (rejectedForSpace > 0) {
+      toast({
+        title:
+          rejectedForSpace === 1
+            ? "Photo too large to add"
+            : `${rejectedForSpace} photos too large to add`,
+        description:
+          "Kinectem couldn't make these photos small enough for this post. Remove some photos or choose smaller ones.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -252,6 +295,7 @@ export function MediaSection({
             accept="image/*"
             multiple
             className="hidden"
+            data-testid="input-post-photos"
             onChange={(e) => {
               onFiles(e.target.files);
               e.target.value = "";

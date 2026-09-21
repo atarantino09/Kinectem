@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   toast: vi.fn(),
   requestUpload: vi.fn(),
   confirmUpload: vi.fn(),
+  shrinkImageToDataUrl: vi.fn(),
 }));
 
 vi.mock("@/hooks/use-toast", () => ({
@@ -22,10 +23,26 @@ vi.mock("@workspace/api-client-react", async () => {
   };
 });
 
+vi.mock("@/lib/shrinkImage", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/shrinkImage")>(
+    "@/lib/shrinkImage",
+  );
+  return {
+    ...actual,
+    DATA_URL_MAX_LENGTH: 60,
+    POST_IMAGES_TOTAL_MAX_LENGTH: 100,
+    shrinkImageToDataUrl: mocks.shrinkImageToDataUrl,
+  };
+});
+
 import {
   HIGHLIGHT_VIDEO_MAX_BYTES,
   MediaSection,
 } from "./MediaSection";
+import {
+  IMAGE_UPLOAD_MAX_BYTES,
+  UnsupportedImageFormatError,
+} from "@/lib/shrinkImage";
 
 function renderHighlight(
   overrides: Partial<React.ComponentProps<typeof MediaSection>> = {},
@@ -43,6 +60,103 @@ function renderHighlight(
     />,
   );
 }
+
+function renderPhotos(
+  overrides: Partial<React.ComponentProps<typeof MediaSection>> = {},
+) {
+  return render(
+    <MediaSection
+      photos={[]}
+      onPhotosChange={vi.fn()}
+      videoUrl=""
+      onVideoUrlChange={vi.fn()}
+      {...overrides}
+    />,
+  );
+}
+
+describe("MediaSection phone photo processing", () => {
+  beforeEach(() => {
+    mocks.toast.mockReset();
+    mocks.shrinkImageToDataUrl.mockReset();
+    mocks.shrinkImageToDataUrl.mockResolvedValue(
+      "data:image/jpeg;base64,compressed",
+    );
+  });
+
+  it("compresses and attaches a phone photo larger than 5 MB", async () => {
+    const onPhotosChange = vi.fn();
+    renderPhotos({ onPhotosChange });
+    const photo = new File(
+      [new Uint8Array(IMAGE_UPLOAD_MAX_BYTES + 1)],
+      "game-day.jpg",
+      { type: "image/jpeg" },
+    );
+
+    fireEvent.change(screen.getByTestId("input-post-photos"), {
+      target: { files: [photo] },
+    });
+
+    await waitFor(() =>
+      expect(onPhotosChange).toHaveBeenCalledWith([
+        "data:image/jpeg;base64,compressed",
+      ]),
+    );
+    expect(mocks.shrinkImageToDataUrl).toHaveBeenCalledWith(photo);
+    expect(mocks.toast).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: expect.stringMatching(/under 5 MB/i),
+      }),
+    );
+  });
+
+  it("shows format guidance for an unsupported iPhone photo", async () => {
+    renderPhotos();
+    mocks.shrinkImageToDataUrl.mockRejectedValue(
+      new UnsupportedImageFormatError(),
+    );
+    const photo = new File(["heic"], "game-day.heic", {
+      type: "image/heic",
+    });
+
+    fireEvent.change(screen.getByTestId("input-post-photos"), {
+      target: { files: [photo] },
+    });
+
+    await waitFor(() =>
+      expect(mocks.toast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: expect.stringMatching(/format isn't supported/i),
+          description: expect.stringMatching(/HEIC.*JPG/i),
+        }),
+      ),
+    );
+  });
+
+  it("keeps the combined post-photo limit after compression", async () => {
+    const onPhotosChange = vi.fn();
+    renderPhotos({
+      photos: ["x".repeat(90)],
+      onPhotosChange,
+    });
+    mocks.shrinkImageToDataUrl.mockResolvedValue("y".repeat(20));
+    const photo = new File(["photo"], "extra.jpg", { type: "image/jpeg" });
+
+    fireEvent.change(screen.getByTestId("input-post-photos"), {
+      target: { files: [photo] },
+    });
+
+    await waitFor(() =>
+      expect(mocks.toast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Photo too large to add",
+          description: expect.stringMatching(/this post/i),
+        }),
+      ),
+    );
+    expect(onPhotosChange).not.toHaveBeenCalled();
+  });
+});
 
 describe("MediaSection highlight video upload", () => {
   beforeEach(() => {
