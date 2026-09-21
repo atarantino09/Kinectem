@@ -13,7 +13,11 @@ describe("organization owner invitation email", () => {
       "Become the owner of Westfield Athletic Club",
     );
     expect(email.text).toContain(
-      "/app/org-claim-links/private-token",
+      "/app/claim/private-token",
+    );
+    expect(email.text).not.toContain("/app/org-claim-links/");
+    expect(email.html).toMatch(
+      /href="[^"]+\/app\/claim\/private-token"/,
     );
     expect(email.text).toContain(
       "Kinectem is the youth-sports platform where the story of your season comes to life",

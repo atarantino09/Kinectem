@@ -146,6 +146,11 @@ function Router() {
         <Route path="/org-claim/:token">
           {(p) => <Redirect to={`/claim/${p.token}`} replace />}
         </Route>
+        {/* Owner-invite emails were briefly generated with the admin
+            link-management path. Preserve those already-delivered links. */}
+        <Route path="/org-claim-links/:token">
+          {(p) => <Redirect to={`/claim/${p.token}`} replace />}
+        </Route>
         <Route path="/claim/:token" component={ClaimOrgPage} />
         <Route path="/adopt-team/:token" component={TeamAdoptPage} />
         <Route path="/c/:slug/signup" component={TournamentSignupPage} />

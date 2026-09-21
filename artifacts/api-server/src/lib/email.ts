@@ -336,7 +336,7 @@ export function buildOrgOwnerInvitationEmail(input: {
   organizationName: string;
   claimToken: string;
 }): EmailMessage {
-  const claimUrl = `${appBaseUrl()}/app/org-claim-links/${input.claimToken}`;
+  const claimUrl = `${appBaseUrl()}/app/claim/${input.claimToken}`;
   return {
     to: input.to,
     subject: `Become the owner of ${input.organizationName} on Kinectem`,
