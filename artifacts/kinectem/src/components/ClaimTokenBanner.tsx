@@ -70,6 +70,7 @@ function ClaimActions({
   claimLabel,
   returnTo,
   testidPrefix,
+  claimOrgName,
 }: {
   me: unknown;
   claiming: boolean;
@@ -77,6 +78,7 @@ function ClaimActions({
   claimLabel: string;
   returnTo: string;
   testidPrefix: string;
+  claimOrgName?: string;
 }) {
   if (me) {
     return (
@@ -91,9 +93,12 @@ function ClaimActions({
     );
   }
   const encoded = encodeURIComponent(returnTo);
+  const claimContext = claimOrgName
+    ? `&claimOrg=${encodeURIComponent(claimOrgName)}`
+    : "";
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <Link href={`/login?signup=1&returnTo=${encoded}`}>
+      <Link href={`/login?signup=1${claimContext}&returnTo=${encoded}`}>
         <Button
           className="font-bold bg-red-600 hover:bg-red-700 text-white"
           data-testid={`btn-${testidPrefix}-claim`}
@@ -255,6 +260,7 @@ export function OrgClaimBanner({ orgId }: { orgId: string }) {
         }
         returnTo={returnTo}
         testidPrefix="org"
+        claimOrgName={formatOrgName(data.organization.name)}
       />
     </BannerShell>
   );

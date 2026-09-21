@@ -57,6 +57,7 @@ const HEADINGS: Record<Mode, { title: string; subtitle: string }> = {
 export default function LoginPage() {
   const initialSignup = readQueryParam("signup");
   const returnTo = readQueryParam("returnTo");
+  const claimOrgName = readQueryParam("claimOrg")?.trim() || null;
   // Task #864 — visitors arriving from a public game recap get a warm
   // invitation banner explaining why they're here.
   const gate = readQueryParam("gate");
@@ -83,6 +84,18 @@ export default function LoginPage() {
     initialSignup === "parent" ? "parent" : "athlete";
 
   const heading = (() => {
+    if (claimOrgName && mode === "signup") {
+      return {
+        title: "Create your individual account",
+        subtitle: `You're about to become the owner of ${claimOrgName}.`,
+      };
+    }
+    if (claimOrgName && mode === "signin") {
+      return {
+        title: "Sign in to claim your organization",
+        subtitle: `You're about to become the owner of ${claimOrgName}.`,
+      };
+    }
     if (mode === "signup" && initialSignup === "parent") {
       return {
         title: "Create your guardian account",
@@ -140,6 +153,21 @@ export default function LoginPage() {
             </div>
           )}
 
+          {claimOrgName &&
+            (mode === "signup" || mode === "signin") && (
+              <div
+                className="rounded-xl border border-primary/25 bg-primary/5 px-4 py-3 text-sm"
+                data-testid="text-org-claim-signup-message"
+              >
+                <p className="font-bold">Claim {claimOrgName}</p>
+                <p className="mt-0.5 text-slate-600">
+                  {mode === "signup"
+                    ? "Create your individual Kinectem account. We'll make you the organization owner and take you directly to its page."
+                    : "Sign in to become the organization owner and continue directly to its page."}
+                </p>
+              </div>
+            )}
+
           {error && (
             <div
               className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
@@ -164,7 +192,7 @@ export default function LoginPage() {
 
           {mode === "signup" && (
             <SignUpForm
-              initialRole={initialRole}
+              initialRole={claimOrgName ? "coach" : initialRole}
               returnTo={returnTo}
               onSwitchSignin={() => switchMode("signin")}
               onError={setError}
@@ -172,7 +200,8 @@ export default function LoginPage() {
                 setSignupGuardianEmail(email);
                 setMode("signupPending");
               }}
-              skipPathStep={initialSignup === "parent"}
+              skipPathStep={initialSignup === "parent" || !!claimOrgName}
+              claimingOrganizationName={claimOrgName}
               onPathChange={(path) => setSignupPath(path)}
             />
           )}

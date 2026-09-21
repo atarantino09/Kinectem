@@ -5,6 +5,7 @@ describe("organization claim-link redirect", () => {
   it("sends a signed-out recipient straight to account creation and returns to auto-claim", () => {
     const redirect = getClaimOrgRedirect({
       organizationId: "org-123",
+      organizationName: "Florida Youth Soccer",
       token: "secret/token",
       alreadyClaimed: false,
       signedIn: false,
@@ -14,6 +15,7 @@ describe("organization claim-link redirect", () => {
 
     expect(path).toBe("/login");
     expect(params.get("signup")).toBe("1");
+    expect(params.get("claimOrg")).toBe("Florida Youth Soccer");
     expect(params.get("returnTo")).toBe(
       "/organizations/org-123?claimToken=secret%2Ftoken&autoClaim=1",
     );
@@ -23,6 +25,7 @@ describe("organization claim-link redirect", () => {
     expect(
       getClaimOrgRedirect({
         organizationId: "org-123",
+        organizationName: "Florida Youth Soccer",
         token: "token",
         alreadyClaimed: false,
         signedIn: true,
@@ -31,6 +34,7 @@ describe("organization claim-link redirect", () => {
     expect(
       getClaimOrgRedirect({
         organizationId: "org-123",
+        organizationName: "Florida Youth Soccer",
         token: "token",
         alreadyClaimed: true,
         signedIn: false,

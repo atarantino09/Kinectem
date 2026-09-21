@@ -71,6 +71,9 @@ interface SignUpFormProps {
   /** Fired when the visitor picks a path on the path-picker step, or clears
    *  their selection (null = returned to path picker). */
   onPathChange?: (path: "org_admin" | "general" | null) => void;
+  /** Organization named by a private owner-claim invitation. This bypasses
+   * the generic role chooser while preserving the neutral age gate. */
+  claimingOrganizationName?: string | null;
 }
 
 export function SignUpForm({
@@ -81,6 +84,7 @@ export function SignUpForm({
   onPending,
   skipPathStep = false,
   onPathChange,
+  claimingOrganizationName,
 }: SignUpFormProps) {
   const qc = useQueryClient();
   const [submitting, setSubmitting] = useState(false);
@@ -564,7 +568,24 @@ export function SignUpForm({
 
       {!isUnder13 && (
         <div className="space-y-1.5">
-          {orgAdminViaPath ? (
+          {claimingOrganizationName ? (
+            <div
+              className="flex items-start gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3"
+              data-testid="badge-org-owner-claim"
+            >
+              <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-bold text-primary">
+                  Your individual account
+                </div>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-slate-600">
+                  After signup, this account will become the owner of{" "}
+                  <strong>{claimingOrganizationName}</strong> and you'll go
+                  directly to its organization page.
+                </p>
+              </div>
+            </div>
+          ) : orgAdminViaPath ? (
             // Role was chosen via the path-picker card — lock it and make
             // the org-admin context explicit so nothing feels hidden.
             <div

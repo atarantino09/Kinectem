@@ -19,17 +19,19 @@ import { Skeleton } from "@/components/ui/skeleton";
 // Hand-written customFetch — these endpoints have no openapi.yaml entry.
 
 type ClaimResolve = {
-  organization: { id: string };
+  organization: { id: string; name: string };
   alreadyClaimed: boolean;
 };
 
 export function getClaimOrgRedirect({
   organizationId,
+  organizationName,
   token,
   alreadyClaimed,
   signedIn,
 }: {
   organizationId: string;
+  organizationName: string;
   token: string;
   alreadyClaimed: boolean;
   signedIn: boolean;
@@ -37,7 +39,7 @@ export function getClaimOrgRedirect({
   const destination = `/organizations/${organizationId}?claimToken=${encodeURIComponent(token)}`;
   if (alreadyClaimed || signedIn) return destination;
   const returnTo = `${destination}&autoClaim=1`;
-  return `/login?signup=1&returnTo=${encodeURIComponent(returnTo)}`;
+  return `/login?signup=1&claimOrg=${encodeURIComponent(organizationName)}&returnTo=${encodeURIComponent(returnTo)}`;
 }
 
 export default function ClaimOrgPage() {
@@ -63,6 +65,7 @@ export default function ClaimOrgPage() {
     navigate(
       getClaimOrgRedirect({
         organizationId: data.organization.id,
+        organizationName: data.organization.name,
         token,
         alreadyClaimed: data.alreadyClaimed,
         signedIn: !!me,
