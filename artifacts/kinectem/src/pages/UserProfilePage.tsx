@@ -100,7 +100,7 @@ export default function UserProfilePage() {
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) =>
       lastPage.pagination.hasMore
-        ? lastPage.pagination.nextCursor ?? undefined
+        ? (lastPage.pagination.nextCursor ?? undefined)
         : undefined,
     enabled: !!userId,
   });
@@ -206,7 +206,9 @@ export default function UserProfilePage() {
     const ap = pinnedSet.has(a.teamId);
     const bp = pinnedSet.has(b.teamId);
     if (ap && bp) {
-      return (pinnedOrder.get(a.teamId) ?? 0) - (pinnedOrder.get(b.teamId) ?? 0);
+      return (
+        (pinnedOrder.get(a.teamId) ?? 0) - (pinnedOrder.get(b.teamId) ?? 0)
+      );
     }
     if (ap) return -1;
     if (bp) return 1;
@@ -218,10 +220,7 @@ export default function UserProfilePage() {
   // Server returns the private response (with `parentId`) when the viewer
   // is the linked parent, so the simple comparison below is sufficient.
   const isParentOfThisUser =
-    !!me &&
-    "parentId" in user &&
-    !!user.parentId &&
-    user.parentId === me.id;
+    !!me && "parentId" in user && !!user.parentId && user.parentId === me.id;
 
   // Pre-render the per-section item arrays so the same content can be
   // dropped into the right rail (lg+) or inline below the hero (mobile).
@@ -263,7 +262,9 @@ export default function UserProfilePage() {
             imgClassName="w-10 h-10 rounded-lg object-cover bg-muted shrink-0"
           />
           <div className="min-w-0 flex-1">
-            <p className="font-bold text-sm truncate">{formatOrgName(org.name)}</p>
+            <p className="font-bold text-sm truncate">
+              {formatOrgName(org.name)}
+            </p>
             {org.role && (
               <Badge
                 variant="outline"
@@ -435,314 +436,325 @@ export default function UserProfilePage() {
     <div
       className={`grid grid-cols-1 ${
         hasAnyAffiliation ? "lg:grid-cols-[minmax(0,1fr)_340px]" : ""
-      } gap-6 items-start`}
+      } gap-6 lg:gap-8 items-start`}
     >
       {/* Task #367 — minor profile pages must not be search-indexed.
           The API also sets X-Robots-Tag, but the SPA shell may render
           the page from the static index.html before the API call
           completes. */}
       {(user as { isMinor?: boolean }).isMinor ? <NoIndex /> : null}
-      <div className="space-y-6 min-w-0">
-      {/* Hero */}
-      <div className="app-surface overflow-hidden">
-        <div className="h-32 brand-gradient-cover relative">
-          {user.coverPhotoUrl ? (
-            <img
-              src={user.coverPhotoUrl}
-              alt=""
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            <div
-              aria-hidden="true"
-              className="brand-banner-pattern absolute inset-0 pointer-events-none"
-            />
-          )}
-        </div>
-        <div className="px-6 pb-6 -mt-16">
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <AvatarLightbox
-              avatarUrl={user.avatarUrl}
-              displayName={displayName}
-              triggerTestId="btn-open-avatar-lightbox"
-              dialogTestId="dialog-avatar-lightbox"
-              imageTestId="img-avatar-lightbox"
-            >
-              <UserAvatar
+      <div className="space-y-6 lg:space-y-8 min-w-0">
+        {/* Hero */}
+        <div className="app-surface overflow-hidden">
+          <div className="h-32 brand-gradient-cover relative">
+            {user.coverPhotoUrl ? (
+              <img
+                src={user.coverPhotoUrl}
+                alt=""
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div
+                aria-hidden="true"
+                className="brand-banner-pattern absolute inset-0 pointer-events-none"
+              />
+            )}
+          </div>
+          <div className="px-4 pb-5 sm:px-6 sm:pb-6 -mt-16">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <AvatarLightbox
                 avatarUrl={user.avatarUrl}
                 displayName={displayName}
-                size="4xl"
-                className={`border-4 border-card shadow-lg ${user.avatarUrl ? "cursor-pointer" : ""}`}
-                fallbackClassName="bg-slate-900 text-primary-foreground font-black"
-              />
-            </AvatarLightbox>
-            {user.isOwnProfile && "email" in user ? (
-              <div className="mt-24 flex items-center gap-2">
-                <Link href="/me/tags">
+                triggerTestId="btn-open-avatar-lightbox"
+                dialogTestId="dialog-avatar-lightbox"
+                imageTestId="img-avatar-lightbox"
+              >
+                <UserAvatar
+                  avatarUrl={user.avatarUrl}
+                  displayName={displayName}
+                  size="4xl"
+                  className={`border-4 border-card shadow-lg ${user.avatarUrl ? "cursor-pointer" : ""}`}
+                  fallbackClassName="bg-slate-900 text-primary-foreground font-black"
+                />
+              </AvatarLightbox>
+              {user.isOwnProfile && "email" in user ? (
+                <div className="mt-24 flex items-center gap-2">
+                  <Link href="/me/tags">
+                    <Button
+                      variant="outline"
+                      className="font-bold rounded-full"
+                      data-testid="link-manage-tags"
+                    >
+                      <Tag className="w-4 h-4 mr-1.5" />
+                      Manage Tags
+                    </Button>
+                  </Link>
+                  <EditProfileDialog user={user as PrivateUserResponse} />
+                </div>
+              ) : isParentOfThisUser ? (
+                <div
+                  className="mt-24 flex items-center gap-2"
+                  data-testid="parent-actions"
+                >
+                  <EditProfileDialog user={user as PrivateUserResponse} />
+                </div>
+              ) : (
+                <div className="mt-24 flex items-center gap-2">
                   <Button
                     variant="outline"
                     className="font-bold rounded-full"
-                    data-testid="link-manage-tags"
+                    onClick={onMessage}
+                    disabled={startConversation.isPending}
+                    data-testid="btn-message-user"
                   >
-                    <Tag className="w-4 h-4 mr-1.5" />
-                    Manage Tags
+                    <MessageSquare className="w-4 h-4 mr-1.5" />
+                    Message
                   </Button>
-                </Link>
-                <EditProfileDialog user={user as PrivateUserResponse} />
-              </div>
-            ) : isParentOfThisUser ? (
-              <div
-                className="mt-24 flex items-center gap-2"
-                data-testid="parent-actions"
-              >
-                <EditProfileDialog user={user as PrivateUserResponse} />
-              </div>
-            ) : (
-              <div className="mt-24 flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  className="font-bold rounded-full"
-                  onClick={onMessage}
-                  disabled={startConversation.isPending}
-                  data-testid="btn-message-user"
+                  <Button
+                    variant="brand"
+                    onClick={onToggleFollow}
+                    disabled={followUser.isPending || unfollowUser.isPending}
+                    data-testid="btn-follow-user"
+                  >
+                    {user.isFollowing
+                      ? "Following"
+                      : (user as { followRequestPending?: boolean })
+                            .followRequestPending
+                        ? "Requested"
+                        : "Follow"}
+                  </Button>
+                </div>
+              )}
+            </div>
+            <div className="mt-2">
+              <h1 className="text-4xl font-black tracking-tight leading-[1.05]">
+                {displayName}
+              </h1>
+              <div className="flex items-center gap-5 mt-2">
+                <button
+                  type="button"
+                  onClick={() => setFollowersOpen(true)}
+                  className="text-sm font-medium text-muted-foreground hover:text-foreground"
+                  data-testid="btn-view-user-followers"
                 >
-                  <MessageSquare className="w-4 h-4 mr-1.5" />
-                  Message
-                </Button>
-                <Button
-                  variant="brand"
-                  onClick={onToggleFollow}
-                  disabled={followUser.isPending || unfollowUser.isPending}
-                  data-testid="btn-follow-user"
+                  <span className="font-black text-foreground">
+                    {(user as { followerCount?: number }).followerCount ?? 0}
+                  </span>{" "}
+                  Followers
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFollowingOpen(true)}
+                  className="text-sm font-medium text-muted-foreground hover:text-foreground"
+                  data-testid="btn-view-user-following"
                 >
-                  {user.isFollowing
-                    ? "Following"
-                    : (user as { followRequestPending?: boolean })
-                          .followRequestPending
-                      ? "Requested"
-                      : "Follow"}
-                </Button>
+                  <span className="font-black text-foreground">
+                    {(user as { followingCount?: number }).followingCount ?? 0}
+                  </span>{" "}
+                  Following
+                </button>
               </div>
-            )}
-          </div>
-          <div className="mt-2">
-            <h1 className="text-4xl font-black tracking-tight leading-[1.05]">
-              {displayName}
-            </h1>
-            <div className="flex items-center gap-5 mt-2">
-              <button
-                type="button"
-                onClick={() => setFollowersOpen(true)}
-                className="text-sm font-medium text-muted-foreground hover:text-foreground"
-                data-testid="btn-view-user-followers"
-              >
-                <span className="font-black text-foreground">
-                  {(user as { followerCount?: number }).followerCount ?? 0}
-                </span>{" "}
-                Followers
-              </button>
-              <button
-                type="button"
-                onClick={() => setFollowingOpen(true)}
-                className="text-sm font-medium text-muted-foreground hover:text-foreground"
-                data-testid="btn-view-user-following"
-              >
-                <span className="font-black text-foreground">
-                  {(user as { followingCount?: number }).followingCount ?? 0}
-                </span>{" "}
-                Following
-              </button>
             </div>
           </div>
-        </div>
-        <FollowListDialog
-          open={followersOpen}
-          onOpenChange={setFollowersOpen}
-          title={`${displayName}'s followers`}
-          variant={{ kind: "user-followers", userId }}
-        />
-        <FollowListDialog
-          open={followingOpen}
-          onOpenChange={setFollowingOpen}
-          title={`${displayName} follows`}
-          variant={{ kind: "user-following", userId }}
-        />
-        {(() => {
-          // Task #422 — `dateOfBirth` only appears on the private response
-          // (self / linked guardian), so reading it here automatically
-          // respects the visibility rule: strangers never receive the
-          // field and therefore never see the row.
-          const dobRaw = (user as { dateOfBirth?: string | Date | null }).dateOfBirth;
-          const dobDate =
-            dobRaw instanceof Date
-              ? dobRaw
-              : typeof dobRaw === "string" && dobRaw
-                ? new Date(dobRaw)
-                : null;
-          const dobValid = dobDate && !Number.isNaN(dobDate.getTime());
-          const dobLabel = dobValid ? friendlyAgeLabel(dobDate) : null;
-          const showInfo =
-            user.bio || user.city || user.state || dobLabel || userSports.length > 0;
-          if (!showInfo) return null;
-          return (
-          <div className="px-6 pb-6 space-y-2">
-            {user.bio && (
-              <div className="flex items-start gap-2 text-sm text-muted-foreground leading-relaxed max-w-2xl">
-                <FileText className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
-                <p className="whitespace-pre-wrap min-w-0">
-                  {linkify(user.bio)}
-                </p>
-              </div>
-            )}
-            {dobLabel && (
-              <div
-                className="flex items-center gap-2 text-sm font-medium text-muted-foreground"
-                data-testid="text-user-birthday"
-              >
-                <Cake className="h-4 w-4 shrink-0" aria-hidden="true" />
-                <span>{dobLabel}</span>
-              </div>
-            )}
-            {/* Task #500 — Show the user's selected sports as small
+          <FollowListDialog
+            open={followersOpen}
+            onOpenChange={setFollowersOpen}
+            title={`${displayName}'s followers`}
+            variant={{ kind: "user-followers", userId }}
+          />
+          <FollowListDialog
+            open={followingOpen}
+            onOpenChange={setFollowingOpen}
+            title={`${displayName} follows`}
+            variant={{ kind: "user-following", userId }}
+          />
+          {(() => {
+            // Task #422 — `dateOfBirth` only appears on the private response
+            // (self / linked guardian), so reading it here automatically
+            // respects the visibility rule: strangers never receive the
+            // field and therefore never see the row.
+            const dobRaw = (user as { dateOfBirth?: string | Date | null })
+              .dateOfBirth;
+            const dobDate =
+              dobRaw instanceof Date
+                ? dobRaw
+                : typeof dobRaw === "string" && dobRaw
+                  ? new Date(dobRaw)
+                  : null;
+            const dobValid = dobDate && !Number.isNaN(dobDate.getTime());
+            const dobLabel = dobValid ? friendlyAgeLabel(dobDate) : null;
+            const showInfo =
+              user.bio ||
+              user.city ||
+              user.state ||
+              dobLabel ||
+              userSports.length > 0;
+            if (!showInfo) return null;
+            return (
+              <div className="px-4 pb-5 sm:px-6 sm:pb-6 space-y-2">
+                {user.bio && (
+                  <div className="flex items-start gap-2 text-sm text-muted-foreground leading-relaxed max-w-2xl">
+                    <FileText
+                      className="h-4 w-4 shrink-0 mt-0.5"
+                      aria-hidden="true"
+                    />
+                    <p className="whitespace-pre-wrap min-w-0">
+                      {linkify(user.bio)}
+                    </p>
+                  </div>
+                )}
+                {dobLabel && (
+                  <div
+                    className="flex items-center gap-2 text-sm font-medium text-muted-foreground"
+                    data-testid="text-user-birthday"
+                  >
+                    <Cake className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    <span>{dobLabel}</span>
+                  </div>
+                )}
+                {/* Task #500 — Show the user's selected sports as small
                 badge chips. Hidden when empty (and the query is only
                 enabled for own-profile, so strangers never see this
                 row at all today). */}
-            {userSports.length > 0 && (
-              <div
-                className="flex items-start gap-2 text-sm font-medium text-muted-foreground"
-                data-testid="text-user-sports"
-              >
-                <Trophy className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
-                <div className="flex flex-wrap gap-1.5">
-                  {userSports.map((s) => (
-                    <Badge
-                      key={s}
-                      variant="secondary"
-                      className="font-medium"
-                      data-testid={`badge-user-sport-${s}`}
-                    >
-                      {s}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            )}
-            {/* Task #349 — Show "City, ST", just the city, or just the state
+                {userSports.length > 0 && (
+                  <div
+                    className="flex items-start gap-2 text-sm font-medium text-muted-foreground"
+                    data-testid="text-user-sports"
+                  >
+                    <Trophy
+                      className="h-4 w-4 shrink-0 mt-0.5"
+                      aria-hidden="true"
+                    />
+                    <div className="flex flex-wrap gap-1.5">
+                      {userSports.map((s) => (
+                        <Badge
+                          key={s}
+                          variant="secondary"
+                          className="font-medium"
+                          data-testid={`badge-user-sport-${s}`}
+                        >
+                          {s}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {/* Task #349 — Show "City, ST", just the city, or just the state
                 depending on which fields the user has set. Hidden when both
                 are empty. */}
-            {(user.city || user.state) && (
-              <div
-                className="flex items-center gap-2 text-sm font-medium text-muted-foreground"
-                data-testid="text-user-location"
-              >
-                <MapPin className="h-4 w-4 shrink-0" aria-hidden="true" />
-                <span>
-                  {user.city && user.state
-                    ? `${user.city}, ${user.state}`
-                    : (user.city ?? user.state)}
-                </span>
+                {(user.city || user.state) && (
+                  <div
+                    className="flex items-center gap-2 text-sm font-medium text-muted-foreground"
+                    data-testid="text-user-location"
+                  >
+                    <MapPin className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    <span>
+                      {user.city && user.state
+                        ? `${user.city}, ${user.state}`
+                        : (user.city ?? user.state)}
+                    </span>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-          );
-        })()}
-      </div>
+            );
+          })()}
+        </div>
 
-      {/* Affiliations stack: inline on mobile (between hero and posts),
+        {/* Affiliations stack: inline on mobile (between hero and posts),
           rendered in the right rail on lg+. Only one copy mounts at a
           time so testids stay unique. */}
-      {!isLg && affiliationsStack}
+        {!isLg && affiliationsStack}
 
-      {/* Posts (authored + tagged) */}
-      <section>
-        <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-          <h2 className="text-2xl font-black tracking-tight">
-            {user.isOwnProfile ? "Posts" : "Posts & tagged in"}
-          </h2>
-          <div className="flex w-full sm:w-auto items-center justify-end gap-2 flex-wrap">
-            {canPostProfileHighlight && (
-              <Link
-                href={`/posts/new?type=short&profileOnly=1&from=${encodeURIComponent(`/users/${userId}`)}`}
-              >
-                <Button
-                  variant="brand"
-                  className="font-bold rounded-full shrink-0"
-                  data-testid="btn-post-profile-highlight"
+        {/* Posts (authored + tagged) */}
+        <section>
+          <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+            <h2 className="text-2xl font-black tracking-tight">
+              {user.isOwnProfile ? "Posts" : "Posts & tagged in"}
+            </h2>
+            <div className="flex w-full sm:w-auto items-center justify-end gap-2 flex-wrap">
+              {canPostProfileHighlight && (
+                <Link
+                  href={`/posts/new?type=short&profileOnly=1&from=${encodeURIComponent(`/users/${userId}`)}`}
                 >
-                  <Play className="w-4 h-4 mr-1.5" />
-                  Post highlight
-                </Button>
-              </Link>
-            )}
-            {teams.length > 0 && (
-              <Select value={teamFilter} onValueChange={setTeamFilter}>
-                <SelectTrigger
-                  className="w-56 max-w-full font-bold"
-                  data-testid="select-team-filter"
-                >
-                  <SelectValue placeholder="All teams" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All teams</SelectItem>
-                  {teams.map((t) => (
-                    <SelectItem key={t.teamId} value={t.teamId}>
-                      {t.teamName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+                  <Button
+                    variant="brand"
+                    className="font-bold rounded-full shrink-0"
+                    data-testid="btn-post-profile-highlight"
+                  >
+                    <Play className="w-4 h-4 mr-1.5" />
+                    Post highlight
+                  </Button>
+                </Link>
+              )}
+              {teams.length > 0 && (
+                <Select value={teamFilter} onValueChange={setTeamFilter}>
+                  <SelectTrigger
+                    className="w-56 max-w-full font-bold"
+                    data-testid="select-team-filter"
+                  >
+                    <SelectValue placeholder="All teams" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All teams</SelectItem>
+                    {teams.map((t) => (
+                      <SelectItem key={t.teamId} value={t.teamId}>
+                        {t.teamName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
           </div>
-        </div>
-        <div className="space-y-3">
-          {posts.length > 0 ? (
-            posts.map((p) => <PostCard key={p.id} post={p} />)
-          ) : hasMorePosts ? null : (
-            <Card className="app-surface">
-              <CardContent className="p-0">
-                <EmptyState
-                  icon={<Building2 className="h-5 w-5" />}
-                  title="No posts yet."
-                  description="Highlights, recaps, and tagged moments will appear here."
-                />
-              </CardContent>
-            </Card>
-          )}
-          {/* Task #785 — auto-load older posts on scroll. Rendered even
+          <div className="space-y-3">
+            {posts.length > 0 ? (
+              posts.map((p) => <PostCard key={p.id} post={p} />)
+            ) : hasMorePosts ? null : (
+              <Card className="app-surface">
+                <CardContent className="p-0">
+                  <EmptyState
+                    icon={<Building2 className="h-5 w-5" />}
+                    title="No posts yet."
+                    description="Highlights, recaps, and tagged moments will appear here."
+                  />
+                </CardContent>
+              </Card>
+            )}
+            {/* Task #785 — auto-load older posts on scroll. Rendered even
               when the team filter empties the visible list so older
               pages keep loading until a match (or the end) is found.
               On fetch failure, pause and offer a manual retry. */}
-          {hasMorePosts &&
-            (fetchMorePostsFailed ? (
-              <div className="flex flex-col items-center gap-2 py-3">
-                <span className="text-xs text-muted-foreground">
-                  Couldn't load older posts.
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => fetchMorePosts()}
-                  disabled={isFetchingMorePosts}
-                  data-testid="btn-retry-load-more-user-posts"
-                >
-                  Retry loading older posts
-                </Button>
-              </div>
-            ) : (
-              <div
-                ref={postsSentinelRef}
-                className="flex justify-center py-3"
-                data-testid="sentinel-load-more-user-posts"
-              >
-                {isFetchingMorePosts && (
-                  <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                    Loading older posts…
+            {hasMorePosts &&
+              (fetchMorePostsFailed ? (
+                <div className="flex flex-col items-center gap-2 py-3">
+                  <span className="text-xs text-muted-foreground">
+                    Couldn't load older posts.
                   </span>
-                )}
-              </div>
-            ))}
-        </div>
-      </section>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fetchMorePosts()}
+                    disabled={isFetchingMorePosts}
+                    data-testid="btn-retry-load-more-user-posts"
+                  >
+                    Retry loading older posts
+                  </Button>
+                </div>
+              ) : (
+                <div
+                  ref={postsSentinelRef}
+                  className="flex justify-center py-3"
+                  data-testid="sentinel-load-more-user-posts"
+                >
+                  {isFetchingMorePosts && (
+                    <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      Loading older posts…
+                    </span>
+                  )}
+                </div>
+              ))}
+          </div>
+        </section>
       </div>
 
       {/* Right rail (lg+ only — on mobile this renders inline above) */}
@@ -811,10 +823,7 @@ function AffiliationColumn({
           </button>
         )}
       </div>
-      <div
-        className="px-3 pb-3"
-        data-testid={`affiliation-content-${testId}`}
-      >
+      <div className="px-3 pb-3" data-testid={`affiliation-content-${testId}`}>
         <div className="flex flex-col gap-3">
           {!open ? (
             first

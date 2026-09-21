@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/EmptyState";
 import {
   CalendarDays,
   CalendarPlus,
@@ -205,7 +206,10 @@ function MonthCalendar({
   );
 }
 
-export function TeamSchedulePanel({ teamId, canManage }: TeamSchedulePanelProps) {
+export function TeamSchedulePanel({
+  teamId,
+  canManage,
+}: TeamSchedulePanelProps) {
   const [view, setView] = useState<View>("agenda");
   const [formOpen, setFormOpen] = useState(false);
   const [editEvent, setEditEvent] = useState<ScheduleEvent | null>(null);
@@ -321,14 +325,15 @@ export function TeamSchedulePanel({ teamId, canManage }: TeamSchedulePanelProps)
           </CardContent>
         </Card>
       ) : events.length === 0 ? (
-        <Card className="rounded-xl border border-dashed border-border">
-          <CardContent className="p-8 text-center text-sm text-muted-foreground">
-            Nothing on the schedule yet.
-            {canManage && (
-              <span className="block mt-1">
-                Add the team's first practice or game.
-              </span>
-            )}
+        <Card className="app-surface">
+          <CardContent className="p-0">
+            <EmptyState
+              icon={<CalendarDays className="w-5 h-5" />}
+              title="Nothing on the schedule yet."
+              description={
+                canManage ? "Add the team's first practice or game." : undefined
+              }
+            />
           </CardContent>
         </Card>
       ) : view === "calendar" ? (
@@ -340,9 +345,12 @@ export function TeamSchedulePanel({ teamId, canManage }: TeamSchedulePanelProps)
       ) : (
         <div className="space-y-4">
           {upcoming.length === 0 ? (
-            <Card className="rounded-xl border border-dashed border-border">
-              <CardContent className="p-6 text-center text-sm text-muted-foreground">
-                No upcoming events.
+            <Card className="app-surface">
+              <CardContent className="p-0">
+                <EmptyState
+                  icon={<CalendarDays className="w-5 h-5" />}
+                  title="No upcoming events."
+                />
               </CardContent>
             </Card>
           ) : (

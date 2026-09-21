@@ -36,6 +36,7 @@ import {
 } from "@workspace/api-client-react";
 import { toast } from "@/hooks/use-toast";
 import { useInfiniteScrollSentinel } from "@/hooks/useInfiniteScrollSentinel";
+import { EmptyState } from "@/components/EmptyState";
 import {
   Newspaper,
   FileText,
@@ -329,14 +330,17 @@ export function TeamPostsSection({
         )}
       </div>
       {canManage && (
-        <Dialog open={addNewsOpen} onOpenChange={(o) => !addingNews && setAddNewsOpen(o)}>
+        <Dialog
+          open={addNewsOpen}
+          onOpenChange={(o) => !addingNews && setAddNewsOpen(o)}
+        >
           <DialogContent data-testid="dialog-add-news">
             <DialogHeader>
               <DialogTitle>Add a news article</DialogTitle>
               <DialogDescription>
                 Paste the web address of a newspaper article about this team.
-                We'll pull in the headline and photo automatically, and the
-                card will appear on the team page and followers' feeds.
+                We'll pull in the headline and photo automatically, and the card
+                will appear on the team page and followers' feeds.
               </DialogDescription>
             </DialogHeader>
             <form
@@ -370,9 +374,7 @@ export function TeamPostsSection({
                   onChange={(e) => setNewsGameDate(e.target.value)}
                   disabled={addingNews}
                   className={
-                    newsGameDate
-                      ? "text-foreground"
-                      : "text-muted-foreground"
+                    newsGameDate ? "text-foreground" : "text-muted-foreground"
                   }
                   data-testid="input-news-game-date"
                 />
@@ -426,7 +428,15 @@ export function TeamPostsSection({
             </div>
             <div className="space-y-2">
               {pendingRecaps.map((p) => {
-                const author = (p as { author?: { id?: string; displayName?: string; avatarUrl?: string | null } }).author;
+                const author = (
+                  p as {
+                    author?: {
+                      id?: string;
+                      displayName?: string;
+                      avatarUrl?: string | null;
+                    };
+                  }
+                ).author;
                 const canEdit = (p as { canEdit?: boolean }).canEdit === true;
                 return (
                   <div
@@ -494,13 +504,15 @@ export function TeamPostsSection({
             </div>
             <div className="space-y-2">
               {pendingHighlights.map((p) => {
-                const author = (p as {
-                  author?: {
-                    id?: string;
-                    displayName?: string;
-                    avatarUrl?: string | null;
-                  };
-                }).author;
+                const author = (
+                  p as {
+                    author?: {
+                      id?: string;
+                      displayName?: string;
+                      avatarUrl?: string | null;
+                    };
+                  }
+                ).author;
                 return (
                   <div
                     key={p.id}
@@ -569,19 +581,26 @@ export function TeamPostsSection({
         </Card>
       )}
       {posts.length === 0 ? (
-        <Card className="rounded-xl border border-dashed border-border">
-          <CardContent className="p-8 text-center text-sm text-muted-foreground">
-            No posts for this team yet.
-            {canPostHighlight && (
-              <span className="block mt-1">
-                Share the first highlight from this team.
-              </span>
-            )}
-            {canPostRecap && (
-              <span className="block mt-1">
-                Be the first to write a game recap.
-              </span>
-            )}
+        <Card className="app-surface">
+          <CardContent className="p-0">
+            <EmptyState
+              icon={<Newspaper className="h-5 w-5" />}
+              title="No posts for this team yet."
+              description={
+                <>
+                  {canPostHighlight && (
+                    <span className="block">
+                      Share the first highlight from this team.
+                    </span>
+                  )}
+                  {canPostRecap && (
+                    <span className="block mt-1">
+                      Be the first to write a game recap.
+                    </span>
+                  )}
+                </>
+              }
+            />
           </CardContent>
         </Card>
       ) : (

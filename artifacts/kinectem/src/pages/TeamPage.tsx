@@ -40,9 +40,7 @@ import { AdoptTeamDialog } from "@/components/team-page/AdoptTeamDialog";
 import { AdoptLinkCard } from "@/components/team-page/AdoptLinkCard";
 import { CreateOrgDialog } from "@/components/CreateOrgDialog";
 import { TeamWelcomeDialog } from "@/components/team-page/TeamWelcomeDialog";
-import {
-  SpotlightTour,
-} from "@/components/team-page/SpotlightTour";
+import { SpotlightTour } from "@/components/team-page/SpotlightTour";
 import { buildTeamTourSteps } from "@/components/team-page/teamTourSteps";
 import { TournamentScheduleCard } from "@/components/team-page/TournamentScheduleCard";
 import { ClaimCompetitionDialog } from "@/components/team-page/ClaimCompetitionDialog";
@@ -90,16 +88,17 @@ export default function TeamPage() {
   // links so a click on the bell lands on the Roster panel (instead of
   // Posts) with the invitee's pending row scrolled into view. A bare
   // `/teams/:id` URL keeps the historical "open Posts" default.
-  const { showRoster, highlightEntryId, wantsWelcome, wantsTour } = useMemo(() => {
-    const sp = new URLSearchParams(search ?? "");
-    const entryId = sp.get("entryId");
-    return {
-      showRoster: sp.get("roster") === "1" || !!entryId,
-      highlightEntryId: entryId,
-      wantsWelcome: sp.get("welcome") === "1",
-      wantsTour: sp.get("showAround") === "1",
-    };
-  }, [search]);
+  const { showRoster, highlightEntryId, wantsWelcome, wantsTour } =
+    useMemo(() => {
+      const sp = new URLSearchParams(search ?? "");
+      const entryId = sp.get("entryId");
+      return {
+        showRoster: sp.get("roster") === "1" || !!entryId,
+        highlightEntryId: entryId,
+        wantsWelcome: sp.get("welcome") === "1",
+        wantsTour: sp.get("showAround") === "1",
+      };
+    }, [search]);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [welcomeOpen, setWelcomeOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -221,9 +220,7 @@ export default function TeamPage() {
   // correctly excludes pending AND declined entries.
   const isTeamMember =
     !!me?.id &&
-    allMembersForGate.some(
-      (m) => m.userId === me.id && m.status === "active",
-    );
+    allMembersForGate.some((m) => m.userId === me.id && m.status === "active");
   // Mirrors the server's `canViewTeamSchedule`: the schedule is
   // members-only, where "members" also includes the parent of an
   // accepted (status === "active") roster athlete via the `users.parentId`
@@ -363,7 +360,7 @@ export default function TeamPage() {
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) =>
       lastPage.pagination.hasMore
-        ? lastPage.pagination.nextCursor ?? undefined
+        ? (lastPage.pagination.nextCursor ?? undefined)
         : undefined,
     enabled: !!teamId,
   });
@@ -438,9 +435,9 @@ export default function TeamPage() {
   );
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">
+    <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-8">
       {teamHasMinorMembers ? <NoIndex /> : null}
-      <div className="space-y-6 min-w-0">
+      <div className="min-w-0 space-y-6 lg:space-y-8">
         {team.archivedAt && (
           <div
             className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-900"
@@ -457,9 +454,9 @@ export default function TeamPage() {
           >
             <p>
               <span className="font-bold">Temporary tournament team.</span> This
-              team was created for a tournament and has no organization yet. Game
-              recaps can be posted while the tournament is active. To keep posting
-              after it ends, adopt this team into an organization.
+              team was created for a tournament and has no organization yet.
+              Game recaps can be posted while the tournament is active. To keep
+              posting after it ends, adopt this team into an organization.
             </p>
             {canManage && (
               <div className="space-y-2">
@@ -500,7 +497,9 @@ export default function TeamPage() {
           onClaimCompetition={
             canManage ? () => setClaimCompOpen(true) : undefined
           }
-          onMessageTeam={canBroadcast ? () => setBroadcastOpen(true) : undefined}
+          onMessageTeam={
+            canBroadcast ? () => setBroadcastOpen(true) : undefined
+          }
           onReplayTour={
             canManage && tourSteps.length > 0
               ? () => setTourOpen(true)
@@ -647,11 +646,11 @@ export default function TeamPage() {
           name: team.name,
           description: team.description,
           sport: team.sport,
-           organizationSport: (
-             team as typeof team & {
-               organization?: { sport?: string | null } | null;
-             }
-           ).organization?.sport,
+          organizationSport: (
+            team as typeof team & {
+              organization?: { sport?: string | null } | null;
+            }
+          ).organization?.sport,
           level: team.level,
           gender: team.gender,
           bannerUrl: team.bannerUrl,

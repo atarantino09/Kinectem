@@ -13,6 +13,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { EmptyState } from "@/components/EmptyState";
 import { Camera, ImagePlus, PlayCircle, Trash2, X } from "lucide-react";
 import {
   useGetLoggedInUser,
@@ -60,7 +61,8 @@ function normalizeMediaType(type: string): string {
 
 function errorCode(err: unknown): string | null {
   if (!err || typeof err !== "object") return null;
-  const data = (err as { data?: unknown; body?: unknown }).data ??
+  const data =
+    (err as { data?: unknown; body?: unknown }).data ??
     (err as { body?: unknown }).body;
   if (!data || typeof data !== "object") return null;
   return typeof (data as { code?: unknown }).code === "string"
@@ -82,7 +84,10 @@ function friendlyUploadError(err: unknown): string {
     case "FORBIDDEN":
       return "This account isn’t allowed to add media to this team album.";
     default:
-      return apiErrorMessage(err) ?? "The upload failed. Check your connection and try again.";
+      return (
+        apiErrorMessage(err) ??
+        "The upload failed. Check your connection and try again."
+      );
   }
 }
 
@@ -93,7 +98,8 @@ function friendlyUploadError(err: unknown): string {
 // failures simply leave the remaining entries in localStorage so a
 // later mount can retry.
 const LEGACY_STORAGE_KEY = "kinectem.photoAlbums.v1";
-const MIGRATION_DONE_KEY = (postId: string) => `kinectem.albumMigrated.${postId}`;
+const MIGRATION_DONE_KEY = (postId: string) =>
+  `kinectem.albumMigrated.${postId}`;
 
 type LegacyPhoto = {
   id: string;
@@ -143,7 +149,8 @@ async function uploadAlbumMedia(blob: Blob, fileName: string): Promise<string> {
       body = null;
     }
     const message =
-      body && typeof body === "object" &&
+      body &&
+      typeof body === "object" &&
       typeof (body as { error?: unknown }).error === "string"
         ? String((body as { error: string }).error)
         : `Upload failed (${putResp.status})`;
@@ -347,7 +354,9 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
           }
         }
         if (processed.size > ALBUM_UPLOAD_MAX_BYTES) {
-          const isVideo = normalizeMediaType(processed.type).startsWith("video/");
+          const isVideo = normalizeMediaType(processed.type).startsWith(
+            "video/",
+          );
           toast({
             title: `${isVideo ? "Video" : "Photo"} too large`,
             description: isVideo
@@ -361,32 +370,30 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
       }
       if (prepared.length === 0) return;
       const previewItems = await Promise.all(
-        prepared.map(
-          (f): Promise<PreviewItem> => {
-            if (normalizeMediaType(f.type).startsWith("video/")) {
-              const src = URL.createObjectURL(f);
-              createdObjectUrls.push(src);
-              return Promise.resolve({
-                src,
-                kind: "video",
-                name: f.name,
-                objectUrl: true,
-              });
-            }
-            return new Promise<PreviewItem>((resolve, reject) => {
-              const r = new FileReader();
-              r.onload = () =>
-                resolve({
-                  src: String(r.result),
-                  kind: "image",
-                  name: f.name,
-                  objectUrl: false,
-                });
-              r.onerror = () => reject(r.error ?? new Error("Read failed"));
-              r.readAsDataURL(f);
+        prepared.map((f): Promise<PreviewItem> => {
+          if (normalizeMediaType(f.type).startsWith("video/")) {
+            const src = URL.createObjectURL(f);
+            createdObjectUrls.push(src);
+            return Promise.resolve({
+              src,
+              kind: "video",
+              name: f.name,
+              objectUrl: true,
             });
-          },
-        ),
+          }
+          return new Promise<PreviewItem>((resolve, reject) => {
+            const r = new FileReader();
+            r.onload = () =>
+              resolve({
+                src: String(r.result),
+                kind: "image",
+                name: f.name,
+                objectUrl: false,
+              });
+            r.onerror = () => reject(r.error ?? new Error("Read failed"));
+            r.readAsDataURL(f);
+          });
+        }),
       );
       setFiles(prepared);
       setPreviews(previewItems);
@@ -459,7 +466,11 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
   };
 
   return (
-    <section ref={sectionRef} className="space-y-4 scroll-mt-20" data-testid="section-photo-album">
+    <section
+      ref={sectionRef}
+      className="space-y-4 scroll-mt-20"
+      data-testid="section-photo-album"
+    >
       <div className="flex items-end justify-between gap-3 flex-wrap">
         <div>
           <h2 className="text-2xl font-black tracking-tight flex items-center gap-2">
@@ -474,151 +485,164 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
         </div>
 
         {canUpload && (
-        <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) reset(); }}>
-          <DialogTrigger asChild>
-            <Button
-              variant="brand"
-              size="sm"
-              data-testid="button-open-upload"
-            >
-              <ImagePlus className="w-4 h-4" />
-              Add Media
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-lg">
-            <DialogHeader>
-              <DialogTitle className="font-black tracking-tight">
-                Add Photos or Videos
-              </DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="uploader-name" className="text-xs font-bold">
-                  Your name
-                </Label>
-                <Input
-                  id="uploader-name"
-                  value={uploaderName}
-                  placeholder={defaultName || "Anonymous fan"}
-                  onChange={(e) => setUploaderName(e.target.value)}
-                  data-testid="input-uploader-name"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="album-files" className="text-xs font-bold">
-                  Photos and videos
-                </Label>
-                <div className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
-                  <p>
-                    <strong className="text-foreground">iPhone:</strong> tap Add
-                    Video, choose Photos, then select your clip (.MOV is okay).
-                  </p>
-                  <p>
-                    <strong className="text-foreground">Android:</strong> choose
-                    Gallery/Google Photos, then select an MP4 clip.
-                  </p>
-                  <p>
-                    10 MB per photo or video. If a clip is too large, choose a
-                    shorter clip or trim it in your phone’s Photos/Gallery app.
-                  </p>
-                  {me && "isMinor" in me && me.isMinor && (
-                    <p className="font-medium text-foreground">
-                      Under-13 accounts can only upload JPEG or PNG photos.
-                    </p>
-                  )}
-                </div>
-                <Input
-                  id="album-files"
-                  ref={inputRef}
-                  type="file"
-                  accept={FILE_ACCEPT}
-                  multiple
-                  onChange={(e) => onFilesPicked(e.target.files)}
-                  data-testid="input-album-files"
-                />
-                {previews.length > 0 && (
-                  <div className="grid grid-cols-3 gap-2 pt-2">
-                    {previews.map((preview, i) => (
-                      <div
-                        key={`${preview.name}-${i}`}
-                        className="relative aspect-square rounded-lg overflow-hidden bg-black"
-                      >
-                        {preview.kind === "video" ? (
-                          <>
-                            <video
-                              src={preview.src}
-                              className="w-full h-full object-cover"
-                              muted
-                              playsInline
-                              preload="metadata"
-                              aria-label={`Video preview: ${preview.name}`}
-                            />
-                            <PlayCircle className="absolute inset-0 m-auto h-8 w-8 text-white drop-shadow" />
-                            <span className="absolute bottom-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-[9px] font-bold text-white">
-                              VIDEO
-                            </span>
-                          </>
-                        ) : (
-                          <img
-                            src={preview.src}
-                            alt={`Photo preview: ${preview.name}`}
-                            className="w-full h-full object-cover"
-                          />
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="album-caption" className="text-xs font-bold">
-                  Caption (optional)
-                </Label>
-                <Input
-                  id="album-caption"
-                  value={caption}
-                  onChange={(e) => setCaption(e.target.value)}
-                  placeholder="3rd quarter touchdown"
-                  data-testid="input-album-caption"
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => { reset(); setOpen(false); }}
-                className="font-bold"
-              >
-                Cancel
-              </Button>
+          <Dialog
+            open={open}
+            onOpenChange={(o) => {
+              setOpen(o);
+              if (!o) reset();
+            }}
+          >
+            <DialogTrigger asChild>
               <Button
                 variant="brand"
-                onClick={onSubmit}
-                disabled={saving || files.length === 0}
-                data-testid="button-submit-media"
+                size="sm"
+                data-testid="button-open-upload"
               >
-                {saving
-                  ? "Adding…"
-                  : `Add ${files.length || ""} item${files.length === 1 ? "" : "s"}`.trim()}
+                <ImagePlus className="w-4 h-4" />
+                Add Media
               </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-lg">
+              <DialogHeader>
+                <DialogTitle className="font-black tracking-tight">
+                  Add Photos or Videos
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="uploader-name" className="text-xs font-bold">
+                    Your name
+                  </Label>
+                  <Input
+                    id="uploader-name"
+                    value={uploaderName}
+                    placeholder={defaultName || "Anonymous fan"}
+                    onChange={(e) => setUploaderName(e.target.value)}
+                    data-testid="input-uploader-name"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="album-files" className="text-xs font-bold">
+                    Photos and videos
+                  </Label>
+                  <div className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
+                    <p>
+                      <strong className="text-foreground">iPhone:</strong> tap
+                      Add Video, choose Photos, then select your clip (.MOV is
+                      okay).
+                    </p>
+                    <p>
+                      <strong className="text-foreground">Android:</strong>{" "}
+                      choose Gallery/Google Photos, then select an MP4 clip.
+                    </p>
+                    <p>
+                      10 MB per photo or video. If a clip is too large, choose a
+                      shorter clip or trim it in your phone’s Photos/Gallery
+                      app.
+                    </p>
+                    {me && "isMinor" in me && me.isMinor && (
+                      <p className="font-medium text-foreground">
+                        Under-13 accounts can only upload JPEG or PNG photos.
+                      </p>
+                    )}
+                  </div>
+                  <Input
+                    id="album-files"
+                    ref={inputRef}
+                    type="file"
+                    accept={FILE_ACCEPT}
+                    multiple
+                    onChange={(e) => onFilesPicked(e.target.files)}
+                    data-testid="input-album-files"
+                  />
+                  {previews.length > 0 && (
+                    <div className="grid grid-cols-3 gap-2 pt-2">
+                      {previews.map((preview, i) => (
+                        <div
+                          key={`${preview.name}-${i}`}
+                          className="relative aspect-square rounded-lg overflow-hidden bg-black"
+                        >
+                          {preview.kind === "video" ? (
+                            <>
+                              <video
+                                src={preview.src}
+                                className="w-full h-full object-cover"
+                                muted
+                                playsInline
+                                preload="metadata"
+                                aria-label={`Video preview: ${preview.name}`}
+                              />
+                              <PlayCircle className="absolute inset-0 m-auto h-8 w-8 text-white drop-shadow" />
+                              <span className="absolute bottom-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-[9px] font-bold text-white">
+                                VIDEO
+                              </span>
+                            </>
+                          ) : (
+                            <img
+                              src={preview.src}
+                              alt={`Photo preview: ${preview.name}`}
+                              className="w-full h-full object-cover"
+                            />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="album-caption" className="text-xs font-bold">
+                    Caption (optional)
+                  </Label>
+                  <Input
+                    id="album-caption"
+                    value={caption}
+                    onChange={(e) => setCaption(e.target.value)}
+                    placeholder="3rd quarter touchdown"
+                    data-testid="input-album-caption"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    reset();
+                    setOpen(false);
+                  }}
+                  className="font-bold"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="brand"
+                  onClick={onSubmit}
+                  disabled={saving || files.length === 0}
+                  data-testid="button-submit-media"
+                >
+                  {saving
+                    ? "Adding…"
+                    : `Add ${files.length || ""} item${files.length === 1 ? "" : "s"}`.trim()}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         )}
       </div>
 
       {media.length === 0 ? (
-        <Card className="rounded-xl border border-border border-dashed">
-          <CardContent className="p-10 text-center space-y-2">
-            <Camera className="w-8 h-8 text-muted-foreground mx-auto" />
-            <p className="text-sm font-bold">No photos or videos yet</p>
-            <p className="text-xs text-muted-foreground">
-              {canUpload
-                ? "Be the first to share a moment from the game."
-                : "Team members haven’t added any media yet."}
-            </p>
+        <Card className="app-surface">
+          <CardContent className="p-0">
+            <EmptyState
+              icon={<Camera className="w-5 h-5" />}
+              title="No photos or videos yet"
+              description={
+                canUpload
+                  ? "Be the first to share a moment from the game."
+                  : "Team members haven’t added any media yet."
+              }
+            />
           </CardContent>
         </Card>
       ) : (
@@ -627,53 +651,52 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
             {media.map((p) => {
               const isVideo = p.fileType.startsWith("video/");
               return (
-              <button
-                key={p.id}
-                onClick={() => setLightbox(p)}
-                className="group relative aspect-square rounded-lg overflow-hidden bg-muted cursor-pointer"
-                data-testid={`album-photo-${p.id}`}
-                aria-label={`Open ${isVideo ? "video" : "photo"} from ${p.uploaderName}`}
-              >
-                {isVideo ? (
-                  <>
-                    <video
+                <button
+                  key={p.id}
+                  onClick={() => setLightbox(p)}
+                  className="group relative aspect-square rounded-lg overflow-hidden bg-muted cursor-pointer"
+                  data-testid={`album-photo-${p.id}`}
+                  aria-label={`Open ${isVideo ? "video" : "photo"} from ${p.uploaderName}`}
+                >
+                  {isVideo ? (
+                    <>
+                      <video
+                        src={p.url}
+                        className="w-full h-full object-cover"
+                        muted
+                        playsInline
+                        preload="metadata"
+                      />
+                      <PlayCircle className="absolute inset-0 m-auto h-10 w-10 text-white drop-shadow-lg" />
+                      <span className="absolute left-2 top-2 rounded bg-black/70 px-2 py-1 text-[10px] font-black text-white">
+                        VIDEO
+                      </span>
+                    </>
+                  ) : (
+                    <img
                       src={p.url}
-                      className="w-full h-full object-cover"
-                      muted
-                      playsInline
-                      preload="metadata"
+                      alt={p.caption || "fan photo"}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                     />
-                    <PlayCircle className="absolute inset-0 m-auto h-10 w-10 text-white drop-shadow-lg" />
-                    <span className="absolute left-2 top-2 rounded bg-black/70 px-2 py-1 text-[10px] font-black text-white">
-                      VIDEO
-                    </span>
-                  </>
-                ) : (
-                  <img
-                    src={p.url}
-                    alt={p.caption || "fan photo"}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                  />
-                )}
-                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                  <p className="text-[10px] font-bold text-white truncate">
-                    {p.uploaderName}
-                  </p>
-                </div>
-              </button>
+                  )}
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                    <p className="text-[10px] font-bold text-white truncate">
+                      {p.uploaderName}
+                    </p>
+                  </div>
+                </button>
               );
             })}
           </div>
           <p className="text-xs text-muted-foreground">
-            {media.length} media item{media.length === 1 ? "" : "s"} from the team
+            {media.length} media item{media.length === 1 ? "" : "s"} from the
+            team
           </p>
         </>
       )}
 
       <Dialog open={!!lightbox} onOpenChange={(o) => !o && setLightbox(null)}>
-        <DialogContent
-          className="sm:max-w-3xl p-0 overflow-hidden"
-        >
+        <DialogContent className="sm:max-w-3xl p-0 overflow-hidden">
           <DialogTitle className="sr-only">Album media details</DialogTitle>
           <DialogDescription className="sr-only">
             View the selected album photo or video, its caption and uploader,

@@ -118,7 +118,15 @@ export function TeamHeaderCard({
   // Task #628 — solo teams (tournament funnel) have no org; the generated
   // type still types `organization` non-null (openapi.yaml locked), so read
   // it through a narrow cast and fall back to the team's own name/initials.
-  const org = (team as { organization?: { id?: string; name?: string; avatarUrl?: string | null } | null }).organization;
+  const org = (
+    team as {
+      organization?: {
+        id?: string;
+        name?: string;
+        avatarUrl?: string | null;
+      } | null;
+    }
+  ).organization;
   const hasOrg = !!org?.id;
   const logoLabel = org?.name ?? team.name;
   const orgLogoUrl = org?.avatarUrl ?? "";
@@ -317,7 +325,7 @@ export function TeamHeaderCard({
           </div>
         )}
       </div>
-      <CardContent className="p-6 pt-0">
+      <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
         {/* Avatar block: org logo, overlapping the bottom of the banner.
             Org name sits directly under the logo as a link to the org.
             The logo column gets its own positioning + z-index so it is
@@ -434,139 +442,139 @@ export function TeamHeaderCard({
               className="flex flex-col items-end gap-3 sm:flex-row sm:items-center sm:justify-end"
               data-testid="team-header-action-group"
             >
-            <div
-              className="flex items-center"
-              data-testid="team-community-actions"
-            >
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="brand-community-trigger rounded-full font-bold focus-visible:ring-[var(--k-magenta)]"
-                    data-testid="btn-team-community-menu"
-                  >
-                    <Users className="w-3.5 h-3.5" />
-                    Community
-                    <ChevronDown className="w-3.5 h-3.5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-56">
-                  <DropdownMenuItem
-                    onClick={onToggleFollow}
-                    disabled={followPending}
-                    data-testid="btn-follow-team"
-                  >
-                    <Users className="w-4 h-4 mr-2" />
-                    {team.isFollowing ? "Following" : "Follow"}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={onOpenFollowers}
-                    data-testid="btn-view-team-followers"
-                  >
-                    <Users className="w-4 h-4 mr-2" />
-                    View {team.followerCount ?? 0} followers
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-
-            {(isAdmin ||
-              onClaimCompetition ||
-              onMessageTeam ||
-              onReplayTour) && (
               <div
-                className="flex flex-wrap items-center justify-end gap-2"
-                data-testid="team-contextual-tools"
+                className="flex items-center"
+                data-testid="team-community-actions"
               >
-                {(isAdmin || onClaimCompetition || onMessageTeam) && (
-                  <div data-testid="team-manage-actions">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="rounded-full border-blue-200 bg-blue-50 font-bold text-blue-800 hover:bg-blue-100 focus-visible:ring-blue-500 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-200 dark:hover:bg-blue-950/70"
-                          data-testid="btn-team-manage-menu"
-                        >
-                          <Shield className="w-3.5 h-3.5" />
-                          Manage
-                          <ChevronDown className="w-3.5 h-3.5" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-56">
-                        {isAdmin && (
-                          <DropdownMenuItem
-                            onClick={onEdit}
-                            data-testid="btn-edit-team"
-                          >
-                            <Pencil className="w-4 h-4 mr-2" />
-                            Edit team
-                          </DropdownMenuItem>
-                        )}
-                        {onClaimCompetition && (
-                          <DropdownMenuItem
-                            onClick={onClaimCompetition}
-                            data-testid="btn-claim-competition"
-                          >
-                            <Trophy className="w-4 h-4 mr-2" />
-                            Claim competition games
-                          </DropdownMenuItem>
-                        )}
-                        {onMessageTeam && (
-                          <DropdownMenuItem
-                            onClick={onMessageTeam}
-                            data-testid="btn-team-broadcast"
-                          >
-                            <Megaphone className="w-4 h-4 mr-2" />
-                            Message team
-                          </DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                )}
-
-                {onReplayTour && (
-                  <div data-testid="team-guides-actions">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="rounded-full border-purple-200 bg-purple-50 font-bold text-purple-800 hover:bg-purple-100 focus-visible:ring-purple-500 dark:border-purple-800 dark:bg-purple-950/40 dark:text-purple-200 dark:hover:bg-purple-950/70"
-                          data-testid="btn-team-guides-menu"
-                        >
-                          <Compass className="w-3.5 h-3.5" />
-                          Guides
-                          <ChevronDown className="w-3.5 h-3.5" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-56">
-                        <DropdownMenuItem
-                          onClick={onReplayTour}
-                          data-testid="btn-team-replay-tour"
-                        >
-                          <Compass className="w-4 h-4 mr-2" />
-                          Take a page tour
-                        </DropdownMenuItem>
-                        <DropdownMenuItem asChild>
-                          <a
-                            href="/getting-started.html"
-                            target="_blank"
-                            rel="noreferrer"
-                            data-testid="link-team-getting-started"
-                          >
-                            <ExternalLink className="w-4 h-4 mr-2" />
-                            Getting started guide
-                          </a>
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                )}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="brand-community-trigger rounded-full font-bold focus-visible:ring-[var(--k-magenta)]"
+                      data-testid="btn-team-community-menu"
+                    >
+                      <Users className="w-3.5 h-3.5" />
+                      Community
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-56">
+                    <DropdownMenuItem
+                      onClick={onToggleFollow}
+                      disabled={followPending}
+                      data-testid="btn-follow-team"
+                    >
+                      <Users className="w-4 h-4 mr-2" />
+                      {team.isFollowing ? "Following" : "Follow"}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={onOpenFollowers}
+                      data-testid="btn-view-team-followers"
+                    >
+                      <Users className="w-4 h-4 mr-2" />
+                      View {team.followerCount ?? 0} followers
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
-            )}
+
+              {(isAdmin ||
+                onClaimCompetition ||
+                onMessageTeam ||
+                onReplayTour) && (
+                <div
+                  className="flex flex-wrap items-center justify-end gap-2"
+                  data-testid="team-contextual-tools"
+                >
+                  {(isAdmin || onClaimCompetition || onMessageTeam) && (
+                    <div data-testid="team-manage-actions">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="rounded-full border-blue-200 bg-blue-50 font-bold text-blue-800 hover:bg-blue-100 focus-visible:ring-blue-500 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-200 dark:hover:bg-blue-950/70"
+                            data-testid="btn-team-manage-menu"
+                          >
+                            <Shield className="w-3.5 h-3.5" />
+                            Manage
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-56">
+                          {isAdmin && (
+                            <DropdownMenuItem
+                              onClick={onEdit}
+                              data-testid="btn-edit-team"
+                            >
+                              <Pencil className="w-4 h-4 mr-2" />
+                              Edit team
+                            </DropdownMenuItem>
+                          )}
+                          {onClaimCompetition && (
+                            <DropdownMenuItem
+                              onClick={onClaimCompetition}
+                              data-testid="btn-claim-competition"
+                            >
+                              <Trophy className="w-4 h-4 mr-2" />
+                              Claim competition games
+                            </DropdownMenuItem>
+                          )}
+                          {onMessageTeam && (
+                            <DropdownMenuItem
+                              onClick={onMessageTeam}
+                              data-testid="btn-team-broadcast"
+                            >
+                              <Megaphone className="w-4 h-4 mr-2" />
+                              Message team
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  )}
+
+                  {onReplayTour && (
+                    <div data-testid="team-guides-actions">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="rounded-full border-purple-200 bg-purple-50 font-bold text-purple-800 hover:bg-purple-100 focus-visible:ring-purple-500 dark:border-purple-800 dark:bg-purple-950/40 dark:text-purple-200 dark:hover:bg-purple-950/70"
+                            data-testid="btn-team-guides-menu"
+                          >
+                            <Compass className="w-3.5 h-3.5" />
+                            Guides
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-56">
+                          <DropdownMenuItem
+                            onClick={onReplayTour}
+                            data-testid="btn-team-replay-tour"
+                          >
+                            <Compass className="w-4 h-4 mr-2" />
+                            Take a page tour
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild>
+                            <a
+                              href="/getting-started.html"
+                              target="_blank"
+                              rel="noreferrer"
+                              data-testid="link-team-getting-started"
+                            >
+                              <ExternalLink className="w-4 h-4 mr-2" />
+                              Getting started guide
+                            </a>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 

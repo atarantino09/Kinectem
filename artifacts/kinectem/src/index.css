@@ -68,13 +68,13 @@
 
 /* LIGHT MODE */
 :root {
-  --button-outline: rgba(0,0,0, .10);
-  --badge-outline: rgba(0,0,0, .05);
+  --button-outline: rgba(0, 0, 0, 0.1);
+  --badge-outline: rgba(0, 0, 0, 0.05);
 
   --opaque-button-border-intensity: -8;
 
-  --elevate-1: rgba(0,0,0, .03);
-  --elevate-2: rgba(0,0,0, .08);
+  --elevate-1: rgba(0, 0, 0, 0.03);
+  --elevate-2: rgba(0, 0, 0, 0.08);
 
   --background: 220 33% 98%; /* #f8fafc */
   --foreground: 222 47% 11%;
@@ -121,26 +121,63 @@
 
   --brand-purple: 262 83% 58%;
   --brand-blue: 217 91% 60%;
-  --brand-gradient: linear-gradient(135deg, hsl(var(--brand-purple)) 0%, hsl(var(--brand-blue)) 100%);
-  --brand-gradient-cover: linear-gradient(135deg, hsl(262 80% 68%) 0%, hsl(217 90% 68%) 100%);
-  --brand-gradient-dark: linear-gradient(135deg, hsl(262 60% 20%) 0%, hsl(222 47% 11%) 55%, hsl(217 60% 22%) 100%);
+  --brand-gradient: linear-gradient(
+    135deg,
+    hsl(var(--brand-purple)) 0%,
+    hsl(var(--brand-blue)) 100%
+  );
+  --brand-gradient-cover: linear-gradient(
+    135deg,
+    hsl(262 80% 68%) 0%,
+    hsl(217 90% 68%) 100%
+  );
+  --brand-gradient-dark: linear-gradient(
+    135deg,
+    hsl(262 60% 20%) 0%,
+    hsl(222 47% 11%) 55%,
+    hsl(217 60% 22%) 100%
+  );
 
-  --k-magenta: #FF1F9E;
-  --k-glyph-gradient: linear-gradient(135deg, #FF1F9E 0%, #9B22E8 13%, #7E22CE 34%, #5B32E8 56%, #2563EB 80%, #3B82F6 100%);
-  --k-glyph-gradient-small: linear-gradient(135deg, #FF1F9E 0%, #9B22E8 22%, #7E22CE 59%, #5B32E8 97%);
+  --k-magenta: #ff1f9e;
+  --k-glyph-gradient: linear-gradient(
+    135deg,
+    #ff1f9e 0%,
+    #9b22e8 13%,
+    #7e22ce 34%,
+    #5b32e8 56%,
+    #2563eb 80%,
+    #3b82f6 100%
+  );
+  --k-glyph-gradient-small: linear-gradient(
+    135deg,
+    #ff1f9e 0%,
+    #9b22e8 22%,
+    #7e22ce 59%,
+    #5b32e8 97%
+  );
 
-  --app-font-sans: 'Inter', sans-serif;
-  --app-font-display: 'Poppins', sans-serif;
+  --app-font-sans: "Inter", sans-serif;
+  --app-font-display: "Poppins", sans-serif;
   --app-font-serif: Georgia, serif;
   --app-font-mono: Menlo, monospace;
   --radius: 0.75rem;
   --shadow-2xs: 0px 2px 0px 0px hsl(222 47% 11% / 0.02);
   --shadow-xs: 0px 2px 0px 0px hsl(222 47% 11% / 0.02);
-  --shadow-sm: 0px 2px 0px 0px hsl(222 47% 11% / 0.02), 0px 1px 2px -1px hsl(222 47% 11% / 0.04);
-  --shadow: 0px 2px 0px 0px hsl(222 47% 11% / 0.02), 0px 1px 3px -1px hsl(222 47% 11% / 0.04);
-  --shadow-md: 0px 2px 0px 0px hsl(222 47% 11% / 0.02), 0px 4px 8px -2px hsl(222 47% 11% / 0.06);
-  --shadow-lg: 0px 2px 0px 0px hsl(222 47% 11% / 0.02), 0px 8px 16px -4px hsl(222 47% 11% / 0.08);
-  --shadow-xl: 0px 2px 0px 0px hsl(222 47% 11% / 0.02), 0px 12px 24px -6px hsl(222 47% 11% / 0.1);
+  --shadow-sm:
+    0px 2px 0px 0px hsl(222 47% 11% / 0.02),
+    0px 1px 2px -1px hsl(222 47% 11% / 0.04);
+  --shadow:
+    0px 2px 0px 0px hsl(222 47% 11% / 0.02),
+    0px 1px 3px -1px hsl(222 47% 11% / 0.04);
+  --shadow-md:
+    0px 2px 0px 0px hsl(222 47% 11% / 0.02),
+    0px 4px 8px -2px hsl(222 47% 11% / 0.06);
+  --shadow-lg:
+    0px 2px 0px 0px hsl(222 47% 11% / 0.02),
+    0px 8px 16px -4px hsl(222 47% 11% / 0.08);
+  --shadow-xl:
+    0px 2px 0px 0px hsl(222 47% 11% / 0.02),
+    0px 12px 24px -6px hsl(222 47% 11% / 0.1);
   --shadow-2xl: 0px 2px 0px 0px hsl(222 47% 11% / 0.02);
   --tracking-normal: -0.01em;
   --spacing: 0.25rem;
@@ -149,41 +186,62 @@
 
   /* Fallback for older browsers */
   --sidebar-primary-border: hsl(var(--sidebar-primary));
-  --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --sidebar-primary-border: hsl(
+    from hsl(var(--sidebar-primary)) h s
+      calc(l + var(--opaque-button-border-intensity)) / alpha
+  );
 
   /* Fallback for older browsers */
   --sidebar-accent-border: hsl(var(--sidebar-accent));
-  --sidebar-accent-border: hsl(from hsl(var(--sidebar-accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --sidebar-accent-border: hsl(
+    from hsl(var(--sidebar-accent)) h s
+      calc(l + var(--opaque-button-border-intensity)) / alpha
+  );
 
   /* Fallback for older browsers */
   --primary-border: hsl(var(--primary));
-  --primary-border: hsl(from hsl(var(--primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --primary-border: hsl(
+    from hsl(var(--primary)) h s
+      calc(l + var(--opaque-button-border-intensity)) / alpha
+  );
 
   /* Fallback for older browsers */
   --secondary-border: hsl(var(--secondary));
-  --secondary-border: hsl(from hsl(var(--secondary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --secondary-border: hsl(
+    from hsl(var(--secondary)) h s
+      calc(l + var(--opaque-button-border-intensity)) / alpha
+  );
 
   /* Fallback for older browsers */
   --muted-border: hsl(var(--muted));
-  --muted-border: hsl(from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --muted-border: hsl(
+    from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) /
+      alpha
+  );
 
   /* Fallback for older browsers */
   --accent-border: hsl(var(--accent));
-  --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --accent-border: hsl(
+    from hsl(var(--accent)) h s
+      calc(l + var(--opaque-button-border-intensity)) / alpha
+  );
 
   /* Fallback for older browsers */
   --destructive-border: hsl(var(--destructive));
-  --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --destructive-border: hsl(
+    from hsl(var(--destructive)) h s
+      calc(l + var(--opaque-button-border-intensity)) / alpha
+  );
 }
 
 .dark {
-  --button-outline: rgba(255,255,255, .10);
-  --badge-outline: rgba(255,255,255, .05);
+  --button-outline: rgba(255, 255, 255, 0.1);
+  --badge-outline: rgba(255, 255, 255, 0.05);
 
   --opaque-button-border-intensity: 9;
 
-  --elevate-1: rgba(255,255,255, .04);
-  --elevate-2: rgba(255,255,255, .09);
+  --elevate-1: rgba(255, 255, 255, 0.04);
+  --elevate-2: rgba(255, 255, 255, 0.09);
 
   --background: 222 47% 11%;
   --foreground: 210 40% 98%;
@@ -227,11 +285,16 @@
 
   --shadow-2xs: 0px 2px 0px 0px hsl(0 0% 0% / 0.2);
   --shadow-xs: 0px 2px 0px 0px hsl(0 0% 0% / 0.2);
-  --shadow-sm: 0px 2px 0px 0px hsl(0 0% 0% / 0.2), 0px 1px 2px -1px hsl(0 0% 0% / 0.4);
-  --shadow: 0px 2px 0px 0px hsl(0 0% 0% / 0.2), 0px 1px 3px -1px hsl(0 0% 0% / 0.4);
-  --shadow-md: 0px 2px 0px 0px hsl(0 0% 0% / 0.2), 0px 4px 8px -2px hsl(0 0% 0% / 0.6);
-  --shadow-lg: 0px 2px 0px 0px hsl(0 0% 0% / 0.2), 0px 8px 16px -4px hsl(0 0% 0% / 0.8);
-  --shadow-xl: 0px 2px 0px 0px hsl(0 0% 0% / 0.2), 0px 12px 24px -6px hsl(0 0% 0% / 1.0);
+  --shadow-sm:
+    0px 2px 0px 0px hsl(0 0% 0% / 0.2), 0px 1px 2px -1px hsl(0 0% 0% / 0.4);
+  --shadow:
+    0px 2px 0px 0px hsl(0 0% 0% / 0.2), 0px 1px 3px -1px hsl(0 0% 0% / 0.4);
+  --shadow-md:
+    0px 2px 0px 0px hsl(0 0% 0% / 0.2), 0px 4px 8px -2px hsl(0 0% 0% / 0.6);
+  --shadow-lg:
+    0px 2px 0px 0px hsl(0 0% 0% / 0.2), 0px 8px 16px -4px hsl(0 0% 0% / 0.8);
+  --shadow-xl:
+    0px 2px 0px 0px hsl(0 0% 0% / 0.2), 0px 12px 24px -6px hsl(0 0% 0% / 1);
   --shadow-2xl: 0px 2px 0px 0px hsl(0 0% 0% / 0.2);
 }
 
@@ -249,7 +312,12 @@
     background-attachment: fixed;
   }
 
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     font-family: var(--app-font-display);
   }
 
@@ -292,9 +360,15 @@
  * need to be distinguished from eachother visually.
  */
 @layer utilities {
-  .brand-gradient { background: var(--brand-gradient); }
-  .brand-gradient-cover { background: var(--brand-gradient-cover); }
-  .brand-gradient-dark { background: var(--brand-gradient-dark); }
+  .brand-gradient {
+    background: var(--brand-gradient);
+  }
+  .brand-gradient-cover {
+    background: var(--brand-gradient-cover);
+  }
+  .brand-gradient-dark {
+    background: var(--brand-gradient-dark);
+  }
   /*
    * Subtle decorative overlay for the brand gradient banner.
    * Soft blurred orbs + a faint dot grid layered on top of the gradient.
@@ -305,11 +379,27 @@
    */
   .brand-banner-pattern {
     background-image:
-      radial-gradient(circle at 18% 28%, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 42%),
-      radial-gradient(circle at 82% 72%, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0) 38%),
-      radial-gradient(circle at 55% 110%, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0) 50%),
+      radial-gradient(
+        circle at 18% 28%,
+        rgba(255, 255, 255, 0.22) 0%,
+        rgba(255, 255, 255, 0) 42%
+      ),
+      radial-gradient(
+        circle at 82% 72%,
+        rgba(255, 255, 255, 0.18) 0%,
+        rgba(255, 255, 255, 0) 38%
+      ),
+      radial-gradient(
+        circle at 55% 110%,
+        rgba(255, 255, 255, 0.12) 0%,
+        rgba(255, 255, 255, 0) 50%
+      ),
       radial-gradient(rgba(255, 255, 255, 0.18) 1px, rgba(255, 255, 255, 0) 1px);
-    background-size: auto, auto, auto, 18px 18px;
+    background-size:
+      auto,
+      auto,
+      auto,
+      18px 18px;
     background-repeat: no-repeat, no-repeat, no-repeat, repeat;
   }
   .brand-gradient-text {
@@ -466,9 +556,11 @@
     padding: 1px;
     border-radius: inherit;
     background: var(--brand-gradient);
-    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
     -webkit-mask-composite: xor;
-            mask-composite: exclude;
+    mask-composite: exclude;
     pointer-events: none;
   }
 
@@ -482,10 +574,12 @@
   .app-page-header {
     position: relative;
     overflow: hidden;
-    border: 1px solid hsl(var(--border));
+    border: 1px solid hsl(var(--brand-purple) / 0.18);
     border-radius: 1.25rem;
     background: hsl(var(--card));
-    box-shadow: var(--shadow-md);
+    box-shadow:
+      0 12px 34px hsl(var(--brand-purple) / 0.09),
+      0 2px 8px hsl(222 47% 11% / 0.04);
   }
   .app-page-header::after {
     content: "";
@@ -493,7 +587,10 @@
     inset: 0;
     pointer-events: none;
     opacity: 0.15;
-    background-image: radial-gradient(hsl(var(--brand-purple) / 1) 1px, transparent 1px);
+    background-image: radial-gradient(
+      hsl(var(--brand-purple) / 1) 1px,
+      transparent 1px
+    );
     background-size: 16px 16px;
     mask-image: linear-gradient(115deg, black, transparent 60%);
   }
@@ -522,18 +619,36 @@
     background: var(--k-glyph-gradient-small);
   }
   .app-surface {
-    border: 1px solid hsl(var(--border));
+    border: 1px solid hsl(var(--brand-purple) / 0.16);
     border-radius: 1.25rem;
     background: hsl(var(--card));
-    box-shadow: var(--shadow-sm);
+    box-shadow:
+      0 8px 26px hsl(var(--brand-purple) / 0.075),
+      0 1px 4px hsl(222 47% 11% / 0.04);
+  }
+  .dark .app-surface {
+    border-color: hsl(var(--brand-purple) / 0.28);
+    box-shadow:
+      0 8px 26px hsl(var(--brand-purple) / 0.05),
+      0 1px 4px hsl(0 0% 0% / 0.24);
   }
   .app-surface-interactive {
-    transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+    transition:
+      transform 180ms ease,
+      border-color 180ms ease,
+      box-shadow 180ms ease;
   }
   .app-surface-interactive:hover {
     transform: translateY(-2px);
-    border-color: hsl(var(--brand-purple) / 0.34);
-    box-shadow: var(--shadow-md);
+    border-color: hsl(var(--brand-purple) / 0.38);
+    box-shadow:
+      0 16px 38px hsl(var(--brand-purple) / 0.13),
+      0 2px 8px hsl(222 47% 11% / 0.06);
+  }
+  .dark .app-surface-interactive:hover {
+    box-shadow:
+      0 16px 38px hsl(var(--brand-purple) / 0.09),
+      0 2px 8px hsl(0 0% 0% / 0.42);
   }
   .app-section-heading {
     display: flex;
@@ -573,9 +688,15 @@
     margin-bottom: 0.75rem;
     border: 1px solid hsl(var(--brand-purple) / 0.18);
     border-radius: 1rem;
-    background: linear-gradient(135deg, hsl(var(--brand-blue) / 0.1), hsl(var(--brand-purple) / 0.1));
+    background: linear-gradient(
+      135deg,
+      hsl(var(--brand-blue) / 0.1),
+      hsl(var(--brand-purple) / 0.1)
+    );
     color: hsl(var(--brand-purple));
-    box-shadow: inset 0 2px 4px hsl(var(--background) / 0.5), 0 4px 12px hsl(var(--brand-purple) / 0.05);
+    box-shadow:
+      inset 0 2px 4px hsl(var(--background) / 0.5),
+      0 4px 12px hsl(var(--brand-purple) / 0.05);
   }
   /* Competition pages opt into these surfaces with inline primary and
      secondary colors. The plain card background is the fallback for browsers
@@ -585,31 +706,72 @@
     background: hsl(var(--card));
   }
   .competition-page .competition-section-surface {
-    border-color: color-mix(in srgb, var(--competition-primary) 30%, hsl(var(--border)));
+    border-color: color-mix(
+      in srgb,
+      var(--competition-primary) 30%,
+      hsl(var(--border))
+    );
     background:
-      radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--competition-secondary) 16%, transparent), transparent 38%),
-      linear-gradient(135deg, color-mix(in srgb, var(--competition-primary) 11%, transparent), transparent 62%),
+      radial-gradient(
+        circle at 100% 0%,
+        color-mix(in srgb, var(--competition-secondary) 16%, transparent),
+        transparent 38%
+      ),
+      linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--competition-primary) 11%, transparent),
+        transparent 62%
+      ),
       hsl(var(--card));
   }
   .competition-section-trigger {
-    background: linear-gradient(90deg, color-mix(in srgb, var(--competition-primary) 8%, transparent), transparent 65%);
+    background: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--competition-primary) 8%, transparent),
+      transparent 65%
+    );
   }
   .competition-filter-panel {
-    border-color: color-mix(in srgb, var(--competition-primary) 24%, hsl(var(--border)));
-    background: color-mix(in srgb, var(--competition-primary) 5%, hsl(var(--background)));
+    border-color: color-mix(
+      in srgb,
+      var(--competition-primary) 24%,
+      hsl(var(--border))
+    );
+    background: color-mix(
+      in srgb,
+      var(--competition-primary) 5%,
+      hsl(var(--background))
+    );
   }
   .competition-schedule-group {
-    border: 1px solid color-mix(in srgb, var(--competition-secondary) 18%, hsl(var(--border)));
-    background: color-mix(in srgb, var(--competition-secondary) 4%, hsl(var(--card)));
+    border: 1px solid
+      color-mix(in srgb, var(--competition-secondary) 18%, hsl(var(--border)));
+    background: color-mix(
+      in srgb,
+      var(--competition-secondary) 4%,
+      hsl(var(--card))
+    );
   }
   .competition-empty-state {
-    border-color: color-mix(in srgb, var(--competition-primary) 28%, hsl(var(--border)));
+    border-color: color-mix(
+      in srgb,
+      var(--competition-primary) 28%,
+      hsl(var(--border))
+    );
     background:
-      linear-gradient(135deg, color-mix(in srgb, var(--competition-primary) 10%, transparent), transparent 72%),
+      linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--competition-primary) 10%, transparent),
+        transparent 72%
+      ),
       color-mix(in srgb, var(--competition-secondary) 4%, hsl(var(--muted)));
   }
   .competition-item-row {
-    border-color: color-mix(in srgb, var(--competition-primary) 18%, hsl(var(--border)));
+    border-color: color-mix(
+      in srgb,
+      var(--competition-primary) 18%,
+      hsl(var(--border))
+    );
   }
   @media (prefers-reduced-motion: reduce) {
     *,
@@ -634,6 +796,15 @@
     .app-page-header .text-3xl {
       font-size: 1.75rem;
     }
+    .app-empty-state {
+      min-height: 11rem;
+      padding: 2rem 1.25rem;
+    }
+    .app-empty-state-icon {
+      width: 3.5rem;
+      height: 3.5rem;
+      margin-bottom: 0.5rem;
+    }
   }
 
   /* Hide ugly search cancel button in Chrome until we can style it properly */
@@ -651,10 +822,11 @@
   /* .no-default-hover-elevate/no-default-active-elevate is an escape hatch so consumers of
    * buttons/badges can remove the automatic brightness adjustment on interactions
    * and program their own. */
-  .no-default-hover-elevate {}
+  .no-default-hover-elevate {
+  }
 
-  .no-default-active-elevate {}
-
+  .no-default-active-elevate {
+  }
 
   /**
    * Toggleable backgrounds go behind the content. Hoverable/active goes on top.
@@ -727,19 +899,35 @@
 }
 
 @keyframes brand-shine {
-  0%   { background-position: 0% 0%; }
-  50%  { background-position: 0% 100%; }
-  100% { background-position: 0% 0%; }
+  0% {
+    background-position: 0% 0%;
+  }
+  50% {
+    background-position: 0% 100%;
+  }
+  100% {
+    background-position: 0% 0%;
+  }
 }
 
 @keyframes ai-assist-shine {
-  0%        { transform: translateX(-100%); }
-  60%, 100% { transform: translateX(100%); }
+  0% {
+    transform: translateX(-100%);
+  }
+  60%,
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 @keyframes competition-pill-shine {
-  0%        { transform: translateX(-100%); }
-  60%, 100% { transform: translateX(100%); }
+  0% {
+    transform: translateX(-100%);
+  }
+  60%,
+  100% {
+    transform: translateX(100%);
+  }
 }
 /* Thin, always-visible scrollbar for scrollable rails (e.g. the org Teams
    list). macOS overlay scrollbars auto-hide, making long lists look

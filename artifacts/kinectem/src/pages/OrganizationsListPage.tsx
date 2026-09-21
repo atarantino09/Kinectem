@@ -7,6 +7,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Building2, ChevronRight, Compass, Star } from "lucide-react";
 import { OrgLogo } from "@/components/OrgLogoFallback";
+import { BrandPageHeader } from "@/components/BrandPageHeader";
+import { EmptyState } from "@/components/EmptyState";
 
 function OrgLogoTile({
   name,
@@ -30,7 +32,7 @@ type OrgListItem = OrganizationResponse;
 function OrgCard({ org }: { org: OrgListItem }) {
   return (
     <Link href={`/organizations/${org.id}`}>
-      <Card className="rounded-xl border border-border shadow-sm hover:border-primary/50 transition-colors cursor-pointer group">
+      <Card className="app-surface app-surface-interactive cursor-pointer group">
         <CardContent className="p-4 sm:p-5">
           <div className="flex items-start gap-3 sm:gap-4">
             <OrgLogoTile name={org.name} logoUrl={org.logoUrl ?? null} />
@@ -89,15 +91,12 @@ export default function OrganizationsListPage() {
   const discoverOrgs = orgs.filter((o) => !o.isMember && !o.isFollowing);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl sm:text-4xl font-black tracking-tight">
-          <span className="brand-gradient-text">Organizations</span>
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1 font-medium">
-          Discover clubs, schools, and academies on Kinectem.
-        </p>
-      </div>
+    <div className="space-y-6 sm:space-y-8">
+      <BrandPageHeader
+        eyebrow="Find your community"
+        title={<span className="brand-gradient-text">Organizations</span>}
+        description="Discover clubs, schools, and academies on Kinectem."
+      />
 
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -106,10 +105,13 @@ export default function OrganizationsListPage() {
           ))}
         </div>
       ) : orgs.length === 0 ? (
-        <Card className="rounded-xl border border-border">
-          <CardContent className="p-8 text-center">
-            <Building2 className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-            <p className="text-sm text-muted-foreground">No organizations yet.</p>
+        <Card className="app-surface">
+          <CardContent className="p-0">
+            <EmptyState
+              icon={<Building2 className="h-5 w-5" />}
+              title="No organizations yet"
+              description="Clubs, schools, and academies will appear here as they join Kinectem."
+            />
           </CardContent>
         </Card>
       ) : (

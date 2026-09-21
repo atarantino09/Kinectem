@@ -1,6 +1,10 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useParams, Link, useLocation, useSearch } from "wouter";
-import { useQueryClient, useQuery, useInfiniteQuery } from "@tanstack/react-query";
+import {
+  useQueryClient,
+  useQuery,
+  useInfiniteQuery,
+} from "@tanstack/react-query";
 import {
   useGetOrganizationById,
   useListOrgTeams,
@@ -66,9 +70,7 @@ import { FitText } from "@/components/FitText";
 import { PersonaPill } from "@/components/PersonaPill";
 import { OrgLogo } from "@/components/OrgLogoFallback";
 import { OrgAdminPanel } from "@/components/OrgAdminPanel";
-import {
-  RolesPermissionsCard,
-} from "@/components/OrgSetupChecklist";
+import { RolesPermissionsCard } from "@/components/OrgSetupChecklist";
 import { CreateTeamDialog } from "@/components/CreateTeamDialog";
 import { BulkAddTeamsDialog } from "@/components/BulkAddTeamsDialog";
 import { BulkAddCoachesDialog } from "@/components/BulkAddCoachesDialog";
@@ -100,6 +102,7 @@ import { OrgClaimBanner } from "@/components/ClaimTokenBanner";
 import { OrgPageShareDialog } from "@/components/OrgPageShareDialog";
 import { OrgPreInviteDialog } from "@/components/OrgPreInviteDialog";
 import { PostClaimSetupGuide } from "@/components/PostClaimSetupGuide";
+import { EmptyState } from "@/components/EmptyState";
 
 type TeamRailItem = {
   id: string;
@@ -319,7 +322,7 @@ export default function OrganizationPage() {
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) =>
       lastPage.pagination.hasMore
-        ? lastPage.pagination.nextCursor ?? undefined
+        ? (lastPage.pagination.nextCursor ?? undefined)
         : undefined,
     enabled: !!orgId,
   });
@@ -359,10 +362,7 @@ export default function OrganizationPage() {
     try {
       sessionStorage.setItem(`kinectem:pre-invite-org:${orgId}`, "1");
       sessionStorage.setItem(`kinectem:coach-setup:${orgId}`, "1");
-      sessionStorage.setItem(
-        `kinectem:post-claim-setup-guide:${orgId}`,
-        "1",
-      );
+      sessionStorage.setItem(`kinectem:post-claim-setup-guide:${orgId}`, "1");
       localStorage.setItem(`kinectem:org-setup-active:${orgId}`, "1");
       setSetupGuideReminderVisible(true);
       // Approval is a new-owner milestone even if this browser previously
@@ -650,7 +650,9 @@ export default function OrganizationPage() {
         await followOrg.mutateAsync({ orgId });
       }
       await Promise.all([
-        qc.invalidateQueries({ queryKey: getGetOrganizationByIdQueryKey(orgId) }),
+        qc.invalidateQueries({
+          queryKey: getGetOrganizationByIdQueryKey(orgId),
+        }),
         qc.invalidateQueries({ queryKey: getListFeedQueryKey() }),
       ]);
     } catch {
@@ -745,17 +747,14 @@ export default function OrganizationPage() {
           if (!v) setWelcomeOrgName(null);
         }}
       >
-        <DialogContent
-          className="sm:max-w-md"
-          data-testid="dialog-welcome-org"
-        >
+        <DialogContent className="sm:max-w-md" data-testid="dialog-welcome-org">
           <DialogHeader>
             <DialogTitle className="font-black tracking-tight">
               Congratulations on creating {formatOrgName(welcomeOrgName)}!
             </DialogTitle>
             <DialogDescription>
-              Next step: create teams and invite coaches, players, and
-              parents so they can start sharing updates and highlights.
+              Next step: create teams and invite coaches, players, and parents
+              so they can start sharing updates and highlights.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -972,7 +971,8 @@ export default function OrganizationPage() {
                 Roles &amp; permissions
               </DialogTitle>
               <DialogDescription>
-                See what organization, team, competition, and family roles can do.
+                See what organization, team, competition, and family roles can
+                do.
               </DialogDescription>
             </DialogHeader>
             <RolesPermissionsCard />
@@ -980,9 +980,9 @@ export default function OrganizationPage() {
         </Dialog>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-8">
         {/* Main column */}
-        <div className="space-y-6 min-w-0">
+        <div className="min-w-0 space-y-6 lg:space-y-8">
           {isOrgManager && !isUnclaimed && setupGuideReminderVisible && (
             <div
               className="relative overflow-hidden rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-50 via-white to-violet-50 p-4 shadow-sm dark:border-blue-900/60 dark:from-blue-950/40 dark:via-card dark:to-violet-950/30"
@@ -1137,7 +1137,9 @@ export default function OrganizationPage() {
                     {formatOrgName(organization.name)}
                   </FitText>
                   <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2 font-medium flex-wrap">
-                    <span className="font-bold text-foreground">@{organization.slug}</span>
+                    <span className="font-bold text-foreground">
+                      @{organization.slug}
+                    </span>
                     {organization.role && (
                       <>
                         <span className="opacity-50">•</span>
@@ -1209,7 +1211,9 @@ export default function OrganizationPage() {
                       <DropdownMenuContent align="end" className="w-56">
                         <DropdownMenuItem
                           onClick={onToggleFollow}
-                          disabled={followOrg.isPending || unfollowOrg.isPending}
+                          disabled={
+                            followOrg.isPending || unfollowOrg.isPending
+                          }
                           data-testid="btn-follow-org"
                         >
                           <Users className="w-4 h-4 mr-2" />
@@ -1230,62 +1234,62 @@ export default function OrganizationPage() {
                   </div>
 
                   {!!organization.role && (
-                      <div data-testid="org-guides-actions">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="rounded-full border-blue-200 bg-blue-50 font-bold text-blue-800 hover:bg-blue-100 focus-visible:ring-blue-500 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-200 dark:hover:bg-blue-950/70"
-                              data-testid="btn-org-guides-menu"
-                            >
-                              <Compass className="w-4 h-4" />
-                              Guides
-                              <ChevronDown className="w-3.5 h-3.5" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-56">
-                            {isOrgManager && (
-                              <DropdownMenuItem
-                                onClick={() => setSetupGuideOpen(true)}
-                                data-testid="btn-org-setup-guide"
-                              >
-                                <ListPlus className="w-4 h-4 mr-2" />
-                                Get your org set up
-                              </DropdownMenuItem>
-                            )}
+                    <div data-testid="org-guides-actions">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="rounded-full border-blue-200 bg-blue-50 font-bold text-blue-800 hover:bg-blue-100 focus-visible:ring-blue-500 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-200 dark:hover:bg-blue-950/70"
+                            data-testid="btn-org-guides-menu"
+                          >
+                            <Compass className="w-4 h-4" />
+                            Guides
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-56">
+                          {isOrgManager && (
                             <DropdownMenuItem
-                              onClick={() => setRolesGuideOpen(true)}
-                              data-testid="btn-org-roles-guide"
+                              onClick={() => setSetupGuideOpen(true)}
+                              data-testid="btn-org-setup-guide"
                             >
-                              <Shield className="w-4 h-4 mr-2" />
-                              Roles &amp; permissions
+                              <ListPlus className="w-4 h-4 mr-2" />
+                              Get your org set up
                             </DropdownMenuItem>
-                            {orgTourSteps.length > 0 && (
-                              <DropdownMenuItem
-                                onClick={() => setOrgTourOpen(true)}
-                                data-testid="btn-org-replay-tour"
-                              >
-                                <Compass className="w-4 h-4 mr-2" />
-                                Take a page tour
-                              </DropdownMenuItem>
-                            )}
+                          )}
+                          <DropdownMenuItem
+                            onClick={() => setRolesGuideOpen(true)}
+                            data-testid="btn-org-roles-guide"
+                          >
+                            <Shield className="w-4 h-4 mr-2" />
+                            Roles &amp; permissions
+                          </DropdownMenuItem>
+                          {orgTourSteps.length > 0 && (
                             <DropdownMenuItem
-                              asChild
-                              data-testid="link-org-getting-started"
+                              onClick={() => setOrgTourOpen(true)}
+                              data-testid="btn-org-replay-tour"
                             >
-                              <a
-                                href="/getting-started.html"
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                <ExternalLink className="w-4 h-4 mr-2" />
-                                Getting started guide
-                              </a>
+                              <Compass className="w-4 h-4 mr-2" />
+                              Take a page tour
                             </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
+                          )}
+                          <DropdownMenuItem
+                            asChild
+                            data-testid="link-org-getting-started"
+                          >
+                            <a
+                              href="/getting-started.html"
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              <ExternalLink className="w-4 h-4 mr-2" />
+                              Getting started guide
+                            </a>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   )}
 
                   {isOrgManager && (
@@ -1328,7 +1332,9 @@ export default function OrganizationPage() {
                                 asChild
                                 data-testid="pill-plan-name"
                               >
-                                <Link href={`/organizations/${orgId}/subscribe`}>
+                                <Link
+                                  href={`/organizations/${orgId}/subscribe`}
+                                >
                                   <Shield className="w-4 h-4 mr-2" />
                                   {PLANS.find((p) => p.id === planUsage.plan)
                                     ?.name ??
@@ -1402,9 +1408,7 @@ export default function OrganizationPage() {
                               <Megaphone className="w-4 h-4 mr-2" />
                               Pre-invite message
                             </DropdownMenuItem>
-                            <DropdownMenuItem
-                              asChild
-                            >
+                            <DropdownMenuItem asChild>
                               <Link
                                 href={`/organizations/${orgId}/roster-outreach`}
                                 className="flex items-center w-full cursor-pointer"
@@ -1435,7 +1439,6 @@ export default function OrganizationPage() {
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
-
                     </>
                   )}
                 </div>
@@ -1487,7 +1490,9 @@ export default function OrganizationPage() {
           {/* Posts */}
           <section data-testid="org-posts">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
-              <h2 className="text-xl font-black tracking-tight">Recent Posts</h2>
+              <h2 className="text-xl font-black tracking-tight">
+                Recent Posts
+              </h2>
               {isOrgManager && (
                 <div
                   className="flex items-center gap-2 flex-wrap"
@@ -1498,6 +1503,7 @@ export default function OrganizationPage() {
                   </span>
                   <Button
                     size="sm"
+                    variant="brand"
                     onClick={() => setNewPostOpen(true)}
                     className="font-bold rounded-full"
                     data-testid="btn-new-org-post"
@@ -1555,19 +1561,27 @@ export default function OrganizationPage() {
                     ))}
                 </>
               ) : (
-                <Card className="rounded-xl border border-border">
-                  <CardContent className="p-6 text-center text-sm text-muted-foreground space-y-3">
-                    <p>No posts yet.</p>
-                    {isOrgManager && (
-                      <Button
-                        size="sm"
-                        onClick={() => setNewPostOpen(true)}
-                        className="font-bold rounded-full"
-                        data-testid="btn-empty-new-org-post"
-                      >
-                        <Plus className="w-4 h-4 mr-1" /> Be the first to post
-                      </Button>
-                    )}
+                <Card className="app-surface">
+                  <CardContent className="p-0">
+                    <EmptyState
+                      icon={<Newspaper className="h-5 w-5" />}
+                      title="No posts yet"
+                      description="Organization news and updates will appear here."
+                      action={
+                        isOrgManager ? (
+                          <Button
+                            size="sm"
+                            variant="brand"
+                            onClick={() => setNewPostOpen(true)}
+                            className="font-bold rounded-full"
+                            data-testid="btn-empty-new-org-post"
+                          >
+                            <Plus className="w-4 h-4 mr-1" /> Be the first to
+                            post
+                          </Button>
+                        ) : undefined
+                      }
+                    />
                   </CardContent>
                 </Card>
               )}
@@ -1723,10 +1737,16 @@ function TeamsRail({
       </div>
 
       {!open ? null : teams.length === 0 ? (
-        <div className="p-8 text-center">
-          <Building2 className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-          <p className="text-sm text-muted-foreground">No teams yet.</p>
-        </div>
+        <EmptyState
+          className="min-h-0"
+          icon={<Building2 className="h-5 w-5" />}
+          title="No teams yet"
+          description={
+            canManage
+              ? "Add the first team to start building this organization."
+              : "Teams will appear here when they are added."
+          }
+        />
       ) : (
         <>
           <div className="px-2 pt-2">
@@ -1761,82 +1781,80 @@ function TeamsRail({
               </p>
             </div>
           ) : (
-          <div
-            className="overflow-y-auto scrollbar-thin max-h-[calc(100vh-14rem)]"
-          >
-            <div className="flex flex-col gap-2 p-2">
-              {pinnedCount > 0 && (
-                <PinnedSectionLabel
-                  label="Pinned"
-                  showStar
-                  testId="pinned-divider-org"
-                />
-              )}
-              {sortedTeams.map((team, i) => (
-                <Fragment key={team.id}>
-                  {pinnedCount > 0 &&
-                    i === pinnedCount &&
-                    pinnedCount < sortedTeams.length && (
-                      <PinnedSectionLabel label="All teams" />
-                    )}
-                  <Link href={`/teams/${team.id}?showAround=1`}>
-                    <div
-                      className="rounded-lg overflow-hidden border border-border hover:border-primary/40 hover:shadow-md cursor-pointer group transition-all"
-                      data-testid={`card-team-${team.id}`}
-                    >
-                    {/* Banner visual: team-specific photo if set, otherwise
+            <div className="overflow-y-auto scrollbar-thin max-h-[calc(100vh-14rem)]">
+              <div className="flex flex-col gap-2 p-2">
+                {pinnedCount > 0 && (
+                  <PinnedSectionLabel
+                    label="Pinned"
+                    showStar
+                    testId="pinned-divider-org"
+                  />
+                )}
+                {sortedTeams.map((team, i) => (
+                  <Fragment key={team.id}>
+                    {pinnedCount > 0 &&
+                      i === pinnedCount &&
+                      pinnedCount < sortedTeams.length && (
+                        <PinnedSectionLabel label="All teams" />
+                      )}
+                    <Link href={`/teams/${team.id}?showAround=1`}>
+                      <div
+                        className="rounded-lg overflow-hidden border border-border hover:border-primary/40 hover:shadow-md cursor-pointer group transition-all"
+                        data-testid={`card-team-${team.id}`}
+                      >
+                        {/* Banner visual: team-specific photo if set, otherwise
                         the same gradient empty-state used by the team-page
                         hero so branding stays consistent. */}
-                    <div className="relative h-20 bg-gradient-to-br from-primary/30 via-primary/10 to-primary/5">
-                      {team.bannerUrl && (
-                        <img
-                          src={team.bannerUrl}
-                          alt={`${team.name} background`}
-                          className="absolute inset-0 w-full h-full object-cover"
-                          data-testid={`img-team-banner-${team.id}`}
-                        />
-                      )}
-                    </div>
-                    <div className="p-2.5">
-                      <div className="flex items-center gap-2">
-                        <div className="flex items-center gap-2 min-w-0 flex-1">
-                          <h3 className="font-bold text-sm truncate group-hover:text-primary transition-colors">
-                            {team.name}
-                          </h3>
-                          {team.sport && (
-                            <Badge
-                              variant="outline"
-                              className="text-[10px] uppercase tracking-wider font-bold shrink-0"
-                            >
-                              {team.sport}
-                            </Badge>
+                        <div className="relative h-20 bg-gradient-to-br from-primary/30 via-primary/10 to-primary/5">
+                          {team.bannerUrl && (
+                            <img
+                              src={team.bannerUrl}
+                              alt={`${team.name} background`}
+                              className="absolute inset-0 w-full h-full object-cover"
+                              data-testid={`img-team-banner-${team.id}`}
+                            />
                           )}
                         </div>
-                        {pinEnabled && (
-                          <PinTeamButton
-                            teamId={team.id}
-                            pinned={pinnedSet.has(team.id)}
-                            onToggle={(id) =>
-                              togglePin(
-                                id,
-                                teams.map((x) => x.id),
-                              )
-                            }
-                            className="-mr-1"
-                          />
-                        )}
+                        <div className="p-2.5">
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <h3 className="font-bold text-sm truncate group-hover:text-primary transition-colors">
+                                {team.name}
+                              </h3>
+                              {team.sport && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] uppercase tracking-wider font-bold shrink-0"
+                                >
+                                  {team.sport}
+                                </Badge>
+                              )}
+                            </div>
+                            {pinEnabled && (
+                              <PinTeamButton
+                                teamId={team.id}
+                                pinned={pinnedSet.has(team.id)}
+                                onToggle={(id) =>
+                                  togglePin(
+                                    id,
+                                    teams.map((x) => x.id),
+                                  )
+                                }
+                                className="-mr-1"
+                              />
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground mt-0.5">
+                            <Users className="w-3 h-3" />
+                            {team.followerCount ?? 0} Followers
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground mt-0.5">
-                        <Users className="w-3 h-3" />
-                        {team.followerCount ?? 0} Followers
-                      </div>
-                    </div>
-                    </div>
-                  </Link>
-                </Fragment>
-              ))}
+                    </Link>
+                  </Fragment>
+                ))}
+              </div>
             </div>
-          </div>
           )}
         </>
       )}
@@ -1883,33 +1901,33 @@ export function ArchivedTeamsCard({
         </button>
       </div>
       {open && (
-      <CardContent className="p-2">
-        <div className="flex flex-col divide-y divide-border">
-          {teams.map((t) => (
-            <Link key={t.id} href={`/teams/${t.id}?showAround=1`}>
-              <div
-                className="flex items-center justify-between gap-3 px-3 py-2.5 hover:bg-muted/40 rounded-lg cursor-pointer"
-                data-testid={`card-archived-team-${t.id}`}
-              >
-                <div className="min-w-0">
-                  <p className="font-bold text-sm truncate">{t.name}</p>
-                  {t.sport && (
-                    <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-bold">
-                      {t.sport}
-                    </p>
-                  )}
-                </div>
-                <Badge
-                  variant="outline"
-                  className="text-[10px] uppercase tracking-wider font-bold shrink-0"
+        <CardContent className="p-2">
+          <div className="flex flex-col divide-y divide-border">
+            {teams.map((t) => (
+              <Link key={t.id} href={`/teams/${t.id}?showAround=1`}>
+                <div
+                  className="flex items-center justify-between gap-3 px-3 py-2.5 hover:bg-muted/40 rounded-lg cursor-pointer"
+                  data-testid={`card-archived-team-${t.id}`}
                 >
-                  Archived
-                </Badge>
-              </div>
-            </Link>
-          ))}
-        </div>
-      </CardContent>
+                  <div className="min-w-0">
+                    <p className="font-bold text-sm truncate">{t.name}</p>
+                    {t.sport && (
+                      <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-bold">
+                        {t.sport}
+                      </p>
+                    )}
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] uppercase tracking-wider font-bold shrink-0"
+                  >
+                    Archived
+                  </Badge>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </CardContent>
       )}
     </Card>
   );

@@ -39,6 +39,7 @@ import { UserAvatar } from "@/components/UserAvatar";
 import { useToast } from "@/hooks/use-toast";
 import { useIsLg } from "@/hooks/use-mobile";
 import { formatDate } from "@/lib/format";
+import { EmptyState } from "@/components/EmptyState";
 import {
   Shield,
   UserPlus,
@@ -54,6 +55,7 @@ import {
   MoreHorizontal,
   Info,
   Send,
+  Users,
 } from "lucide-react";
 import { EditRosterMemberDialog } from "./EditRosterMemberDialog";
 
@@ -136,7 +138,10 @@ export function TeamRosterTabs({
   // cached `whoami` so the Layout re-evaluates `canAuthorRecap`
   // without requiring a hard reload.
   const invalidateRoster = async () => {
-    await Promise.all([invalidate(), qc.invalidateQueries({ queryKey: ["whoami"] })]);
+    await Promise.all([
+      invalidate(),
+      qc.invalidateQueries({ queryKey: ["whoami"] }),
+    ]);
   };
 
   const acceptInvite = useAcceptTeamInvite({
@@ -283,7 +288,10 @@ export function TeamRosterTabs({
   const onCopyMessage = (i: RosterInvite) => {
     const link = inviteLink(i);
     if (!link) {
-      toast({ title: "No link available for this invite", variant: "destructive" });
+      toast({
+        title: "No link available for this invite",
+        variant: "destructive",
+      });
       return;
     }
     copyToClipboard(shortInviteMessage(link), "Message");
@@ -297,13 +305,25 @@ export function TeamRosterTabs({
   ): { label: string; hint: string } | null => {
     switch (status) {
       case "bounced":
-        return { label: "Bounced", hint: "The email bounced — share the link directly." };
+        return {
+          label: "Bounced",
+          hint: "The email bounced — share the link directly.",
+        };
       case "dropped":
-        return { label: "Not delivered", hint: "SendGrid dropped the email — share the link directly." };
+        return {
+          label: "Not delivered",
+          hint: "SendGrid dropped the email — share the link directly.",
+        };
       case "deferred":
-        return { label: "Delayed", hint: "Delivery is delayed — you can share the link directly." };
+        return {
+          label: "Delayed",
+          hint: "Delivery is delayed — you can share the link directly.",
+        };
       case "spam":
-        return { label: "Marked spam", hint: "Recipient marked it spam — share the link directly." };
+        return {
+          label: "Marked spam",
+          hint: "Recipient marked it spam — share the link directly.",
+        };
       default:
         return null;
     }
@@ -829,9 +849,10 @@ export function TeamRosterTabs({
           </div>
           <CardContent className="p-0">
             {players.length === 0 ? (
-              <div className="px-5 py-8 text-center text-sm text-muted-foreground">
-                No players on the roster yet.
-              </div>
+              <EmptyState
+                icon={<Users className="w-5 h-5" />}
+                title="No players on the roster yet."
+              />
             ) : isLg ? (
               <Table>
                 <TableHeader>
@@ -872,10 +893,10 @@ export function TeamRosterTabs({
           </div>
           <CardContent className="p-0">
             {staff.length === 0 ? (
-              <div className="px-5 py-8 flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                <Shield className="w-4 h-4" />
-                No coaches or staff listed.
-              </div>
+              <EmptyState
+                icon={<Shield className="w-5 h-5" />}
+                title="No coaches or staff listed."
+              />
             ) : isLg ? (
               <Table>
                 <TableHeader>
@@ -923,22 +944,21 @@ export function TeamRosterTabs({
                 >
                   <Info className="w-4 h-4 mt-0.5 shrink-0 text-muted-foreground" />
                   <p className="leading-relaxed">
-                    Emailed invites occasionally bounce or land in a spam folder.
-                    If an invite stays pending for a while, use{" "}
-                    <span className="font-semibold text-foreground">Share link</span>{" "}
+                    Emailed invites occasionally bounce or land in a spam
+                    folder. If an invite stays pending for a while, use{" "}
+                    <span className="font-semibold text-foreground">
+                      Share link
+                    </span>{" "}
                     to copy the join link and send it yourself by text, your own
                     email, or any chat.
                   </p>
                 </div>
               )}
               {invites.length === 0 ? (
-                <div
-                  className="px-5 py-8 flex items-center justify-center gap-2 text-sm text-muted-foreground"
-                  data-testid="empty-invites"
-                >
-                  <Mail className="w-4 h-4" />
-                  No invitations are waiting on a response.
-                </div>
+                <EmptyState
+                  icon={<Mail className="w-5 h-5" />}
+                  title="No pending invitations."
+                />
               ) : !isLg ? (
                 <div>{invites.map(renderInviteCard)}</div>
               ) : (
@@ -965,7 +985,9 @@ export function TeamRosterTabs({
                               <Mail className="w-4 h-4 text-muted-foreground" />
                               {i.email ?? "—"}
                               {(() => {
-                                const problem = deliveryProblem(i.deliveryStatus);
+                                const problem = deliveryProblem(
+                                  i.deliveryStatus,
+                                );
                                 return problem ? (
                                   <Badge
                                     variant="destructive"

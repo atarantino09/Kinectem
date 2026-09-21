@@ -2,15 +2,37 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { ClipboardList, Sparkles, Lock, Pencil, Loader2, Plus, Clock, CalendarDays, X } from "lucide-react";
+import { EmptyState } from "@/components/EmptyState";
+import {
+  ClipboardList,
+  Sparkles,
+  Lock,
+  Pencil,
+  Loader2,
+  Plus,
+  Clock,
+  CalendarDays,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormMessage,
+} from "@/components/ui/form";
 import { customFetch } from "@workspace/api-client-react";
 import { toast } from "@/hooks/use-toast";
-import { useListPracticePlans, useCreatePracticePlan, useUpdatePracticePlan, PracticePlan } from "@/hooks/use-practice-plans";
+import {
+  useListPracticePlans,
+  useCreatePracticePlan,
+  useUpdatePracticePlan,
+  PracticePlan,
+} from "@/hooks/use-practice-plans";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MediaSection } from "@/components/new-post/MediaSection";
 import { VideoEmbed } from "@/components/VideoEmbed";
@@ -37,7 +59,12 @@ export function PracticePlansSection({
   canView: boolean;
   createRequestToken?: number;
 }) {
-  const { data: plans, isLoading, isError, refetch } = useListPracticePlans(teamId, canView);
+  const {
+    data: plans,
+    isLoading,
+    isError,
+    refetch,
+  } = useListPracticePlans(teamId, canView);
   const [isComposing, setIsComposing] = useState(false);
 
   useEffect(() => {
@@ -54,7 +81,11 @@ export function PracticePlansSection({
   if (!canView) return null;
 
   return (
-    <section id="practice-plans" className="space-y-4 scroll-mt-24" data-testid="practice-plans-section">
+    <section
+      id="practice-plans"
+      className="space-y-4 scroll-mt-24"
+      data-testid="practice-plans-section"
+    >
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <ClipboardList className="w-5 h-5" />
@@ -65,8 +96,8 @@ export function PracticePlansSection({
           </span>
         </div>
         {canManage && !isComposing && (
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             size="sm"
             onClick={() => setIsComposing(true)}
             data-testid="btn-new-practice-plan"
@@ -79,9 +110,9 @@ export function PracticePlansSection({
       </div>
 
       {canManage && isComposing && (
-        <PracticePlanComposer 
-          teamId={teamId} 
-          onCancel={() => setIsComposing(false)} 
+        <PracticePlanComposer
+          teamId={teamId}
+          onCancel={() => setIsComposing(false)}
           onSuccess={() => setIsComposing(false)}
         />
       )}
@@ -95,32 +126,38 @@ export function PracticePlansSection({
         <Card className="border-destructive/20 bg-destructive/5">
           <CardContent className="p-6 text-center text-sm text-destructive">
             <p>Could not load practice plans.</p>
-            <Button variant="outline" size="sm" onClick={() => refetch()} className="mt-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => refetch()}
+              className="mt-3"
+            >
               Retry
             </Button>
           </CardContent>
         </Card>
       ) : plans?.length === 0 && !isComposing ? (
-        <Card className="border-dashed">
-          <CardContent className="p-8 text-center text-sm text-muted-foreground flex flex-col items-center">
-            <ClipboardList className="w-8 h-8 mb-2 opacity-50" />
-            <p>No practice plans yet.</p>
-            {canManage && (
-              <p className="mt-1">
-                Create an internal update for coaches, organization admins,
-                players, and parents.
-              </p>
-            )}
+        <Card className="app-surface">
+          <CardContent className="p-0">
+            <EmptyState
+              icon={<ClipboardList className="w-5 h-5" />}
+              title="No practice plans yet."
+              description={
+                canManage
+                  ? "Create an internal update for coaches, organization admins, players, and parents."
+                  : undefined
+              }
+            />
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-3">
           {plans?.map((plan) => (
-            <PracticePlanCard 
-              key={plan.id} 
-              plan={plan} 
-              teamId={teamId} 
-              canManage={canManage} 
+            <PracticePlanCard
+              key={plan.id}
+              plan={plan}
+              teamId={teamId}
+              canManage={canManage}
             />
           ))}
         </div>
@@ -158,7 +195,10 @@ function PracticePlanComposer({
 
   const isSaving = createPlan.isPending || updatePlan.isPending;
 
-  const onSubmit = async (values: PlanValues, status: "draft" | "published") => {
+  const onSubmit = async (
+    values: PlanValues,
+    status: "draft" | "published",
+  ) => {
     try {
       if (plan) {
         await updatePlan.mutateAsync({
@@ -166,13 +206,23 @@ function PracticePlanComposer({
           planId: plan.id,
           data: { ...values, status },
         });
-        toast({ title: status === "published" ? "Plan published internally" : "Draft updated" });
+        toast({
+          title:
+            status === "published"
+              ? "Plan published internally"
+              : "Draft updated",
+        });
       } else {
         await createPlan.mutateAsync({
           teamId,
           data: { ...values, status },
         });
-        toast({ title: status === "published" ? "Plan published internally" : "Plan saved as draft" });
+        toast({
+          title:
+            status === "published"
+              ? "Plan published internally"
+              : "Plan saved as draft",
+        });
       }
       onSuccess();
     } catch {
@@ -183,9 +233,12 @@ function PracticePlanComposer({
   const generateWithAi = async () => {
     const currentBody = form.getValues("body");
     const currentTitle = form.getValues("title");
-    
+
     if (!currentBody.trim()) {
-      toast({ title: "Add some notes first", description: "Jot down a few drills or topics for the AI to expand on." });
+      toast({
+        title: "Add some notes first",
+        description: "Jot down a few drills or topics for the AI to expand on.",
+      });
       return;
     }
 
@@ -204,9 +257,15 @@ function PracticePlanComposer({
         }),
       });
       form.setValue("body", result.text, { shouldValidate: true });
-      toast({ title: "AI draft generated", description: "Review and edit before saving." });
+      toast({
+        title: "AI draft generated",
+        description: "Review and edit before saving.",
+      });
     } catch {
-      toast({ title: "AI Assist couldn't draft this plan", variant: "destructive" });
+      toast({
+        title: "AI Assist couldn't draft this plan",
+        variant: "destructive",
+      });
     } finally {
       setIsAiGenerating(false);
     }
@@ -215,7 +274,10 @@ function PracticePlanComposer({
   return (
     <Card className="border-primary/30 bg-primary/5">
       <CardHeader className="p-4 pb-0">
-        <div className="flex items-center gap-2 text-sm font-bold text-primary" data-testid="practice-plan-privacy-copy">
+        <div
+          className="flex items-center gap-2 text-sm font-bold text-primary"
+          data-testid="practice-plan-privacy-copy"
+        >
           <Lock className="w-4 h-4" />
           Private team update
         </div>
@@ -243,7 +305,9 @@ function PracticePlanComposer({
                         variant="outline"
                         size="sm"
                         onClick={() => field.onChange([...field.value, ""])}
-                        disabled={isSaving || isAiGenerating || field.value.length >= 20}
+                        disabled={
+                          isSaving || isAiGenerating || field.value.length >= 20
+                        }
                         data-testid="practice-plan-add-date"
                       >
                         <Plus className="mr-1.5 h-3.5 w-3.5" />
@@ -271,7 +335,11 @@ function PracticePlanComposer({
                             size="icon"
                             aria-label={`Remove practice date ${index + 1}`}
                             onClick={() =>
-                              field.onChange(field.value.filter((_, itemIndex) => itemIndex !== index))
+                              field.onChange(
+                                field.value.filter(
+                                  (_, itemIndex) => itemIndex !== index,
+                                ),
+                              )
                             }
                             disabled={isSaving || isAiGenerating}
                           >
@@ -291,12 +359,12 @@ function PracticePlanComposer({
               render={({ field }) => (
                 <FormItem>
                   <FormControl>
-                    <Input 
-                      placeholder="e.g. Tuesday Evening - Defensive Rotations" 
+                    <Input
+                      placeholder="e.g. Tuesday Evening - Defensive Rotations"
                       className="font-semibold bg-background"
                       disabled={isSaving || isAiGenerating}
                       data-testid="practice-plan-title"
-                      {...field} 
+                      {...field}
                     />
                   </FormControl>
                   <FormMessage />
@@ -309,12 +377,12 @@ function PracticePlanComposer({
               render={({ field }) => (
                 <FormItem>
                   <FormControl>
-                    <Textarea 
+                    <Textarea
                       placeholder="Outline your drills, time blocks, required equipment, and coaching focus..."
                       className="min-h-[140px] resize-y bg-background"
                       disabled={isSaving || isAiGenerating}
                       data-testid="practice-plan-body"
-                      {...field} 
+                      {...field}
                     />
                   </FormControl>
                   <FormMessage />
@@ -337,12 +405,14 @@ function PracticePlanComposer({
               allowVideoUpload
             />
             <div className="flex flex-col sm:flex-row gap-2 pt-2">
-              <Button 
-                type="button" 
-                variant="outline" 
+              <Button
+                type="button"
+                variant="outline"
                 size="sm"
                 className="ai-assist-shine sm:mr-auto"
-                disabled={isSaving || isAiGenerating || !form.watch("body").trim()}
+                disabled={
+                  isSaving || isAiGenerating || !form.watch("body").trim()
+                }
                 onClick={generateWithAi}
                 data-testid="practice-plan-ai-assist"
               >
@@ -354,9 +424,9 @@ function PracticePlanComposer({
                 Expand with AI
               </Button>
               <div className="flex gap-2">
-                <Button 
-                  type="button" 
-                  variant="ghost" 
+                <Button
+                  type="button"
+                  variant="ghost"
                   size="sm"
                   onClick={onCancel}
                   disabled={isSaving || isAiGenerating}
@@ -365,22 +435,26 @@ function PracticePlanComposer({
                 >
                   Cancel
                 </Button>
-                <Button 
-                  type="button" 
-                  variant="secondary" 
+                <Button
+                  type="button"
+                  variant="secondary"
                   size="sm"
-                  onClick={() => form.handleSubmit((v) => onSubmit(v, "draft"))()}
+                  onClick={() =>
+                    form.handleSubmit((v) => onSubmit(v, "draft"))()
+                  }
                   disabled={isSaving || isAiGenerating}
                   className="flex-1 sm:flex-none"
                   data-testid="practice-plan-save-draft"
                 >
                   Save Draft
                 </Button>
-                <Button 
-                  type="button" 
-                  variant="brand" 
+                <Button
+                  type="button"
+                  variant="brand"
                   size="sm"
-                  onClick={() => form.handleSubmit((v) => onSubmit(v, "published"))()}
+                  onClick={() =>
+                    form.handleSubmit((v) => onSubmit(v, "published"))()
+                  }
                   disabled={isSaving || isAiGenerating}
                   className="flex-1 sm:flex-none"
                   data-testid="practice-plan-submit"
@@ -409,7 +483,7 @@ function PracticePlanCard({
 
   if (isEditing) {
     return (
-      <PracticePlanComposer 
+      <PracticePlanComposer
         teamId={teamId}
         plan={plan}
         onCancel={() => setIsEditing(false)}
@@ -447,13 +521,20 @@ function PracticePlanCard({
               </span>
               <span>•</span>
               <span>
-                By {plan.author?.displayName || "Staff"} on {new Date(plan.createdAt).toLocaleDateString()}
+                By {plan.author?.displayName || "Staff"} on{" "}
+                {new Date(plan.createdAt).toLocaleDateString()}
               </span>
             </div>
             {plan.practiceDates?.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1.5" data-testid={`practice-plan-dates-${plan.id}`}>
+              <div
+                className="mt-2 flex flex-wrap gap-1.5"
+                data-testid={`practice-plan-dates-${plan.id}`}
+              >
                 {plan.practiceDates.map((date) => (
-                  <span key={date} className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
+                  <span
+                    key={date}
+                    className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary"
+                  >
                     <CalendarDays className="h-3 w-3" />
                     {formatPracticeDate(date)}
                   </span>
@@ -487,7 +568,7 @@ function PracticePlanCard({
             </Button>
           )}
         </div>
-        
+
         <div className="prose prose-sm max-w-none text-sm whitespace-pre-wrap text-foreground/90">
           {plan.body}
         </div>
