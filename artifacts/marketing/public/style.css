@@ -2013,3 +2013,12 @@ section { padding: 84px 0; }
 .persona-image-wrapper--athlete img {
   object-position: 10% 20%;
 }
+
+/* Preserve the supplied UI screenshot's hard text and control edges. */
+.persona-image-wrapper--coach img,
+.persona-card:hover .persona-image-wrapper--coach img {
+  transform: none;
+  transition: none;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+}
