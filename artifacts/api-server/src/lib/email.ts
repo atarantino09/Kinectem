@@ -1021,12 +1021,31 @@ export function buildWelcomeEmail(ctx: DispatchBuildContext): EmailMessage {
     subject: "Welcome to Kinectem!",
     text: `Hi ${firstNameOf(ctx.recipientName)},
 
-Welcome to Kinectem — the home for your team's recaps, highlights, schedules, and updates.
+Welcome to Kinectem — where every season becomes a permanent, searchable archive of your team's story.
 
-A few things to try first:
-- Follow your team to see new recaps and highlights in your feed
-- Complete your profile so teammates can find you
-- Check your team's schedule so you never miss a game
+Kinectem brings game recaps, highlights, schedules, and team updates together in one place, so the moments that matter are easy to follow now and easy to find for years to come.
+
+How everyone uses Kinectem:
+
+Organization Admins
+- Build and manage your organization's home on Kinectem
+- Add teams and give coaches or other admins the access they need
+- Keep your entire community connected in one trusted place
+
+Coaches
+- Manage your team, roster, and schedule
+- Share updates, highlights, and game recaps
+- Give every season a story players and families can revisit
+
+Players
+- Follow your schedule and team updates
+- See the recaps and highlights that tell your season's story
+- Build a lasting record of the moments and achievements that matter
+
+Parents
+- Follow your athlete and team in one place
+- Stay current on schedules, updates, recaps, and highlights
+- Celebrate and preserve the memories from every season
 
 Jump in here:
 ${url}
@@ -1034,12 +1053,32 @@ ${url}
 We're glad you're here.
 — The Kinectem Team${foot.text}`,
     html: `<p>Hi ${hi},</p>
-<p>Welcome to <strong>Kinectem</strong> — the home for your team's recaps, highlights, schedules, and updates.</p>
-<p>A few things to try first:</p>
+<p>Welcome to <strong>Kinectem</strong> — where every season becomes a permanent, searchable archive of your team's story.</p>
+<p>Kinectem brings game recaps, highlights, schedules, and team updates together in one place, so the moments that matter are easy to follow now and easy to find for years to come.</p>
+<h3 style="margin:24px 0 8px;font-size:18px;line-height:1.35;">How everyone uses Kinectem</h3>
+<p style="margin-bottom:4px;"><strong>Organization Admins</strong></p>
 <ul>
-<li>Follow your team to see new recaps and highlights in your feed</li>
-<li>Complete your profile so teammates can find you</li>
-<li>Check your team's schedule so you never miss a game</li>
+<li>Build and manage your organization's home on Kinectem</li>
+<li>Add teams and give coaches or other admins the access they need</li>
+<li>Keep your entire community connected in one trusted place</li>
+</ul>
+<p style="margin-bottom:4px;"><strong>Coaches</strong></p>
+<ul>
+<li>Manage your team, roster, and schedule</li>
+<li>Share updates, highlights, and game recaps</li>
+<li>Give every season a story players and families can revisit</li>
+</ul>
+<p style="margin-bottom:4px;"><strong>Players</strong></p>
+<ul>
+<li>Follow your schedule and team updates</li>
+<li>See the recaps and highlights that tell your season's story</li>
+<li>Build a lasting record of the moments and achievements that matter</li>
+</ul>
+<p style="margin-bottom:4px;"><strong>Parents</strong></p>
+<ul>
+<li>Follow your athlete and team in one place</li>
+<li>Stay current on schedules, updates, recaps, and highlights</li>
+<li>Celebrate and preserve the memories from every season</li>
 </ul>
 ${emailButton({ href: url, label: "Open Kinectem" })}
 <p>We're glad you're here.<br/>— The Kinectem Team</p>${foot.html}`,
