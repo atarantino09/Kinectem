@@ -20,7 +20,13 @@ describe("organization owner invitation email", () => {
       /href="[^"]+\/app\/claim\/private-token"/,
     );
     expect(email.text).toContain(
-      "Kinectem is the youth-sports platform where the story of your season comes to life",
+      "Kinectem brings every team in your organization into one connected community",
+    );
+    expect(email.text).toContain(
+      "a family on the U9 girls team can follow the season story of the U12 boys",
+    );
+    expect(email.html).toContain(
+      "Game recaps from across the club flow to your organization page",
     );
     expect(email.text).toContain("create your Kinectem profile");
     expect(email.text).toContain("pre-invite message");

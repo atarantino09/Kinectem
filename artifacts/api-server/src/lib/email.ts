@@ -345,7 +345,7 @@ export function buildOrgOwnerInvitationEmail(input: {
     text: [
       `You've been invited to become the owner of ${input.organizationName} on Kinectem.`,
       "",
-      "Kinectem is the youth-sports platform where the story of your season comes to life. It turns quick coach notes into polished game recaps, builds lasting player histories, and gives every team one recognizable home without replacing the registration, scheduling, or communication tools your club already uses.",
+      "Kinectem brings every team in your organization into one connected community. Game recaps from across the club flow to your organization page, so a family on the U9 girls team can follow the season story of the U12 boys — and celebrate every team along the way.",
       "",
       "Use this secure link to claim your organization:",
       claimUrl,
@@ -362,7 +362,7 @@ export function buildOrgOwnerInvitationEmail(input: {
     ].join("\n"),
     html: [
       emailSection("Your invitation", `<p>You've been invited to become the owner of <strong>${escapeHtml(input.organizationName)}</strong> on Kinectem.</p>
-<p style="margin-bottom:0;">Kinectem gives your club one recognizable home for recaps, player histories, and team updates without replacing the tools you already use.</p>`),
+<p style="margin-bottom:0;">Kinectem brings every team in your organization into one connected community. Game recaps from across the club flow to your organization page, so a family on the U9 girls team can follow the season story of the U12 boys — and celebrate every team along the way.</p>`),
       emailSection("Claim your organization", `${emailButton({ href: claimUrl, label: "Claim organization" })}
 <p class="email-muted" style="color:#65758b;font-size:14px;margin-bottom:0;">This private invitation should not be forwarded. It stops working after the organization has an owner.</p>`),
       emailSection(
