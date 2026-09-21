@@ -1034,18 +1034,19 @@ Organization Admins
 
 Coaches
 - Manage your team, roster, and schedule
-- Share updates, highlights, and game recaps
-- Give every season a story players and families can revisit
+- Use the built-in AI Assist in the game recap composer to turn your game notes into a full recap in minutes
+- Share recaps, highlights, and updates that give every season a story players and families can revisit
 
 Players
-- Follow your schedule and team updates
 - See the recaps and highlights that tell your season's story
-- Build a lasting record of the moments and achievements that matter
+- Showcase the moments, milestones, and achievements that define you
+- Build a permanent digital storybook of your playing journey that preserves your story and helps others discover it
 
 Parents
 - Follow your athlete and team in one place
 - Stay current on schedules, updates, recaps, and highlights
-- Celebrate and preserve the memories from every season
+- Upload your photos and videos to game recap albums, pairing the story of each game with the moments you captured
+- Help create a complete, lasting record your athlete and family can revisit for years
 
 Jump in here:
 ${url}
@@ -1065,20 +1066,21 @@ We're glad you're here.
 <p style="margin-bottom:4px;"><strong>Coaches</strong></p>
 <ul>
 <li>Manage your team, roster, and schedule</li>
-<li>Share updates, highlights, and game recaps</li>
-<li>Give every season a story players and families can revisit</li>
+<li>Use the built-in <strong>AI Assist</strong> in the game recap composer to turn your game notes into a full recap in minutes</li>
+<li>Share recaps, highlights, and updates that give every season a story players and families can revisit</li>
 </ul>
 <p style="margin-bottom:4px;"><strong>Players</strong></p>
 <ul>
-<li>Follow your schedule and team updates</li>
 <li>See the recaps and highlights that tell your season's story</li>
-<li>Build a lasting record of the moments and achievements that matter</li>
+<li>Showcase the moments, milestones, and achievements that define you</li>
+<li>Build a permanent digital storybook of your playing journey that preserves your story and helps others discover it</li>
 </ul>
 <p style="margin-bottom:4px;"><strong>Parents</strong></p>
 <ul>
 <li>Follow your athlete and team in one place</li>
 <li>Stay current on schedules, updates, recaps, and highlights</li>
-<li>Celebrate and preserve the memories from every season</li>
+<li>Upload your photos and videos to game recap albums, pairing the story of each game with the moments you captured</li>
+<li>Help create a complete, lasting record your athlete and family can revisit for years</li>
 </ul>
 ${emailButton({ href: url, label: "Open Kinectem" })}
 <p>We're glad you're here.<br/>— The Kinectem Team</p>${foot.html}`,
