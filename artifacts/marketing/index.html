@@ -7,956 +7,376 @@
   <meta property="og:title" content="Kinectem — Elevate Your Youth Sports Organization" />
   <meta property="og:description" content="Promote team wins, spotlight your players, and attract new athletes — all on one purpose-built platform." />
   <meta property="og:type" content="website" />
-  <meta property="og:image" content="https://kinectem.com/og-image-light-1200x630.png" />
+  <meta property="og:image" content="https://kinectem.com/og-image-light.png" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:image" content="https://kinectem.com/og-image-light-1200x630.png" />
+  <meta name="twitter:image" content="https://kinectem.com/og-image-light.png" />
   <title>Kinectem — Elevate Your Youth Sports Organization</title>
-  <link rel="icon" type="image/png" href="./logo-icon.png" />
-  <link rel="apple-touch-icon" href="./logo-icon.png" />
-  <link rel="preload" href="./fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="icon" type="image/png" href="./icon.png" />
+  <link rel="apple-touch-icon" href="./icon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
 
-  <!-- =====================================================
-       Navigation
-       ===================================================== -->
-  <header role="banner">
-    <nav class="nav" aria-label="Main navigation">
-      <div class="nav__inner">
-        <a href="#" class="nav__logo" aria-label="Kinectem home">
-          <img src="./logo-horizontal.png" alt="Kinectem" />
-        </a>
-        <ul class="nav__links" role="list">
-          <li><a href="#personas" class="nav__link">Who It's For</a></li>
-          <li><a href="#features" class="nav__link">Why Kinectem</a></li>
-          <li><a href="#pricing" class="nav__link">Pricing</a></li>
-          <li><a href="#faq" class="nav__link">FAQ</a></li>
-          <li><a href="./getting-started.html" class="nav__link">Getting Started</a></li>
-          <li><a href="./for-organizers.html" class="nav__link">For Organizers</a></li>
-          <li><a href="./partners.html" class="nav__link">Partners</a></li>
-        </ul>
-        <div class="nav__actions">
-          <a href="/app/login" class="nav__link">Log In</a>
-          <a href="/app/login?signup=1" class="btn btn-primary btn--nav">Get Started</a>
-        </div>
-        <button class="nav__mobile-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu">
-          <svg width="22" height="16" viewBox="0 0 22 16" fill="none" aria-hidden="true">
-            <rect y="0" width="22" height="2" rx="1" fill="currentColor"/>
-            <rect y="7" width="22" height="2" rx="1" fill="currentColor"/>
-            <rect y="14" width="22" height="2" rx="1" fill="currentColor"/>
-          </svg>
-        </button>
-      </div>
-    </nav>
-    <div class="mobile-menu" id="mobile-menu" aria-hidden="true">
-      <ul role="list">
-        <li><a href="#personas" class="mobile-menu__link">Who It's For</a></li>
-        <li><a href="#features" class="mobile-menu__link">Features</a></li>
-        <li><a href="#pricing" class="mobile-menu__link">Pricing</a></li>
-        <li><a href="#faq" class="mobile-menu__link">FAQ</a></li>
-        <li><a href="./getting-started.html" class="mobile-menu__link">Getting Started</a></li>
-        <li><a href="./for-organizers.html" class="mobile-menu__link">For Organizers</a></li>
-        <li><a href="./partners.html" class="mobile-menu__link">Partners</a></li>
-        <li><a href="/app/login" class="mobile-menu__link">Log In</a></li>
-        <li><a href="/app/login?signup=1" class="mobile-menu__link mobile-menu__link--cta">Get Started</a></li>
+  <!-- Navigation -->
+  <header class="nav" role="banner">
+    <div class="wrap nav__inner">
+      <a href="./" class="nav__logo" aria-label="Kinectem home">
+        <img src="./logo-horizontal.png" alt="Kinectem" />
+      </a>
+      <ul class="nav__links" role="list">
+        <li><a href="#personas" class="nav__link">Who It's For</a></li>
+        <li><a href="#features" class="nav__link">Why Kinectem</a></li>
+        <li><a href="#pricing" class="nav__link">Pricing</a></li>
+        <li><a href="#faq" class="nav__link">FAQ</a></li>
+        <li><a href="./getting-started.html" class="nav__link">Getting Started</a></li>
+        <li><a href="./for-organizers.html" class="nav__link">For Organizers</a></li>
+        <li><a href="./partners.html" class="nav__link">Partners</a></li>
       </ul>
+      <div class="nav__actions">
+        <a href="/app/login" class="nav__link">Log In</a>
+        <a href="/app/login?signup=1" class="btn btn-primary btn--nav">Get Started</a>
+      </div>
+      <button class="nav__mobile-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
     </div>
   </header>
 
+  <div class="mobile-menu" id="mobile-menu" aria-hidden="true">
+    <ul role="list">
+      <li><a href="#personas" class="mobile-menu__link">Who It's For</a></li>
+      <li><a href="#features" class="mobile-menu__link">Why Kinectem</a></li>
+      <li><a href="#pricing" class="mobile-menu__link">Pricing</a></li>
+      <li><a href="#faq" class="mobile-menu__link">FAQ</a></li>
+      <li><a href="./getting-started.html" class="mobile-menu__link">Getting Started</a></li>
+      <li><a href="./for-organizers.html" class="mobile-menu__link">For Organizers</a></li>
+      <li><a href="./partners.html" class="mobile-menu__link">Partners</a></li>
+      <li><a href="/app/login" class="mobile-menu__link">Log In</a></li>
+      <li><a href="/app/login?signup=1" class="mobile-menu__link mobile-menu__link--cta">Get Started</a></li>
+    </ul>
+  </div>
+
   <main id="main-content">
 
-    <!-- =====================================================
-         Hero
-         ===================================================== -->
-    <section class="hero" aria-labelledby="hero-heading">
-      <div class="hero__bg-grid" aria-hidden="true"></div>
-      <div class="hero__glow" aria-hidden="true"></div>
-      <div class="hero__content">
-        <span class="hero__eyebrow" aria-hidden="true">We're live!</span>
-        <h1 class="hero__heading" id="hero-heading">
-          The Platform That Makes<br>
-          Your Organization
-          <span class="hero__rotating-wrapper" aria-label="Shine">
-            <span class="hero__word hero__word--shine is-active">Shine</span>
-          </span>
-        </h1>
-        <p class="hero__subtext">
-          Kinectem is the youth-sports platform where the story of your season comes to life. Coaches
-          publish game recaps that live on team pages and tag to every rostered player's profile, going
-          beyond the box score — capturing the hustle plays and turning points the stat sheet misses.
-          Season after season, it all compounds into a permanent, searchable storybook of every
-          athlete's journey and every team's legacy.
-        </p>
-        <div class="hero__actions">
-          <a href="/app/login?signup=1" class="btn btn-primary btn--hero">
-            Get Started
-          </a>
-          <a href="#personas" class="btn btn-ghost">
-            See Who It's For
-          </a>
-        </div>
-        <div class="hero__visual" aria-hidden="true">
-          <div class="hero__stat-card hero__stat-card--1">
-            <span class="stat-card__number">🏆</span>
-            <span class="stat-card__label">Showcase Team Wins</span>
+    <!-- Hero -->
+    <section class="hero">
+      <div class="hero-orb-1"></div>
+      <div class="hero-orb-2"></div>
+      <div class="wrap hero-inner">
+        <div class="hero-copy">
+          <span class="eyebrow">We're live</span>
+          <h1>The Platform That Makes Your Organization <span class="wordmark wordmark-em">Shine</span></h1>
+          <p class="lede">Kinectem is the youth-sports platform where the story of your season comes to life. Turn every game into a permanent, searchable archive of your athletes' journeys and your team's legacy.</p>
+          <div class="hero-ctas">
+            <a href="/app/login?signup=1" class="btn btn-primary">Get Started</a>
+            <a href="#personas" class="btn btn-outline">See Who It's For</a>
           </div>
-          <div class="hero__stat-card hero__stat-card--2">
-            <span class="stat-card__number">⚡</span>
-            <span class="stat-card__label">Digital Storybooks & Online Resumes</span>
-          </div>
-          <div class="hero__stat-card hero__stat-card--3">
-            <span class="stat-card__number">📣</span>
-            <span class="stat-card__label">Attract New Athletes</span>
+          <div class="trust-row">
+            <div class="trust-item">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" color="var(--royal-purple)"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+              COPPA-Compliant
+            </div>
+            <div class="trust-item">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" color="var(--royal-purple)"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+              Built for Youth Sports
+            </div>
           </div>
         </div>
-      </div>
-    </section>
-
-    <!-- Wave divider -->
-    <div aria-hidden="true" style="line-height:0; background: var(--gradient-hero-bg);">
-      <svg viewBox="0 0 1440 40" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" style="display:block;width:100%;height:40px;">
-        <path d="M0,20 C240,40 480,0 720,20 C960,40 1200,0 1440,20 L1440,40 L0,40 Z" fill="white" opacity="0.6"/>
-        <path d="M0,28 C360,8 720,40 1080,20 C1260,10 1380,30 1440,28 L1440,40 L0,40 Z" fill="white" opacity="0.4"/>
-      </svg>
-    </div>
-
-    <!-- =====================================================
-         Stats Strip
-         ===================================================== -->
-    <div class="stats-strip" aria-label="Platform highlights">
-      <div class="stats-strip__inner">
-        <div class="stats-strip__item">
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-            <path d="M10 2L12.09 7.26L17.82 7.27L13.45 10.64L15.18 15.99L10 12.77L4.82 15.99L6.55 10.64L2.18 7.27L7.91 7.26L10 2Z" fill="currentColor"/>
-          </svg>
-          <span>Promote team championships &amp; milestones</span>
-        </div>
-        <div class="stats-strip__divider" aria-hidden="true"></div>
-        <div class="stats-strip__item">
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-            <path d="M12 2C9.24 2 7 4.24 7 7C7 9.76 9.24 12 12 12C14.76 12 17 9.76 17 7C17 4.24 14.76 2 12 2ZM12 10C10.35 10 9 8.65 9 7C9 5.35 10.35 4 12 4C13.65 4 15 5.35 15 7C15 8.65 13.65 10 12 10ZM12 13C9.33 13 4 14.34 4 17V19H20V17C20 14.34 14.67 13 12 13Z" fill="currentColor"/>
-          </svg>
-          <span>Boost individual player visibility &amp; recognition</span>
-        </div>
-        <div class="stats-strip__divider" aria-hidden="true"></div>
-        <div class="stats-strip__item">
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-            <path d="M9 12H11V14H9V12ZM9 6H11V10H9V6ZM10 2C5.59 2 2 5.59 2 10C2 14.42 5.59 18 10 18C14.42 18 18 14.42 18 10C18 5.59 14.42 2 10 2ZM10 16C6.69 16 4 13.31 4 10C4 6.69 6.69 4 10 4C13.31 4 16 6.69 16 10C16 13.31 13.31 16 10 16Z" fill="currentColor"/>
-          </svg>
-          <span>Discover new players for your program</span>
-        </div>
-        <div class="stats-strip__divider" aria-hidden="true"></div>
-        <div class="stats-strip__item">
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-            <path d="M16 4H15V2H13V4H7V2H5V4H4C2.89 4 2 4.9 2 6V18C2 19.11 2.89 20 4 20H16C17.11 20 18 19.11 18 18V6C18 4.9 17.11 4 16 4ZM16 18H4V9H16V18ZM16 7H4V6H16V7Z" fill="currentColor"/>
-          </svg>
-          <span>COPPA-compliant &amp; built for youth sports</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- =====================================================
-         Walkthrough Video
-         ===================================================== -->
-    <section class="walkthrough" id="walkthrough" aria-labelledby="walkthrough-heading">
-      <div class="container">
-        <div class="section-header">
-          <span class="section-eyebrow" aria-hidden="true">See It In Action</span>
-          <h2 class="section-heading" id="walkthrough-heading">A 48-second tour of Kinectem</h2>
-          <p class="section-subtext">
-            From signup to publishing your first game recap &mdash; the whole admin flow, end to end.
-          </p>
-        </div>
-        <div class="walkthrough__frame">
-          <video
-            class="walkthrough__video"
-            src="./walkthrough.mp4"
-            poster="./walkthrough-poster.jpg"
-            controls
-            preload="metadata"
-            playsinline
-            aria-label="Kinectem product walkthrough"
-          ></video>
-        </div>
-      </div>
-    </section>
-
-    <!-- =====================================================
-         AI Assist Video
-         ===================================================== -->
-    <section class="walkthrough" id="ai-assist" aria-labelledby="ai-assist-heading">
-      <div class="container">
-        <div class="section-header">
-          <span class="section-eyebrow" aria-hidden="true">Write It In Seconds</span>
-          <h2 class="section-heading" id="ai-assist-heading">From rough notes to a polished recap</h2>
-          <p class="section-subtext">
-            Jot down a few rough notes and let AI Assist draft &mdash; or polish &mdash; a ready-to-share game recap in seconds, right inside the composer.
-          </p>
-        </div>
-        <div class="walkthrough__frame">
-          <video
-            class="walkthrough__video"
-            src="./ai-assist.mp4"
-            poster="./ai-assist-poster.jpg"
-            controls
-            preload="metadata"
-            playsinline
-            aria-label="Kinectem AI Assist walkthrough"
-          ></video>
-        </div>
-      </div>
-    </section>
-
-    <!-- =====================================================
-         Game Recap Video
-         ===================================================== -->
-    <section class="walkthrough" id="game-recap" aria-labelledby="game-recap-heading">
-      <div class="container">
-        <div class="section-header">
-          <span class="section-eyebrow" aria-hidden="true">The Payoff</span>
-          <h2 class="section-heading" id="game-recap-heading">See a published game recap</h2>
-          <p class="section-subtext">
-            Watch a finished recap come to life &mdash; on the team page, across athlete profiles, and everywhere your season&rsquo;s story belongs.
-          </p>
-        </div>
-        <div class="walkthrough__frame">
-          <video
-            class="walkthrough__video"
-            src="./game-recap.mp4"
-            poster="./game-recap-poster.jpg"
-            controls
-            preload="metadata"
-            playsinline
-            aria-label="Kinectem game recap walkthrough"
-          ></video>
-        </div>
-      </div>
-    </section>
-
-    <!-- =====================================================
-         Who It's For (Persona Sections)
-         ===================================================== -->
-    <section class="personas" id="personas" aria-labelledby="personas-heading">
-      <div class="container">
-        <div class="section-header">
-          <span class="section-eyebrow" aria-hidden="true">Built for Your Entire Program</span>
-          <h2 class="section-heading" id="personas-heading">Who Kinectem Is For</h2>
-          <p class="section-subtext">
-            Whether you're an athlete ready to be seen, an organization looking to grow,
-            a coach building a winning roster, or a parent supporting your athlete —
-            Kinectem was built with you in mind.
-          </p>
-        </div>
-
-                <!-- Athletes -->
-        <div class="persona-row persona-row--reverse">
-          <div class="persona-row__visual persona-row__visual--athletes">
-            <picture class="persona-row__shot">
-              <source srcset="./persona-athlete.webp" type="image/webp">
-              <img src="./persona-athlete.png" alt="A Kinectem athlete profile page showing the player's avatar, bio, posts, and the teams they belong to." loading="lazy" decoding="async">
-            </picture>
-          </div>
-          <div class="persona-row__content">
-            <span class="persona-row__label persona-row__label--athlete">For Athletes</span>
-            <h3 class="persona-row__heading">Your Digital Storybook. Your Online Resume. Your Future.</h3>
-            <p class="persona-row__desc">
-              Every player deserves to be seen beyond the box score. Game recap articles accumulate over time to automatically build each athlete's digital storybook and online resume — archiving their growth, accomplishments, and standout moments into a record that gets more impressive every season.
-            </p>
-            <ul class="persona-row__bullets" role="list">
-              <li>
-                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>
-                Game recaps accumulate into a digital storybook that archives your full journey
-              </li>
-              <li>
-                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>
-                An online resume that grows richer with every season and every game
-              </li>
-              <li>
-                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>
-                A complete archive of team accomplishments and individual progress over time
-              </li>
-              <li>
-                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>
-                Direct messaging from verified coaches and scouts
-              </li>
-            </ul>
-            <a href="/app/login?signup=1" class="btn btn-primary">Get Early Access</a>
-          </div>
-        </div>
-
-        <!-- Organizations -->
-        <div class="persona-row">
-          <div class="persona-row__visual persona-row__visual--athletes">
-            <picture class="persona-row__shot">
-              <source srcset="./persona-organization.webp" type="image/webp">
-              <img src="./persona-organization.png" alt="A Kinectem organization page showing the program's logo, teams, members, and recent game recap posts." loading="lazy" decoding="async">
-            </picture>
-          </div>
-          <div class="persona-row__content">
-            <span class="persona-row__label persona-row__label--athlete">For Organizations</span>
-            <h3 class="persona-row__heading">Put Your Program on the Map.</h3>
-            <p class="persona-row__desc">
-              Give your youth sports organization a professional home base. Kinectem lets you
-              celebrate team accomplishments, shine a spotlight on your players, and make your
-              program the one every local athlete wants to join.
-            </p>
-            <ul class="persona-row__bullets" role="list">
-              <li>
-                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>
-                Dedicated org profile to showcase wins, seasons, and history
-              </li>
-              <li>
-                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>
-                Publish game recap articles that go deeper than the final score — creating third-party validation of player and team accomplishments, tagged to team pages and individual player profiles
-              </li>
-              <li>
-                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>
-                Highlight team championships, tournaments, and milestones
-              </li>
-              <li>
-                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>
-                Attract new athletes with a compelling, discoverable presence
-              </li>
-            </ul>
-            <a href="/app/login?signup=1" class="btn btn-primary">Get Early Access</a>
-          </div>
-        </div>
-
-        <!-- Coaches -->
-        <div class="persona-row persona-row--reverse">
-          <div class="persona-row__visual persona-row__visual--coaches">
-            <picture class="persona-row__shot">
-              <source srcset="./gs-step-3-staff.webp" type="image/webp">
-              <img src="./gs-step-3-staff.png" alt="Team page for Legacy Black 2014 under Legacy test, with Roster, Staff, and Pending tabs — the Staff tab is selected, showing a Marcus Rivera row with role Admin and a Lisa Carter row with role Author, both Active, plus an Invite button." loading="lazy" decoding="async">
-            </picture>
-          </div>
-          <div class="persona-row__content">
-            <span class="persona-row__label persona-row__label--coach">For Coaches</span>
-            <h3 class="persona-row__heading">Recognition stops being something only the stars get.</h3>
-            <p class="persona-row__desc">
-              Every game your team plays gets a real game recap — names called out, plays described,
-              moments captured — so every kid on your roster gets seen, not just the scorers. And the
-              season you're already coaching becomes the most credible recruiting tool your program
-              has ever had.
-            </p>
-            <ul class="persona-row__bullets" role="list">
-              <li>
-                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>
-                <span><strong>Recognition for every kid</strong> — Every player gets named in real game recaps, not just the stars.</span>
-              </li>
-              <li>
-                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>
-                <span><strong>Development becomes visible</strong> — The unseen weekly work of coaching finally gets documented.</span>
-              </li>
-              <li>
-                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>
-                <span><strong>Effortless recruiting assets</strong> — Every player's profile builds itself as the season runs. No extra work for you.</span>
-              </li>
-            </ul>
-            <a href="/app/login?signup=1" class="btn btn-primary">Get Early Access</a>
-          </div>
-        </div>
-
-        <!-- Parents -->
-        <div class="persona-row">
-          <div class="persona-row__visual persona-row__visual--parents">
-            <picture class="persona-row__shot">
-              <source srcset="./persona-parent.webp" type="image/webp">
-              <img src="./persona-parent.png" alt="The Kinectem Family dashboard a parent uses to manage their linked child's account, review pending tags, and control privacy settings." loading="lazy" decoding="async">
-            </picture>
-          </div>
-          <div class="persona-row__content">
-            <span class="persona-row__label persona-row__label--parent">For Parents</span>
-            <h3 class="persona-row__heading">Your Child Gets Discovered. You Stay in Control.</h3>
-            <p class="persona-row__desc">
-              Kinectem puts parents in the driver's seat. You control what's visible, who can
-              reach your child, and how their information is used — with COPPA-compliant
-              privacy protections built in from the start.
-            </p>
-            <ul class="persona-row__bullets" role="list">
-              <li>
-                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>
-                Full parental consent and guardian controls
-              </li>
-              <li>
-                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>
-                Granular privacy settings per child
-              </li>
-              <li>
-                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>
-                COPPA compliant — under-13 protections built in
-              </li>
-            </ul>
-            <a href="/app/login?signup=1" class="btn btn-primary">Get Early Access</a>
+        <div class="hero-media">
+          <div class="hero-video-panel" id="hero-video-panel">
+            <div class="scrim"></div>
+            <video src="./ai-assist.mp4" poster="./ai-assist-poster.jpg" playsinline id="hero-video">
+              <track kind="captions" src="./ai-assist-captions.vtt" srclang="en" label="English" default />
+            </video>
+            <div class="top-row">
+              <img src="./logo-horizontal.png" alt="Kinectem" />
+              <div class="badge">AI Assist</div>
+            </div>
+            <div class="play">
+              <button aria-label="Play AI Assist Walkthrough" onclick="document.getElementById('hero-video').play(); document.getElementById('hero-video-panel').classList.add('is-playing'); document.getElementById('hero-video').controls = true;">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="var(--royal-purple)">
+                  <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                </svg>
+              </button>
+            </div>
+            <div class="caption">Watch AI Assist turn game notes into a recap — 54 seconds</div>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- =====================================================
-         Why Kinectem (Features)
-         ===================================================== -->
-    <section class="features" id="features" aria-labelledby="features-heading">
-      <div class="container">
-        <div class="section-header">
-          <span class="section-eyebrow" aria-hidden="true">Built Different</span>
-          <h2 class="section-heading" id="features-heading">Why Kinectem</h2>
-          <p class="section-subtext">
-            We didn't build another social network. We built the growth engine youth sports organizations have been missing.
-          </p>
+    <!-- Personas (Who It's For) -->
+    <section id="personas" class="section-alt">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">Built for Your Entire Program</span>
+          <h2>Who It's For</h2>
+          <p>One connected place for the people who build the program, tell the story, play the game, and cheer from the sideline.</p>
         </div>
-
-        <div class="features__grid">
-
-          <article class="feature-card">
-            <div class="feature-card__icon-wrap" aria-hidden="true">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-label="Trophy">
-                <path d="M19 5h-2V3H7v2H5c-1.1 0-2 .9-2 2v1c0 2.55 1.92 4.63 4.39 4.94C8.02 14.5 9.37 15.96 11 16.4V19H7v2h10v-2h-4v-2.6c1.63-.44 2.98-1.9 3.61-3.46C19.08 12.63 21 10.55 21 8V7c0-1.1-.9-2-2-2zM5 8V7h2v3.82C5.84 10.4 5 9.3 5 8zm14 0c0 1.3-.84 2.4-2 2.82V7h2v1z" fill="currentColor"/>
-              </svg>
+        <div class="grid-4">
+          <!-- Org -->
+          <div class="card persona-card">
+            <div class="persona-image-wrapper">
+              <img src="./persona-organization.webp" alt="Organization Dashboard" loading="lazy" decoding="async">
             </div>
-            <h3 class="feature-card__title">Showcase Team Accomplishments</h3>
-            <p class="feature-card__desc">
-              Your organization's wins deserve more than a trophy shelf. Kinectem gives you a
-              dedicated space to publish championships, season records, tournament results, and
-              milestones — building a legacy that attracts players and earns community respect.
-            </p>
-          </article>
-
-          <article class="feature-card">
-            <div class="feature-card__icon-wrap" aria-hidden="true">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-label="Game recap article">
-                <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z" fill="currentColor"/>
-              </svg>
+            <div class="icon-tile">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" color="var(--royal-purple)"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
             </div>
-            <h3 class="feature-card__title">Game Recap Articles: Third-Party Validation That Compounds Over Time</h3>
-            <p class="feature-card__desc">
-              When your organization writes a game recap, you're doing more than telling a story — you're creating independent, third-party validation of every player's and team's accomplishments. These aren't self-reported stats; they're documented achievements written by the organization itself. Over time, recaps accumulate into a living archive that automatically builds each player's digital storybook and online resume, and preserves a verified record of your team's progress and success that carries real credibility with coaches and scouts.
-            </p>
-          </article>
-
-          <article class="feature-card">
-            <div class="feature-card__icon-wrap" aria-hidden="true">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-label="Player profile boost">
-                <path d="M12 12C14.21 12 16 10.21 16 8C16 5.79 14.21 4 12 4C9.79 4 8 5.79 8 8C8 10.21 9.79 12 12 12ZM12 14C9.33 14 4 15.34 4 18V20H20V18C20 15.34 14.67 14 12 14Z" fill="currentColor"/>
-              </svg>
+            <h3>Organization Admins</h3>
+            <p>Launch a branded home for every team, publish credible stories, and give families a reason to keep coming back.</p>
+          </div>
+          <!-- Coaches -->
+          <div class="card persona-card">
+            <div class="persona-image-wrapper">
+              <img src="./gs-step-3-staff.webp" alt="Coach Team View" loading="lazy" decoding="async">
             </div>
-            <h3 class="feature-card__title">Every Player Gets a Digital Storybook & Online Resume</h3>
-            <p class="feature-card__desc">
-              As game recaps accumulate over time, each player's digital storybook and online resume grows automatically — archiving their highlights, stats, and standout moments season by season. Because these recaps are written by the organization, not the player, they serve as credible third-party validation of every achievement. It's a living record that gets more powerful the longer they play, giving coaches and scouts a complete and trustworthy picture of who that athlete is and how far they've come.
-            </p>
-          </article>
-
-          <article class="feature-card">
-            <div class="feature-card__icon-wrap" aria-hidden="true">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-label="Attract new players">
-                <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" fill="currentColor"/>
-              </svg>
+            <div class="icon-tile">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" color="var(--royal-purple)"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
             </div>
-            <h3 class="feature-card__title">Attract New Players to Your Program</h3>
-            <p class="feature-card__desc">
-              Turn your organization's profile into your best tool to discover new players. Athletes and
-              families searching for a program can discover your team, browse your history, and
-              reach out directly — bringing motivated new players right to your door.
-            </p>
-          </article>
-
-          <article class="feature-card">
-            <div class="feature-card__icon-wrap" aria-hidden="true">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-label="Shield with checkmark">
-                <path d="M12 1L3 5V11C3 16.55 6.84 21.74 12 23C17.16 21.74 21 16.55 21 11V5L12 1ZM10 17L6 13L7.41 11.59L10 14.17L16.59 7.58L18 9L10 17Z" fill="currentColor"/>
-              </svg>
+            <h3>Coaches</h3>
+            <p>AI Assist turns your game notes into a full draft right in the editor — about two minutes, not an afternoon.</p>
+          </div>
+          <!-- Athletes -->
+          <div class="card persona-card">
+            <div class="persona-image-wrapper">
+              <img src="./persona-athlete.webp" alt="Athlete Profile" loading="lazy" decoding="async">
             </div>
-            <h3 class="feature-card__title">COPPA Compliant by Design</h3>
-            <p class="feature-card__desc">
-              Built for under-13 athletes from the ground up — proper parental consent flows,
-              guardian controls, and data protections baked in at the architecture level, not
-              bolted on as an afterthought.
-            </p>
-          </article>
-          <!--historical team membership tracking-->
-          <article class="feature-card">
-            <div class="feature-card__icon-wrap" aria-hidden="true">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-label="Historical team membership tracking">
-                <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z" fill="currentColor"/>
-              </svg>
+            <div class="icon-tile">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" color="var(--royal-purple)"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
             </div>
-            <h3 class="feature-card__title">Historical Team Membership Tracking</h3>
-            <p class="feature-card__desc">
-              Every player profile includes a timeline of their team memberships, so you can see not just where an athlete is now, but the full journey that got them there.
-            </p>
-          </article>
-        </div>
-      </div>
-    </section>
-
-    <!-- =====================================================
-         Pricing
-         ===================================================== -->
-    <section class="pricing" id="pricing" aria-labelledby="pricing-heading">
-      <div class="container">
-        <div class="section-header">
-          <span class="section-eyebrow" aria-hidden="true">Simple, Transparent Pricing</span>
-          <h2 class="section-heading" id="pricing-heading">Pricing That Grows With Your Organization</h2>
-          <p class="section-subtext">
-            One annual plan per organization, priced by how many teams you run. Every tier includes the full platform — unlimited player profiles, highlights, and AI-assisted game recaps.
-          </p>
-          <p class="section-subtext">
-            <strong>Your first 90 days are free.</strong> Every new organization gets 90 days free from the day it's created — no charge until then, and you can cancel anytime during your free period at no cost.
-          </p>
-        </div>
-
-        <div class="pricing__grid">
-
-          <!-- Starter -->
-          <article class="price-card">
-            <div class="price-card__head">
-              <h3 class="price-card__name">Starter</h3>
-              <p class="price-card__teams">For organizations with 1–15 teams</p>
+            <h3>Athletes</h3>
+            <p>Every recap connects to the players who made it happen, so each storybook builds itself one game at a time.</p>
+          </div>
+          <!-- Parents -->
+          <div class="card persona-card">
+            <div class="persona-image-wrapper">
+              <img src="./persona-parent.webp" alt="Parent Privacy Controls" loading="lazy" decoding="async">
             </div>
-            <div class="price-card__price">
-              <span class="price-card__amount">$1,000</span>
-              <span class="price-card__period">/ year</span>
+            <div class="icon-tile">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" color="var(--royal-purple)"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
             </div>
-            <ul class="price-card__features" role="list">
-              <li><svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>Up to 15 teams</li>
-              <li><svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>Unlimited players &amp; profiles</li>
-              <li><svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>Unlimited game recaps</li>
-              <li><svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>COPPA-compliant guardian controls</li>
-            </ul>
-            <a href="/app/login?signup=1" class="btn btn-ghost price-card__cta">Get Started</a>
-          </article>
-
-          <!-- Pro (highlighted) -->
-          <article class="price-card price-card--featured">
-            <span class="price-card__badge">Most Popular</span>
-            <div class="price-card__head">
-              <h3 class="price-card__name">Pro</h3>
-              <p class="price-card__teams">For organizations with 16–40 teams</p>
-            </div>
-            <div class="price-card__price">
-              <span class="price-card__amount">$1,750</span>
-              <span class="price-card__period">/ year</span>
-            </div>
-            <ul class="price-card__features" role="list">
-              <li><svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>Up to 40 teams</li>
-              <li><svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>Everything in Starter</li>
-              <li><svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>Unlimited players &amp; profiles</li>
-              <li><svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>COPPA-compliant guardian controls</li>
-            </ul>
-            <a href="/app/login?signup=1" class="btn btn-primary price-card__cta">Get Started</a>
-          </article>
-
-          <!-- Elite -->
-          <article class="price-card">
-            <div class="price-card__head">
-              <h3 class="price-card__name">Elite</h3>
-              <p class="price-card__teams">For organizations with 41+ teams</p>
-            </div>
-            <div class="price-card__price">
-              <span class="price-card__amount">$2,500</span>
-              <span class="price-card__period">/ year</span>
-            </div>
-            <ul class="price-card__features" role="list">
-              <li><svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>Unlimited teams (41+)</li>
-              <li><svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>Everything in Pro</li>
-              <li><svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>Unlimited players &amp; profiles</li>
-              <li><svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg>COPPA-compliant guardian controls</li>
-            </ul>
-            <a href="/app/login?signup=1" class="btn btn-ghost price-card__cta">Get Started</a>
-          </article>
-
-        </div>
-
-        <!-- At-a-glance comparison chart -->
-        <div class="price-compare">
-          <div class="price-compare__scroll">
-            <table class="price-table" aria-label="Pricing comparison by tier">
-              <thead>
-                <tr>
-                  <th scope="col" class="price-table__corner">
-                    <span class="price-table__corner-label">Compare plans</span>
-                  </th>
-                  <th scope="col" class="price-table__tier">
-                    <span class="price-table__tier-name">Starter</span>
-                    <span class="price-table__tier-range">1–15 teams</span>
-                  </th>
-                  <th scope="col" class="price-table__tier price-table__tier--featured">
-                    <span class="price-table__tier-badge">Most Popular</span>
-                    <span class="price-table__tier-name">Pro</span>
-                    <span class="price-table__tier-range">16–40 teams</span>
-                  </th>
-                  <th scope="col" class="price-table__tier">
-                    <span class="price-table__tier-name">Elite</span>
-                    <span class="price-table__tier-range">41+ teams</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr class="price-table__row--price">
-                  <th scope="row">Annual price</th>
-                  <td><span class="price-table__amount">$1,000</span><span class="price-table__per">/yr</span></td>
-                  <td class="price-table__cell--featured"><span class="price-table__amount">$1,750</span><span class="price-table__per">/yr</span></td>
-                  <td><span class="price-table__amount">$2,500</span><span class="price-table__per">/yr</span></td>
-                </tr>
-                <tr>
-                  <th scope="row">Teams included</th>
-                  <td>Up to 15</td>
-                  <td class="price-table__cell--featured">Up to 40</td>
-                  <td>Unlimited (41+)</td>
-                </tr>
-                <tr>
-                  <th scope="row">Players &amp; profiles</th>
-                  <td>Unlimited</td>
-                  <td class="price-table__cell--featured">Unlimited</td>
-                  <td>Unlimited</td>
-                </tr>
-                <tr>
-                  <th scope="row">Game recaps</th>
-                  <td>Unlimited</td>
-                  <td class="price-table__cell--featured">Unlimited</td>
-                  <td>Unlimited</td>
-                </tr>
-                <tr>
-                  <th scope="row">COPPA guardian controls</th>
-                  <td><svg class="price-table__check" width="18" height="18" viewBox="0 0 20 20" fill="none" aria-label="Included"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg></td>
-                  <td class="price-table__cell--featured"><svg class="price-table__check" width="18" height="18" viewBox="0 0 20 20" fill="none" aria-label="Included"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg></td>
-                  <td><svg class="price-table__check" width="18" height="18" viewBox="0 0 20 20" fill="none" aria-label="Included"><path d="M8 14L3 9L4.41 7.59L8 11.17L15.59 3.58L17 5L8 14Z" fill="currentColor"/></svg></td>
-                </tr>
-                <tr class="price-table__row--cta">
-                  <th scope="row"><span class="sr-only">Get started</span></th>
-                  <td><a href="/app/login?signup=1" class="btn btn-ghost price-table__cta">Get Started</a></td>
-                  <td class="price-table__cell--featured"><a href="/app/login?signup=1" class="btn btn-primary price-table__cta">Get Started</a></td>
-                  <td><a href="/app/login?signup=1" class="btn btn-ghost price-table__cta">Get Started</a></td>
-                </tr>
-              </tbody>
-            </table>
+            <h3>Parents</h3>
+            <p>Follow the team, catch every recap and highlight, and add your own photos and videos to game albums.</p>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- =====================================================
-         FAQ
-         ===================================================== -->
-    <section class="faq" id="faq" aria-labelledby="faq-heading">
-      <div class="container">
-        <div class="section-header">
-          <span class="section-eyebrow" aria-hidden="true">Frequently Asked Questions</span>
-          <h2 class="section-heading" id="faq-heading">Questions? We've Got Answers.</h2>
-          <p class="section-subtext">Answers to the questions we hear most.</p>
+    <!-- Why Kinectem (Features) -->
+    <section id="features">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">Built Different</span>
+          <h2>Why Kinectem</h2>
+          <p>Kinectem isn't another registration, scheduling, or communication app. TeamSnap, Byga, and PlayMetrics get your team to kickoff. Kinectem is where the season lives on after the final whistle.</p>
         </div>
-
-        <div class="faq__list">
-          <div class="faq-item">
-            <button class="faq-item__question" type="button" aria-expanded="false" aria-controls="faq-answer-0" id="faq-question-0">
-              <span class="faq-item__q-text">How hard is it to set up?</span>
-              <span class="faq-item__icon" aria-hidden="true">
-                <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 4.5V17.5M4.5 11H17.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
-              </span>
-            </button>
-            <div class="faq-item__answer" id="faq-answer-0" role="region" aria-labelledby="faq-question-0">
-              <p>The truth? It's about as simple as it gets. Your org admin creates the account, builds out your org page, and adds your team pages. Then they invite the coaches, players, and parents — and that's it. The storytelling starts immediately. Every game recap, every great moment, every season, all in one place. No software training. No 6-month rollout. No "phase one." If you can run a team, you can run Kinectem.</p>
+        <div class="grid-3">
+          <div class="card">
+            <div class="icon-tile-grad surface-grad">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" color="#fff"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
             </div>
+            <h3>Third-Party Validation</h3>
+            <p>Recaps written by the organization provide credible, independent validation of every player's and team's accomplishments.</p>
           </div>
-
-          <div class="faq-item">
-            <button class="faq-item__question" type="button" aria-expanded="false" aria-controls="faq-answer-2" id="faq-question-2">
-              <span class="faq-item__q-text">Is my kid actually safe on this platform?</span>
-              <span class="faq-item__icon" aria-hidden="true">
-                <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 4.5V17.5M4.5 11H17.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
-              </span>
-            </button>
-            <div class="faq-item__answer" id="faq-answer-2" role="region" aria-labelledby="faq-question-2">
-              <p>Yes — and we built Kinectem specifically because of this concern. Kinectem is COPPA-compliant by design. Players under 13 cannot be discovered publicly. There are no DMs from strangers. The only people who can see a young player's profile are verified users from their own organization — coaches, families, teammates. That's it. The whole point of Kinectem is to let your kid be celebrated for the right things by the right people — without making them findable to everyone else on the internet.</p>
+          <div class="card">
+            <div class="icon-tile-grad surface-grad">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" color="#fff"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
             </div>
+            <h3>Digital Storybook & Resume</h3>
+            <p>Real recaps capture the hustle plays and turning points the stat sheet misses, then compound into a searchable storybook season after season.</p>
           </div>
-
-          <div class="faq-item">
-            <button class="faq-item__question" type="button" aria-expanded="false" aria-controls="faq-answer-3" id="faq-question-3">
-              <span class="faq-item__q-text">Who writes the game recaps? I'm not a writer.</span>
-              <span class="faq-item__icon" aria-hidden="true">
-                <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 4.5V17.5M4.5 11H17.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
-              </span>
-            </button>
-            <div class="faq-item__answer" id="faq-answer-3" role="region" aria-labelledby="faq-question-3">
-              <p>Nobody on your staff has to be a journalist. Game recaps live inside each team page. The coach can write them if they want — but if writing isn't their thing, the org can assign a parent as an author and let them handle it instead. Every article gets reviewed and approved by an org admin before it goes live, so the organization stays in full control of every story it publishes. The role of "team storyteller" can sit wherever it makes sense — coach, parent, club volunteer. The org just makes the final call.</p>
+          <div class="card">
+            <div class="icon-tile-grad surface-grad">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" color="#fff"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4l3 3"></path></svg>
             </div>
-          </div>
-
-          <div class="faq-item">
-            <button class="faq-item__question" type="button" aria-expanded="false" aria-controls="faq-answer-12" id="faq-question-12">
-              <span class="faq-item__q-text">I'm a coach — I don't have time to write a 500-word game recap.</span>
-              <span class="faq-item__icon" aria-hidden="true">
-                <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 4.5V17.5M4.5 11H17.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
-              </span>
-            </button>
-            <div class="faq-item__answer" id="faq-answer-12" role="region" aria-labelledby="faq-question-12">
-              <p>You don't have to. With AI Assist, you just enter a few key pieces of info — the opponent, the score, and a few standout plays or highlight moments — and the AI drafts the full recap for you. No blank page, no late nights writing. And you're always in control: the coach can edit, reword, or rewrite anything the AI produces before it's published. Think of it as a head start, not a replacement — you get a polished, ready-to-share story in seconds, and the final word is always yours.</p>
-            </div>
-          </div>
-
-          <div class="faq-item">
-            <button class="faq-item__question" type="button" aria-expanded="false" aria-controls="faq-answer-4" id="faq-question-4">
-              <span class="faq-item__q-text">Do college coaches actually look at platforms like this?</span>
-              <span class="faq-item__icon" aria-hidden="true">
-                <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 4.5V17.5M4.5 11H17.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
-              </span>
-            </button>
-            <div class="faq-item__answer" id="faq-answer-4" role="region" aria-labelledby="faq-question-4">
-              <p>Yes — and here's why it matters more than a highlight reel. College coaches don't want a 90-second sizzle reel that strips out the context. They want to know how a player performs against tough competition, how they handle losses, how they grow over a full season. That's exactly what a Kinectem profile shows them. Every game recap is org-verified. Every stat has context. Every season tells a story. It's the most credible thing a recruiter can land on — not because of how it looks, but because of who built it.</p>
-            </div>
-          </div>
-
-          <div class="faq-item">
-            <button class="faq-item__question" type="button" aria-expanded="false" aria-controls="faq-answer-5" id="faq-question-5">
-              <span class="faq-item__q-text">Why not just keep using our club website and Facebook?</span>
-              <span class="faq-item__icon" aria-hidden="true">
-                <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 4.5V17.5M4.5 11H17.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
-              </span>
-            </button>
-            <div class="faq-item__answer" id="faq-answer-5" role="region" aria-labelledby="faq-question-5">
-              <p>Because they were never built to do this job. Your website is static — built once, updated rarely, mostly forgotten. Facebook posts vanish into a feed nobody scrolls back through. Neither one creates a permanent, searchable record of your program's actual story. Kinectem is purpose-built for that job. A living archive. A real player profile. A program identity that doesn't get buried by an algorithm or lost when the volunteer webmaster moves on. The kind of online presence your club actually deserves.</p>
-            </div>
-          </div>
-
-          <div class="faq-item">
-            <button class="faq-item__question" type="button" aria-expanded="false" aria-controls="faq-answer-6" id="faq-question-6">
-              <span class="faq-item__q-text">What happens to all the data Kinectem captures about my kid?</span>
-              <span class="faq-item__icon" aria-hidden="true">
-                <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 4.5V17.5M4.5 11H17.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
-              </span>
-            </button>
-            <div class="faq-item__answer" id="faq-answer-6" role="region" aria-labelledby="faq-question-6">
-              <p>It stays exactly where it belongs. Game recaps, profiles, and stats are owned by your organization — not by Kinectem. We're not in the business of selling your data, sharing it with advertisers, or training AI models on your kid's info. Your org controls who sees what. For players under 13, the safeguards go further: profiles aren't publicly discoverable, there are no DMs from outside the org, and the only people who can engage with a young athlete are verified users from their own club — coaches, families, teammates.</p>
-            </div>
-          </div>
-
-          <div class="faq-item">
-            <button class="faq-item__question" type="button" aria-expanded="false" aria-controls="faq-answer-7" id="faq-question-7">
-              <span class="faq-item__q-text">Does Kinectem only work for top travel teams?</span>
-              <span class="faq-item__icon" aria-hidden="true">
-                <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 4.5V17.5M4.5 11H17.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
-              </span>
-            </button>
-            <div class="faq-item__answer" id="faq-answer-7" role="region" aria-labelledby="faq-question-7">
-              <p>No — Kinectem isn't a stats-only platform that rewards box-score performance. It's a storytelling platform that lets every player on the roster be celebrated for what they actually did on the field — every game, every season, every breakthrough moment. The most overlooked part of youth sports is that every kid playing deserves to have their story told — not just the ones on the top travel team. We built Kinectem so any organization can finally do that for the kids who show up.</p>
-            </div>
-          </div>
-
-          <div class="faq-item">
-            <button class="faq-item__question" type="button" aria-expanded="false" aria-controls="faq-answer-8" id="faq-question-8">
-              <span class="faq-item__q-text">Does every player have to sign themselves up?</span>
-              <span class="faq-item__icon" aria-hidden="true">
-                <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 4.5V17.5M4.5 11H17.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
-              </span>
-            </button>
-            <div class="faq-item__answer" id="faq-answer-8" role="region" aria-labelledby="faq-question-8">
-              <p>Athletes don't sign themselves up. Their organization sends the first invite — that's the only setup step. From there, the athlete owns their account and their profile. And here's what makes it powerful: that profile follows them their whole journey. As they move from team to team, or even from one organization to another, their profile keeps building — every season, every recap, every milestone, all in one place that belongs to them. The org gets them started. The athlete keeps it for good.</p>
-            </div>
-          </div>
-
-          <div class="faq-item">
-            <button class="faq-item__question" type="button" aria-expanded="false" aria-controls="faq-answer-9" id="faq-question-9">
-              <span class="faq-item__q-text">Is Kinectem built for smaller programs too?</span>
-              <span class="faq-item__icon" aria-hidden="true">
-                <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 4.5V17.5M4.5 11H17.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
-              </span>
-            </button>
-            <div class="faq-item__answer" id="faq-answer-9" role="region" aria-labelledby="faq-question-9">
-              <p>It was built for all of you. Any youth sports organization can use Kinectem — competitive clubs, recreational leagues, schools, travel teams, park districts, single-team programs run out of a garage. If you have a roster and you want to share the accomplishments and track the journey of your teams, the platform works the same way. The product doesn't get smaller for a smaller org. Same archive. Same recaps. Same player profiles. Whether you run 4 teams or 40, every program deserves a place to tell its story.</p>
-            </div>
-          </div>
-
-          <div class="faq-item">
-            <button class="faq-item__question" type="button" aria-expanded="false" aria-controls="faq-answer-10" id="faq-question-10">
-              <span class="faq-item__q-text">Does Kinectem cover my sport?</span>
-              <span class="faq-item__icon" aria-hidden="true">
-                <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 4.5V17.5M4.5 11H17.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
-              </span>
-            </button>
-            <div class="faq-item__answer" id="faq-answer-10" role="region" aria-labelledby="faq-question-10">
-              <p>Every sport works here. Soccer, basketball, hockey, lacrosse, field hockey, cheer, water polo — if your org runs it, Kinectem covers it. The platform isn't built around any one sport's stats or quirks. It's built around the universal job: capturing what your program does and turning it into a permanent record. And if you don't see your sport in our drop-down menu, let us know. We'll add it. Every kid running, swimming, throwing, kicking, or skating their way through a season deserves a real place to be remembered.</p>
-            </div>
-          </div>
-
-          <div class="faq-item">
-            <button class="faq-item__question" type="button" aria-expanded="false" aria-controls="faq-answer-11" id="faq-question-11">
-              <span class="faq-item__q-text">Can we add seasons from before we joined?</span>
-              <span class="faq-item__icon" aria-hidden="true">
-                <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 4.5V17.5M4.5 11H17.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
-              </span>
-            </button>
-            <div class="faq-item__answer" id="faq-answer-11" role="region" aria-labelledby="faq-question-11">
-              <p>Your history doesn't get left behind. You can backfill past seasons on Kinectem so your archive starts on your team's day one — not the day you signed up with us. Game recaps, championship moments, alumni profiles. Everything that already happened gets a home alongside everything that's about to happen. Because the story of your program didn't start when you found us. It just finally has a place to live.</p>
-            </div>
+            <h3>COPPA Compliant by Design</h3>
+            <p>Parental consent, guardian controls, and under-13 data protections are built into the platform from day one.</p>
           </div>
         </div>
       </div>
     </section>
 
+    <!-- Pricing -->
+    <section id="pricing">
+      <div class="wrap">
+        <div class="section-head">
+          <span class="eyebrow">Simple, Transparent Pricing</span>
+          <h2>Pricing That Grows With Your Organization</h2>
+          <p>One annual plan per organization, priced by team count. Every tier includes the full platform. <strong>Your first 90 days are free.</strong></p>
+        </div>
+        <div class="grid-3">
+          <div class="card price-card">
+            <div>
+              <div class="plan-name">Starter</div>
+              <div class="plan-range">For organizations with 1–15 teams</div>
+            </div>
+            <div class="price">$1,000<span>/year</span></div>
+            <div class="feature-list">
+              <div><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Up to 15 teams</div>
+              <div><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Unlimited player profiles</div>
+              <div><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> AI-assisted game recaps</div>
+            </div>
+            <a href="/app/login?signup=1" class="btn btn-outline" style="margin-top: auto;">Get Started</a>
+          </div>
+
+          <div class="card price-card featured">
+            <div class="popular-badge surface-grad">Most Popular</div>
+            <div>
+              <div class="plan-name">Pro</div>
+              <div class="plan-range">For organizations with 16–40 teams</div>
+            </div>
+            <div class="price">$1,750<span>/year</span></div>
+            <div class="feature-list">
+              <div><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Up to 40 teams</div>
+              <div><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Unlimited player profiles</div>
+              <div><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> AI-assisted game recaps</div>
+            </div>
+            <a href="/app/login?signup=1" class="btn btn-primary" style="margin-top: auto;">Start Free</a>
+          </div>
+
+          <div class="card price-card">
+            <div>
+              <div class="plan-name">Elite</div>
+              <div class="plan-range">For organizations with 41+ teams</div>
+            </div>
+            <div class="price">$2,500<span>/year</span></div>
+            <div class="feature-list">
+              <div><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Unlimited teams</div>
+              <div><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Unlimited player profiles</div>
+              <div><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> AI-assisted game recaps</div>
+            </div>
+            <a href="/app/login?signup=1" class="btn btn-outline" style="margin-top: auto;">Get Started</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section id="faq" class="section-alt">
+      <div class="wrap faq-layout">
+        <div class="faq-aside">
+          <h2>Frequently Asked Questions</h2>
+          <p class="section-subtext" style="margin: 0; text-align: left;">Everything you need to know about getting your organization set up on Kinectem.</p>
+        </div>
+        <div class="faq-list">
+          <details class="faq-item">
+            <summary>How hard is it to set up? <span class="icon" aria-hidden="true">+</span></summary>
+            <div class="answer">
+              Start with your organization and teams, then invite staff and families. Guided setup keeps each step clear, and you can begin publishing without replacing the tools you already use.
+            </div>
+          </details>
+          <details class="faq-item">
+            <summary>Is my kid actually safe on this platform? <span class="icon" aria-hidden="true">+</span></summary>
+            <div class="answer">
+              Yes. Kinectem was built from the ground up to be fully COPPA-compliant. Parents have complete control over their child's profile visibility, who can contact them, and what information is shared publicly.
+            </div>
+          </details>
+          <details class="faq-item">
+            <summary>I'm a coach — I don't have time to write a 500-word game recap. <span class="icon" aria-hidden="true">+</span></summary>
+            <div class="answer">
+              You don't have to. Add rough game notes, let AI Assist create a polished draft, then review and publish when it sounds right.
+            </div>
+          </details>
+          <details class="faq-item">
+            <summary>Do college coaches actually look at platforms like this? <span class="icon" aria-hidden="true">+</span></summary>
+            <div class="answer">
+              A well-organized player storybook gives coaches credible context they can review and share. Kinectem helps athletes collect that record over time; it does not promise recruiting outcomes.
+            </div>
+          </details>
+          <details class="faq-item">
+            <summary>Why not just keep using our club website and Facebook? <span class="icon" aria-hidden="true">+</span></summary>
+            <div class="answer">
+              Keep using them. Kinectem adds the structured player, team, and season archive those channels don't create, while giving you stories worth sharing back to them.
+            </div>
+          </details>
+          <details class="faq-item">
+            <summary>Does Kinectem only work for top travel teams? <span class="icon" aria-hidden="true">+</span></summary>
+            <div class="answer">
+              No. Kinectem is built for youth sports organizations of every size and level because every athlete deserves a record of the work and moments that shaped their season.
+            </div>
+          </details>
+          <details class="faq-item">
+            <summary>What happens to all the data Kinectem captures about my kid? <span class="icon" aria-hidden="true">+</span></summary>
+            <div class="answer">
+              Guardian controls and under-13 protections govern what is collected and visible. Parents can manage their child's profile visibility and the information shared publicly.
+            </div>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA Band -->
+    <section class="cta-band surface-grad">
+      <div class="texture"></div>
+      <div class="orb"></div>
+      <div class="wrap inner">
+        <h2>Ready to make your program shine?</h2>
+        <p>Your first 90 days are free — no charge until then, cancel anytime.</p>
+        <a href="/app/login?signup=1" class="btn btn-outline-light">Get Started Free</a>
+      </div>
+    </section>
   </main>
 
-  <!-- =====================================================
-       Footer
-       ===================================================== -->
-  <footer class="footer" role="contentinfo">
-    <div class="container">
-      <div class="footer__inner">
-        <div class="footer__brand">
-          <a href="#" class="footer__logo" aria-label="Kinectem home">
-            <img src="./logo-horizontal.png" alt="Kinectem" />
-          </a>
-          <p class="footer__tagline">Where Programs Shine</p>
-          <span class="footer__badge">We're live!</span>
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="wrap landing-footer__inner">
+      <div class="footer-top">
+        <div class="footer-brand">
+          <img src="./logo-stacked-light.png" alt="Kinectem" />
+          <div class="footer-tagline">Where Programs Shine</div>
         </div>
-        <nav class="footer__links" aria-label="Footer links">
-          <a href="./getting-started.html" class="footer__link">Getting Started</a>
-          <a href="./for-organizers.html" class="footer__link">For Organizers</a>
-          <a href="#" class="footer__link">Privacy Policy</a>
-          <a href="/app/" class="footer__link">app.kinectem.com</a>
-        </nav>
+        <div class="footer-links">
+          <a href="#personas">Who It's For</a>
+          <a href="#features">Why Kinectem</a>
+          <a href="#pricing">Pricing</a>
+          <a href="./getting-started.html">Getting Started</a>
+          <a href="./for-organizers.html">For Organizers</a>
+          <a href="./partners.html">Partners</a>
+        </div>
       </div>
-      <div class="footer__social">
-        <a
-          href="https://www.facebook.com/Kinectem"
-          class="footer__social-link"
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="Kinectem on Facebook (opens in new tab)"
-        >
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
-            <path d="M22 12.06C22 6.5 17.52 2 12 2S2 6.5 2 12.06c0 5.02 3.66 9.18 8.44 9.94v-7.03H7.9v-2.9h2.54V9.85c0-2.52 1.49-3.91 3.78-3.91 1.1 0 2.24.2 2.24.2v2.47h-1.26c-1.24 0-1.63.78-1.63 1.57v1.88h2.78l-.44 2.9h-2.34V22c4.78-.76 8.44-4.92 8.44-9.94Z" />
-          </svg>
-        </a>
-        <a
-          href="https://www.instagram.com/kinectem"
-          class="footer__social-link"
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="Kinectem on Instagram (opens in new tab)"
-        >
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
-            <path d="M12 2c2.72 0 3.06.01 4.12.06 1.07.05 1.8.22 2.43.47.66.25 1.22.6 1.77 1.15.55.55.9 1.11 1.15 1.77.25.63.42 1.36.47 2.43.05 1.07.06 1.4.06 4.12s-.01 3.06-.06 4.12c-.05 1.07-.22 1.8-.47 2.43-.25.66-.6 1.22-1.15 1.77-.55.55-1.11.9-1.77 1.15-.63.25-1.36.42-2.43.47-1.07.05-1.4.06-4.12.06s-3.06-.01-4.12-.06c-1.07-.05-1.8-.22-2.43-.47-.66-.25-1.22-.6-1.77-1.15-.55-.55-.9-1.11-1.15-1.77-.25-.63-.42-1.36-.47-2.43C2.01 15.06 2 14.72 2 12s.01-3.06.06-4.12c.05-1.07.22-1.8.47-2.43.25-.66.6-1.22 1.15-1.77.55-.55 1.11-.9 1.77-1.15.63-.25 1.36-.42 2.43-.47C8.94 2.01 9.28 2 12 2Zm0 1.8c-2.67 0-2.99.01-4.04.06-.98.04-1.51.21-1.86.35-.47.18-.8.4-1.15.75-.35.35-.57.68-.75 1.15-.14.35-.31.88-.35 1.86-.05 1.05-.06 1.37-.06 4.04s.01 2.99.06 4.04c.04.98.21 1.51.35 1.86.18.47.4.8.75 1.15.35.35.68.57 1.15.75.35.14.88.31 1.86.35 1.05.05 1.37.06 4.04.06s2.99-.01 4.04-.06c.98-.04 1.51-.21 1.86-.35.47-.18.8-.4 1.15-.75.35-.35.57-.68.75-1.15.14-.35.31-.88.35-1.86.05-1.05.06-1.37.06-4.04s-.01-2.99-.06-4.04c-.04-.98-.21-1.51-.35-1.86-.18-.47-.4-.8-.75-1.15-.35-.35-.68-.57-1.15-.75-.35-.14-.88-.31-1.86-.35-1.05-.05-1.37-.06-4.04-.06Zm0 3.07a5.13 5.13 0 1 1 0 10.26 5.13 5.13 0 0 1 0-10.26Zm0 1.8a3.33 3.33 0 1 0 0 6.66 3.33 3.33 0 0 0 0-6.66Zm5.34-3.21a1.2 1.2 0 1 1 0 2.4 1.2 1.2 0 0 1 0-2.4Z" />
-          </svg>
-        </a>
-      </div>
-      <div class="footer__bottom">
-        <p class="footer__copyright">&copy; 2026 Kinectem. All rights reserved.</p>
+      <div class="footer-bottom">
+        <div>&copy; 2026 Kinectem. All rights reserved.</div>
+        <div style="display: flex; gap: 24px;">
+          <a href="/app/privacy-policy">Privacy Policy</a>
+          <a href="/app/coppa-notice">COPPA Notice</a>
+        </div>
       </div>
     </div>
   </footer>
 
-  <!-- =====================================================
-       Scripts
-       ===================================================== -->
   <script>
-    /* --------------------------------------------------
-       Mobile nav toggle
-       -------------------------------------------------- */
-    (function () {
-      var toggle = document.querySelector('.nav__mobile-toggle');
-      var menu   = document.getElementById('mobile-menu');
-      if (!toggle || !menu) return;
-
-      toggle.addEventListener('click', function () {
-        var expanded = toggle.getAttribute('aria-expanded') === 'true';
-        toggle.setAttribute('aria-expanded', String(!expanded));
-        menu.classList.toggle('is-open', !expanded);
-        menu.setAttribute('aria-hidden', String(expanded));
-      });
-
-      // Close menu when a link is clicked
-      menu.querySelectorAll('a').forEach(function (link) {
-        link.addEventListener('click', function () {
-          toggle.setAttribute('aria-expanded', 'false');
-          menu.classList.remove('is-open');
-          menu.setAttribute('aria-hidden', 'true');
-        });
-      });
-    }());
-
-    /* --------------------------------------------------
-       Hero rotating word animation
-       -------------------------------------------------- */
-    (function () {
-      var wrapper = document.querySelector('.hero__rotating');
-      if (!wrapper) return;
-
-      var words   = wrapper.querySelectorAll('.hero__word');
-      var current = 0;
-      var total   = words.length - 1; // last word is a repeat of first
-
-      // Duration each word stays visible (ms) — Shine holds much longer
-      var durations = [3800, 1800, 1800, 3800];
-
-      // Mark the first word as active on load
-      words[0].classList.add('is-active');
-
-      // Respect reduced motion
-      var prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      if (prefersReduced) return;
-
-      function nextWord() {
-        words[current].classList.remove('is-active');
-        words[current].classList.add('is-exiting');
-        var exiting = current;
-        setTimeout(function () {
-          words[exiting].classList.remove('is-exiting');
-        }, 450);
-
-        current = (current + 1) % total;
-        words[current].classList.add('is-active');
-
-        setTimeout(nextWord, durations[current]);
+    // Mobile Nav Toggle
+    const mobileToggle = document.querySelector('.nav__mobile-toggle');
+    const mobileMenu = document.getElementById('mobile-menu');
+    mobileToggle.addEventListener('click', () => {
+      const isExpanded = mobileToggle.getAttribute('aria-expanded') === 'true';
+      mobileToggle.setAttribute('aria-expanded', String(!isExpanded));
+      mobileMenu.setAttribute('aria-hidden', String(isExpanded));
+      if (!isExpanded) {
+        mobileMenu.classList.add('is-open');
+      } else {
+        mobileMenu.classList.remove('is-open');
       }
+    });
 
-      setTimeout(nextWord, durations[0]);
-    }());
-
-    /* --------------------------------------------------
-       Nav scroll state
-       -------------------------------------------------- */
-    (function () {
-      var nav = document.querySelector('.nav');
-      if (!nav) return;
-      window.addEventListener('scroll', function () {
-        nav.classList.toggle('nav--scrolled', window.scrollY > 20);
-      }, { passive: true });
-    }());
-
-    /* --------------------------------------------------
-       FAQ accordion
-       -------------------------------------------------- */
-    (function () {
-      var items = document.querySelectorAll('.faq-item');
-      if (!items.length) return;
-
-      items.forEach(function (item) {
-        var btn = item.querySelector('.faq-item__question');
-        var answer = item.querySelector('.faq-item__answer');
-        if (!btn || !answer) return;
-
-        btn.addEventListener('click', function () {
-          var isOpen = item.classList.contains('is-open');
-          items.forEach(function (other) {
-            other.classList.remove('is-open');
-            var oa = other.querySelector('.faq-item__answer');
-            var ob = other.querySelector('.faq-item__question');
-            if (oa) oa.style.maxHeight = null;
-            if (ob) ob.setAttribute('aria-expanded', 'false');
-          });
-          if (!isOpen) {
-            item.classList.add('is-open');
-            answer.style.maxHeight = answer.scrollHeight + 'px';
-            btn.setAttribute('aria-expanded', 'true');
-          }
-        });
+    // Close mobile menu on link click
+    const mobileLinks = document.querySelectorAll('.mobile-menu__link');
+    mobileLinks.forEach(link => {
+      link.addEventListener('click', () => {
+        mobileToggle.setAttribute('aria-expanded', 'false');
+        mobileMenu.classList.remove('is-open');
+        mobileMenu.setAttribute('aria-hidden', 'true');
       });
-    }());
+    });
   </script>
-
 </body>
 </html>
