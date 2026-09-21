@@ -1018,72 +1018,38 @@ export function buildWelcomeEmail(ctx: DispatchBuildContext): EmailMessage {
   return {
     to: ctx.to,
     kind: "welcome",
-    subject: "Welcome to Kinectem!",
+    subject: "Welcome to Kinectem — let's get your first post up",
     text: `Hi ${firstNameOf(ctx.recipientName)},
 
-Welcome to Kinectem — where every season becomes a permanent, searchable archive of your team's story.
+Welcome to Kinectem — where the story of your season comes to life, from start to finish.
 
 Kinectem brings game recaps, highlights, schedules, and team updates together in one place, so the moments that matter are easy to follow now and easy to find for years to come.
 
-How everyone uses Kinectem:
-
-Organization Admins
-- Build and manage your organization's home on Kinectem
-- Add teams and give coaches or other admins the access they need
-- Keep your entire community connected in one trusted place
-
-Coaches
-- Manage your team, roster, and schedule
-- Use the built-in AI Assist in the game recap composer to turn your game notes into a full recap in minutes
-- Share recaps, highlights, and updates that give every season a story players and families can revisit
-
-Players
-- See the recaps and highlights that tell your season's story
-- Showcase the moments, milestones, and achievements that define you
-- Build a permanent digital storybook of your playing journey that preserves your story and helps others discover it
-
-Parents
-- Follow your athlete and team in one place
-- Stay current on schedules, updates, recaps, and highlights
-- Upload your photos and videos to game recap albums, pairing the story of each game with the moments you captured
-- Help create a complete, lasting record your athlete and family can revisit for years
-
-Jump in here:
+Log in and get started:
 ${url}
 
-We're glad you're here.
-— The Kinectem Team${foot.text}`,
+Here's what to do first, based on your role:
+
+Organization Admins — Build your organization's home, add teams, and give coaches and admins the access they need.
+
+Coaches — Publish your first game recap. AI Assist turns your game notes into a full draft right in the editor — about two minutes, not an afternoon.
+
+Players — Every game recap auto-tags each rostered player, so your storybook builds itself one game at a time.
+
+Parents — Follow your athlete's team, catch every recap and highlight, and upload your own photos and videos to the game recap albums.
+
+See you on Kinectem,
+The Kinectem Team${foot.text}`,
     html: `<p>Hi ${hi},</p>
-<p>Welcome to <strong>Kinectem</strong> — where every season becomes a permanent, searchable archive of your team's story.</p>
+<p>Welcome to <strong>Kinectem</strong> — where the story of your season comes to life, from start to finish.</p>
 <p>Kinectem brings game recaps, highlights, schedules, and team updates together in one place, so the moments that matter are easy to follow now and easy to find for years to come.</p>
-<h3 style="margin:24px 0 8px;font-size:18px;line-height:1.35;">How everyone uses Kinectem</h3>
-<p style="margin-bottom:4px;"><strong>Organization Admins</strong></p>
-<ul>
-<li>Build and manage your organization's home on Kinectem</li>
-<li>Add teams and give coaches or other admins the access they need</li>
-<li>Keep your entire community connected in one trusted place</li>
-</ul>
-<p style="margin-bottom:4px;"><strong>Coaches</strong></p>
-<ul>
-<li>Manage your team, roster, and schedule</li>
-<li>Use the built-in <strong>AI Assist</strong> in the game recap composer to turn your game notes into a full recap in minutes</li>
-<li>Share recaps, highlights, and updates that give every season a story players and families can revisit</li>
-</ul>
-<p style="margin-bottom:4px;"><strong>Players</strong></p>
-<ul>
-<li>See the recaps and highlights that tell your season's story</li>
-<li>Showcase the moments, milestones, and achievements that define you</li>
-<li>Build a permanent digital storybook of your playing journey that preserves your story and helps others discover it</li>
-</ul>
-<p style="margin-bottom:4px;"><strong>Parents</strong></p>
-<ul>
-<li>Follow your athlete and team in one place</li>
-<li>Stay current on schedules, updates, recaps, and highlights</li>
-<li>Upload your photos and videos to game recap albums, pairing the story of each game with the moments you captured</li>
-<li>Help create a complete, lasting record your athlete and family can revisit for years</li>
-</ul>
-${emailButton({ href: url, label: "Open Kinectem" })}
-<p>We're glad you're here.<br/>— The Kinectem Team</p>${foot.html}`,
+${emailButton({ href: url, label: "Log in and get started →" })}
+<h3 style="margin:24px 0 12px;font-size:18px;line-height:1.35;">Here's what to do first, based on your role:</h3>
+<p><strong>Organization Admins</strong> — Build your organization's home, add teams, and give coaches and admins the access they need.</p>
+<p><strong>Coaches</strong> — Publish your first game recap. <strong>AI Assist</strong> turns your game notes into a full draft right in the editor — about two minutes, not an afternoon.</p>
+<p><strong>Players</strong> — Every game recap auto-tags each rostered player, so your storybook builds itself one game at a time.</p>
+<p><strong>Parents</strong> — Follow your athlete's team, catch every recap and highlight, and upload your own photos and videos to the game recap albums.</p>
+<p>See you on Kinectem,<br/>The Kinectem Team</p>${foot.html}`,
   };
 }
 
