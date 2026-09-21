@@ -119,7 +119,7 @@ export function SuggestionsPanel({
   if (isLoading) {
     if (hideWhenEmpty && variant === "compact") {
       return (
-        <Card className="rounded-xl border border-border">
+        <Card className="app-surface">
           <CardContent className="p-4 space-y-2">
             <Skeleton className="h-4 w-32" />
             <Skeleton className="h-10 w-full" />
@@ -180,10 +180,10 @@ export function SuggestionsPanel({
 
   if (variant === "compact") {
     return (
-      <Card className="rounded-xl border border-border">
+      <Card className="app-surface">
         <CardContent className="p-4">
           <div className="mb-3">
-            <h4 className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">
+            <h4 className="app-section-heading mb-2 text-muted-foreground">
               {heading ?? "People to follow"}
             </h4>
             {subheading && (
@@ -274,7 +274,7 @@ export function SuggestionsPanel({
   }
 
   return (
-    <Card className="rounded-xl border border-border">
+    <Card className="app-surface">
       <CardContent className="p-6 space-y-6">
         <div>
           <h3 className="font-black text-base tracking-tight">

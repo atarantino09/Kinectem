@@ -98,12 +98,12 @@ export function SignInForm({
       <div className="space-y-1.5">
         <Label
           htmlFor="email"
-          className="text-xs font-semibold uppercase tracking-wide text-slate-600"
+          className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
         >
           Email
         </Label>
         <div className="relative">
-          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/70" />
           <Input
             id="email"
             type="email"
@@ -112,7 +112,7 @@ export function SignInForm({
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@school.edu"
-            className="rounded-xl h-11 pl-9"
+            className="rounded-xl h-11 pl-9 bg-muted/50 border-muted"
             data-testid="input-signin-email"
           />
         </div>
@@ -122,13 +122,13 @@ export function SignInForm({
         <div className="flex items-center justify-between">
           <Label
             htmlFor="password"
-            className="text-xs font-semibold uppercase tracking-wide text-slate-600"
+            className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
           >
             Password
           </Label>
           <button
             type="button"
-            className="text-xs font-semibold text-violet-600 hover:underline"
+            className="text-xs font-bold text-primary hover:underline"
             onClick={onForgot}
             data-testid="btn-forgot-password"
           >
@@ -136,7 +136,7 @@ export function SignInForm({
           </button>
         </div>
         <div className="relative">
-          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/70" />
           <Input
             id="password"
             type={showPassword ? "text" : "password"}
@@ -145,13 +145,13 @@ export function SignInForm({
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
-            className="rounded-xl h-11 pl-9 pr-10"
+            className="rounded-xl h-11 pl-9 pr-10 bg-muted/50 border-muted"
             data-testid="input-signin-password"
           />
           <button
             type="button"
             onClick={() => setShowPassword((v) => !v)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/70 hover:text-foreground"
             aria-label={showPassword ? "Hide password" : "Show password"}
             aria-pressed={showPassword}
             data-testid="btn-toggle-signin-password"
@@ -169,6 +169,7 @@ export function SignInForm({
         type="submit"
         variant="brandBlock"
         disabled={submitting}
+        className="mt-2"
         data-testid="btn-signin"
       >
         {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
@@ -176,12 +177,12 @@ export function SignInForm({
         <ArrowRight className="w-4 h-4 ml-1" />
       </Button>
 
-      <p className="text-center text-sm text-slate-500">
+      <p className="text-center text-sm text-muted-foreground pt-4">
         New to Kinectem?{" "}
         <button
           type="button"
           onClick={onSwitchSignup}
-          className="font-bold text-violet-600 hover:underline"
+          className="font-bold text-primary hover:underline"
           data-testid="btn-switch-signup"
         >
           Create an account

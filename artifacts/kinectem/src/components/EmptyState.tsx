@@ -21,9 +21,9 @@ export function EmptyState({
       <div className="app-empty-state-icon" aria-hidden="true">
         {icon}
       </div>
-      <p className="font-black tracking-tight">{title}</p>
+      <p className="font-black tracking-tight text-xl">{title}</p>
       {description ? (
-        <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
+        <p className="max-w-sm text-[15px] leading-relaxed text-muted-foreground mt-1">
           {description}
         </p>
       ) : null}

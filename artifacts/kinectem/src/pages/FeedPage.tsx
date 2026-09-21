@@ -302,7 +302,7 @@ export default function FeedPage() {
         {hasSidebarItems && (
           <Card className="app-surface">
             <CardContent className="p-4">
-              <h4 className="text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-3">
+              <h4 className="app-section-heading mb-3 text-muted-foreground">
                 Your Orgs and Teams
               </h4>
               <div className="space-y-1">
@@ -376,7 +376,7 @@ export default function FeedPage() {
         {followedComps.length > 0 && (
           <Card className="app-surface">
             <CardContent className="p-4">
-              <h4 className="text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-3">
+              <h4 className="app-section-heading mb-3 text-muted-foreground">
                 Competitions You Follow
               </h4>
               <div className="space-y-0.5">
@@ -417,7 +417,7 @@ export default function FeedPage() {
         {followedHubs.length > 0 && (
           <Card className="app-surface">
             <CardContent className="p-4">
-              <h4 className="text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-3">
+              <h4 className="app-section-heading mb-3 text-muted-foreground">
                 Hubs You Follow
               </h4>
               <div className="space-y-0.5">

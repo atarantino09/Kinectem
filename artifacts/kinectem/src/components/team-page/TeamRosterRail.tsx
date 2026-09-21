@@ -32,7 +32,7 @@ export function TeamRosterRail({
 
   return (
     <Card
-      className="rounded-xl border border-border shadow-sm overflow-hidden"
+      className="app-surface overflow-hidden"
       data-testid="rail-roster"
     >
       <div

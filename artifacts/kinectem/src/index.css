@@ -71,25 +71,22 @@
   --button-outline: rgba(0,0,0, .10);
   --badge-outline: rgba(0,0,0, .05);
 
-  /* Automatic computation of border around primary / danger buttons */
-  --opaque-button-border-intensity: -8; /* In terms of percentages */
+  --opaque-button-border-intensity: -8;
 
-  /* Backgrounds applied on top of other backgrounds when hovered/active */
   --elevate-1: rgba(0,0,0, .03);
   --elevate-2: rgba(0,0,0, .08);
 
-  --background: 252 65% 99%;
+  --background: 220 33% 98%; /* #f8fafc */
   --foreground: 222 47% 11%;
-  /* Soft brand-tinted radial glows that sit behind every page. Kept very
-   * desaturated and low-opacity so cards, inputs, and the sticky header still
-   * pop. Rendered on the body via background-image with fixed attachment so
-   * the glow stays anchored to the viewport on long scrolled pages. */
-  --page-glow-1: hsl(252 95% 88% / 0.55);
-  --page-glow-2: hsl(258 95% 86% / 0.65);
+
+  --page-glow-1: hsl(262 83% 58% / 0.08);
+  --page-glow-2: hsl(217 91% 60% / 0.12);
+
   --border: 214 32% 91%;
   --card: 0 0% 100%;
   --card-foreground: 222 47% 11%;
   --card-border: 214 32% 91%;
+
   --sidebar: 0 0% 100%;
   --sidebar-foreground: 222 47% 11%;
   --sidebar-border: 214 32% 91%;
@@ -98,9 +95,11 @@
   --sidebar-accent: 210 40% 96%;
   --sidebar-accent-foreground: 222 47% 11%;
   --sidebar-ring: 217 91% 60%;
+
   --popover: 0 0% 100%;
   --popover-foreground: 222 47% 11%;
   --popover-border: 214 32% 91%;
+
   --primary: 217 91% 60%;
   --primary-foreground: 0 0% 100%;
   --secondary: 210 40% 96%;
@@ -112,41 +111,38 @@
   --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 100%;
   --input: 214 32% 91%;
-  --ring: 217 91% 60%;
+  --ring: 262 83% 58%;
+
   --chart-1: 217 91% 60%;
-  --chart-2: 222 47% 20%;
-  --chart-3: 210 40% 60%;
+  --chart-2: 262 83% 58%;
+  --chart-3: 320 80% 60%;
   --chart-4: 38 92% 50%;
   --chart-5: 142 71% 45%;
 
-  /* Kinectem brand gradient (purple -> blue, matches logo) */
   --brand-purple: 262 83% 58%;
   --brand-blue: 217 91% 60%;
   --brand-gradient: linear-gradient(135deg, hsl(var(--brand-purple)) 0%, hsl(var(--brand-blue)) 100%);
   --brand-gradient-cover: linear-gradient(135deg, hsl(262 80% 68%) 0%, hsl(217 90% 68%) 100%);
   --brand-gradient-dark: linear-gradient(135deg, hsl(262 60% 20%) 0%, hsl(222 47% 11%) 55%, hsl(217 60% 22%) 100%);
 
-  /* Magenta is an accent only. Keep it separate from the purple-blue surface
-   * gradient so primary actions and broad brand surfaces stay unchanged. */
   --k-magenta: #FF1F9E;
-  --k-glyph-gradient: linear-gradient(135deg,
-    #FF1F9E 0%, #9B22E8 13%, #7E22CE 34%, #5B32E8 56%, #2563EB 80%, #3B82F6 100%);
-  --k-glyph-gradient-small: linear-gradient(135deg,
-    #FF1F9E 0%, #9B22E8 22%, #7E22CE 59%, #5B32E8 97%);
+  --k-glyph-gradient: linear-gradient(135deg, #FF1F9E 0%, #9B22E8 13%, #7E22CE 34%, #5B32E8 56%, #2563EB 80%, #3B82F6 100%);
+  --k-glyph-gradient-small: linear-gradient(135deg, #FF1F9E 0%, #9B22E8 22%, #7E22CE 59%, #5B32E8 97%);
 
   --app-font-sans: 'Inter', sans-serif;
+  --app-font-display: 'Poppins', sans-serif;
   --app-font-serif: Georgia, serif;
   --app-font-mono: Menlo, monospace;
-  --radius: .5rem; /* 8px */
-  --shadow-2xs: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00); /*replace with H S L */
-  --shadow-xs: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00); /*replace with H S L */
-  --shadow-sm: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 1px 2px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
-  --shadow: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 1px 2px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
-  --shadow-md: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 2px 4px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
-  --shadow-lg: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 4px 6px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
-  --shadow-xl: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 8px 10px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
-  --shadow-2xl: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00);
-  --tracking-normal: 0em;
+  --radius: 0.75rem;
+  --shadow-2xs: 0px 2px 0px 0px hsl(222 47% 11% / 0.02);
+  --shadow-xs: 0px 2px 0px 0px hsl(222 47% 11% / 0.02);
+  --shadow-sm: 0px 2px 0px 0px hsl(222 47% 11% / 0.02), 0px 1px 2px -1px hsl(222 47% 11% / 0.04);
+  --shadow: 0px 2px 0px 0px hsl(222 47% 11% / 0.02), 0px 1px 3px -1px hsl(222 47% 11% / 0.04);
+  --shadow-md: 0px 2px 0px 0px hsl(222 47% 11% / 0.02), 0px 4px 8px -2px hsl(222 47% 11% / 0.06);
+  --shadow-lg: 0px 2px 0px 0px hsl(222 47% 11% / 0.02), 0px 8px 16px -4px hsl(222 47% 11% / 0.08);
+  --shadow-xl: 0px 2px 0px 0px hsl(222 47% 11% / 0.02), 0px 12px 24px -6px hsl(222 47% 11% / 0.1);
+  --shadow-2xl: 0px 2px 0px 0px hsl(222 47% 11% / 0.02);
+  --tracking-normal: -0.01em;
   --spacing: 0.25rem;
 
   /* Automatically computed borders - intensity can be controlled by the user by the --opaque-button-border-intensity setting */
@@ -184,84 +180,59 @@
   --button-outline: rgba(255,255,255, .10);
   --badge-outline: rgba(255,255,255, .05);
 
-  --opaque-button-border-intensity: 9;  /* In terms of percentages */
+  --opaque-button-border-intensity: 9;
 
-  /* Backgrounds applied on top of other backgrounds when hovered/active */
   --elevate-1: rgba(255,255,255, .04);
   --elevate-2: rgba(255,255,255, .09);
 
-  --background: red; /*replace with H S L */
+  --background: 222 47% 11%;
+  --foreground: 210 40% 98%;
 
-  --foreground: red; /*replace with H S L */
+  --border: 217 32% 17%;
+  --card: 222 47% 11%;
+  --card-foreground: 210 40% 98%;
+  --card-border: 217 32% 17%;
 
-  --border: red; /*replace with H S L */
+  --sidebar: 222 47% 11%;
+  --sidebar-foreground: 210 40% 98%;
+  --sidebar-border: 217 32% 17%;
+  --sidebar-primary: 217 91% 60%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 217 32% 17%;
+  --sidebar-accent-foreground: 210 40% 98%;
+  --sidebar-ring: 217 91% 60%;
 
-  --card: red; /*replace with H S L */
+  --popover: 222 47% 11%;
+  --popover-foreground: 210 40% 98%;
+  --popover-border: 217 32% 17%;
 
-  --card-foreground: red; /*replace with H S L */
+  --primary: 217 91% 60%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 217 32% 17%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 217 32% 17%;
+  --muted-foreground: 215 20% 65%;
+  --accent: 217 32% 17%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 62% 30%;
+  --destructive-foreground: 0 0% 100%;
 
-  --card-border: red; /*replace with H S L */
+  --input: 217 32% 17%;
+  --ring: 262 83% 58%;
+  --chart-1: 217 91% 60%;
+  --chart-2: 262 83% 58%;
+  --chart-3: 320 80% 60%;
+  --chart-4: 38 92% 50%;
+  --chart-5: 142 71% 45%;
 
-  --sidebar: red; /*replace with H S L */
-
-  --sidebar-foreground: red; /*replace with H S L */
-
-  --sidebar-border: red; /*replace with H S L */
-
-  --sidebar-primary: red; /*replace with H S L */
-
-  --sidebar-primary-foreground: red; /*replace with H S L */
-
-  --sidebar-accent: red; /*replace with H S L */
-
-  --sidebar-accent-foreground: red; /*replace with H S L */
-
-  --sidebar-ring: red; /*replace with H S L */
-
-  --popover: red; /*replace with H S L */
-
-  --popover-foreground: red; /*replace with H S L */
-
-  --popover-border: red; /*replace with H S L */
-
-  --primary: red; /*replace with H S L */
-
-  --primary-foreground: red; /*replace with H S L */
-
-  --secondary: red; /*replace with H S L */
-
-  --secondary-foreground: red; /*replace with H S L */
-
-  --muted: red; /*replace with H S L */
-
-  --muted-foreground: red; /*replace with H S L */
-
-  --accent: red; /*replace with H S L */
-
-  --accent-foreground: red; /*replace with H S L */
-
-  --destructive: red; /*replace with H S L */
-
-  --destructive-foreground: red; /*replace with H S L */
-
-  /* Used as the border around inputs. Dark mode: Should be a border that is light enough to have high contrast when rendered on a --card background. More contrast than standard --border */
-  --input: red; /*replace with H S L */
-  --ring: red; /*replace with H S L */
-  --chart-1: red; /*replace with H S L */
-  --chart-2: red; /*replace with H S L */
-  --chart-3: red; /*replace with H S L */
-  --chart-4: red; /*replace with H S L */
-  --chart-5: red; /*replace with H S L */
-
-  --shadow-2xs: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00);
-  --shadow-xs: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00);
-  --shadow-sm: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 1px 2px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
-  --shadow: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 1px 2px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
-  --shadow-md: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 2px 4px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
-  --shadow-lg: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 4px 6px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
-  --shadow-xl: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 8px 10px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
-  --shadow-2xl: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00);
-
+  --shadow-2xs: 0px 2px 0px 0px hsl(0 0% 0% / 0.2);
+  --shadow-xs: 0px 2px 0px 0px hsl(0 0% 0% / 0.2);
+  --shadow-sm: 0px 2px 0px 0px hsl(0 0% 0% / 0.2), 0px 1px 2px -1px hsl(0 0% 0% / 0.4);
+  --shadow: 0px 2px 0px 0px hsl(0 0% 0% / 0.2), 0px 1px 3px -1px hsl(0 0% 0% / 0.4);
+  --shadow-md: 0px 2px 0px 0px hsl(0 0% 0% / 0.2), 0px 4px 8px -2px hsl(0 0% 0% / 0.6);
+  --shadow-lg: 0px 2px 0px 0px hsl(0 0% 0% / 0.2), 0px 8px 16px -4px hsl(0 0% 0% / 0.8);
+  --shadow-xl: 0px 2px 0px 0px hsl(0 0% 0% / 0.2), 0px 12px 24px -6px hsl(0 0% 0% / 1.0);
+  --shadow-2xl: 0px 2px 0px 0px hsl(0 0% 0% / 0.2);
 }
 
 @layer base {
@@ -278,10 +249,25 @@
     background-attachment: fixed;
   }
 
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--app-font-display);
+  }
+
   /* Don't apply the lavender glows in dark mode; the dark theme is intentionally
    * left untouched and dark surfaces would look muddy under the light tints. */
   .dark body {
     background-image: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      scroll-behavior: auto !important;
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+    }
   }
 }
 
@@ -490,29 +476,26 @@
      confident hierarchy available to feed, discovery, identity, and
      organizer routes without forcing a global token migration. */
   .app-shell-header {
-    background:
-      linear-gradient(90deg, hsl(var(--card) / 0.97), hsl(252 90% 99% / 0.92), hsl(var(--card) / 0.97));
-    box-shadow: 0 1px 0 hsl(var(--brand-purple) / 0.12), 0 8px 24px hsl(240 40% 40% / 0.05);
+    background: hsl(var(--background));
+    border-bottom: 1px solid hsl(var(--border));
   }
   .app-page-header {
     position: relative;
     overflow: hidden;
-    border: 1px solid hsl(var(--brand-purple) / 0.16);
-    border-radius: 1rem;
-    background:
-      radial-gradient(circle at 90% 10%, hsl(var(--brand-blue) / 0.12), transparent 34%),
-      linear-gradient(135deg, hsl(var(--brand-purple) / 0.09), hsl(var(--brand-blue) / 0.05) 60%, hsl(var(--card)));
-    box-shadow: 0 10px 30px hsl(240 40% 40% / 0.07);
+    border: 1px solid hsl(var(--border));
+    border-radius: 1.25rem;
+    background: hsl(var(--card));
+    box-shadow: var(--shadow-md);
   }
   .app-page-header::after {
     content: "";
     position: absolute;
     inset: 0;
     pointer-events: none;
-    opacity: 0.5;
-    background-image: radial-gradient(hsl(var(--brand-purple) / 0.18) 1px, transparent 1px);
+    opacity: 0.15;
+    background-image: radial-gradient(hsl(var(--brand-purple) / 1) 1px, transparent 1px);
     background-size: 16px 16px;
-    mask-image: linear-gradient(115deg, black, transparent 72%);
+    mask-image: linear-gradient(115deg, black, transparent 60%);
   }
   .app-page-header-content {
     position: relative;
@@ -540,9 +523,9 @@
   }
   .app-surface {
     border: 1px solid hsl(var(--border));
-    border-radius: 1rem;
+    border-radius: 1.25rem;
     background: hsl(var(--card));
-    box-shadow: 0 5px 18px hsl(240 40% 40% / 0.045);
+    box-shadow: var(--shadow-sm);
   }
   .app-surface-interactive {
     transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
@@ -550,7 +533,7 @@
   .app-surface-interactive:hover {
     transform: translateY(-2px);
     border-color: hsl(var(--brand-purple) / 0.34);
-    box-shadow: 0 12px 26px hsl(240 40% 40% / 0.1);
+    box-shadow: var(--shadow-md);
   }
   .app-section-heading {
     display: flex;
@@ -573,25 +556,26 @@
   }
   .app-empty-state {
     display: flex;
-    min-height: 10rem;
+    min-height: 14rem;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    padding: 2rem 1.5rem;
+    padding: 3rem 2rem;
     text-align: center;
   }
   .app-empty-state-icon {
     display: flex;
-    width: 2.75rem;
-    height: 2.75rem;
+    width: 4rem;
+    height: 4rem;
     align-items: center;
     justify-content: center;
-    margin-bottom: 0.25rem;
+    margin-bottom: 0.75rem;
     border: 1px solid hsl(var(--brand-purple) / 0.18);
-    border-radius: 0.875rem;
-    background: linear-gradient(135deg, hsl(var(--brand-purple) / 0.12), hsl(var(--brand-blue) / 0.12));
+    border-radius: 1rem;
+    background: linear-gradient(135deg, hsl(var(--brand-blue) / 0.1), hsl(var(--brand-purple) / 0.1));
     color: hsl(var(--brand-purple));
+    box-shadow: inset 0 2px 4px hsl(var(--background) / 0.5), 0 4px 12px hsl(var(--brand-purple) / 0.05);
   }
   /* Competition pages opt into these surfaces with inline primary and
      secondary colors. The plain card background is the fallback for browsers
@@ -628,13 +612,19 @@
     border-color: color-mix(in srgb, var(--competition-primary) 18%, hsl(var(--border)));
   }
   @media (prefers-reduced-motion: reduce) {
-    .competition-page *,
-    .competition-page *::before,
-    .competition-page *::after {
+    *,
+    *::before,
+    *::after {
       animation-duration: 0.001ms !important;
       animation-iteration-count: 1 !important;
       scroll-behavior: auto !important;
       transition-duration: 0.001ms !important;
+    }
+    .app-surface-interactive {
+      transition: none !important;
+    }
+    .app-surface-interactive:hover {
+      transform: none !important;
     }
   }
   @media (max-width: 639px) {
@@ -643,14 +633,6 @@
     }
     .app-page-header .text-3xl {
       font-size: 1.75rem;
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .app-surface-interactive {
-      transition: none;
-    }
-    .app-surface-interactive:hover {
-      transform: none;
     }
   }
 

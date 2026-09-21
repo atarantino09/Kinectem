@@ -126,18 +126,30 @@ export default function LoginPage() {
   })();
 
   return (
-    <div className="min-h-screen grid grid-cols-1 md:grid-cols-2 text-slate-900">
+    <div className="min-h-screen grid grid-cols-1 md:grid-cols-2 text-foreground bg-background">
       <AuthAside />
-      <main className="flex items-center justify-center p-8 md:p-12">
-        <div className="w-full max-w-sm space-y-6">
-          <div className="space-y-2">
+      <main className="flex flex-col items-center justify-center p-8 md:p-12 relative min-h-screen">
+        <div className="w-full max-w-[420px] mb-8 md:hidden">
+          <img
+            src={`${import.meta.env.BASE_URL}logo-horizontal.png`}
+            alt="Kinectem"
+            className="block h-7 w-auto dark:hidden"
+          />
+          <img
+            src={`${import.meta.env.BASE_URL}logo-horizontal-mono-white-transparent.png`}
+            alt="Kinectem"
+            className="hidden h-7 w-auto dark:block"
+          />
+        </div>
+        <div className="w-full max-w-[420px] space-y-8">
+          <div className="space-y-3">
             <h2
-              className="font-black tracking-tight text-3xl"
+              className="font-black tracking-tight text-4xl"
               data-testid="text-auth-heading"
             >
               {heading.title}
             </h2>
-            <p className="text-sm text-slate-500">{heading.subtitle}</p>
+            <p className="text-base text-muted-foreground">{heading.subtitle}</p>
           </div>
 
           {gate === "recap" && (mode === "signup" || mode === "signin") && (
@@ -146,7 +158,7 @@ export default function LoginPage() {
               data-testid="text-recap-gate-message"
             >
               <p className="font-bold">You've caught the highlights 🎉</p>
-              <p className="text-slate-600 mt-0.5">
+              <p className="mt-0.5 text-muted-foreground">
                 Create your free account to cheer, comment, and follow this
                 team all season — you'll land right back on the recap.
               </p>
@@ -160,7 +172,7 @@ export default function LoginPage() {
                 data-testid="text-org-claim-signup-message"
               >
                 <p className="font-bold">Claim {claimOrgName}</p>
-                <p className="mt-0.5 text-slate-600">
+                <p className="mt-0.5 text-muted-foreground">
                   {mode === "signup"
                     ? "Create your individual Kinectem account. We'll make you the organization owner and take you directly to its page."
                     : "Sign in to become the organization owner and continue directly to its page."}

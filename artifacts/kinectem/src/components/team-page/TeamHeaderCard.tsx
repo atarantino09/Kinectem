@@ -384,7 +384,7 @@ export function TeamHeaderCard({
               as="h1"
               max={48}
               min={18}
-              className="font-black tracking-tight"
+              className="font-black tracking-tight max-sm:[&>span:last-child]:whitespace-normal max-sm:[&>span:last-child]:overflow-visible max-sm:[&>span:last-child]:text-clip"
             >
               {team.name}
             </FitText>

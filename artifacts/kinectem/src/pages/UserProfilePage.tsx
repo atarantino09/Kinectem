@@ -254,7 +254,7 @@ export default function UserProfilePage() {
 
   const orgItems: ReactNode[] = orgs.map((org) => (
     <Link key={org.id} href={`/organizations/${org.id}`}>
-      <Card className="rounded-xl border border-border shadow-sm hover:border-primary/50 transition-colors cursor-pointer">
+      <Card className="app-surface app-surface-interactive cursor-pointer">
         <CardContent className="p-4 flex items-center gap-3">
           <OrgLogo
             logoUrl={org.logoUrl}
@@ -292,7 +292,7 @@ export default function UserProfilePage() {
     return (
       <Link key={t.id} href={`/teams/${t.teamId}`}>
         <Card
-          className="rounded-xl border border-border shadow-sm hover:border-primary/50 transition-colors cursor-pointer"
+          className="app-surface app-surface-interactive cursor-pointer"
           data-testid={`card-team-${t.teamId}`}
         >
           <CardContent className="p-4 flex items-center gap-3">
@@ -373,7 +373,7 @@ export default function UserProfilePage() {
     return (
       <Link key={`${m.relation}-${m.id}`} href={`/users/${m.id}`}>
         <Card
-          className="rounded-xl border border-border shadow-sm hover:border-primary/50 transition-colors cursor-pointer"
+          className="app-surface app-surface-interactive cursor-pointer"
           data-testid={`card-linked-${m.id}`}
         >
           <CardContent className="p-4 flex items-center gap-3">
@@ -444,13 +444,13 @@ export default function UserProfilePage() {
       {(user as { isMinor?: boolean }).isMinor ? <NoIndex /> : null}
       <div className="space-y-6 min-w-0">
       {/* Hero */}
-      <div className="app-surface overflow-hidden bg-card">
-        <div className="h-24 brand-gradient-cover relative">
+      <div className="app-surface overflow-hidden">
+        <div className="h-32 brand-gradient-cover relative">
           {user.coverPhotoUrl ? (
             <img
               src={user.coverPhotoUrl}
               alt=""
-              className="w-full h-full object-cover opacity-90"
+              className="w-full h-full object-cover"
             />
           ) : (
             <div
