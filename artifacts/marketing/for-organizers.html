@@ -10,330 +10,180 @@
   <title>Kinectem — For Organizers</title>
   <link rel="icon" type="image/png" href="./logo-icon.png" />
   <link rel="apple-touch-icon" href="./logo-icon.png" />
-  <link rel="preload" href="./fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./style.css" />
-  <style>
-    /* Page-local layout — keep small + scoped so the existing marketing
-       site CSS stays the single source of truth for shared styles. */
-    .fo-page { padding: 96px 0 64px; background: #fff; }
-    .fo-page__header { text-align: center; margin-bottom: 48px; }
-    .fo-page__eyebrow {
-      display: inline-block;
-      font-family: var(--font-display);
-      font-weight: 700;
-      font-size: 12px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--purple, #7c3aed);
-      margin-bottom: 12px;
-    }
-    .fo-page__heading {
-      font-family: var(--font-display);
-      font-weight: 800;
-      font-size: clamp(32px, 5vw, 48px);
-      letter-spacing: -0.02em;
-      line-height: 1.1;
-      margin: 0 0 16px;
-      color: #0f172a;
-    }
-    .fo-page__subtext {
-      font-size: 17px;
-      color: #475569;
-      max-width: 640px;
-      margin: 0 auto;
-      line-height: 1.6;
-    }
-    .fo-reassurance {
-      max-width: 820px;
-      margin: 0 auto 32px;
-      padding: 28px 32px;
-      border: 1px solid #e2e8f0;
-      border-radius: 16px;
-      background: #f8fafc;
-    }
-    .fo-reassurance__title {
-      font-family: var(--font-display);
-      font-weight: 800;
-      font-size: 20px;
-      margin: 0 0 8px;
-      color: #0f172a;
-    }
-    .fo-reassurance__body { font-size: 15px; color: #475569; line-height: 1.6; margin: 0; }
-    .fo-steps { display: flex; flex-direction: column; gap: 24px; max-width: 820px; margin: 0 auto; }
-    .fo-step {
-      display: grid;
-      grid-template-columns: 64px 1fr;
-      gap: 20px;
-      align-items: start;
-      padding: 24px;
-      border: 1px solid #e2e8f0;
-      border-radius: 16px;
-      background: #fff;
-      box-shadow: 0 1px 2px rgba(15,23,42,0.04);
-    }
-    .fo-step__num {
-      width: 48px;
-      height: 48px;
-      border-radius: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-family: var(--font-display);
-      font-weight: 800;
-      font-size: 20px;
-      color: #fff;
-      background: linear-gradient(135deg, #7c3aed 0%, #2563eb 100%);
-    }
-    .fo-step__title {
-      font-family: var(--font-display);
-      font-weight: 800;
-      font-size: 20px;
-      margin: 0 0 4px;
-      color: #0f172a;
-    }
-    .fo-step__desc { font-size: 15px; color: #475569; line-height: 1.6; margin: 0; }
-    /* The payoff — step 6, deliberately louder than the rest. */
-    .fo-payoff {
-      max-width: 820px;
-      margin: 24px auto 0;
-      padding: 32px;
-      border-radius: 16px;
-      color: #fff;
-      background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 55%, #2563eb 100%);
-      box-shadow: 0 12px 32px rgba(79,70,229,0.28);
-    }
-    .fo-payoff__eyebrow {
-      font-family: var(--font-display);
-      font-weight: 800;
-      font-size: 11px;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      opacity: 0.9;
-      margin: 0 0 8px;
-    }
-    .fo-payoff__title {
-      font-family: var(--font-display);
-      font-weight: 800;
-      font-size: clamp(22px, 3vw, 28px);
-      letter-spacing: -0.01em;
-      margin: 0 0 10px;
-    }
-    .fo-payoff__body { font-size: 15px; line-height: 1.65; margin: 0; opacity: 0.95; }
-    .fo-extras {
-      max-width: 820px;
-      margin: 24px auto 0;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 24px;
-    }
-    .fo-extra {
-      padding: 28px;
-      border: 1px solid #e2e8f0;
-      border-radius: 16px;
-      background: #f8fafc;
-    }
-    .fo-extra__eyebrow {
-      display: inline-block;
-      font-family: var(--font-display);
-      font-weight: 800;
-      font-size: 11px;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      color: var(--purple, #7c3aed);
-      margin: 0 0 8px;
-    }
-    .fo-extra__title {
-      font-family: var(--font-display);
-      font-weight: 800;
-      font-size: 20px;
-      margin: 0 0 8px;
-      color: #0f172a;
-    }
-    .fo-extra__body { font-size: 15px; color: #475569; line-height: 1.6; margin: 0; }
-    .fo-cta {
-      max-width: 820px;
-      margin: 48px auto 0;
-      text-align: center;
-      padding: 32px;
-      border-radius: 16px;
-      background: linear-gradient(135deg, rgba(124,58,237,0.08), rgba(37,99,235,0.08));
-    }
-    .fo-cta__title {
-      font-family: var(--font-display);
-      font-weight: 800;
-      font-size: 22px;
-      margin: 0 0 8px;
-      color: #0f172a;
-    }
-    .fo-cta__body { font-size: 15px; color: #475569; margin: 0 0 20px; }
-    @media (max-width: 640px) {
-      .fo-step { grid-template-columns: 1fr; }
-      .fo-step__num { width: 40px; height: 40px; font-size: 16px; }
-      .fo-extras { grid-template-columns: 1fr; }
-    }
-  </style>
+
 </head>
 <body>
 
-  <header role="banner">
-    <nav class="nav" aria-label="Main navigation">
-      <div class="nav__inner">
-        <a href="./" class="nav__logo" aria-label="Kinectem home">
-          <img src="./logo-horizontal.png" alt="Kinectem" />
-        </a>
-        <ul class="nav__links" role="list">
-          <li><a href="./#personas" class="nav__link">Who It's For</a></li>
-          <li><a href="./#features" class="nav__link">Why Kinectem</a></li>
-          <li><a href="./#faq" class="nav__link">FAQ</a></li>
-          <li><a href="./getting-started.html" class="nav__link">Getting Started</a></li>
-          <li><a href="./for-organizers.html" class="nav__link" aria-current="page">For Organizers</a></li>
-          <li><a href="./partners.html" class="nav__link">Partners</a></li>
-        </ul>
-        <div class="nav__actions">
-          <a href="/app/login" class="nav__link">Log In</a>
-          <a href="/app/login?signup=1" class="btn btn-primary btn--nav">Get Started</a>
-        </div>
-        <button class="nav__mobile-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu">
-          <svg width="22" height="16" viewBox="0 0 22 16" fill="none" aria-hidden="true">
-            <rect y="0" width="22" height="2" rx="1" fill="currentColor"/>
-            <rect y="7" width="22" height="2" rx="1" fill="currentColor"/>
-            <rect y="14" width="22" height="2" rx="1" fill="currentColor"/>
-          </svg>
-        </button>
-      </div>
-    </nav>
-    <div class="mobile-menu" id="mobile-menu" aria-hidden="true">
-      <ul role="list">
-        <li><a href="./#personas" class="mobile-menu__link">Who It's For</a></li>
-        <li><a href="./#features" class="mobile-menu__link">Why Kinectem</a></li>
-        <li><a href="./#faq" class="mobile-menu__link">FAQ</a></li>
-        <li><a href="./getting-started.html" class="mobile-menu__link">Getting Started</a></li>
-        <li><a href="./for-organizers.html" class="mobile-menu__link" aria-current="page">For Organizers</a></li>
-        <li><a href="./partners.html" class="mobile-menu__link">Partners</a></li>
-        <li><a href="/app/login" class="mobile-menu__link">Log In</a></li>
-        <li><a href="/app/login?signup=1" class="mobile-menu__link mobile-menu__link--cta">Get Started</a></li>
+  <!-- Navigation -->
+  <header class="nav" role="banner">
+    <div class="wrap nav__inner">
+      <a href="./" class="nav__logo" aria-label="Kinectem home">
+        <img src="./logo-horizontal.png" alt="Kinectem" />
+      </a>
+      <ul class="nav__links" role="list">
+        <li><a href="./#personas" class="nav__link">Who It's For</a></li>
+        <li><a href="./#features" class="nav__link">Why Kinectem</a></li>
+        <li><a href="./#pricing" class="nav__link">Pricing</a></li>
+        <li><a href="./#faq" class="nav__link">FAQ</a></li>
+        <li><a href="./getting-started.html" class="nav__link">Getting Started</a></li>
+        <li><a href="./for-organizers.html" class="nav__link" aria-current="page">For Organizers</a></li>
+        <li><a href="./partners.html" class="nav__link">Partners</a></li>
       </ul>
+      <div class="nav__actions">
+        <a href="/app/login" class="nav__link">Log In</a>
+        <a href="/app/login?signup=1" class="btn btn-primary btn--nav">Get Started</a>
+      </div>
+      <button class="nav__mobile-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
     </div>
   </header>
 
+  <div class="mobile-menu" id="mobile-menu" aria-hidden="true">
+    <ul role="list">
+      <li><a href="./#personas" class="mobile-menu__link">Who It's For</a></li>
+      <li><a href="./#features" class="mobile-menu__link">Why Kinectem</a></li>
+      <li><a href="./#pricing" class="mobile-menu__link">Pricing</a></li>
+      <li><a href="./#faq" class="mobile-menu__link">FAQ</a></li>
+      <li><a href="./getting-started.html" class="mobile-menu__link">Getting Started</a></li>
+      <li><a href="./for-organizers.html" class="mobile-menu__link" aria-current="page">For Organizers</a></li>
+      <li><a href="./partners.html" class="mobile-menu__link">Partners</a></li>
+      <li><a href="/app/login" class="mobile-menu__link">Log In</a></li>
+      <li><a href="/app/login?signup=1" class="mobile-menu__link mobile-menu__link--cta">Get Started</a></li>
+    </ul>
+  </div>
+
   <main id="main-content">
-    <section class="fo-page">
+    <section class="section-alt">
+      <div class="wrap">
       <div class="container">
-        <div class="fo-page__header">
-          <span class="fo-page__eyebrow">For Competition Organizers</span>
-          <h1 class="fo-page__heading">How your competition works on Kinectem</h1>
-          <p class="fo-page__subtext">
+        <div class="section-head">
+          <span class="eyebrow">For Competition Organizers</span>
+          <h1>How your competition works on Kinectem</h1>
+          <p>
             A 2-minute guide for tournament and league organizers — from your branded public page to your brand on every game recap.
           </p>
         </div>
 
         <!-- Zero-disruption reassurance — the ice-breaker, always first. -->
-        <div class="fo-reassurance">
-          <p class="fo-reassurance__title">Nothing changes about the way you run your competition.</p>
+        <div class="card fo-reassurance" style="margin: 0 auto 32px; max-width: 820px; background: var(--surface-tint);">
+          <p style="font-family: var(--font-display); font-weight: 800; font-size: 20px; color: var(--ink); margin: 0 0 8px;">Nothing changes about the way you run your competition.</p>
           <p class="fo-reassurance__body">
             Keep your registration, seeding, scheduling tools, and day-of operations exactly as they are. You just come to Kinectem once your schedule is created — and upload it.
           </p>
         </div>
 
-        <ol class="fo-steps" aria-label="How it works steps">
-          <li class="fo-step">
-            <div class="fo-step__num" aria-hidden="true">1</div>
+        <ol class="process-steps" aria-label="How it works steps">
+          <li class="card process-step">
+            <div class="process-step__num" aria-hidden="true">1</div>
             <div>
-              <h2 class="fo-step__title">Create your competition</h2>
-              <p class="fo-step__desc">Name, dates, logo, and colors — your branded public page goes live instantly.</p>
+              <h2 class="process-step__title">Create your competition</h2>
+              <p class="process-step__desc">Name, dates, logo, and colors — your branded public page goes live instantly.</p>
             </div>
           </li>
-          <li class="fo-step">
-            <div class="fo-step__num" aria-hidden="true">2</div>
+          <li class="card process-step">
+            <div class="process-step__num" aria-hidden="true">2</div>
             <div>
-              <h2 class="fo-step__title">Email your teams your promo code</h2>
-              <p class="fo-step__desc">Every new organization gets its first 90 days on Kinectem free — and those that sign up with your code also get 25% off their first year, while your competition earns a 15% commission on what they pay. A ready-made message is waiting in your competition console.</p>
+              <h2 class="process-step__title">Email your teams your promo code</h2>
+              <p class="process-step__desc">Every new organization gets its first 90 days on Kinectem free — and those that sign up with your code also get 25% off their first year, while your competition earns a 15% commission on what they pay. A ready-made message is waiting in your competition console.</p>
             </div>
           </li>
-          <li class="fo-step">
-            <div class="fo-step__num" aria-hidden="true">3</div>
+          <li class="card process-step">
+            <div class="process-step__num" aria-hidden="true">3</div>
             <div>
-              <h2 class="fo-step__title">Upload your schedule</h2>
-              <p class="fo-step__desc">One CSV from whatever tool you already use. We pull every team out of it automatically — no manual entry.</p>
+              <h2 class="process-step__title">Upload your schedule</h2>
+              <p class="process-step__desc">One CSV from whatever tool you already use. We pull every team out of it automatically — no manual entry.</p>
             </div>
           </li>
-          <li class="fo-step">
-            <div class="fo-step__num" aria-hidden="true">4</div>
+          <li class="card process-step">
+            <div class="process-step__num" aria-hidden="true">4</div>
             <div>
-              <h2 class="fo-step__title">Send the public link to your teams</h2>
-              <p class="fo-step__desc">Share your competition page link with your teams — one message, one link. That's all the outreach it takes.</p>
+              <h2 class="process-step__title">Send the public link to your teams</h2>
+              <p class="process-step__desc">Share your competition page link with your teams — one message, one link. That's all the outreach it takes.</p>
             </div>
           </li>
-          <li class="fo-step">
-            <div class="fo-step__num" aria-hidden="true">5</div>
+          <li class="card process-step">
+            <div class="process-step__num" aria-hidden="true">5</div>
             <div>
-              <h2 class="fo-step__title">Teams claim their spot</h2>
-              <p class="fo-step__desc">Coaches claim their team into their existing Kinectem team page — or create a team page on the spot if they're new here.</p>
+              <h2 class="process-step__title">Teams claim their spot</h2>
+              <p class="process-step__desc">Coaches claim their team into their existing Kinectem team page — or create a team page on the spot if they're new here.</p>
             </div>
           </li>
-          <li class="fo-step">
-            <div class="fo-step__num" aria-hidden="true">6</div>
+          <li class="card process-step">
+            <div class="process-step__num" aria-hidden="true">6</div>
             <div>
-              <h2 class="fo-step__title">Schedules land automatically</h2>
-              <p class="fo-step__desc">The moment a team is claimed, their competition schedule appears on their Kinectem team page. Nobody types anything twice.</p>
+              <h2 class="process-step__title">Schedules land automatically</h2>
+              <p class="process-step__desc">The moment a team is claimed, their competition schedule appears on their Kinectem team page. Nobody types anything twice.</p>
             </div>
           </li>
         </ol>
 
-        <div class="fo-payoff">
-          <p class="fo-payoff__eyebrow">Step 7 &middot; The payoff</p>
+        <div class="card surface-grad fo-payoff" style="color: #fff; max-width: 820px; margin: 24px auto 0;">
+          <p class="eyebrow" style="color: #fff; opacity: 0.9;">Step 7 &middot; The payoff</p>
           <p class="fo-payoff__title">Your brand on every game recap.</p>
           <p class="fo-payoff__body">
             After the games are played, teams write game recaps — and every recap from your competition carries your branding. You pick the best ones to feature front-and-center on your competition page. Every story a team tells becomes exposure for your competition: free, and it compounds with every game.
           </p>
         </div>
 
-        <div class="fo-extras">
-          <div class="fo-extra">
-            <p class="fo-extra__eyebrow">Run more than one?</p>
-            <p class="fo-extra__title">Create a competition hub.</p>
+        <div class="grid-2 fo-extras" style="max-width: 820px; margin: 24px auto 0;">
+          <div class="card fo-extra">
+            <p class="eyebrow">Run more than one?</p>
+            <p style="font-family: var(--font-display); font-weight: 800; font-size: 20px; color: var(--ink); margin: 0 0 8px;">Create a competition hub.</p>
             <p class="fo-extra__body">
               If you run multiple leagues and tournaments, create a competition hub — one branded home where all of your competitions live. Your logo, your colors, every event in one place, and teams always know where to find you.
             </p>
           </div>
-          <div class="fo-extra">
-            <p class="fo-extra__eyebrow">What it costs</p>
-            <p class="fo-extra__title">100% free for organizers.</p>
+          <div class="card fo-extra">
+            <p class="eyebrow">What it costs</p>
+            <p style="font-family: var(--font-display); font-weight: 800; font-size: 20px; color: var(--ink); margin: 0 0 8px;">100% free for organizers.</p>
             <p class="fo-extra__body">
               Everything on this page — your branded competition page, schedule uploads, team claims, and featured recaps — is completely free for organizers. No fees, no card, no catch.
             </p>
           </div>
         </div>
 
-        <div class="fo-cta">
-          <p class="fo-cta__title">Ready to put your competition on Kinectem?</p>
+        <div class="card fo-cta" style="background: var(--surface-tint); max-width: 820px; margin: 48px auto 0; text-align: center;">
+          <p style="font-family: var(--font-display); font-weight: 800; font-size: 22px; color: var(--ink); margin: 0 0 8px;">Ready to put your competition on Kinectem?</p>
           <p class="fo-cta__body">Create your account, set up your competition, and upload your first schedule in minutes — free, start to finish.</p>
           <a href="/app/login?signup=1" class="btn btn-primary">Get Started</a>
         </div>
       </div>
+      </div>
     </section>
   </main>
 
-  <footer class="footer" role="contentinfo">
-    <div class="container">
-      <div class="footer__inner">
-        <div class="footer__brand">
-          <a href="./" class="footer__logo" aria-label="Kinectem home">
-            <img src="./logo-horizontal.png" alt="Kinectem" />
-          </a>
-          <p class="footer__tagline">Where Programs Shine</p>
-          <span class="footer__badge">We're live!</span>
+    <!-- Footer -->
+  <footer class="footer">
+    <div class="wrap landing-footer__inner">
+      <div class="footer-top">
+        <div class="footer-brand">
+          <img src="./logo-horizontal-mono-white-transparent.png" alt="Kinectem" />
+          <div class="footer-tagline">Where Programs Shine</div>
         </div>
-        <nav class="footer__links" aria-label="Footer links">
-          <a href="./getting-started.html" class="footer__link">Getting Started</a>
-          <a href="./for-organizers.html" class="footer__link">For Organizers</a>
-          <a href="./partners.html" class="footer__link">Partners</a>
-          <a href="/app/privacy-policy" class="footer__link">Privacy Policy</a>
-          <a href="/app/" class="footer__link">app.kinectem.com</a>
-        </nav>
+        <div class="footer-links">
+          <a href="./#personas">Who It's For</a>
+          <a href="./#features">Why Kinectem</a>
+          <a href="./#pricing">Pricing</a>
+          <a href="./getting-started.html">Getting Started</a>
+          <a href="./for-organizers.html">For Organizers</a>
+          <a href="./partners.html">Partners</a>
+        </div>
       </div>
-      <div class="footer__bottom">
-        <p class="footer__copyright">&copy; 2026 Kinectem. All rights reserved.</p>
+      <div class="footer-bottom">
+        <div>&copy; 2026 Kinectem. All rights reserved.</div>
+        <div style="display: flex; gap: 24px;">
+          <a href="/app/privacy-policy">Privacy Policy</a>
+          <a href="/app/coppa-notice">COPPA Notice</a>
+        </div>
       </div>
     </div>
   </footer>

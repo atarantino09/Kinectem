@@ -7,225 +7,65 @@
   <title>Kinectem — Partners</title>
   <link rel="icon" type="image/png" href="./logo-icon.png" />
   <link rel="apple-touch-icon" href="./logo-icon.png" />
-  <link rel="preload" href="./fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./style.css" />
-  <style>
-    /* Partners Page Styles */
-    .pt-page { padding: 56px 0 64px; background: #fff; min-height: calc(100vh - 200px); }
-    .pt-page__header { text-align: center; margin-bottom: 64px; }
-    .pt-page__eyebrow {
-      display: inline-block;
-      font-family: var(--font-display);
-      font-weight: 700;
-      font-size: 12px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--purple, #7c3aed);
-      margin-bottom: 12px;
-    }
-    .pt-page__heading {
-      font-family: var(--font-display);
-      font-weight: 800;
-      font-size: clamp(32px, 5vw, 48px);
-      letter-spacing: -0.02em;
-      line-height: 1.1;
-      margin: 0 0 16px;
-      color: #0f172a;
-    }
-    .pt-page__subtext {
-      font-size: 17px;
-      color: #475569;
-      max-width: 640px;
-      margin: 0 auto;
-      line-height: 1.6;
-    }
 
-    /* Grid */
-    .pt-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 32px;
-      max-width: 1024px;
-      margin: 0 auto;
-    }
-
-    /* Cards */
-    .pt-card {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 48px 32px;
-      border: 1px solid #e2e8f0;
-      border-radius: 16px;
-      background: #f8fafc;
-      text-decoration: none;
-      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-      position: relative;
-      overflow: hidden;
-    }
-    .pt-card::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(135deg, rgba(124,58,237,0.03), rgba(37,99,235,0.03));
-      opacity: 0;
-      transition: opacity 0.4s ease;
-    }
-    .pt-card:hover {
-      background: #ffffff;
-      border-color: #cbd5e1;
-      box-shadow: 0 12px 32px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.02);
-      transform: translateY(-4px);
-    }
-    .pt-card:hover::before {
-      opacity: 1;
-    }
-    .pt-card__logo-wrapper {
-      position: relative;
-      width: 100%;
-      height: 150px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin-bottom: 24px;
-      z-index: 1;
-    }
-    .pt-card__logo {
-      max-width: 100%;
-      max-height: 100%;
-      object-fit: contain;
-      filter: none;
-    }
-    .pt-card__name {
-      font-family: var(--font-display);
-      font-weight: 700;
-      font-size: 18px;
-      color: #0f172a;
-      text-align: center;
-      z-index: 1;
-      margin: 0;
-      transition: color 0.3s ease;
-    }
-    .pt-card:hover .pt-card__name {
-      color: #7c3aed;
-    }
-
-    /* States */
-    .pt-state {
-      text-align: center;
-      padding: 64px 24px;
-      max-width: 600px;
-      margin: 0 auto;
-      border: 1px dashed #e2e8f0;
-      border-radius: 16px;
-      background: #f8fafc;
-    }
-    .pt-state__icon {
-      margin-bottom: 20px;
-      color: #94a3b8;
-      display: flex;
-      justify-content: center;
-    }
-    .pt-state__title {
-      font-family: var(--font-display);
-      font-weight: 700;
-      font-size: 20px;
-      color: #0f172a;
-      margin: 0 0 8px;
-    }
-    .pt-state__desc {
-      font-size: 15px;
-      color: #475569;
-      margin: 0;
-    }
-    .pt-state__btn {
-      margin-top: 24px;
-      display: inline-flex;
-    }
-
-    /* Skeleton Loader */
-    .pt-skeleton {
-      background: #f1f5f9;
-      border-radius: 16px;
-      height: 240px;
-      position: relative;
-      overflow: hidden;
-      border: 1px solid #e2e8f0;
-    }
-    .pt-skeleton::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent);
-      animation: shimmer 1.5s infinite;
-    }
-    @keyframes shimmer {
-      0% { transform: translateX(-100%); }
-      100% { transform: translateX(100%); }
-    }
-    
-    .pt-container {
-      max-width: 1024px;
-      margin: 0 auto;
-      padding: 0 24px;
-    }
-    @media (max-width: 640px) {
-      .pt-page { padding-top: 40px; }
-      .pt-card__logo-wrapper { height: 130px; }
-    }
-  </style>
 </head>
 <body>
 
-  <header role="banner">
-    <nav class="nav" aria-label="Main navigation">
-      <div class="nav__inner">
-        <a href="./" class="nav__logo" aria-label="Kinectem home">
-          <img src="./logo-horizontal.png" alt="Kinectem" />
-        </a>
-        <ul class="nav__links" role="list">
-          <li><a href="./#personas" class="nav__link">Who It's For</a></li>
-          <li><a href="./#features" class="nav__link">Why Kinectem</a></li>
-          <li><a href="./#faq" class="nav__link">FAQ</a></li>
-          <li><a href="./getting-started.html" class="nav__link">Getting Started</a></li>
-          <li><a href="./for-organizers.html" class="nav__link">For Organizers</a></li>
-          <li><a href="./partners.html" class="nav__link" aria-current="page">Partners</a></li>
-        </ul>
-        <div class="nav__actions">
-          <a href="/app/login" class="nav__link">Log In</a>
-          <a href="/app/login?signup=1" class="btn btn-primary btn--nav">Get Started</a>
-        </div>
-        <button class="nav__mobile-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu">
-          <svg width="22" height="16" viewBox="0 0 22 16" fill="none" aria-hidden="true">
-            <rect y="0" width="22" height="2" rx="1" fill="currentColor"/>
-            <rect y="7" width="22" height="2" rx="1" fill="currentColor"/>
-            <rect y="14" width="22" height="2" rx="1" fill="currentColor"/>
-          </svg>
-        </button>
-      </div>
-    </nav>
-    <div class="mobile-menu" id="mobile-menu" aria-hidden="true">
-      <ul role="list">
-        <li><a href="./#personas" class="mobile-menu__link">Who It's For</a></li>
-        <li><a href="./#features" class="mobile-menu__link">Why Kinectem</a></li>
-        <li><a href="./#faq" class="mobile-menu__link">FAQ</a></li>
-        <li><a href="./getting-started.html" class="mobile-menu__link">Getting Started</a></li>
-        <li><a href="./for-organizers.html" class="mobile-menu__link">For Organizers</a></li>
-        <li><a href="./partners.html" class="mobile-menu__link" aria-current="page">Partners</a></li>
-        <li><a href="/app/login" class="mobile-menu__link">Log In</a></li>
-        <li><a href="/app/login?signup=1" class="mobile-menu__link mobile-menu__link--cta">Get Started</a></li>
+  <!-- Navigation -->
+  <header class="nav" role="banner">
+    <div class="wrap nav__inner">
+      <a href="./" class="nav__logo" aria-label="Kinectem home">
+        <img src="./logo-horizontal.png" alt="Kinectem" />
+      </a>
+      <ul class="nav__links" role="list">
+        <li><a href="./#personas" class="nav__link">Who It's For</a></li>
+        <li><a href="./#features" class="nav__link">Why Kinectem</a></li>
+        <li><a href="./#pricing" class="nav__link">Pricing</a></li>
+        <li><a href="./#faq" class="nav__link">FAQ</a></li>
+        <li><a href="./getting-started.html" class="nav__link">Getting Started</a></li>
+        <li><a href="./for-organizers.html" class="nav__link">For Organizers</a></li>
+        <li><a href="./partners.html" class="nav__link" aria-current="page">Partners</a></li>
       </ul>
+      <div class="nav__actions">
+        <a href="/app/login" class="nav__link">Log In</a>
+        <a href="/app/login?signup=1" class="btn btn-primary btn--nav">Get Started</a>
+      </div>
+      <button class="nav__mobile-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
     </div>
   </header>
 
+  <div class="mobile-menu" id="mobile-menu" aria-hidden="true">
+    <ul role="list">
+      <li><a href="./#personas" class="mobile-menu__link">Who It's For</a></li>
+      <li><a href="./#features" class="mobile-menu__link">Why Kinectem</a></li>
+      <li><a href="./#pricing" class="mobile-menu__link">Pricing</a></li>
+      <li><a href="./#faq" class="mobile-menu__link">FAQ</a></li>
+      <li><a href="./getting-started.html" class="mobile-menu__link">Getting Started</a></li>
+      <li><a href="./for-organizers.html" class="mobile-menu__link">For Organizers</a></li>
+      <li><a href="./partners.html" class="mobile-menu__link" aria-current="page">Partners</a></li>
+      <li><a href="/app/login" class="mobile-menu__link">Log In</a></li>
+      <li><a href="/app/login?signup=1" class="mobile-menu__link mobile-menu__link--cta">Get Started</a></li>
+    </ul>
+  </div>
+
   <main id="main-content">
-    <section class="pt-page">
-      <div class="pt-container">
-        <div class="pt-page__header">
-          <span class="pt-page__eyebrow">Our Network</span>
-          <h1 class="pt-page__heading">Trusted Partners</h1>
-          <p class="pt-page__subtext">
+    <section class="section-alt">
+      <div class="wrap">
+      <div>
+        <div class="section-head">
+          <span class="eyebrow">Our Network</span>
+          <h1>Trusted Partners</h1>
+          <p>
             We collaborate with industry-leading organizations, leagues, tournaments, and brands to bring the best youth sports experience to every athlete.
           </p>
         </div>
@@ -242,29 +82,33 @@
           </div>
         </div>
       </div>
+      </div>
     </section>
   </main>
 
-  <footer class="footer" role="contentinfo">
-    <div class="container">
-      <div class="footer__inner">
-        <div class="footer__brand">
-          <a href="./" class="footer__logo" aria-label="Kinectem home">
-            <img src="./logo-horizontal.png" alt="Kinectem" />
-          </a>
-          <p class="footer__tagline">Where Programs Shine</p>
-          <span class="footer__badge">We're live!</span>
+    <!-- Footer -->
+  <footer class="footer">
+    <div class="wrap landing-footer__inner">
+      <div class="footer-top">
+        <div class="footer-brand">
+          <img src="./logo-horizontal-mono-white-transparent.png" alt="Kinectem" />
+          <div class="footer-tagline">Where Programs Shine</div>
         </div>
-        <nav class="footer__links" aria-label="Footer links">
-          <a href="./getting-started.html" class="footer__link">Getting Started</a>
-          <a href="./for-organizers.html" class="footer__link">For Organizers</a>
-          <a href="./partners.html" class="footer__link">Partners</a>
-          <a href="/app/privacy-policy" class="footer__link">Privacy Policy</a>
-          <a href="/app/" class="footer__link">app.kinectem.com</a>
-        </nav>
+        <div class="footer-links">
+          <a href="./#personas">Who It's For</a>
+          <a href="./#features">Why Kinectem</a>
+          <a href="./#pricing">Pricing</a>
+          <a href="./getting-started.html">Getting Started</a>
+          <a href="./for-organizers.html">For Organizers</a>
+          <a href="./partners.html">Partners</a>
+        </div>
       </div>
-      <div class="footer__bottom">
-        <p class="footer__copyright">&copy; 2026 Kinectem. All rights reserved.</p>
+      <div class="footer-bottom">
+        <div>&copy; 2026 Kinectem. All rights reserved.</div>
+        <div style="display: flex; gap: 24px;">
+          <a href="/app/privacy-policy">Privacy Policy</a>
+          <a href="/app/coppa-notice">COPPA Notice</a>
+        </div>
       </div>
     </div>
   </footer>
@@ -375,8 +219,8 @@
         sorted.forEach(function(p) {
           var tag = p.websiteUrl ? 'a' : 'div';
           var hrefAttr = p.websiteUrl ? ' href="' + p.websiteUrl + '" target="_blank" rel="noopener noreferrer"' : '';
-          
-          html += '<' + tag + ' class="pt-card"' + hrefAttr + '>';
+
+          html += '<' + tag + ' class="card pt-card"' + hrefAttr + '>';
           if (p.logoUrl) {
             html += '<div class="pt-card__logo-wrapper">';
             html += '<img src="' + p.logoUrl + '" alt="' + p.name + ' logo" class="pt-card__logo" loading="lazy" />';
