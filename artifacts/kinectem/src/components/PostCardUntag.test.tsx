@@ -319,70 +319,106 @@ describe("PostCard news chronology", () => {
   });
 });
 
-describe("PostCard mobile recap header", () => {
-  it("reserves the upper-right area for recap controls and leaves long identity links in the flexible row", () => {
-    const post = basePost({
-      id: "article-mobile-recap",
-      gameDate: "2026-09-20T00:00:00.000Z",
-      context: {
-        type: "team",
-        id: "team-with-a-long-name",
-        name: "2014 Boys Premier National Championship Soccer Team",
-        avatarUrl: null,
-        orgName:
-          "Parsippany Soccer Club and Community Athletic Organization",
-        orgId: "org-with-a-long-name",
-        orgAvatarUrl: null,
-      } as PostResponse["context"],
-    });
+describe("PostCard compact mobile header", () => {
+  const longContext = {
+    type: "team",
+    id: "team-with-a-long-name",
+    name: "2014 Boys Premier National Championship Soccer Team",
+    avatarUrl: null,
+    orgName: "Parsippany Soccer Club and Community Athletic Organization",
+    orgId: "org-with-a-long-name",
+    orgAvatarUrl: null,
+  } as PostResponse["context"];
 
-    renderWithClient(<PostCard post={post} />);
+  const cases = [
+    {
+      name: "ordinary update",
+      post: () =>
+        basePost({
+          id: "orgpost-mobile-update",
+          postType: "long",
+          gameDate: null,
+          context: longContext,
+        }),
+      badge: "Update",
+    },
+    {
+      name: "highlight",
+      post: () =>
+        basePost({
+          id: "highlight-mobile",
+          postType: "short",
+          context: longContext,
+        }),
+      badge: "Highlight",
+    },
+    {
+      name: "news article",
+      post: () => {
+        const post = basePost({
+          id: "news-mobile",
+          context: longContext,
+        }) as PostResponse & {
+          newsLink: { url: string; sourceName: string | null };
+        };
+        post.newsLink = {
+          url: "https://localpaper.example/long-team-story",
+          sourceName: "Local Paper",
+        };
+        return post;
+      },
+      badge: "In the News",
+    },
+    {
+      name: "shared post",
+      post: () =>
+        ({
+          ...basePost({
+            id: "highlight-mobile-shared",
+            postType: "short",
+            context: longContext,
+          }),
+          sharedBy: {
+            id: "sharing-user",
+            displayName: "A Supporter With A Long Display Name",
+          },
+        }) as Parameters<typeof PostCard>[0]["post"],
+      badge: "Highlight",
+    },
+  ];
 
-    const identity = screen.getByTestId(
-      `post-header-identity-${post.id}`,
-    );
-    const actions = screen.getByTestId(`post-header-actions-${post.id}`);
+  it.each(cases)(
+    "reserves the mobile upper-right controls for a $name while restoring the inline desktop layout",
+    ({ post: makePost, badge }) => {
+      const post = makePost();
+      renderWithClient(<PostCard post={post} />);
 
-    expect(identity).toHaveClass("w-full", "pt-7", "sm:w-auto", "sm:pt-0");
-    expect(actions).toHaveClass(
-      "absolute",
-      "right-4",
-      "top-2",
-      "sm:static",
-    );
-    expect(
-      screen.getByTestId(`text-post-parent-org-${post.id}`),
-    ).toHaveTextContent(
-      "PARSIPPANY SOCCER CLUB AND COMMUNITY ATHLETIC ORGANIZATION",
-    );
-    expect(
-      screen.getByText("2014 Boys Premier National Championship Soccer Team"),
-    ).toBeInTheDocument();
-    expect(screen.getByTestId(`link-post-author-${post.id}`)).toHaveTextContent(
-      "Coach Carter",
-    );
-    expect(screen.getByTestId(`badge-post-type-${post.id}`)).toHaveTextContent(
-      "Game Recap",
-    );
-    expect(screen.getByTestId(`btn-post-menu-${post.id}`)).toHaveAccessibleName(
-      "Post actions",
-    );
-  });
-
-  it("keeps the ordinary post header in its existing inline layout", () => {
-    const post = basePost({
-      id: "article-ordinary-post",
-      postType: "short",
-      gameDate: null,
-    });
-
-    renderWithClient(<PostCard post={post} />);
-
-    expect(
-      screen.getByTestId(`post-header-identity-${post.id}`),
-    ).not.toHaveClass("pt-7");
-    expect(screen.getByTestId(`post-header-actions-${post.id}`)).not.toHaveClass(
-      "absolute",
-    );
-  });
+      expect(
+        screen.getByTestId(`post-header-${post.id}`),
+      ).toHaveClass("relative");
+      expect(
+        screen.getByTestId(`post-header-identity-${post.id}`),
+      ).toHaveClass("w-full", "pt-7", "sm:w-auto", "sm:pt-0");
+      expect(
+        screen.getByTestId(`post-header-actions-${post.id}`),
+      ).toHaveClass("absolute", "right-4", "top-2", "sm:static");
+      expect(
+        screen.getByTestId(`text-post-parent-org-${post.id}`),
+      ).toHaveTextContent(
+        "PARSIPPANY SOCCER CLUB AND COMMUNITY ATHLETIC ORGANIZATION",
+      );
+      expect(
+        screen.getByText("2014 Boys Premier National Championship Soccer Team"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId(`link-post-author-${post.id}`),
+      ).toHaveTextContent("Coach Carter");
+      expect(
+        screen.getByTestId(`badge-post-type-${post.id}`),
+      ).toHaveTextContent(badge);
+      expect(
+        screen.getByTestId(`btn-post-menu-${post.id}`),
+      ).toHaveAccessibleName("Post actions");
+    },
+  );
 });

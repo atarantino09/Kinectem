@@ -471,17 +471,11 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
           </Link>
         )}
         <div
-          className={cn(
-            "px-5 py-4 flex items-center justify-between border-b border-border/60",
-            isRecapArticle && "relative",
-          )}
+          className="relative px-5 py-4 flex items-center justify-between border-b border-border/60"
           data-testid={`post-header-${post.id}`}
         >
           <div
-            className={cn(
-              "flex items-center gap-3 min-w-0",
-              isRecapArticle && "w-full pt-7 sm:w-auto sm:pt-0",
-            )}
+            className="flex w-full items-center gap-3 min-w-0 pt-7 sm:w-auto sm:pt-0"
             data-testid={`post-header-identity-${post.id}`}
           >
             {(() => {
@@ -587,10 +581,7 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
             </div>
           </div>
           <div
-            className={cn(
-              "flex items-center gap-1 shrink-0",
-              isRecapArticle && "absolute right-4 top-2 sm:static",
-            )}
+            className="absolute right-4 top-2 flex items-center gap-1 shrink-0 sm:static"
             data-testid={`post-header-actions-${post.id}`}
           >
             {competitionFeatured && (
