@@ -1,9 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
-import { screen, within } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { renderWithProviders } from "@/test";
 import { TeamHeaderCard } from "./TeamHeaderCard";
+import {
+  classifyBlurFillImageShape,
+  teamBannerFrameClass,
+  teamBannerPreviewClass,
+} from "@/components/BlurFillImage";
 import { customFetch } from "@workspace/api-client-react";
 import { shrinkImageToDataUrl } from "@/lib/shrinkImage";
 
@@ -24,6 +29,29 @@ vi.mock("@/lib/shrinkImage", () => ({
 
 const mockCustomFetch = vi.mocked(customFetch);
 const mockShrinkImageToDataUrl = vi.mocked(shrinkImageToDataUrl);
+
+describe("adaptive team photo sizing", () => {
+  it.each([
+    [800, 1200, "portrait"],
+    [1200, 1000, "landscape"],
+    [1600, 900, "landscape"],
+    [2400, 900, "wide"],
+  ] as const)(
+    "classifies %sx%s photos as %s",
+    (width, height, expected) => {
+      expect(classifyBlurFillImageShape(width, height)).toBe(expected);
+    },
+  );
+
+  it("uses taller bounded frames for portrait and ordinary landscape photos", () => {
+    expect(teamBannerFrameClass("portrait")).toContain("aspect-[2/1]");
+    expect(teamBannerFrameClass("landscape")).toContain("aspect-[16/7]");
+    expect(teamBannerFrameClass("wide")).toBe("aspect-[16/5]");
+    expect(teamBannerPreviewClass("portrait")).toBe("h-40");
+    expect(teamBannerPreviewClass("landscape")).toBe("h-36");
+    expect(teamBannerPreviewClass("wide")).toBe("h-28");
+  });
+});
 
 const team = {
   id: "team-1",
@@ -63,6 +91,31 @@ function renderHeader(
 }
 
 describe("TeamHeaderCard action hierarchy", () => {
+  it("expands the banner when an ordinary landscape photo loads", () => {
+    renderHeader({
+      team: {
+        ...team,
+        bannerUrl: "data:image/jpeg;base64,team-photo",
+      },
+    });
+
+    const image = screen.getByTestId("img-team-banner");
+    Object.defineProperties(image, {
+      naturalWidth: { configurable: true, value: 1600 },
+      naturalHeight: { configurable: true, value: 900 },
+    });
+    fireEvent.load(image);
+
+    expect(screen.getByTestId("team-banner-frame")).toHaveAttribute(
+      "data-image-shape",
+      "landscape",
+    );
+    expect(screen.getByTestId("team-banner-frame")).toHaveClass(
+      "aspect-[16/7]",
+      "sm:aspect-[8/3]",
+    );
+  });
+
   it("compresses a raw photo over 5 MB before PATCHing the banner", async () => {
     const user = userEvent.setup();
     mockCustomFetch.mockResolvedValue({});

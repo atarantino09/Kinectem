@@ -10,7 +10,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AvatarLightbox } from "@/components/AvatarLightbox";
-import { BlurFillImage } from "@/components/BlurFillImage";
+import {
+  BlurFillImage,
+  teamBannerFrameClass,
+  type BlurFillImageShape,
+} from "@/components/BlurFillImage";
 import { FitText } from "@/components/FitText";
 import {
   DropdownMenu,
@@ -140,6 +144,8 @@ export function TeamHeaderCard({
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [bannerShape, setBannerShape] =
+    useState<BlurFillImageShape>("wide");
 
   const onPickPhoto = () => fileInputRef.current?.click();
 
@@ -241,12 +247,17 @@ export function TeamHeaderCard({
       )}
       {/* Hero background: team-specific photo if set, otherwise the
           existing brand gradient as the empty-state. */}
-      <div className="relative aspect-[16/5] overflow-hidden bg-gradient-to-br from-primary/30 via-primary/10 to-primary/5">
+      <div
+        className={`relative overflow-hidden bg-gradient-to-br from-primary/30 via-primary/10 to-primary/5 transition-[aspect-ratio] duration-300 ${teamBannerFrameClass(bannerUrl ? bannerShape : "wide")}`}
+        data-testid="team-banner-frame"
+        data-image-shape={bannerUrl ? bannerShape : "wide"}
+      >
         {bannerUrl && (
           <BlurFillImage
             src={bannerUrl}
             alt={`${team.name} background`}
             testId="img-team-banner"
+            onShapeChange={setBannerShape}
           />
         )}
         {team.currentSeason && (

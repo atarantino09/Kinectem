@@ -33,7 +33,11 @@ import {
   BANNER_SHRINK_MAX_DIMENSION,
   BANNER_SHRINK_OUTPUT_QUALITY,
 } from "@/lib/shrinkImage";
-import { BlurFillImage } from "@/components/BlurFillImage";
+import {
+  BlurFillImage,
+  teamBannerPreviewClass,
+  type BlurFillImageShape,
+} from "@/components/BlurFillImage";
 import { SPORTS } from "@/lib/sports";
 import { apiErrorMessage } from "@/lib/api-errors";
 
@@ -72,6 +76,8 @@ export function EditTeamDialog({
   const [level, setLevel] = useState(team.level ?? "");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [bannerShape, setBannerShape] =
+    useState<BlurFillImageShape>("wide");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -225,12 +231,17 @@ export function EditTeamDialog({
                   itself always comes from your organization.
                 </p>
                 <div className="space-y-2">
-                  <div className="relative w-full h-28 bg-muted rounded-xl border border-border overflow-hidden flex items-center justify-center">
+                  <div
+                    className={`relative w-full bg-muted rounded-xl border border-border overflow-hidden flex items-center justify-center transition-[height] duration-300 ${teamBannerPreviewClass(team.bannerUrl ? bannerShape : "wide")}`}
+                    data-testid="team-photo-preview-frame"
+                    data-image-shape={team.bannerUrl ? bannerShape : "wide"}
+                  >
                     {team.bannerUrl ? (
                       <BlurFillImage
                         src={team.bannerUrl}
                         alt={`${team.name} background`}
                         testId="img-team-photo-preview"
+                        onShapeChange={setBannerShape}
                       />
                     ) : (
                       <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
