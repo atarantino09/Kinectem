@@ -92,7 +92,7 @@ export function AdoptTeamDialog({
           <DialogDescription>
             Reparent this independent team into one of your organizations. It
             keeps its roster and recap history, and recap authoring is no longer
-            limited to the tournament window.
+            limited to active competition dates.
           </DialogDescription>
         </DialogHeader>
         {manageableOrgs.length === 0 ? (

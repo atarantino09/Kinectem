@@ -453,10 +453,11 @@ export default function TeamPage() {
             data-testid="banner-team-temporary"
           >
             <p>
-              <span className="font-bold">Temporary tournament team.</span> This
-              team was created for a tournament and has no organization yet.
-              Game recaps can be posted while the tournament is active. To keep
-              posting after it ends, adopt this team into an organization.
+              <span className="font-bold">Standalone competition team.</span>{" "}
+              This team was created for a competition and has no organization
+              yet. Game recaps can be posted while a competition is active. To
+              keep posting outside competition dates, adopt this team into an
+              organization.
             </p>
             {canManage && (
               <div className="space-y-2">

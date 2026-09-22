@@ -2653,7 +2653,7 @@ router.post(
         return apiError(res, 409, "Team is archived", { code: "team_archived" });
       const allowed = await canCreateRecap(me.id, team);
       if (!allowed) {
-        // Task #628 — distinguish "tournament window closed" from a plain
+        // Distinguish a closed competition window from a plain
         // permission failure so the solo-team coach gets actionable copy.
         if (
           isSoloTeam(team) &&
@@ -2663,7 +2663,7 @@ router.post(
           return apiError(
             res,
             403,
-            "Your team's free 2-week window has ended. Standalone team pages only work for 2 weeks — create or join an organization (organizations get 90 days free) to keep posting game recaps.",
+            "Game recaps are available to standalone teams while a competition is active. Create or join an organization (organizations get 90 days free) to keep posting outside a competition's dates.",
             { code: "tournament_window_closed" },
           );
         }

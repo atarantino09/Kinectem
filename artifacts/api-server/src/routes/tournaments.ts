@@ -57,7 +57,6 @@ import {
 import {
   canManageOrganization,
   canManageTeam,
-  recapFreeUntil,
 } from "../lib/permissions";
 import {
   seedBracketsFromSchedule,
@@ -4348,7 +4347,7 @@ router.get(
           tournamentName: t.name,
           startDate: t.startDate,
           endDate: t.endDate,
-          recapFreeUntil: isOrgBacked ? null : recapFreeUntil(t.startDate),
+          recapFreeUntil: isOrgBacked ? null : t.endDate,
           logoUrl: t.logoUrl ?? null,
           brandColor: t.brandColor ?? null,
           secondaryColor: t.secondaryColor ?? null,

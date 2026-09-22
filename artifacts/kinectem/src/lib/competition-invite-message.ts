@@ -92,7 +92,7 @@ export function buildCompetitionInviteMessage(
     `5. Pick your existing Kinectem team — or create a new one`,
     `6. That's it. Your games are added to your team page automatically.`,
     ``,
-    `What it costs: nothing to claim. If your team is new to Kinectem, your standalone team page is free through our event and for two weeks after it starts. To keep going after that, just create or join an organization on Kinectem — and a new organization's first 90 days are free, so there's no interruption and no charge along the way.`,
+    `What it costs: nothing to claim. If your team is new to Kinectem, your standalone team page can publish game recaps while the competition is active. To keep going outside the competition's dates, just create or join an organization on Kinectem — and a new organization's first 90 days are free, so there's no interruption and no charge along the way.`,
     ``,
     `One more thing: if your club isn't on Kinectem yet, use promo code ${promoCode} when you pick your organization's plan — it takes 25% off your first year.`,
     ``,

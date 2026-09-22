@@ -46,7 +46,7 @@ describe("buildCompetitionInviteMessage", () => {
       "1. Open the event page: https://example.com/app/c/summer-cup",
     );
     expect(msg).toContain(
-      "your standalone team page is free through our event and for two weeks after it starts",
+      "your standalone team page can publish game recaps while the competition is active",
     );
     expect(msg).toContain("promo code SUMMER25");
     expect(msg).toContain("25% off your first year");

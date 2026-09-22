@@ -222,7 +222,7 @@ export default function TeamAdoptPage() {
                 Pick the organization to adopt{" "}
                 <span className="font-bold">{team?.name}</span> into. It keeps
                 its roster and recap history, and recap authoring is no longer
-                limited to the tournament window.
+                limited to active competition dates.
               </p>
               {manageableOrgs.length > 0 && (
                 <Select value={orgId} onValueChange={setOrgId}>

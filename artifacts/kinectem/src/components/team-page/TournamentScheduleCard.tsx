@@ -69,7 +69,7 @@ interface TournamentGroup {
   startDate: string;
   endDate: string;
   // Last calendar day (YYYY-MM-DD) free game recaps are available for this
-  // team — two weeks after the tournament starts. Null for org-backed teams,
+  // team — the competition end date. Null for org-backed teams,
   // which have normal recap rights (no free-window notice).
   recapFreeUntil: string | null;
   logoUrl: string | null;
@@ -174,9 +174,8 @@ function formatCountdown(ms: number): string {
   return `${mins}m ${secs}s`;
 }
 
-// Note + live countdown for the team's free game recap period. Recaps are free
-// for two weeks after a tournament starts. If a window is currently open we count
-// down to when it ends; otherwise we note the next/last window.
+// Note + live countdown for the team's free game recap period. If a competition
+// is active we count down to its end; otherwise we note the next/last window.
 function FreeRecapNotice({ groups }: { groups: TournamentGroup[] }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -200,9 +199,9 @@ function FreeRecapNotice({ groups }: { groups: TournamentGroup[] }) {
     body = (
       <p className="mt-0.5 flex items-center gap-1.5 text-xs">
         <Clock className="w-3 h-3 shrink-0" />
-        Your standalone team page is free for 2 weeks after the tournament
-        starts, then it must join or create an organization. Ends{" "}
-        {dayLabel(end)} —{" "}
+        Your standalone team can publish game recaps while this competition is
+        active. Access ends{" "}
+        {dayLabel(end - 1)} —{" "}
         <span
           className="font-black tabular-nums"
           data-testid="free-recap-countdown"
@@ -213,13 +212,16 @@ function FreeRecapNotice({ groups }: { groups: TournamentGroup[] }) {
       </p>
     );
   } else if (upcoming.length > 0) {
-    const start = Math.min(...upcoming.map((w) => w.start));
+    const next = upcoming.reduce((earliest, w) =>
+      w.start < earliest.start ? w : earliest,
+    );
     tone = "open";
     body = (
       <p className="mt-0.5 text-xs">
-        Free game recaps unlock when the tournament starts on {dayLabel(start)},
-        then stay free for 2 weeks. After that, your standalone team page must
-        join or create an organization to keep going.
+        Free game recaps unlock when the next competition starts on{" "}
+        {dayLabel(next.start)} and remain available through{" "}
+        {dayLabel(next.end - 1)}. Outside an active competition, your standalone
+        team must join or create an organization to keep publishing.
       </p>
     );
   } else {
@@ -227,7 +229,7 @@ function FreeRecapNotice({ groups }: { groups: TournamentGroup[] }) {
     tone = "muted";
     body = (
       <p className="mt-0.5 text-xs">
-        Your team page's free 2-week window ended on {dayLabel(end)}. Join or
+        Your team's competition recap access ended on {dayLabel(end - 1)}. Join or
         create an organization to keep publishing recaps — creating an
         organization starts a 90-day free period, so your team keeps going
         without interruption.

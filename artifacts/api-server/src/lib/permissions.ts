@@ -21,31 +21,10 @@ export function isSoloTeam(team: Team): boolean {
   return team.organizationId == null;
 }
 
-// Task #628 (extended by Task #795) — the free recap window runs for two weeks
-// starting at a tournament's START date. Exposed so the team page can show a
-// matching note + countdown.
-export const RECAP_FREE_DAYS = 14;
-
-// The (inclusive) last calendar date a solo team may freely author recaps for a
-// tournament that started on `startDate` (YYYY-MM-DD in / out).
-export function recapFreeUntil(startDate: string): string {
-  const d = new Date(`${startDate}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + RECAP_FREE_DAYS);
-  return d.toISOString().slice(0, 10);
-}
-
-// Task #628 — is at least one tournament this solo team participates in inside
-// its free recap window: the tournament has STARTED and it's been <= two weeks,
-// i.e. `start_date <= today <= start_date + RECAP_FREE_DAYS`. Recap authoring on
-// a solo team is only permitted while this is true; before the tournament starts
-// there are no results to write up, and after the two weeks close the coach must
-// create / get adopted by a real org to keep posting. The upper bound rewrites
-// to `start >= today - 14` so both bounds stay simple indexed date comparisons.
+// A standalone team may author recaps while any competition it participates in
+// is active. Dates are UTC calendar dates and both boundaries are inclusive.
 export async function soloTeamRecapWindowOpen(teamId: string): Promise<boolean> {
   const today = new Date().toISOString().slice(0, 10);
-  const cutoff = new Date();
-  cutoff.setUTCDate(cutoff.getUTCDate() - RECAP_FREE_DAYS);
-  const cutoffStr = cutoff.toISOString().slice(0, 10);
   const [row] = await db
     .select({ id: tournaments.id })
     .from(tournamentParticipants)
@@ -57,7 +36,7 @@ export async function soloTeamRecapWindowOpen(teamId: string): Promise<boolean> 
       and(
         eq(tournamentParticipants.teamId, teamId),
         lte(tournaments.startDate, today),
-        gte(tournaments.startDate, cutoffStr),
+        gte(tournaments.endDate, today),
       ),
     )
     .limit(1);
