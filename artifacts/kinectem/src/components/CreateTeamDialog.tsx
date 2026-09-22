@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -34,7 +34,11 @@ import {
   BANNER_SHRINK_MAX_DIMENSION,
   BANNER_SHRINK_OUTPUT_QUALITY,
 } from "@/lib/shrinkImage";
-import { BlurFillImage } from "@/components/BlurFillImage";
+import {
+  TEAM_BANNER_ASPECT,
+  TEAM_BANNER_PREVIEW_CLASS,
+} from "@/components/BlurFillImage";
+import { ImageCropDialog } from "@/components/LazyImageCropDialog";
 import { SPORTS } from "@/lib/sports";
 import { apiErrorMessage } from "@/lib/api-errors";
 import { PLANS, nextPlan, type OrgPlanUsage } from "@/lib/plans";
@@ -77,6 +81,8 @@ export function CreateTeamDialog({
   // the form is submitted so creation is a single round-trip.
   const [bannerDataUrl, setBannerDataUrl] = useState<string | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
+  const [cropSource, setCropSource] = useState<string | null>(null);
+  const [cropFileName, setCropFileName] = useState("team-banner.jpg");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const createTeam = useCreateTeam();
@@ -118,7 +124,21 @@ export function CreateTeamDialog({
 
   const onPickPhoto = () => fileInputRef.current?.click();
 
-  const onPhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  useEffect(
+    () => () => {
+      if (cropSource) URL.revokeObjectURL(cropSource);
+    },
+    [cropSource],
+  );
+
+  const closeCrop = () => {
+    setCropSource((current) => {
+      if (current) URL.revokeObjectURL(current);
+      return null;
+    });
+  };
+
+  const onPhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
@@ -143,8 +163,11 @@ export function CreateTeamDialog({
       });
       return;
     }
-    // No crop step: the whole photo is staged as-is (aspect preserved)
-    // and the banner fits it with BlurFillImage, so nothing gets cut off.
+    setCropFileName(file.name);
+    setCropSource(URL.createObjectURL(file));
+  };
+
+  const stageCroppedPhoto = async (file: File) => {
     setPhotoBusy(true);
     try {
       const dataUrl = await shrinkImageToDataUrl(file, {
@@ -171,6 +194,7 @@ export function CreateTeamDialog({
             : undefined,
         variant: "destructive",
       });
+      throw err;
     } finally {
       setPhotoBusy(false);
     }
@@ -396,12 +420,16 @@ export function CreateTeamDialog({
                 Shows behind your org's logo on the team page.
               </p>
               <div className="space-y-2">
-                <div className="relative w-full h-24 bg-muted rounded-xl border border-border overflow-hidden flex items-center justify-center">
+                <div
+                  className={`relative w-full bg-muted rounded-xl border border-border overflow-hidden flex items-center justify-center ${TEAM_BANNER_PREVIEW_CLASS}`}
+                  data-testid="create-team-photo-preview-frame"
+                >
                   {bannerDataUrl ? (
-                    <BlurFillImage
+                    <img
                       src={bannerDataUrl}
                       alt="Team photo preview"
-                      testId="img-create-team-photo-preview"
+                      data-testid="img-create-team-photo-preview"
+                      className="absolute inset-0 h-full w-full object-cover"
                     />
                   ) : (
                     <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
@@ -471,6 +499,24 @@ export function CreateTeamDialog({
         </form>
       </DialogContent>
     </Dialog>
+    <ImageCropDialog
+      src={cropSource}
+      fileName={cropFileName}
+      aspect={TEAM_BANNER_ASPECT}
+      title="Position team photo"
+      description="Drag to position the photo and use zoom to adjust the banner crop."
+      confirmLabel="Use team photo"
+      fallbackBaseName="team-banner"
+      testId="dialog-crop-team-banner"
+      cropAreaHeight={220}
+      maxOutputWidth={BANNER_SHRINK_MAX_DIMENSION}
+      outputQuality={BANNER_SHRINK_OUTPUT_QUALITY}
+      open={!!cropSource}
+      onOpenChange={(cropOpen) => {
+        if (!cropOpen) closeCrop();
+      }}
+      onConfirm={stageCroppedPhoto}
+    />
     </>
   );
 }

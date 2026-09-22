@@ -1,20 +1,27 @@
-import { describe, expect, it, vi } from "vitest";
-import { fireEvent, screen, within } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { renderWithProviders } from "@/test";
 import { TeamHeaderCard } from "./TeamHeaderCard";
 import {
-  classifyBlurFillImageShape,
-  teamBannerFrameClass,
-  teamBannerPreviewClass,
+  TEAM_BANNER_ASPECT,
+  TEAM_BANNER_FRAME_CLASS,
+  TEAM_BANNER_PREVIEW_CLASS,
 } from "@/components/BlurFillImage";
+import { EditTeamDialog } from "@/components/EditTeamDialog";
+import { CreateTeamDialog } from "@/components/CreateTeamDialog";
 import { customFetch } from "@workspace/api-client-react";
 import { shrinkImageToDataUrl } from "@/lib/shrinkImage";
 
 vi.mock("@workspace/api-client-react", () => ({
   customFetch: vi.fn(),
   getGetTeamByIdQueryKey: (id: string) => ["team", id],
+  getListOrgTeamsQueryKey: (id: string) => ["org-teams", id],
+  useCreateTeam: () => ({
+    isPending: false,
+    mutateAsync: vi.fn(),
+  }),
 }));
 
 vi.mock("@/lib/shrinkImage", () => ({
@@ -27,29 +34,52 @@ vi.mock("@/lib/shrinkImage", () => ({
   UnsupportedImageFormatError: class extends Error {},
 }));
 
+vi.mock("@/components/LazyImageCropDialog", () => ({
+  ImageCropDialog: (props: {
+    open: boolean;
+    aspect: number;
+    onOpenChange: (open: boolean) => void;
+    onConfirm: (file: File) => void | Promise<void>;
+  }) =>
+    props.open ? (
+      <div data-testid="mock-team-banner-crop" data-aspect={props.aspect}>
+        <button
+          type="button"
+          data-testid="mock-crop-save"
+          onClick={() =>
+            props.onConfirm(
+              new File(["cropped"], "cropped.jpg", { type: "image/jpeg" }),
+            )
+          }
+        >
+          Save crop
+        </button>
+        <button
+          type="button"
+          data-testid="mock-crop-cancel"
+          onClick={() => props.onOpenChange(false)}
+        >
+          Cancel crop
+        </button>
+      </div>
+    ) : null,
+}));
+
 const mockCustomFetch = vi.mocked(customFetch);
 const mockShrinkImageToDataUrl = vi.mocked(shrinkImageToDataUrl);
 
-describe("adaptive team photo sizing", () => {
-  it.each([
-    [800, 1200, "portrait"],
-    [1200, 1000, "landscape"],
-    [1600, 900, "landscape"],
-    [2400, 900, "wide"],
-  ] as const)(
-    "classifies %sx%s photos as %s",
-    (width, height, expected) => {
-      expect(classifyBlurFillImageShape(width, height)).toBe(expected);
-    },
-  );
+beforeEach(() => {
+  mockCustomFetch.mockReset();
+  mockShrinkImageToDataUrl.mockReset();
+  vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:team-banner");
+  vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+});
 
-  it("uses taller bounded frames for portrait and ordinary landscape photos", () => {
-    expect(teamBannerFrameClass("portrait")).toContain("aspect-[2/1]");
-    expect(teamBannerFrameClass("landscape")).toContain("aspect-[16/7]");
-    expect(teamBannerFrameClass("wide")).toBe("aspect-[16/5]");
-    expect(teamBannerPreviewClass("portrait")).toBe("h-40");
-    expect(teamBannerPreviewClass("landscape")).toBe("h-36");
-    expect(teamBannerPreviewClass("wide")).toBe("h-28");
+describe("fixed team photo sizing", () => {
+  it("uses the same compact 16:5 geometry for the header and edit preview", () => {
+    expect(TEAM_BANNER_ASPECT).toBe(16 / 5);
+    expect(TEAM_BANNER_FRAME_CLASS).toBe("aspect-[16/5]");
+    expect(TEAM_BANNER_PREVIEW_CLASS).toBe("aspect-[16/5]");
   });
 });
 
@@ -91,7 +121,7 @@ function renderHeader(
 }
 
 describe("TeamHeaderCard action hierarchy", () => {
-  it("expands the banner when an ordinary landscape photo loads", () => {
+  it("keeps a cropped photo edge-to-edge in the fixed banner frame", () => {
     renderHeader({
       team: {
         ...team,
@@ -99,24 +129,11 @@ describe("TeamHeaderCard action hierarchy", () => {
       },
     });
 
-    const image = screen.getByTestId("img-team-banner");
-    Object.defineProperties(image, {
-      naturalWidth: { configurable: true, value: 1600 },
-      naturalHeight: { configurable: true, value: 900 },
-    });
-    fireEvent.load(image);
-
-    expect(screen.getByTestId("team-banner-frame")).toHaveAttribute(
-      "data-image-shape",
-      "landscape",
-    );
-    expect(screen.getByTestId("team-banner-frame")).toHaveClass(
-      "aspect-[16/7]",
-      "sm:aspect-[8/3]",
-    );
+    expect(screen.getByTestId("team-banner-frame")).toHaveClass("aspect-[16/5]");
+    expect(screen.getByTestId("img-team-banner")).toHaveClass("object-cover");
   });
 
-  it("compresses a raw photo over 5 MB before PATCHing the banner", async () => {
+  it("waits for inline crop confirmation before compressing and PATCHing", async () => {
     const user = userEvent.setup();
     mockCustomFetch.mockResolvedValue({});
     mockShrinkImageToDataUrl.mockResolvedValue("data:image/jpeg;base64,compressed");
@@ -128,17 +145,43 @@ describe("TeamHeaderCard action hierarchy", () => {
     });
     await user.upload(screen.getByTestId("input-inline-team-photo"), file);
 
-    expect(mockShrinkImageToDataUrl).toHaveBeenCalledWith(file, {
+    expect(screen.getByTestId("mock-team-banner-crop")).toHaveAttribute(
+      "data-aspect",
+      String(16 / 5),
+    );
+    expect(mockShrinkImageToDataUrl).not.toHaveBeenCalled();
+    expect(mockCustomFetch).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId("mock-crop-save"));
+
+    expect(mockShrinkImageToDataUrl).toHaveBeenCalledWith(expect.any(File), {
       maxDimension: 2048,
       quality: 0.92,
     });
-    expect(mockCustomFetch).toHaveBeenCalledWith(
-      "/api/v1/teams/team-1",
-      expect.objectContaining({
-        method: "PATCH",
-        body: JSON.stringify({ bannerUrl: "data:image/jpeg;base64,compressed" }),
-      }),
+    await waitFor(() =>
+      expect(mockCustomFetch).toHaveBeenCalledWith(
+        "/api/v1/teams/team-1",
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({ bannerUrl: "data:image/jpeg;base64,compressed" }),
+        }),
+      ),
     );
+  });
+
+  it("leaves the inline banner unchanged when cropping is canceled", async () => {
+    const user = userEvent.setup();
+    renderHeader({ isAdmin: true });
+
+    await user.upload(
+      screen.getByTestId("input-inline-team-photo"),
+      new File(["photo"], "phone.jpg", { type: "image/jpeg" }),
+    );
+    fireEvent.click(screen.getByTestId("mock-crop-cancel"));
+
+    expect(screen.queryByTestId("mock-team-banner-crop")).not.toBeInTheDocument();
+    expect(mockShrinkImageToDataUrl).not.toHaveBeenCalled();
+    expect(mockCustomFetch).not.toHaveBeenCalled();
   });
 
   it("places a public viewer's community actions in the magenta menu", async () => {
@@ -219,6 +262,139 @@ describe("TeamHeaderCard action hierarchy", () => {
 
     await user.click(screen.getByTestId("btn-team-replay-tour"));
     expect(onReplayTour).toHaveBeenCalledOnce();
+  });
+});
+
+describe("EditTeamDialog team photo cropping", () => {
+  it("uses the fixed preview and uploads only the confirmed crop", async () => {
+    const user = userEvent.setup();
+    mockCustomFetch.mockResolvedValue({});
+    mockShrinkImageToDataUrl.mockResolvedValue(
+      "data:image/jpeg;base64,edit-cropped",
+    );
+    renderWithProviders(
+      <EditTeamDialog
+        team={{ ...team, bannerUrl: "data:image/jpeg;base64,current" }}
+        canManagePhoto
+        open
+        onOpenChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("team-photo-preview-frame")).toHaveClass(
+      "aspect-[16/5]",
+    );
+    expect(screen.getByTestId("img-team-photo-preview")).toHaveClass(
+      "object-cover",
+    );
+
+    await user.upload(
+      screen.getByTestId("input-team-photo"),
+      new File(["photo"], "replacement.png", { type: "image/png" }),
+    );
+    expect(mockCustomFetch).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId("mock-crop-save"));
+    await waitFor(() =>
+      expect(mockCustomFetch).toHaveBeenCalledWith(
+        "/api/v1/teams/team-1",
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({
+            bannerUrl: "data:image/jpeg;base64,edit-cropped",
+          }),
+        }),
+      ),
+    );
+  });
+
+  it("does not replace the Edit team photo when cropping is canceled", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <EditTeamDialog
+        team={{ ...team, bannerUrl: "data:image/jpeg;base64,current" }}
+        canManagePhoto
+        open
+        onOpenChange={vi.fn()}
+      />,
+    );
+
+    await user.upload(
+      screen.getByTestId("input-team-photo"),
+      new File(["photo"], "replacement.png", { type: "image/png" }),
+    );
+    fireEvent.click(screen.getByTestId("mock-crop-cancel"));
+
+    expect(mockShrinkImageToDataUrl).not.toHaveBeenCalled();
+    expect(mockCustomFetch).not.toHaveBeenCalled();
+    expect(screen.getByTestId("img-team-photo-preview")).toHaveAttribute(
+      "src",
+      "data:image/jpeg;base64,current",
+    );
+  });
+});
+
+describe("CreateTeamDialog team photo cropping", () => {
+  it("stages only a confirmed crop in the shared fixed preview", async () => {
+    const user = userEvent.setup();
+    mockShrinkImageToDataUrl.mockResolvedValue(
+      "data:image/jpeg;base64,create-cropped",
+    );
+    renderWithProviders(
+      <CreateTeamDialog
+        orgId="org-1"
+        open
+        onOpenChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("create-team-photo-preview-frame")).toHaveClass(
+      "aspect-[16/5]",
+    );
+    await user.upload(
+      screen.getByTestId("input-create-team-photo"),
+      new File(["photo"], "new-team.png", { type: "image/png" }),
+    );
+
+    expect(mockShrinkImageToDataUrl).not.toHaveBeenCalled();
+    expect(
+      screen.queryByTestId("img-create-team-photo-preview"),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("mock-crop-save"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("img-create-team-photo-preview")).toHaveAttribute(
+        "src",
+        "data:image/jpeg;base64,create-cropped",
+      ),
+    );
+    expect(screen.getByTestId("img-create-team-photo-preview")).toHaveClass(
+      "object-cover",
+    );
+  });
+
+  it("leaves the Create team banner empty when cropping is canceled", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <CreateTeamDialog
+        orgId="org-1"
+        open
+        onOpenChange={vi.fn()}
+      />,
+    );
+
+    await user.upload(
+      screen.getByTestId("input-create-team-photo"),
+      new File(["photo"], "new-team.png", { type: "image/png" }),
+    );
+    fireEvent.click(screen.getByTestId("mock-crop-cancel"));
+
+    expect(mockShrinkImageToDataUrl).not.toHaveBeenCalled();
+    expect(
+      screen.queryByTestId("img-create-team-photo-preview"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("No team photo yet")).toBeInTheDocument();
   });
 });
 

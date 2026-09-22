@@ -1,10 +1,10 @@
 ---
-name: Team banner blur-fill display
-description: Team hero photos are shown whole (no crop) via a blur-fill backdrop; team upload flows deliberately omit a crop step.
+name: Team banner cropping
+description: Team hero photos use one compact fixed aspect and are user-cropped before upload.
 ---
 
-Team hero photos (and their upload previews) are shown **whole**, fitted inside the wide banner with a blurred copy of the same image filling the leftover space — never cropped to the banner aspect with `object-cover`.
+Team hero photos and all team-photo previews use the same compact 16:5 frame. Create team, the inline header selector, and Edit team must open the reusable banner-shaped crop dialog before compression, staging, or upload.
 
-**Why:** A wide 16:5 banner can't show a tall group/team photo cropped without cutting off heads/legs. The user explicitly chose "fit the whole photo, slight blur outside it" over edge-to-edge cover or a taller header.
+**Why:** Adaptive portrait-aware frames made the top of team pages expand unpredictably. Admin-controlled drag and zoom preserves intentional framing while keeping page geometry consistent.
 
-**How to apply:** Team-photo upload flows intentionally have **no crop step** — they upload the original (aspect preserved) at the banner quality budget. Don't reintroduce a fixed-aspect crop for team photos. If you add any fixed-aspect display for arbitrary user-supplied photos elsewhere, prefer the same blur-fill approach over `object-cover` cropping. (The generic crop dialog still exists for avatars — that's fine.)
+**How to apply:** Keep banner aspect shared across display, previews, and cropper. Process only confirmed cropped output through existing validation, compression, size-limit, staging/PATCH, and error flows. Cancel preserves the current photo; upload failures reject so the cropper stays open for retry.

@@ -2,6 +2,11 @@ import type { SyntheticEvent } from "react";
 
 export type BlurFillImageShape = "wide" | "landscape" | "portrait";
 
+/** Shared fixed geometry for cropped team banners and their edit preview. */
+export const TEAM_BANNER_ASPECT = 16 / 5;
+export const TEAM_BANNER_FRAME_CLASS = "aspect-[16/5]";
+export const TEAM_BANNER_PREVIEW_CLASS = "aspect-[16/5]";
+
 export function classifyBlurFillImageShape(
   naturalWidth: number,
   naturalHeight: number,

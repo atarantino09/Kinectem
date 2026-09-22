@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { formatOrgName } from "@/lib/format";
 import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
@@ -11,10 +11,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AvatarLightbox } from "@/components/AvatarLightbox";
 import {
-  BlurFillImage,
-  teamBannerFrameClass,
-  type BlurFillImageShape,
+  TEAM_BANNER_ASPECT,
+  TEAM_BANNER_FRAME_CLASS,
 } from "@/components/BlurFillImage";
+import { ImageCropDialog } from "@/components/LazyImageCropDialog";
 import { FitText } from "@/components/FitText";
 import {
   DropdownMenu,
@@ -138,16 +138,29 @@ export function TeamHeaderCard({
 
   // Inline photo controls (Task #391). Admins can swap or remove the
   // hero banner without opening EditTeamDialog. Mirrors the file →
-  // shrink → PATCH pipeline used by EditTeamDialog (no crop step — the
-  // whole photo is kept and fitted by BlurFillImage on display).
+  // crop → shrink → PATCH pipeline used by EditTeamDialog.
   const qc = useQueryClient();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [bannerShape, setBannerShape] =
-    useState<BlurFillImageShape>("wide");
+  const [cropSource, setCropSource] = useState<string | null>(null);
+  const [cropFileName, setCropFileName] = useState("team-banner.jpg");
 
   const onPickPhoto = () => fileInputRef.current?.click();
+
+  useEffect(
+    () => () => {
+      if (cropSource) URL.revokeObjectURL(cropSource);
+    },
+    [cropSource],
+  );
+
+  const closeCrop = () => {
+    setCropSource((current) => {
+      if (current) URL.revokeObjectURL(current);
+      return null;
+    });
+  };
 
   const onPhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -174,8 +187,11 @@ export function TeamHeaderCard({
       });
       return;
     }
-    // No crop step: the whole photo is uploaded as-is (aspect preserved)
-    // and the banner fits it with BlurFillImage, so nothing gets cut off.
+    setCropFileName(file.name);
+    setCropSource(URL.createObjectURL(file));
+  };
+
+  const uploadCroppedPhoto = async (file: File) => {
     setUploading(true);
     try {
       const dataUrl = await shrinkImageToDataUrl(file, {
@@ -208,6 +224,7 @@ export function TeamHeaderCard({
             : undefined,
         variant: "destructive",
       });
+      throw err;
     } finally {
       setUploading(false);
     }
@@ -248,16 +265,15 @@ export function TeamHeaderCard({
       {/* Hero background: team-specific photo if set, otherwise the
           existing brand gradient as the empty-state. */}
       <div
-        className={`relative overflow-hidden bg-gradient-to-br from-primary/30 via-primary/10 to-primary/5 transition-[aspect-ratio] duration-300 ${teamBannerFrameClass(bannerUrl ? bannerShape : "wide")}`}
+        className={`relative overflow-hidden bg-gradient-to-br from-primary/30 via-primary/10 to-primary/5 ${TEAM_BANNER_FRAME_CLASS}`}
         data-testid="team-banner-frame"
-        data-image-shape={bannerUrl ? bannerShape : "wide"}
       >
         {bannerUrl && (
-          <BlurFillImage
+          <img
             src={bannerUrl}
             alt={`${team.name} background`}
-            testId="img-team-banner"
-            onShapeChange={setBannerShape}
+            data-testid="img-team-banner"
+            className="absolute inset-0 h-full w-full object-cover"
           />
         )}
         {team.currentSeason && (
@@ -662,6 +678,24 @@ export function TeamHeaderCard({
           </div>
         </div>
       </CardContent>
+      <ImageCropDialog
+        src={cropSource}
+        fileName={cropFileName}
+        aspect={TEAM_BANNER_ASPECT}
+        title="Position team photo"
+        description="Drag to position the photo and use zoom to adjust the banner crop."
+        confirmLabel="Save team photo"
+        fallbackBaseName="team-banner"
+        testId="dialog-crop-team-banner"
+        cropAreaHeight={220}
+        maxOutputWidth={BANNER_SHRINK_MAX_DIMENSION}
+        outputQuality={BANNER_SHRINK_OUTPUT_QUALITY}
+        open={!!cropSource}
+        onOpenChange={(open) => {
+          if (!open) closeCrop();
+        }}
+        onConfirm={uploadCroppedPhoto}
+      />
     </Card>
   );
 }

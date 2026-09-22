@@ -34,10 +34,10 @@ import {
   BANNER_SHRINK_OUTPUT_QUALITY,
 } from "@/lib/shrinkImage";
 import {
-  BlurFillImage,
-  teamBannerPreviewClass,
-  type BlurFillImageShape,
+  TEAM_BANNER_ASPECT,
+  TEAM_BANNER_PREVIEW_CLASS,
 } from "@/components/BlurFillImage";
+import { ImageCropDialog } from "@/components/LazyImageCropDialog";
 import { SPORTS } from "@/lib/sports";
 import { apiErrorMessage } from "@/lib/api-errors";
 
@@ -76,8 +76,8 @@ export function EditTeamDialog({
   const [level, setLevel] = useState(team.level ?? "");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [bannerShape, setBannerShape] =
-    useState<BlurFillImageShape>("wide");
+  const [cropSource, setCropSource] = useState<string | null>(null);
+  const [cropFileName, setCropFileName] = useState("team-banner.jpg");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -95,6 +95,20 @@ export function EditTeamDialog({
   }, [open, team.id]);
 
   const onPickPhoto = () => fileInputRef.current?.click();
+
+  useEffect(
+    () => () => {
+      if (cropSource) URL.revokeObjectURL(cropSource);
+    },
+    [cropSource],
+  );
+
+  const closeCrop = () => {
+    setCropSource((current) => {
+      if (current) URL.revokeObjectURL(current);
+      return null;
+    });
+  };
 
   const onRemovePhoto = async () => {
     setUploading(true);
@@ -138,8 +152,11 @@ export function EditTeamDialog({
       });
       return;
     }
-    // No crop step: the whole photo is uploaded as-is (aspect preserved)
-    // and the banner fits it with BlurFillImage, so nothing gets cut off.
+    setCropFileName(file.name);
+    setCropSource(URL.createObjectURL(file));
+  };
+
+  const uploadCroppedPhoto = async (file: File) => {
     setUploading(true);
     try {
       const dataUrl = await shrinkImageToDataUrl(file, {
@@ -173,6 +190,7 @@ export function EditTeamDialog({
             : undefined,
         variant: "destructive",
       });
+      throw err;
     } finally {
       setUploading(false);
     }
@@ -232,16 +250,15 @@ export function EditTeamDialog({
                 </p>
                 <div className="space-y-2">
                   <div
-                    className={`relative w-full bg-muted rounded-xl border border-border overflow-hidden flex items-center justify-center transition-[height] duration-300 ${teamBannerPreviewClass(team.bannerUrl ? bannerShape : "wide")}`}
+                    className={`relative w-full bg-muted rounded-xl border border-border overflow-hidden flex items-center justify-center ${TEAM_BANNER_PREVIEW_CLASS}`}
                     data-testid="team-photo-preview-frame"
-                    data-image-shape={team.bannerUrl ? bannerShape : "wide"}
                   >
                     {team.bannerUrl ? (
-                      <BlurFillImage
+                      <img
                         src={team.bannerUrl}
                         alt={`${team.name} background`}
-                        testId="img-team-photo-preview"
-                        onShapeChange={setBannerShape}
+                        data-testid="img-team-photo-preview"
+                        className="absolute inset-0 h-full w-full object-cover"
                       />
                     ) : (
                       <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
@@ -405,6 +422,24 @@ export function EditTeamDialog({
         </form>
       </DialogContent>
     </Dialog>
+    <ImageCropDialog
+      src={cropSource}
+      fileName={cropFileName}
+      aspect={TEAM_BANNER_ASPECT}
+      title="Position team photo"
+      description="Drag to position the photo and use zoom to adjust the banner crop."
+      confirmLabel="Save team photo"
+      fallbackBaseName="team-banner"
+      testId="dialog-crop-team-banner"
+      cropAreaHeight={220}
+      maxOutputWidth={BANNER_SHRINK_MAX_DIMENSION}
+      outputQuality={BANNER_SHRINK_OUTPUT_QUALITY}
+      open={!!cropSource}
+      onOpenChange={(cropOpen) => {
+        if (!cropOpen) closeCrop();
+      }}
+      onConfirm={uploadCroppedPhoto}
+    />
     </>
   );
 }
