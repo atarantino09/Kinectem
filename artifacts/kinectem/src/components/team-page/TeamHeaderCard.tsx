@@ -43,7 +43,6 @@ import {
   Users,
   Pencil,
   Camera,
-  Trash2,
   CalendarDays,
   ChevronDown,
   Compass,
@@ -137,8 +136,8 @@ export function TeamHeaderCard({
   const orgLogoUrl = org?.avatarUrl ?? "";
   const bannerUrl = team.bannerUrl ?? "";
 
-  // Inline photo controls (Task #391). Admins can swap or remove the
-  // hero banner without opening EditTeamDialog. Mirrors the file →
+  // Inline photo controls. Admins can add or replace the hero banner
+  // without opening EditTeamDialog. Mirrors the file →
   // crop → shrink → PATCH pipeline used by EditTeamDialog.
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -232,23 +231,6 @@ export function TeamHeaderCard({
     }
   };
 
-  const onRemovePhoto = async () => {
-    setUploading(true);
-    try {
-      await customFetch(`/api/v1/teams/${team.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bannerUrl: null }),
-      });
-      await qc.invalidateQueries({ queryKey: getGetTeamByIdQueryKey(team.id) });
-      toast({ title: "Team photo removed" });
-    } catch {
-      toast({ title: "Failed to remove team photo", variant: "destructive" });
-    } finally {
-      setUploading(false);
-    }
-  };
-
   // Task #733 — parent-org brand colors ride on the org embed as extra
   // fields beyond the locked spec; when set, a thin gradient strip renders
   // at the very top of the card, above the hero photo. Independent teams
@@ -312,30 +294,17 @@ export function TeamHeaderCard({
               data-testid="input-inline-team-photo"
             />
             {bannerUrl ? (
-              <>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-10 sm:h-7 px-3 font-bold rounded-full bg-background/90 hover:bg-background shadow-sm"
-                  onClick={onPickPhoto}
-                  disabled={uploading}
-                  data-testid="btn-inline-edit-team-photo"
-                >
-                  <Camera className="w-3.5 h-3.5 mr-1.5" />
-                  {uploading ? "Working..." : "Change photo"}
-                </Button>
-                <Button
-                  size="icon"
-                  variant="outline"
-                  className="h-10 w-10 sm:h-7 sm:w-7 rounded-full bg-background/90 hover:bg-background text-destructive hover:text-destructive shadow-sm"
-                  onClick={onRemovePhoto}
-                  disabled={uploading}
-                  aria-label="Remove team photo"
-                  data-testid="btn-inline-remove-team-photo"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </Button>
-              </>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-10 sm:h-7 px-3 font-bold rounded-full bg-background/90 hover:bg-background shadow-sm"
+                onClick={onPickPhoto}
+                disabled={uploading}
+                data-testid="btn-inline-edit-team-photo"
+              >
+                <Camera className="w-3.5 h-3.5 mr-1.5" />
+                {uploading ? "Working..." : "Change photo"}
+              </Button>
             ) : (
               // No photo yet: a single action, so go straight to the picker.
               <Button

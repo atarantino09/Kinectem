@@ -155,7 +155,7 @@ describe("TeamHeaderCard action hierarchy", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("opens the file picker directly from Change photo", async () => {
+  it("lets admins change an existing photo without an inline remove action", async () => {
     const user = userEvent.setup();
     renderHeader({
       isAdmin: true,
@@ -166,6 +166,13 @@ describe("TeamHeaderCard action hierarchy", () => {
     });
     const input = screen.getByTestId("input-inline-team-photo");
     const click = vi.spyOn(input, "click");
+
+    expect(
+      screen.queryByTestId("btn-inline-remove-team-photo"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Remove team photo" }),
+    ).not.toBeInTheDocument();
 
     await user.click(screen.getByTestId("btn-inline-edit-team-photo"));
 
