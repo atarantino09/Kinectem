@@ -133,6 +133,45 @@ describe("TeamHeaderCard action hierarchy", () => {
     expect(screen.getByTestId("img-team-banner")).toHaveClass("object-cover");
   });
 
+  it("opens the full team photo and closes it from the lightbox", async () => {
+    const user = userEvent.setup();
+    renderHeader({
+      team: {
+        ...team,
+        bannerUrl: "data:image/jpeg;base64,team-photo",
+      },
+    });
+
+    await user.click(screen.getByTestId("btn-open-team-banner-lightbox"));
+    expect(screen.getByTestId("team-banner-lightbox-dialog")).toBeInTheDocument();
+    expect(screen.getByTestId("team-banner-lightbox-image")).toHaveAttribute(
+      "src",
+      "data:image/jpeg;base64,team-photo",
+    );
+
+    await user.click(screen.getByTestId("team-banner-lightbox-close"));
+    expect(
+      screen.queryByTestId("team-banner-lightbox-dialog"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens the file picker directly from Change photo", async () => {
+    const user = userEvent.setup();
+    renderHeader({
+      isAdmin: true,
+      team: {
+        ...team,
+        bannerUrl: "data:image/jpeg;base64,team-photo",
+      },
+    });
+    const input = screen.getByTestId("input-inline-team-photo");
+    const click = vi.spyOn(input, "click");
+
+    await user.click(screen.getByTestId("btn-inline-edit-team-photo"));
+
+    expect(click).toHaveBeenCalledOnce();
+  });
+
   it("waits for inline crop confirmation before compressing and PATCHing", async () => {
     const user = userEvent.setup();
     mockCustomFetch.mockResolvedValue({});

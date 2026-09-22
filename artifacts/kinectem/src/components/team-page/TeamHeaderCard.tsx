@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AvatarLightbox } from "@/components/AvatarLightbox";
+import { PhotoLightbox } from "@/components/PhotoLightbox";
 import {
   TEAM_BANNER_ASPECT,
   TEAM_BANNER_FRAME_CLASS,
@@ -143,6 +144,7 @@ export function TeamHeaderCard({
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [bannerLightboxOpen, setBannerLightboxOpen] = useState(false);
   const [cropSource, setCropSource] = useState<string | null>(null);
   const [cropFileName, setCropFileName] = useState("team-banner.jpg");
 
@@ -269,16 +271,24 @@ export function TeamHeaderCard({
         data-testid="team-banner-frame"
       >
         {bannerUrl && (
-          <img
-            src={bannerUrl}
-            alt={`${team.name} background`}
-            data-testid="img-team-banner"
-            className="absolute inset-0 h-full w-full object-cover"
-          />
+          <button
+            type="button"
+            className="absolute inset-0 h-full w-full cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+            aria-label={`View full ${team.name} team photo`}
+            data-testid="btn-open-team-banner-lightbox"
+            onClick={() => setBannerLightboxOpen(true)}
+          >
+            <img
+              src={bannerUrl}
+              alt={`${team.name} background`}
+              data-testid="img-team-banner"
+              className="h-full w-full object-cover"
+            />
+          </button>
         )}
         {team.currentSeason && (
           <Badge
-            className="absolute top-3 left-3 bg-background/90 text-primary hover:bg-background border-none font-bold shadow-sm"
+            className="absolute z-10 top-3 left-3 bg-background/90 text-primary hover:bg-background border-none font-bold shadow-sm"
             data-testid="badge-current-season"
           >
             {team.currentSeason.name}
@@ -287,11 +297,11 @@ export function TeamHeaderCard({
         <PersonaPill
           persona="team"
           size="sm"
-          className="!absolute top-3 right-3 shadow-sm"
+          className="!absolute z-10 top-3 right-3 shadow-sm"
         />
         {isAdmin && (
           <div
-            className={`absolute left-3 ${team.currentSeason ? "top-12" : "top-3"} flex items-center gap-2`}
+            className={`absolute z-10 left-3 ${team.currentSeason ? "top-12" : "top-3"} flex items-center gap-2`}
           >
             <input
               ref={fileInputRef}
@@ -302,39 +312,30 @@ export function TeamHeaderCard({
               data-testid="input-inline-team-photo"
             />
             {bannerUrl ? (
-              // With a photo set, collapse the controls into a single
-              // "Edit photo" button that opens a menu of Change / Remove.
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 px-3 font-bold rounded-full bg-background/90 hover:bg-background shadow-sm"
-                    disabled={uploading}
-                    data-testid="btn-inline-edit-team-photo"
-                  >
-                    <Camera className="w-3.5 h-3.5 mr-1.5" />
-                    {uploading ? "Working..." : "Edit photo"}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="font-bold">
-                  <DropdownMenuItem
-                    onSelect={onPickPhoto}
-                    data-testid="btn-inline-change-team-photo"
-                  >
-                    <Camera className="w-3.5 h-3.5 mr-2" />
-                    Change photo
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onSelect={onRemovePhoto}
-                    className="text-destructive focus:text-destructive"
-                    data-testid="btn-inline-remove-team-photo"
-                  >
-                    <Trash2 className="w-3.5 h-3.5 mr-2" />
-                    Remove photo
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-10 sm:h-7 px-3 font-bold rounded-full bg-background/90 hover:bg-background shadow-sm"
+                  onClick={onPickPhoto}
+                  disabled={uploading}
+                  data-testid="btn-inline-edit-team-photo"
+                >
+                  <Camera className="w-3.5 h-3.5 mr-1.5" />
+                  {uploading ? "Working..." : "Change photo"}
+                </Button>
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-10 w-10 sm:h-7 sm:w-7 rounded-full bg-background/90 hover:bg-background text-destructive hover:text-destructive shadow-sm"
+                  onClick={onRemovePhoto}
+                  disabled={uploading}
+                  aria-label="Remove team photo"
+                  data-testid="btn-inline-remove-team-photo"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </Button>
+              </>
             ) : (
               // No photo yet: a single action, so go straight to the picker.
               <Button
@@ -352,6 +353,13 @@ export function TeamHeaderCard({
           </div>
         )}
       </div>
+      <PhotoLightbox
+        images={bannerUrl ? [bannerUrl] : []}
+        startIndex={0}
+        open={bannerLightboxOpen}
+        onOpenChange={setBannerLightboxOpen}
+        testIdPrefix="team-banner-lightbox"
+      />
       <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
         {/* Avatar block: org logo, overlapping the bottom of the banner.
             Org name sits directly under the logo as a link to the org.
