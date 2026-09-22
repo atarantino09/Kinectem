@@ -318,3 +318,71 @@ describe("PostCard news chronology", () => {
     expect(dates).not.toHaveTextContent("Game played:");
   });
 });
+
+describe("PostCard mobile recap header", () => {
+  it("reserves the upper-right area for recap controls and leaves long identity links in the flexible row", () => {
+    const post = basePost({
+      id: "article-mobile-recap",
+      gameDate: "2026-09-20T00:00:00.000Z",
+      context: {
+        type: "team",
+        id: "team-with-a-long-name",
+        name: "2014 Boys Premier National Championship Soccer Team",
+        avatarUrl: null,
+        orgName:
+          "Parsippany Soccer Club and Community Athletic Organization",
+        orgId: "org-with-a-long-name",
+        orgAvatarUrl: null,
+      } as PostResponse["context"],
+    });
+
+    renderWithClient(<PostCard post={post} />);
+
+    const identity = screen.getByTestId(
+      `post-header-identity-${post.id}`,
+    );
+    const actions = screen.getByTestId(`post-header-actions-${post.id}`);
+
+    expect(identity).toHaveClass("w-full", "pt-7", "sm:w-auto", "sm:pt-0");
+    expect(actions).toHaveClass(
+      "absolute",
+      "right-4",
+      "top-2",
+      "sm:static",
+    );
+    expect(
+      screen.getByTestId(`text-post-parent-org-${post.id}`),
+    ).toHaveTextContent(
+      "PARSIPPANY SOCCER CLUB AND COMMUNITY ATHLETIC ORGANIZATION",
+    );
+    expect(
+      screen.getByText("2014 Boys Premier National Championship Soccer Team"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId(`link-post-author-${post.id}`)).toHaveTextContent(
+      "Coach Carter",
+    );
+    expect(screen.getByTestId(`badge-post-type-${post.id}`)).toHaveTextContent(
+      "Game Recap",
+    );
+    expect(screen.getByTestId(`btn-post-menu-${post.id}`)).toHaveAccessibleName(
+      "Post actions",
+    );
+  });
+
+  it("keeps the ordinary post header in its existing inline layout", () => {
+    const post = basePost({
+      id: "article-ordinary-post",
+      postType: "short",
+      gameDate: null,
+    });
+
+    renderWithClient(<PostCard post={post} />);
+
+    expect(
+      screen.getByTestId(`post-header-identity-${post.id}`),
+    ).not.toHaveClass("pt-7");
+    expect(screen.getByTestId(`post-header-actions-${post.id}`)).not.toHaveClass(
+      "absolute",
+    );
+  });
+});

@@ -470,8 +470,20 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
             <ChevronRight className="ml-auto h-4 w-4 shrink-0 text-white/80" />
           </Link>
         )}
-        <div className="px-5 py-4 flex items-center justify-between border-b border-border/60">
-          <div className="flex items-center gap-3 min-w-0">
+        <div
+          className={cn(
+            "px-5 py-4 flex items-center justify-between border-b border-border/60",
+            isRecapArticle && "relative",
+          )}
+          data-testid={`post-header-${post.id}`}
+        >
+          <div
+            className={cn(
+              "flex items-center gap-3 min-w-0",
+              isRecapArticle && "w-full pt-7 sm:w-auto sm:pt-0",
+            )}
+            data-testid={`post-header-identity-${post.id}`}
+          >
             {(() => {
               // For team-context posts, the avatar slot shows the parent
               // organization's logo instead of the team's own logo so it
@@ -522,7 +534,7 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
                 </AvatarLightbox>
               );
             })()}
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               {post.context.type === "team" && post.context.orgName && post.context.orgId && (
                 <Link href={`/organizations/${post.context.orgId}`}>
                   <p
@@ -574,7 +586,13 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
               )}
             </div>
           </div>
-          <div className="flex items-center gap-1 shrink-0">
+          <div
+            className={cn(
+              "flex items-center gap-1 shrink-0",
+              isRecapArticle && "absolute right-4 top-2 sm:static",
+            )}
+            data-testid={`post-header-actions-${post.id}`}
+          >
             {competitionFeatured && (
               <span
                 className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400"
@@ -586,6 +604,7 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
             )}
             <Badge
               className={`${badgeClass} border-none font-bold uppercase text-[10px] tracking-widest`}
+              data-testid={`badge-post-type-${post.id}`}
             >
               <Icon className="w-3 h-3 mr-1 inline" />
               {label}
