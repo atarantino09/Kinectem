@@ -138,7 +138,7 @@ describe("PostPage delete permissions", () => {
 
     renderWithProviders(<PostPage />);
 
-    await screen.findByText("Match recap");
+    await screen.findByRole("heading", { name: "Match recap" });
     expect(screen.queryByTestId("button-edit-post")).not.toBeInTheDocument();
     expect(screen.queryByTestId("button-delete-post")).not.toBeInTheDocument();
     expect(
@@ -153,7 +153,22 @@ describe("PostPage delete permissions", () => {
 
     renderWithProviders(<PostPage />);
 
-    await screen.findByText("Match recap");
+    await screen.findByRole("heading", { name: "Match recap" });
     expect(screen.queryByTestId("button-delete-post")).not.toBeInTheDocument();
+  });
+
+  it("keeps the published title on one fitted line", async () => {
+    customFetchMock.mockResolvedValue(
+      postFixture({ canEdit: false, canDelete: false }),
+    );
+
+    renderWithProviders(<PostPage />);
+
+    const title = await screen.findByRole("heading", { name: "Match recap" });
+    expect(title.lastElementChild).toHaveClass(
+      "overflow-hidden",
+      "text-ellipsis",
+      "whitespace-nowrap",
+    );
   });
 });

@@ -71,6 +71,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { TakedownDialog } from "@/components/TakedownDialog";
 import { ShareRecapImageDialog } from "@/components/share-image/ShareRecapImageDialog";
+import { FitText } from "@/components/FitText";
 import { apiErrorMessage } from "@/lib/api-errors";
 
 export default function PostPage() {
@@ -673,15 +674,15 @@ export default function PostPage() {
       ) : (
         post.title && (
           <div className="space-y-1">
-            <h1
-              className={
-                isGameRecap
-                  ? "text-4xl sm:text-5xl font-black tracking-tight leading-tight"
-                  : "text-3xl sm:text-4xl font-black tracking-tight leading-tight"
-              }
+            <FitText
+              as="h1"
+              max={isGameRecap ? 42 : 36}
+              min={16}
+              lineHeight={1.05}
+              className="font-black tracking-tight"
             >
               {post.title}
-            </h1>
+            </FitText>
             {post.gameDate && (
               <p
                 className="text-sm text-muted-foreground font-medium"
