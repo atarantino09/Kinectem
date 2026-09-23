@@ -10,6 +10,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { AvatarLightbox } from "@/components/AvatarLightbox";
 import { CompetitionBrandStrip } from "@/components/CompetitionBrandStrip";
 import { CompetitionHowItWorks } from "@/components/CompetitionHowItWorks";
+import {
+  CompetitionPartnerDirectory,
+  type CompetitionPartnerPage,
+} from "@/components/CompetitionPartnerDirectory";
 import { ShareRecapImageDialog } from "@/components/share-image/ShareRecapImageDialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -137,6 +141,7 @@ export type CompetitionMeta = {
     name: string;
     logoUrl: string | null;
   } | null;
+  partnerPages?: CompetitionPartnerPage[];
 };
 
 type FeaturedRecap = {
@@ -1577,6 +1582,12 @@ export default function CompetitionPage() {
       </div>
 
       <div className="w-full min-w-0 max-w-4xl mx-auto p-6 pb-12 space-y-10">
+        {(c.partnerPages?.length ?? 0) > 0 ? (
+          <CompetitionPartnerDirectory
+            partners={c.partnerPages!}
+            signedIn={Boolean(me)}
+          />
+        ) : null}
         {/* Organizer-only lifecycle explainer — starts collapsed (like the
             Teams and Schedule sections below); the organizer expands it via
             the chevron when they want the walkthrough. */}

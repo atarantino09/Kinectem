@@ -41,6 +41,38 @@ vi.mock("@/components/share-image/ShareRecapImageDialog", () => ({
 
 const mockedFetch = vi.mocked(customFetch);
 
+function competitionResponse(overrides: Record<string, unknown> = {}) {
+  return {
+    competition: {
+      id: "competition-1",
+      slug: "rolling-cup",
+      name: "Rolling Cup",
+      type: "tournament",
+      startDate: "2099-01-01",
+      endDate: "2099-01-20",
+      location: "Riverside",
+      description: null,
+      isActive: false,
+      isEnded: false,
+      autoApproveClaims: true,
+      logoUrl: null,
+      brandColor: "#2457a7",
+      secondaryColor: "#7c3aed",
+      tertiaryColor: null,
+      bannerUrl: null,
+      websiteUrl: null,
+      claimedCount: 0,
+      participantCount: 0,
+      isFollowing: false,
+      ...overrides,
+    },
+    participants: [],
+    matches: [],
+    featuredRecaps: [],
+    brackets: [],
+  };
+}
+
 function makeMatch(
   id: string,
   matchDate: string | null,
@@ -136,6 +168,158 @@ describe("schedule grouping model", () => {
       "invalid",
       "missing",
     ]);
+  });
+});
+
+describe("competition partnership directory", () => {
+  beforeEach(() => {
+    window.history.pushState({}, "", "/c/rolling-cup");
+    mockedFetch.mockReset();
+  });
+
+  it("shows linked partnership branding and a searchable, deduplicated club list", async () => {
+    const partners = [
+      {
+        slug: "north-stars",
+        officialName: "North Stars League",
+        associationLabel: "League",
+        logoUrl: null,
+        primaryColor: "#155EEF",
+        secondaryColor: "#06B6D4",
+      },
+      {
+        slug: "regional-soccer",
+        officialName: "Regional Soccer",
+        associationLabel: "Association",
+        logoUrl: null,
+        primaryColor: "#7C3AED",
+        secondaryColor: "#DB2777",
+      },
+    ];
+    const club = {
+      id: "org-1",
+      name: "Riverside United",
+      location: "Riverside",
+      city: "Riverside",
+      state: "CA",
+      logoUrl: null,
+      canRequestClaim: true,
+      owner: null,
+      teams: [{ id: "team-1", name: "Riverside U12" }],
+    };
+    mockedFetch.mockImplementation(async (path) => {
+      if (String(path).includes("/partner-pages/")) {
+        return { data: { organizations: [club] } } as never;
+      }
+      return competitionResponse({ partnerPages: partners }) as never;
+    });
+
+    renderWithProviders(<CompetitionPage />);
+
+    expect(
+      await screen.findByTestId("competition-partner-directory"),
+    ).toHaveTextContent("Find your club");
+    expect(
+      screen.getByTestId("link-competition-partner-north-stars").closest("a"),
+    ).toHaveAttribute("href", "/partners/north-stars");
+    expect(
+      await screen.findAllByTestId("competition-partner-club-org-1"),
+    ).toHaveLength(1);
+    expect(screen.getByText("Ownership access available")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("competition-partner-access-org-1"),
+    ).toHaveStyle({ color: "#ffffff" });
+
+    const user = userEvent.setup();
+    await user.type(
+      screen.getByRole("textbox", { name: "Search partnership clubs" }),
+      "Elsewhere",
+    );
+    expect(screen.getByText("No clubs match that search.")).toBeInTheDocument();
+  });
+
+  it("does not reserve directory space for an unlinked competition", async () => {
+    mockedFetch.mockResolvedValue(
+      competitionResponse({ partnerPages: [] }) as never,
+    );
+
+    renderWithProviders(<CompetitionPage />);
+
+    await screen.findByTestId("hero-competition");
+    expect(
+      screen.queryByTestId("competition-partner-directory"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("distinguishes a directory outage from a successful empty search", async () => {
+    mockedFetch.mockImplementation(async (path) => {
+      if (String(path).includes("/partner-pages/")) {
+        throw new Error("Directory unavailable");
+      }
+      return competitionResponse({
+        partnerPages: [
+          {
+            slug: "north-stars",
+            officialName: "North Stars League",
+            associationLabel: "League",
+            logoUrl: null,
+            primaryColor: "#FDE047",
+            secondaryColor: "#F8FAFC",
+          },
+        ],
+      }) as never;
+    });
+
+    renderWithProviders(<CompetitionPage />);
+
+    expect(
+      await screen.findByRole("alert", undefined, { timeout: 5000 }),
+    ).toHaveTextContent("couldn't load the club directory");
+    expect(
+      screen.queryByText("No clubs match that search."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("uses readable access-button text for a light partnership color", async () => {
+    mockedFetch.mockImplementation(async (path) => {
+      if (String(path).includes("/partner-pages/")) {
+        return {
+          data: {
+            organizations: [
+              {
+                id: "org-light",
+                name: "Sunrise Soccer",
+                location: null,
+                city: "Albany",
+                state: "NY",
+                logoUrl: null,
+                canRequestClaim: true,
+                owner: null,
+                teams: [],
+              },
+            ],
+          },
+        } as never;
+      }
+      return competitionResponse({
+        partnerPages: [
+          {
+            slug: "sunrise",
+            officialName: "Sunrise League",
+            associationLabel: "League",
+            logoUrl: null,
+            primaryColor: "#FDE047",
+            secondaryColor: "#F8FAFC",
+          },
+        ],
+      }) as never;
+    });
+
+    renderWithProviders(<CompetitionPage />);
+
+    expect(
+      await screen.findByTestId("competition-partner-access-org-light"),
+    ).toHaveStyle({ color: "#111827" });
   });
 });
 

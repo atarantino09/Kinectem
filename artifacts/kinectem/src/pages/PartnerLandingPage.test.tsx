@@ -476,6 +476,41 @@ describe("PartnerLandingPage featured competition", () => {
     expect(mockedFetch).toHaveBeenCalledTimes(1);
   });
 
+  it("opens a competition-linked ownership request once and preserves it through sign in", async () => {
+    window.history.pushState(
+      {},
+      "",
+      "/partners/north-stars?view=clubs&claimOrg=org-1",
+    );
+    mockedFetch.mockResolvedValue(
+      partnerResponse(null, [
+        {
+          id: "org-1",
+          name: "North Stars Soccer",
+          location: "Riverside",
+          city: "Riverside",
+          state: "CA",
+          logoUrl: null,
+          canRequestClaim: true,
+          owner: null,
+          teams: [],
+        },
+      ]) as never,
+    );
+
+    renderWithProviders(<PartnerLandingPage />);
+
+    const panel = await screen.findByTestId("partner-access-request");
+    expect(panel).toHaveTextContent("North Stars Soccer");
+    expect(window.location.search).toBe("?view=clubs");
+    const createAccount = within(panel).getByRole("link", {
+      name: "Create account",
+    });
+    expect(
+      new URLSearchParams(new URL(createAccount.href).search).get("returnTo"),
+    ).toBe("/partners/north-stars?view=clubs&claimOrg=org-1");
+  });
+
   it("opens the claimed-club dialog after signup return even when it was already seen", async () => {
     window.history.pushState(
       {},

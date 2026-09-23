@@ -26,6 +26,7 @@ import {
   competitionOrganizers,
   competitionAdmins,
   organizerAdmins,
+  partnerLandingPages,
   teamHiddenCompetitionGames,
 } from "@workspace/db";
 import {
@@ -1069,6 +1070,30 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
           .limit(1)
       : [];
 
+    // A partner page owns the association; competitions expose the published
+    // inverse so visitors can move naturally between the event and directory.
+    // Keep both the current array and legacy singular column readable.
+    const partnerPages = await db
+      .select({
+        slug: partnerLandingPages.slug,
+        officialName: partnerLandingPages.officialName,
+        associationLabel: partnerLandingPages.associationLabel,
+        logoUrl: partnerLandingPages.logoUrl,
+        primaryColor: partnerLandingPages.primaryColor,
+        secondaryColor: partnerLandingPages.secondaryColor,
+      })
+      .from(partnerLandingPages)
+      .where(
+        and(
+          eq(partnerLandingPages.published, true),
+          or(
+            eq(partnerLandingPages.competitionId, tournament.id),
+            sql`${partnerLandingPages.competitionIds} @> ARRAY[${tournament.id}::uuid]`,
+          ),
+        ),
+      )
+      .orderBy(asc(partnerLandingPages.officialName), asc(partnerLandingPages.slug));
+
     // Viewer follow state for the Follow button. Logged-out → false.
     const viewerId = req.sessionUser?.id ?? null;
     const isFollowing = viewerId
@@ -1196,6 +1221,7 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
             ...(canManage ? { promoCode: organizerRow.promoCode } : {}),
           }
         : null,
+      partnerPages,
     };
 
     res.json({

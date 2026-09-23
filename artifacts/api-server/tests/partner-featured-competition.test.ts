@@ -109,6 +109,58 @@ describe("partner featured competition", () => {
     expect(
       publicPage.body.data.competitions.map((item: { id: string }) => item.id),
     ).toEqual([firstCreate.body.id, secondCreate.body.id]);
+    const publicCompetition = await request(app).get(
+      `/api/v1/competitions/${firstCreate.body.slug}`,
+    );
+    expect(publicCompetition.status).toBe(200);
+    expect(publicCompetition.body.competition.partnerPages).toEqual([
+      {
+        slug: `competition-partner-${suffix}`,
+        officialName: `Competition Partner ${suffix}`,
+        associationLabel: "League",
+        logoUrl: null,
+        primaryColor: "#155EEF",
+        secondaryColor: "#06B6D4",
+      },
+    ]);
+    await db
+      .update(partnerLandingPages)
+      .set({ competitionId: firstCreate.body.id, competitionIds: [] })
+      .where(eq(partnerLandingPages.id, pageId));
+    const legacySingularCompetition = await request(app).get(
+      `/api/v1/competitions/${firstCreate.body.slug}`,
+    );
+    expect(legacySingularCompetition.body.competition.partnerPages).toHaveLength(1);
+
+    await db
+      .update(partnerLandingPages)
+      .set({ competitionId: null, competitionIds: [firstCreate.body.id] })
+      .where(eq(partnerLandingPages.id, pageId));
+    const arrayCompetition = await request(app).get(
+      `/api/v1/competitions/${firstCreate.body.slug}`,
+    );
+    expect(arrayCompetition.body.competition.partnerPages).toHaveLength(1);
+    await db
+      .update(partnerLandingPages)
+      .set({
+        competitionId: firstCreate.body.id,
+        competitionIds: [firstCreate.body.id, secondCreate.body.id],
+      })
+      .where(eq(partnerLandingPages.id, pageId));
+
+    const unpublish = await agent
+      .patch(`/api/v1/admin/partner-pages/${pageId}`)
+      .send({ published: false });
+    expect(unpublish.status).toBe(200);
+    const competitionWithoutUnpublishedPartner = await request(app).get(
+      `/api/v1/competitions/${firstCreate.body.slug}`,
+    );
+    expect(
+      competitionWithoutUnpublishedPartner.body.competition.partnerPages,
+    ).toEqual([]);
+    await agent
+      .patch(`/api/v1/admin/partner-pages/${pageId}`)
+      .send({ published: true });
 
     const removeSecond = await agent.delete(
       `/api/v1/admin/partner-pages/${pageId}/competition/${secondCreate.body.id}`,

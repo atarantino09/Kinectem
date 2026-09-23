@@ -206,9 +206,28 @@ export default function PartnerLandingPage() {
   const data = partner.data?.data;
   useEffect(() => {
     if (!data) return;
-    const requestedOrgId = new URLSearchParams(window.location.search).get(
-      "accessRequestOrg",
-    );
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("view") === "clubs") setTab("clubs");
+    const requestedOrgId = params.get("accessRequestOrg");
+    const claimOrgId = params.get("claimOrg");
+    if (claimOrgId) {
+      const org = data.organizations.find(
+        (candidate) => candidate.id === claimOrgId && candidate.canRequestClaim,
+      );
+      if (org) {
+        setTab("clubs");
+        beginClaim(org);
+        const url = new URL(window.location.href);
+        url.searchParams.delete("claimOrg");
+        url.searchParams.set("view", "clubs");
+        window.history.replaceState(
+          window.history.state,
+          "",
+          `${url.pathname}${url.search}${url.hash}`,
+        );
+      }
+      return;
+    }
     if (!requestedOrgId) return;
     const org = data.organizations.find(
       (candidate) =>
@@ -923,7 +942,7 @@ export default function PartnerLandingPage() {
                 <div className="grid gap-8 lg:grid-cols-[.8fr_1.2fr]">
                   <div><div className="flex items-center gap-3"><OrgLogo name={selected.name} logoUrl={selected.logoUrl} className="h-16 w-16 rounded-xl" /><div><div className="text-xs font-black uppercase tracking-wide" style={{ color: page.primaryColor }}>{page.officialName}</div><h2 className="text-2xl font-black">{selected.name}</h2><p className="text-sm text-muted-foreground">{locationOf(selected)}</p></div></div><p className="mt-5 text-sm leading-relaxed text-muted-foreground">Kinectem must authenticate every requester. Approval makes you the initial owner of the entire {selected.name} organization, not only a coach or team manager. If that should be someone else, you can invite the actual owner, directors, or board members after approval and transfer ownership. Your request will be reviewed; ownership is never granted immediately.</p></div>
                   {!me ? (
-                    <div className="rounded-2xl bg-muted p-6"><h3 className="font-black">Sign in or create an account to continue</h3><p className="mt-2 text-sm text-muted-foreground">We'll preserve your selected organization when you return.</p><div className="mt-4 flex gap-2"><Link href={`/login?signup=1&returnTo=${encodeURIComponent(`/partners/${slug}`)}`}><Button>Create account</Button></Link><Link href={`/login?returnTo=${encodeURIComponent(`/partners/${slug}`)}`}><Button variant="outline">Sign in</Button></Link></div></div>
+                    <div className="rounded-2xl bg-muted p-6"><h3 className="font-black">Sign in or create an account to continue</h3><p className="mt-2 text-sm text-muted-foreground">We'll preserve your selected organization when you return.</p><div className="mt-4 flex gap-2"><Link href={`/login?signup=1&returnTo=${encodeURIComponent(`/partners/${slug}?view=clubs&claimOrg=${selected.id}`)}`}><Button>Create account</Button></Link><Link href={`/login?returnTo=${encodeURIComponent(`/partners/${slug}?view=clubs&claimOrg=${selected.id}`)}`}><Button variant="outline">Sign in</Button></Link></div></div>
                   ) : (
                     <div className="space-y-4">
                       <div className="rounded-xl bg-muted p-3 text-sm">Signed in as <strong>{me.email}</strong>. This account identity will be included in the review.</div>
