@@ -458,7 +458,10 @@ export default function PostPage() {
   };
 
   return (
-    <article className="max-w-3xl mx-auto space-y-6">
+    <article
+      className="max-w-3xl mx-auto space-y-4"
+      data-testid="post-detail-layout"
+    >
       {authorIsMinor ? <NoIndex /> : null}
       {asChildId && childPlausiblyLinked && (
         <div className="flex justify-end">
@@ -509,7 +512,7 @@ export default function PostPage() {
           data-testid={`strip-post-org-brand-${post.id}`}
         />
       )}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {(post as { hidden?: boolean }).hidden && (
           <span
             className="inline-flex items-center gap-1 rounded-full bg-red-100 text-red-900 border border-red-300 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide"
@@ -673,8 +676,8 @@ export default function PostPage() {
             <h1
               className={
                 isGameRecap
-                  ? "text-5xl font-black tracking-tight leading-tight"
-                  : "text-4xl font-black tracking-tight leading-tight"
+                  ? "text-4xl sm:text-5xl font-black tracking-tight leading-tight"
+                  : "text-3xl sm:text-4xl font-black tracking-tight leading-tight"
               }
             >
               {post.title}

@@ -97,6 +97,21 @@ describe("PostPage delete permissions", () => {
 
   afterEach(() => cleanup());
 
+  it("uses the compact shared section rhythm for every post detail type", async () => {
+    customFetchMock.mockResolvedValue(
+      postFixture({ canEdit: false, canDelete: false }),
+    );
+
+    renderWithProviders(<PostPage />);
+
+    expect(await screen.findByTestId("post-detail-layout")).toHaveClass(
+      "space-y-4",
+    );
+    expect(screen.getByTestId("post-detail-layout")).not.toHaveClass(
+      "space-y-6",
+    );
+  });
+
   it("gives a delete-only moderator the existing confirmation and DELETE mutation", async () => {
     customFetchMock.mockResolvedValue(
       postFixture({ canEdit: false, canDelete: true }),
