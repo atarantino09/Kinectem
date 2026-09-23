@@ -36,6 +36,10 @@ import { appBaseUrl, sendEmail } from "../lib/email";
 import { dispatchNotificationEmail } from "../lib/notification-email";
 import { generateToken } from "../lib/passwords";
 import { apiError, MAX_IMAGE_DATA_URL_LENGTH } from "../lib/spec-helpers";
+import {
+  lockPartnerCompetitionLinks,
+  mergedPartnerCompetitionIds,
+} from "../lib/partner-competition-links";
 
 const router: IRouter = Router();
 const HEX = /^#[0-9a-fA-F]{6}$/;
@@ -265,11 +269,7 @@ async function featuredCompetitions(pageId: string) {
     .where(eq(partnerLandingPages.id, pageId))
     .limit(1);
   if (!page) return [];
-  const ids = page.competitionIds.length
-    ? page.competitionIds
-    : page.competitionId
-      ? [page.competitionId]
-      : [];
+  const ids = mergedPartnerCompetitionIds(page);
   if (!ids.length) return [];
   const rows = await db
     .select()
@@ -781,31 +781,42 @@ router.put(
   requireAdmin,
   asyncHandler(async (req, res) => {
     const pageId = p(req.params.pageId);
-    const page = await findPage(pageId);
-    if (!page) return apiError(res, 404, "Partner page not found");
     const parsed = PartnerCompetitionBody.safeParse(req.body);
     if (!parsed.success) return apiError(res, 400, "A competition is required");
-    const [competition] = await db
-      .select()
-      .from(tournaments)
-      .where(eq(tournaments.id, parsed.data.competitionId))
-      .limit(1);
-    if (!competition) return apiError(res, 404, "Competition not found");
-    const nextIds = page.competitionIds.includes(competition.id)
-      ? page.competitionIds
-      : [...page.competitionIds, competition.id];
-    const [updated] = await db
-      .update(partnerLandingPages)
-      .set({
-        competitionId: nextIds[0] ?? competition.id,
-        competitionIds: nextIds,
-        updatedAt: new Date(),
-      })
-      .where(eq(partnerLandingPages.id, pageId))
-      .returning();
+    const result = await db.transaction(async (tx) => {
+      const state = await lockPartnerCompetitionLinks(tx, pageId, [
+        parsed.data.competitionId,
+      ]);
+      if (!state) return { status: "page-missing" as const };
+      const [competition] = await tx
+        .select()
+        .from(tournaments)
+        .where(eq(tournaments.id, parsed.data.competitionId))
+        .limit(1);
+      if (!competition) return { status: "competition-missing" as const };
+      const nextIds = state.liveCompetitionIds.includes(competition.id)
+        ? state.liveCompetitionIds
+        : [...state.liveCompetitionIds, competition.id];
+      const [updated] = await tx
+        .update(partnerLandingPages)
+        .set({
+          competitionId: nextIds[0] ?? competition.id,
+          competitionIds: nextIds,
+          updatedAt: new Date(),
+        })
+        .where(eq(partnerLandingPages.id, pageId))
+        .returning();
+      return { status: "updated" as const, competition, page: updated };
+    });
+    if (result.status === "page-missing") {
+      return apiError(res, 404, "Partner page not found");
+    }
+    if (result.status === "competition-missing") {
+      return apiError(res, 404, "Competition not found");
+    }
     return res.json({
-      data: updated,
-      competition: competitionMetadata(competition),
+      data: result.page,
+      competition: competitionMetadata(result.competition),
       competitions: await featuredCompetitions(pageId),
     });
   }),
@@ -816,19 +827,27 @@ router.delete(
   requireAdmin,
   asyncHandler(async (req, res) => {
     const pageId = p(req.params.pageId);
-    const page = await findPage(pageId);
-    if (!page) return apiError(res, 404, "Partner page not found");
     const competitionId = p(req.params.competitionId);
-    const nextIds = page.competitionIds.filter((id) => id !== competitionId);
-    const [updated] = await db
-      .update(partnerLandingPages)
-      .set({
-        competitionIds: nextIds,
-        competitionId: nextIds[0] ?? null,
-        updatedAt: new Date(),
-      })
-      .where(eq(partnerLandingPages.id, pageId))
-      .returning();
+    const updated = await db.transaction(async (tx) => {
+      const state = await lockPartnerCompetitionLinks(tx, pageId, [
+        competitionId,
+      ]);
+      if (!state) return null;
+      const nextIds = state.liveCompetitionIds.filter(
+        (id) => id !== competitionId,
+      );
+      const [page] = await tx
+        .update(partnerLandingPages)
+        .set({
+          competitionIds: nextIds,
+          competitionId: nextIds[0] ?? null,
+          updatedAt: new Date(),
+        })
+        .where(eq(partnerLandingPages.id, pageId))
+        .returning();
+      return page;
+    });
+    if (!updated) return apiError(res, 404, "Partner page not found");
     return res.json({
       data: updated,
       competitions: await featuredCompetitions(pageId),
@@ -841,13 +860,17 @@ router.delete(
   requireAdmin,
   asyncHandler(async (req, res) => {
     const pageId = p(req.params.pageId);
-    if (!(await findPage(pageId)))
-      return apiError(res, 404, "Partner page not found");
-    const [updated] = await db
-      .update(partnerLandingPages)
-      .set({ competitionId: null, competitionIds: [], updatedAt: new Date() })
-      .where(eq(partnerLandingPages.id, pageId))
-      .returning();
+    const updated = await db.transaction(async (tx) => {
+      const state = await lockPartnerCompetitionLinks(tx, pageId);
+      if (!state) return null;
+      const [page] = await tx
+        .update(partnerLandingPages)
+        .set({ competitionId: null, competitionIds: [], updatedAt: new Date() })
+        .where(eq(partnerLandingPages.id, pageId))
+        .returning();
+      return page;
+    });
+    if (!updated) return apiError(res, 404, "Partner page not found");
     return res.json({ data: updated, competition: null });
   }),
 );
@@ -857,8 +880,6 @@ router.post(
   requireAdmin,
   asyncHandler(async (req, res) => {
     const pageId = p(req.params.pageId);
-    if (!(await findPage(pageId)))
-      return apiError(res, 404, "Partner page not found");
     const parsed = PartnerCompetitionCreateBody.safeParse(req.body);
     if (!parsed.success) {
       return apiError(
@@ -873,6 +894,8 @@ router.post(
     }
     const adminId = req.realUser!.id;
     const result = await db.transaction(async (tx) => {
+      const state = await lockPartnerCompetitionLinks(tx, pageId);
+      if (!state) return null;
       const [competition] = await tx
         .insert(tournaments)
         .values({
@@ -887,8 +910,7 @@ router.post(
           ownerUserId: adminId,
         })
         .returning();
-      const page = await findPage(pageId);
-      const nextIds = [...(page?.competitionIds ?? []), competition.id];
+      const nextIds = [...state.liveCompetitionIds, competition.id];
       const [updatedPage] = await tx
         .update(partnerLandingPages)
         .set({
@@ -900,6 +922,7 @@ router.post(
         .returning();
       return { competition, page: updatedPage };
     });
+    if (!result) return apiError(res, 404, "Partner page not found");
     return res.status(201).json({
       data: result.page,
       competition: competitionMetadata(result.competition),

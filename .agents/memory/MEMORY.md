@@ -73,6 +73,7 @@
 - [user-event clipboard mocks](user-event-clipboard-mocks.md) — userEvent.setup replaces navigator.clipboard in JSDOM; spy on writeText only after setup or assertions target a stale mock.
 - [Safe Excel schedule imports](safe-excel-schedule-imports.md) — avoid legacy npm xlsx; bound workbook size and canonicalize true Excel dates before passing CSV to legacy APIs.
 - [Partner landing membership](partner-landing-membership.md) — partner directories attach orgs independently of ownership; duplicates stay distinct and direct secret-link claims remain separate.
+- [Partner competition link locking](partner-competition-link-locking.md) — both admin surfaces must share page + competition locks or concurrent edits/deletes can lose or revive links.
 - [Partner logo palette](partner-logo-palette.md) — partner-page colors come from the logo; preserve manual custom colors and use a solid treatment for one-color marks.
 - [Unclaimed organization deletion](unclaimed-org-deletion.md) — lock organization rows before the owner check, and explicitly purge polymorphic records that have no foreign keys.
 - [Branded email boundary](branded-email-boundary.md) — API email branding belongs at final delivery; scripts use the shared shell, while plaintext and compliance copy remain caller-owned.

@@ -6,6 +6,7 @@ import { BrandColorField } from "@/components/BrandColorField";
 import { BrandColorSwapButton } from "@/components/BrandColorSwapButton";
 import { BrandImageField } from "@/components/BrandImageField";
 import { CompetitionAdminsPanel } from "@/components/CompetitionAdminsPanel";
+import { CompetitionPartnerPagesPanel } from "@/components/CompetitionPartnerPagesPanel";
 import { CompetitionHowItWorks } from "@/components/CompetitionHowItWorks";
 import { readCompetitionScheduleFile } from "@/lib/competition-schedule-file";
 import {
@@ -4208,6 +4209,7 @@ function ConsoleWithTour({
             targetId={row.id}
             collapsible
           />
+          <CompetitionPartnerPagesPanel competitionId={row.id} />
         </>
       ) : null}
       {detail ? (

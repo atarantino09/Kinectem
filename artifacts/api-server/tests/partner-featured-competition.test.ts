@@ -80,6 +80,55 @@ describe("partner featured competition", () => {
       firstCreate.body.id,
       secondCreate.body.id,
     ]);
+    const anonymousCompetitionPartners = await request(app).get(
+      `/api/v1/admin/competitions/${firstCreate.body.id}/partner-pages`,
+    );
+    expect(anonymousCompetitionPartners.status).toBe(401);
+    const { agent: nonAdmin } = await loginAs(
+      (user) => user.role === "coach",
+    );
+    const forbiddenCompetitionPartners = await nonAdmin.get(
+      `/api/v1/admin/competitions/${firstCreate.body.id}/partner-pages`,
+    );
+    expect(forbiddenCompetitionPartners.status).toBe(403);
+    const competitionPartners = await agent.get(
+      `/api/v1/admin/competitions/${firstCreate.body.id}/partner-pages`,
+    );
+    expect(competitionPartners.status).toBe(200);
+    expect(
+      competitionPartners.body.data.find(
+        (page: { id: string }) => page.id === pageId,
+      ),
+    ).toMatchObject({
+      id: pageId,
+      published: false,
+      linked: true,
+    });
+    const inverseDisconnect = await agent.delete(
+      `/api/v1/admin/competitions/${firstCreate.body.id}/partner-pages/${pageId}`,
+    );
+    expect(inverseDisconnect.status).toBe(200);
+    expect(inverseDisconnect.body.data).toEqual({ id: pageId, linked: false });
+    const [afterInverseDisconnect] = await db
+      .select()
+      .from(partnerLandingPages)
+      .where(eq(partnerLandingPages.id, pageId))
+      .limit(1);
+    expect(afterInverseDisconnect.competitionId).toBe(secondCreate.body.id);
+    expect(afterInverseDisconnect.competitionIds).toEqual([secondCreate.body.id]);
+    const inverseReconnect = await agent.put(
+      `/api/v1/admin/competitions/${firstCreate.body.id}/partner-pages/${pageId}`,
+    );
+    expect(inverseReconnect.status).toBe(200);
+    const [afterInverseReconnect] = await db
+      .select()
+      .from(partnerLandingPages)
+      .where(eq(partnerLandingPages.id, pageId))
+      .limit(1);
+    expect(afterInverseReconnect.competitionIds).toEqual([
+      secondCreate.body.id,
+      firstCreate.body.id,
+    ]);
     const linkedSearch = await agent.get(
       `/api/v1/admin/partner-pages/${pageId}/competition-search?q=Second`,
     );
@@ -98,17 +147,17 @@ describe("partner featured competition", () => {
     );
     expect(publicPage.status).toBe(200);
     expect(publicPage.body.data.competition).toEqual({
-      id: firstCreate.body.id,
-      slug: firstCreate.body.slug,
-      name: `Existing Cup ${suffix}`,
-      type: "tournament",
-      startDate: "2026-10-03",
-      endDate: "2026-10-04",
-      location: "Riverside",
+      id: secondCreate.body.id,
+      slug: secondCreate.body.slug,
+      name: `Second Cup ${suffix}`,
+      type: "league",
+      startDate: "2026-11-01",
+      endDate: "2026-11-30",
+      location: "North Fields",
     });
     expect(
       publicPage.body.data.competitions.map((item: { id: string }) => item.id),
-    ).toEqual([firstCreate.body.id, secondCreate.body.id]);
+    ).toEqual([secondCreate.body.id, firstCreate.body.id]);
     const publicCompetition = await request(app).get(
       `/api/v1/competitions/${firstCreate.body.slug}`,
     );
@@ -211,14 +260,19 @@ describe("partner featured competition", () => {
       .limit(1);
     expect(storedPage.competitionId).toBe(linkedCreate.body.competition.id);
 
-    await db
-      .delete(tournaments)
-      .where(eq(tournaments.id, linkedCreate.body.competition.id));
+    const deleteLinkedCompetition = await agent
+      .delete(`/api/v1/competitions/${linkedCreate.body.competition.id}`)
+      .send({ confirm: `Partner League ${suffix}` });
+    expect(
+      deleteLinkedCompetition.status,
+      JSON.stringify(deleteLinkedCompetition.body),
+    ).toBe(200);
     const [afterDelete] = await db
       .select()
       .from(partnerLandingPages)
       .where(eq(partnerLandingPages.id, pageId))
       .limit(1);
     expect(afterDelete.competitionId).toBeNull();
+    expect(afterDelete.competitionIds).toEqual([]);
   });
 });

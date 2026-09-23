@@ -73,6 +73,10 @@ import {
   competitionWeekForDate,
   timestampToCompetitionDate,
 } from "../lib/competition-weeks";
+import {
+  lockPartnerCompetitionLinks,
+  mergedPartnerCompetitionIds,
+} from "../lib/partner-competition-links";
 
 const router: IRouter = Router();
 
@@ -87,6 +91,130 @@ const tournamentWriteLimiter = rateLimit({
   keys: (req) => [ipKey(req)],
   message: "Too many tournament changes. Please wait a moment and try again.",
 });
+
+// Platform-admin relationship editor. The partnership page remains the owner
+// of the association; these routes only offer the inverse competition-console
+// view so both admin surfaces update the same columns.
+router.get(
+  "/admin/competitions/:competitionId/partner-pages",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const competitionId = String(req.params.competitionId ?? "");
+    const [competition] = await db
+      .select({ id: tournaments.id })
+      .from(tournaments)
+      .where(eq(tournaments.id, competitionId))
+      .limit(1);
+    if (!competition) {
+      return apiError(res, 404, "Competition not found");
+    }
+    const pages = await db
+      .select({
+        id: partnerLandingPages.id,
+        slug: partnerLandingPages.slug,
+        officialName: partnerLandingPages.officialName,
+        associationLabel: partnerLandingPages.associationLabel,
+        logoUrl: partnerLandingPages.logoUrl,
+        published: partnerLandingPages.published,
+        competitionId: partnerLandingPages.competitionId,
+        competitionIds: partnerLandingPages.competitionIds,
+      })
+      .from(partnerLandingPages)
+      .orderBy(asc(partnerLandingPages.officialName), asc(partnerLandingPages.id));
+    return res.json({
+      data: pages.map((page) => ({
+        id: page.id,
+        slug: page.slug,
+        officialName: page.officialName,
+        associationLabel: page.associationLabel,
+        logoUrl: page.logoUrl,
+        published: page.published,
+        linked: mergedPartnerCompetitionIds(page).includes(competitionId),
+      })),
+    });
+  }),
+);
+
+router.put(
+  "/admin/competitions/:competitionId/partner-pages/:pageId",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const competitionId = String(req.params.competitionId ?? "");
+    const pageId = String(req.params.pageId ?? "");
+    const updated = await db.transaction(async (tx) => {
+      const state = await lockPartnerCompetitionLinks(tx, pageId, [
+        competitionId,
+      ]);
+      if (!state) return { status: "page-missing" as const };
+      const [competition] = await tx
+        .select({ id: tournaments.id })
+        .from(tournaments)
+        .where(eq(tournaments.id, competitionId))
+        .limit(1);
+      if (!competition) return { status: "competition-missing" as const };
+      const ids = [...state.liveCompetitionIds];
+      if (!ids.includes(competitionId)) ids.push(competitionId);
+      const [next] = await tx
+        .update(partnerLandingPages)
+        .set({
+          competitionId: ids[0] ?? null,
+          competitionIds: ids,
+          updatedAt: new Date(),
+        })
+        .where(eq(partnerLandingPages.id, pageId))
+        .returning();
+      return { status: "updated" as const, page: next };
+    });
+    if (updated.status === "competition-missing") {
+      return apiError(res, 404, "Competition not found");
+    }
+    if (updated.status === "page-missing") {
+      return apiError(res, 404, "Partner page not found");
+    }
+    return res.json({ data: { id: updated.page.id, linked: true } });
+  }),
+);
+
+router.delete(
+  "/admin/competitions/:competitionId/partner-pages/:pageId",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const competitionId = String(req.params.competitionId ?? "");
+    const pageId = String(req.params.pageId ?? "");
+    const updated = await db.transaction(async (tx) => {
+      const state = await lockPartnerCompetitionLinks(tx, pageId, [
+        competitionId,
+      ]);
+      if (!state) return { status: "page-missing" as const };
+      const [competition] = await tx
+        .select({ id: tournaments.id })
+        .from(tournaments)
+        .where(eq(tournaments.id, competitionId))
+        .limit(1);
+      if (!competition) return { status: "competition-missing" as const };
+      const ids = state.liveCompetitionIds.filter(
+        (id) => id !== competitionId,
+      );
+      const [next] = await tx
+        .update(partnerLandingPages)
+        .set({
+          competitionId: ids[0] ?? null,
+          competitionIds: ids,
+          updatedAt: new Date(),
+        })
+        .where(eq(partnerLandingPages.id, pageId))
+        .returning();
+      return { status: "updated" as const, page: next };
+    });
+    if (updated.status === "competition-missing") {
+      return apiError(res, 404, "Competition not found");
+    }
+    if (updated.status === "page-missing") {
+      return apiError(res, 404, "Partner page not found");
+    }
+    return res.json({ data: { id: updated.page.id, linked: false } });
+  }),
+);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -2826,6 +2954,27 @@ router.delete(
           followers: sql<number>`(select count(*)::int from competition_followers where competition_id = ${tournament.id})`,
         })
         .from(sql`(select 1) as _`);
+
+      // Array columns do not have FK cleanup. Remove the deleted competition
+      // from every partnership relationship before deleting the row, and
+      // promote the next linked competition into the legacy singular column.
+      await tx
+        .update(partnerLandingPages)
+        .set({
+          competitionIds: sql`array_remove(${partnerLandingPages.competitionIds}, ${tournament.id}::uuid)`,
+          competitionId: sql`CASE
+            WHEN ${partnerLandingPages.competitionId} = ${tournament.id}::uuid
+            THEN (array_remove(${partnerLandingPages.competitionIds}, ${tournament.id}::uuid))[1]
+            ELSE ${partnerLandingPages.competitionId}
+          END`,
+          updatedAt: new Date(),
+        })
+        .where(
+          or(
+            eq(partnerLandingPages.competitionId, tournament.id),
+            sql`${partnerLandingPages.competitionIds} @> ARRAY[${tournament.id}::uuid]`,
+          ),
+        );
 
       await tx.delete(tournaments).where(eq(tournaments.id, tournament.id));
 
