@@ -1,0 +1,118 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Poppins:wght@400;500;600;700;800;900&display=swap");
+
+:root {
+  --background: 220 33% 98%;
+  --foreground: 222 47% 11%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --border: 214 32% 91%;
+  --muted: 210 40% 96%;
+  --muted-foreground: 215 16% 47%;
+  --primary: 217 91% 60%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 210 40% 96%;
+  --secondary-foreground: 222 47% 11%;
+  --brand-purple: 262 83% 58%;
+  --brand-blue: 217 91% 60%;
+  --brand-gradient: linear-gradient(135deg, hsl(var(--brand-purple)), hsl(var(--brand-blue)));
+  --brand-gradient-cover: linear-gradient(135deg, hsl(262 80% 68%), hsl(217 90% 68%));
+  --brand-gradient-dark: linear-gradient(135deg, hsl(262 60% 20%), hsl(222 47% 11%) 55%, hsl(217 60% 22%));
+  --k-magenta: #ff1f9e;
+  --k-glyph-gradient: linear-gradient(135deg, #ff1f9e 0%, #9b22e8 13%, #7e22ce 34%, #5b32e8 56%, #2563eb 80%, #3b82f6 100%);
+  --k-glyph-gradient-small: linear-gradient(135deg, #ff1f9e, #9b22e8 22%, #7e22ce 59%, #5b32e8 97%);
+  --app-font-sans: "Inter", sans-serif;
+  --app-font-display: "Poppins", sans-serif;
+  --page-glow-1: hsl(262 83% 58% / 0.08);
+  --page-glow-2: hsl(217 91% 60% / 0.12);
+  --radius: 0.75rem;
+}
+
+.brand-gradient-cover { background: var(--brand-gradient-cover); }
+.brand-gradient-dark { background: var(--brand-gradient-dark); }
+.brand-gradient-text {
+  background: var(--k-glyph-gradient);
+  color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+.brand-banner-pattern {
+  background-image:
+    radial-gradient(circle at 18% 28%, rgba(255,255,255,.22), transparent 42%),
+    radial-gradient(circle at 82% 72%, rgba(255,255,255,.18), transparent 38%),
+    radial-gradient(circle at 55% 110%, rgba(255,255,255,.12), transparent 50%),
+    radial-gradient(rgba(255,255,255,.18) 1px, transparent 1px);
+  background-size: auto, auto, auto, 18px 18px;
+}
+.brand-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+  padding: .25rem .625rem;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, #fff2fa, hsl(262 83% 96%) 58%, hsl(217 90% 97%));
+  border: 1px solid color-mix(in srgb, var(--k-magenta) 28%, white);
+  color: #5b21b6;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.app-shell-header { background: hsl(var(--background)); border-bottom: 1px solid hsl(var(--border)); }
+.app-page-header {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid hsl(var(--brand-purple) / .18);
+  border-radius: 1.25rem;
+  background: hsl(var(--card));
+  box-shadow: 0 12px 34px hsl(var(--brand-purple) / .09), 0 2px 8px hsl(222 47% 11% / .04);
+}
+.app-page-header::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: .15;
+  background-image: radial-gradient(hsl(var(--brand-purple)) 1px, transparent 1px);
+  background-size: 16px 16px;
+  mask-image: linear-gradient(115deg, black, transparent 60%);
+}
+.app-page-header-content { position: relative; z-index: 1; padding: 1.25rem; }
+.app-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  margin-bottom: .5rem;
+  color: hsl(var(--brand-purple));
+  font-size: .6875rem;
+  font-weight: 900;
+  letter-spacing: .16em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+.app-kicker::before { content: ""; width: 1.5rem; height: .2rem; border-radius: 9999px; background: var(--k-glyph-gradient-small); }
+.app-surface {
+  border: 1px solid hsl(var(--brand-purple) / .16);
+  border-radius: 1.25rem;
+  background: hsl(var(--card));
+  box-shadow: 0 8px 26px hsl(var(--brand-purple) / .075), 0 1px 4px hsl(222 47% 11% / .04);
+}
+.app-surface-interactive { transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease; }
+.app-surface-interactive:hover { transform: translateY(-2px); border-color: hsl(var(--brand-purple) / .38); box-shadow: 0 16px 38px hsl(var(--brand-purple) / .13), 0 2px 8px hsl(222 47% 11% / .06); }
+.app-section-heading {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  color: hsl(var(--foreground));
+  font-size: .75rem;
+  font-weight: 900;
+  letter-spacing: .12em;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+.app-section-heading::before { content: ""; width: .25rem; height: 1.1rem; flex: none; border-radius: 9999px; background: var(--k-glyph-gradient-small); }
+
+@media (max-width: 639px) {
+  .app-page-header-content { padding: 1rem; }
+  .app-page-header .text-3xl { font-size: 1.75rem; }
+}

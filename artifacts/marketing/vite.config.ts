@@ -55,6 +55,11 @@ export default defineConfig({
     strictPort: true,
     host: "0.0.0.0",
     allowedHosts: true,
+    // The design canvas previews isolated mockups through the shared dev domain.
+    // This proxy is development-only; the published marketing site is unchanged.
+    proxy: {
+      "/__mockup": "http://127.0.0.1:8081",
+    },
     fs: {
       strict: true,
     },

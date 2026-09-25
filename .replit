@@ -11,6 +11,28 @@ env = { "CI" = "true" }
 [workflows]
 runButton = "Project"
 
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Mockup Preview Server"
+
+[[workflows.workflow]]
+name = "Mockup Preview Server"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "webview"
+isCanvasWorkflow = true
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "PORT=8081 pnpm --dir artifacts/mockup-sandbox run dev"
+waitForPort = 8081
+
 [agent]
 stack = "PNPM_WORKSPACE"
 expertMode = true

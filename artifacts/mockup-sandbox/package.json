@@ -1,0 +1,21 @@
+{
+  "name": "kinectem-mockup-sandbox",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "lucide-react": "*",
+    "react": "*",
+    "react-dom": "*"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "*",
+    "@vitejs/plugin-react": "*",
+    "tailwindcss": "*",
+    "vite": "*"
+  }
+}
