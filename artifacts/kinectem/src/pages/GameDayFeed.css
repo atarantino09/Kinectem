@@ -1,3 +1,16 @@
+.game-day-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid rgba(156, 172, 255, .17);
+  border-radius: 20px;
+  background:
+    radial-gradient(ellipse 80% 85% at 104% 100%, rgba(36, 102, 225, .36), transparent 72%),
+    radial-gradient(ellipse 90% 75% at -12% 0%, rgba(111, 29, 185, .42), transparent 72%),
+    var(--brand-gradient-dark);
+  box-shadow: 0 16px 40px rgba(21, 22, 60, .14);
+}
 .game-day-intro {
   display: flex;
   align-items: end;
@@ -5,6 +18,19 @@
   gap: 12px;
   padding: 4px 3px 2px;
 }
+.game-day-hero .game-day-intro h1 { color: #fff; }
+.game-day-hero .game-day-eyebrow { color: #c8aeff; }
+.game-day-hero .game-day-intro p { color: #cbd5e1; }
+.game-day-hero .game-day-intro h1 span {
+  background: linear-gradient(90deg, #e7dcff, #82b4ff 80%, #c7e4ff);
+  background-clip: text;
+}
+.game-day-hero .game-day-intro button {
+  color: #1c2140;
+  background: #fff;
+  border-color: rgba(255, 255, 255, .7);
+}
+.game-day-hero .game-day-intro button:hover { background: #edf2ff; }
 .game-day-eyebrow {
   display: flex;
   align-items: center;
@@ -40,7 +66,7 @@
   display: grid;
   grid-template-columns: 46% 54%;
   min-height: 268px;
-  border: 1px solid hsl(var(--brand-purple) / .24);
+  border: 1px solid rgba(255, 255, 255, .2);
   border-radius: 14px;
   background: hsl(var(--card));
   box-shadow: 0 16px 44px hsl(var(--brand-purple) / .12);
@@ -59,6 +85,7 @@
 .game-day-feed-heading h2 { font-family: var(--app-font-display); font-size: 22px; font-weight: 900; letter-spacing: -.04em; margin-top: 5px; }
 .game-day-explore-stage { touch-action: pan-y; }
 @media (max-width: 680px) {
+  .game-day-hero { padding: 14px; border-radius: 16px; }
   .game-day-intro { align-items: start; }
   .game-day-intro h1 { font-size: 27px; }
   .game-day-intro p { font-size: 11px; max-width: 285px; }

@@ -468,6 +468,7 @@ export default function FeedPage() {
 
       {/* Center feed */}
       <div className="space-y-4 min-w-0">
+        <section className="game-day-hero" aria-label="Game day together">
         <div className="game-day-intro">
           <div>
             <span className="game-day-eyebrow"><Sparkles size={13} /> Your community pulse</span>
@@ -486,8 +487,9 @@ export default function FeedPage() {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+        {feedMode === "following" && spotlight && <GameDaySpotlight post={spotlight} />}
+        </section>
         {feedMode === "explore" ? <ExploreReel active /> : <>
-        {spotlight && <GameDaySpotlight post={spotlight} />}
         <div className="game-day-feed-heading">
           <div><span className="game-day-eyebrow">Keep up with your teams</span><h2>Latest activity</h2></div>
           <a href="#following-posts" className="text-xs font-bold text-primary flex items-center gap-1">View all <ArrowUpRight size={14} /></a>
