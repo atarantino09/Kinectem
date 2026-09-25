@@ -10,6 +10,7 @@ const VIEWER_ID = "22222222-2222-4222-8222-222222222222";
 const useGetUserByIdMock = vi.fn();
 const useGetLoggedInUserMock = vi.fn();
 const useListUserTeamsMock = vi.fn();
+const useGetUserSportsMock = vi.fn();
 
 vi.mock("wouter", () => ({
   useParams: () => ({ userId: PROFILE_ID }),
@@ -49,7 +50,7 @@ vi.mock("@workspace/api-client-react", () => ({
   useGetUserById: (...args: unknown[]) => useGetUserByIdMock(...args),
   useGetLoggedInUser: (...args: unknown[]) =>
     useGetLoggedInUserMock(...args),
-  useGetUserSports: () => ({ data: { sports: [] } }),
+  useGetUserSports: (...args: unknown[]) => useGetUserSportsMock(...args),
   getGetUserSportsQueryKey: (id: string) => [`/api/v1/users/${id}/sports`],
   listUserPosts: vi.fn(),
   getListUserPostsQueryKey: (id: string) => [`/api/v1/users/${id}/posts`],
@@ -127,9 +128,38 @@ function profileFixture(overrides: Record<string, unknown> = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   useListUserTeamsMock.mockReturnValue({ data: { data: [] } });
+  useGetUserSportsMock.mockReturnValue({ data: { sports: [] } });
 });
 
 describe("UserProfilePage profile highlight action", () => {
+  it("groups available about details in a wrapping row below the bio", () => {
+    useGetUserByIdMock.mockReturnValue({
+      data: profileFixture({
+        bio: "A lifelong soccer fan.",
+        dateOfBirth: "1988-05-12",
+        city: "Roxbury",
+        state: "NJ",
+      }),
+      isLoading: false,
+    });
+    useGetLoggedInUserMock.mockReturnValue({
+      data: { id: PROFILE_ID, role: "athlete" },
+    });
+    useGetUserSportsMock.mockReturnValue({ data: { sports: ["Soccer"] } });
+
+    renderWithProviders(<UserProfilePage />);
+
+    const about = screen.getByTestId("user-profile-about");
+    const facts = screen.getByTestId("user-profile-facts");
+    expect(about).toContainElement(facts);
+    expect(about).toHaveTextContent("A lifelong soccer fan.");
+    expect(facts).toHaveClass("flex-wrap");
+    expect(facts).toContainElement(screen.getByTestId("text-user-birthday"));
+    expect(facts).toContainElement(screen.getByTestId("badge-user-sport-Soccer"));
+    expect(facts).toContainElement(screen.getByTestId("text-user-location"));
+    expect(screen.getByTestId("text-user-location")).toHaveTextContent("Roxbury, NJ");
+  });
+
   it("lets a signed-in child launch a profile-only highlight from their own profile", () => {
     useGetUserByIdMock.mockReturnValue({
       data: profileFixture(),

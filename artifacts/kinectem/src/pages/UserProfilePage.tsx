@@ -591,68 +591,64 @@ export default function UserProfilePage() {
               userSports.length > 0;
             if (!showInfo) return null;
             return (
-              <div className="px-4 pb-5 sm:px-6 sm:pb-6 space-y-2">
+              <div className="border-t border-border/60 bg-muted/20 px-4 py-4 sm:px-6 sm:py-5 space-y-3" data-testid="user-profile-about">
                 {user.bio && (
                   <div className="flex items-start gap-2 text-sm text-muted-foreground leading-relaxed max-w-2xl">
                     <FileText
                       className="h-4 w-4 shrink-0 mt-0.5"
                       aria-hidden="true"
                     />
-                    <p className="whitespace-pre-wrap min-w-0">
+                    <p className="whitespace-pre-wrap break-words min-w-0">
                       {linkify(user.bio)}
                     </p>
                   </div>
                 )}
-                {dobLabel && (
-                  <div
-                    className="flex items-center gap-2 text-sm font-medium text-muted-foreground"
-                    data-testid="text-user-birthday"
-                  >
-                    <Cake className="h-4 w-4 shrink-0" aria-hidden="true" />
-                    <span>{dobLabel}</span>
-                  </div>
-                )}
-                {/* Task #500 — Show the user's selected sports as small
-                badge chips. Hidden when empty (and the query is only
-                enabled for own-profile, so strangers never see this
-                row at all today). */}
-                {userSports.length > 0 && (
-                  <div
-                    className="flex items-start gap-2 text-sm font-medium text-muted-foreground"
-                    data-testid="text-user-sports"
-                  >
-                    <Trophy
-                      className="h-4 w-4 shrink-0 mt-0.5"
-                      aria-hidden="true"
-                    />
-                    <div className="flex flex-wrap gap-1.5">
-                      {userSports.map((s) => (
-                        <Badge
-                          key={s}
-                          variant="secondary"
-                          className="font-medium"
-                          data-testid={`badge-user-sport-${s}`}
-                        >
-                          {s}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {/* Task #349 — Show "City, ST", just the city, or just the state
-                depending on which fields the user has set. Hidden when both
-                are empty. */}
-                {(user.city || user.state) && (
-                  <div
-                    className="flex items-center gap-2 text-sm font-medium text-muted-foreground"
-                    data-testid="text-user-location"
-                  >
-                    <MapPin className="h-4 w-4 shrink-0" aria-hidden="true" />
-                    <span>
-                      {user.city && user.state
-                        ? `${user.city}, ${user.state}`
-                        : (user.city ?? user.state)}
-                    </span>
+                {(dobLabel || userSports.length > 0 || user.city || user.state) && (
+                  <div className="flex flex-wrap items-stretch gap-2.5" data-testid="user-profile-facts">
+                    {dobLabel && (
+                      <div
+                        className="inline-flex max-w-full min-w-0 items-center gap-2 rounded-lg border border-border/70 bg-background/80 px-3 py-2 text-sm font-medium text-foreground/80"
+                        data-testid="text-user-birthday"
+                      >
+                        <Cake className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        <span>{dobLabel}</span>
+                      </div>
+                    )}
+                    {/* Task #500 — Sports are self-only until the endpoint is public. */}
+                    {userSports.length > 0 && (
+                      <div
+                        className="flex max-w-full min-w-0 items-center gap-2 rounded-lg border border-border/70 bg-background/80 px-3 py-2 text-sm font-medium text-foreground/80"
+                        data-testid="text-user-sports"
+                      >
+                        <Trophy className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        <div className="flex flex-wrap gap-1.5">
+                          {userSports.map((s) => (
+                            <Badge
+                              key={s}
+                              variant="secondary"
+                              className="font-medium"
+                              data-testid={`badge-user-sport-${s}`}
+                            >
+                              {s}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {/* Task #349 — Show only the location fields the user has set. */}
+                    {(user.city || user.state) && (
+                      <div
+                        className="inline-flex max-w-full min-w-0 items-center gap-2 rounded-lg border border-border/70 bg-background/80 px-3 py-2 text-sm font-medium text-foreground/80"
+                        data-testid="text-user-location"
+                      >
+                        <MapPin className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        <span className="min-w-0 [overflow-wrap:anywhere]">
+                          {user.city && user.state
+                            ? `${user.city}, ${user.state}`
+                            : (user.city ?? user.state)}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
