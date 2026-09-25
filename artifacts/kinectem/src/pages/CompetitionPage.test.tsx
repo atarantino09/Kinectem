@@ -219,9 +219,22 @@ describe("competition partnership directory", () => {
     expect(
       await screen.findByTestId("competition-partner-directory"),
     ).toHaveTextContent("Find your club");
+    expect(screen.getByRole("button", { name: "Show clubs" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(
+      screen.queryByRole("textbox", { name: "Search partnership clubs" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByTestId("link-competition-partner-north-stars").closest("a"),
     ).toHaveAttribute("href", "/partners/north-stars");
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Show clubs" }));
+    expect(screen.getByRole("button", { name: "Hide clubs" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
     expect(
       await screen.findAllByTestId("competition-partner-club-org-1"),
     ).toHaveLength(1);
@@ -230,12 +243,15 @@ describe("competition partnership directory", () => {
       screen.getByTestId("competition-partner-access-org-1"),
     ).toHaveStyle({ color: "#ffffff" });
 
-    const user = userEvent.setup();
     await user.type(
       screen.getByRole("textbox", { name: "Search partnership clubs" }),
       "Elsewhere",
     );
     expect(screen.getByText("No clubs match that search.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Hide clubs" }));
+    expect(
+      screen.queryByTestId("competition-partner-club-org-1"),
+    ).not.toBeInTheDocument();
   });
 
   it("does not reserve directory space for an unlinked competition", async () => {
@@ -272,6 +288,7 @@ describe("competition partnership directory", () => {
 
     renderWithProviders(<CompetitionPage />);
 
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Show clubs" }));
     expect(
       await screen.findByRole("alert", undefined, { timeout: 5000 }),
     ).toHaveTextContent("couldn't load the club directory");
@@ -317,6 +334,7 @@ describe("competition partnership directory", () => {
 
     renderWithProviders(<CompetitionPage />);
 
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Show clubs" }));
     expect(
       await screen.findByTestId("competition-partner-access-org-light"),
     ).toHaveStyle({ color: "#111827" });

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useQueries } from "@tanstack/react-query";
-import { ArrowRight, Building2, MapPin, Search, Users } from "lucide-react";
+import { ArrowRight, Building2, ChevronDown, MapPin, Search, Users } from "lucide-react";
 import { customFetch } from "@workspace/api-client-react";
 import { OrgLogo } from "@/components/OrgLogoFallback";
 import { Button } from "@/components/ui/button";
@@ -67,6 +67,7 @@ export function CompetitionPartnerDirectory({
   partners: CompetitionPartnerPage[];
   signedIn: boolean;
 }) {
+  const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const directoryQueries = useQueries({
     queries: partners.map((partner) => ({
@@ -78,6 +79,7 @@ export function CompetitionPartnerDirectory({
         ),
       staleTime: 60_000,
       retry: 1,
+      enabled: open,
     })),
   });
 
@@ -157,7 +159,7 @@ export function CompetitionPartnerDirectory({
               </p>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {partners.map((partner) => (
               <Link key={partner.slug} href={`/partners/${partner.slug}`}>
                 <Button
@@ -169,11 +171,22 @@ export function CompetitionPartnerDirectory({
                 </Button>
               </Link>
             ))}
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full border-white/50 bg-white/10 font-bold text-white hover:bg-white/20 hover:text-white"
+              aria-expanded={open}
+              aria-controls="competition-partner-clubs"
+              onClick={() => setOpen((value) => !value)}
+            >
+              {open ? "Hide clubs" : "Show clubs"}
+              <ChevronDown className={`ml-1 h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} />
+            </Button>
           </div>
         </div>
       </div>
 
-      <CardContent className="space-y-5 p-5 sm:p-8">
+      {open && <CardContent id="competition-partner-clubs" className="space-y-5 p-5 sm:p-8">
         <div className="relative max-w-xl">
           <Search className="absolute left-4 top-3.5 h-5 w-5 text-slate-400" />
           <Input
@@ -293,7 +306,7 @@ export function CompetitionPartnerDirectory({
             </Button>
           </Link>
         </div>
-      </CardContent>
+      </CardContent>}
     </section>
   );
 }
