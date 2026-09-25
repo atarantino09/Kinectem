@@ -19,7 +19,7 @@
   padding: 4px 3px 2px;
 }
 .game-day-hero .game-day-intro h1 { color: #fff; }
-.game-day-hero .game-day-eyebrow { color: #c8aeff; }
+.game-day-hero .game-day-intro .game-day-eyebrow { color: #c8aeff; }
 .game-day-hero .game-day-intro p { color: #cbd5e1; }
 .game-day-hero .game-day-intro h1 span {
   background: linear-gradient(90deg, #e7dcff, #82b4ff 80%, #c7e4ff);

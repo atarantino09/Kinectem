@@ -91,4 +91,4 @@
 - [Vite invalid hook after dependency merge](vite-invalid-hook-cache.md) — if all components fail at React hooks after lockfile changes, clear the artifact's Vite cache before changing app code.
 - [Mockup sandbox preview routing](mockup-sandbox-routing.md) — old canvas iframes may outlive missing sandbox files; verify dev-domain routing before debugging the design.
 - [Post-merge schema safety](post-merge-schema-safety.md) — forced Drizzle push can prompt and exit 0 without applying schema; use registered startup migrations after merges.
-- [Game-day discovery intent](game-day-discovery-intent.md) — Following remains the default full timeline; Explore is a manual, one-story-at-a-time discovery experience with no autoplay or global fallback.
+- [Game-day discovery intent](game-day-discovery-intent.md) — Explore swaps only the featured story; Latest activity stays below in both modes, with no autoplay or global fallback.

@@ -212,6 +212,7 @@ export default function FeedPage() {
   // the window virtualizer offset by the list's distance from the top
   // of the document. A callback ref measures that offset the moment the
   // list mounts (it only renders once posts have loaded) and on resize.
+  const heroRef = useRef<HTMLElement | null>(null);
   const listElRef = useRef<HTMLDivElement | null>(null);
   const [scrollMargin, setScrollMargin] = useState(0);
   const recomputeMargin = useCallback(() => {
@@ -231,6 +232,12 @@ export default function FeedPage() {
     window.addEventListener("resize", recomputeMargin);
     return () => window.removeEventListener("resize", recomputeMargin);
   }, [recomputeMargin]);
+  useEffect(() => {
+    if (!heroRef.current) return;
+    const observer = new ResizeObserver(recomputeMargin);
+    observer.observe(heroRef.current);
+    return () => observer.disconnect();
+  }, [recomputeMargin]);
 
   const virtualizer = useWindowVirtualizer({
     count: posts.length,
@@ -247,7 +254,6 @@ export default function FeedPage() {
     : -1;
   useEffect(() => {
     if (
-      feedMode === "following" &&
       lastItemIndex >= posts.length - 1 &&
       hasNextPage &&
       !isFetchingNextPage
@@ -256,7 +262,6 @@ export default function FeedPage() {
     }
   }, [
     lastItemIndex,
-    feedMode,
     posts.length,
     hasNextPage,
     isFetchingNextPage,
@@ -488,7 +493,7 @@ export default function FeedPage() {
 
       {/* Center feed */}
       <div className="space-y-4 min-w-0">
-        <section className="game-day-hero" aria-label="Game day together">
+        <section ref={heroRef} className="game-day-hero" aria-label="Game day together">
         <div className="game-day-intro">
           <div>
             <span className="game-day-eyebrow"><Sparkles size={13} /> Your community pulse</span>
@@ -507,7 +512,7 @@ export default function FeedPage() {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        {feedMode === "following" && spotlight && <>
+        {feedMode === "explore" ? <ExploreReel active /> : spotlight && <>
           {(posts.length > 1 || hasNextPage) && (
             <nav className="game-day-spotlight-nav" aria-label="Spotlight posts">
               <span data-testid="text-spotlight-position">Post {spotlightIndex + 1} of {posts.length}{hasNextPage ? "+" : ""}</span>
@@ -533,7 +538,6 @@ export default function FeedPage() {
           </div>
         </>}
         </section>
-        {feedMode === "explore" ? <ExploreReel active /> : <>
         <div className="game-day-feed-heading">
           <div><span className="game-day-eyebrow">Keep up with your teams</span><h2>Latest activity</h2></div>
           <a href="#following-posts" className="text-xs font-bold text-primary flex items-center gap-1">View all <ArrowUpRight size={14} /></a>
@@ -586,7 +590,6 @@ export default function FeedPage() {
             {isFetchingNextPage && <Skeleton className="h-48 rounded-xl" />}
           </>
         )}
-        </>}
       </div>
 
       {/* Right sidebar: three single-type "to follow" cards */}
