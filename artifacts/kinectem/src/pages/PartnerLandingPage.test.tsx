@@ -4,7 +4,6 @@ import userEvent from "@testing-library/user-event";
 import { customFetch } from "@workspace/api-client-react";
 import { renderWithProviders } from "@/test/renderWithProviders";
 import { useWhoami } from "@/hooks/useWhoami";
-import full360HeroLogo from "@assets/full-360-sports-logo-cropped.png";
 import PartnerLandingPage, {
   claimedOrgAccessSeenKey,
   partnerHeroShade,
@@ -354,7 +353,7 @@ describe("PartnerLandingPage featured competition", () => {
     expect(lockup.querySelector('[alt="Kinectem logo"]')).toBeInTheDocument();
   });
 
-  it("uses high-resolution cropped Full 360 artwork in matching square, phone-safe hero tiles", async () => {
+  it("uses the saved Full 360 logo in matching square, phone-safe hero tiles", async () => {
     mockedFetch.mockResolvedValue(
       partnerResponse(null, [], {
         slug: "full360",
@@ -370,7 +369,7 @@ describe("PartnerLandingPage featured competition", () => {
     const tile = screen.getByTestId("partner-logo-tile");
     const logo = screen.getByTestId("partner-logo-image");
     const kinectemTile = screen.getByTestId("kinectem-logo-tile");
-    expect(logo).toHaveAttribute("src", full360HeroLogo);
+    expect(logo).toHaveAttribute("src", "/uploads/full-360-original-square.png");
     expect(logo).toHaveAttribute("alt", "Full 360 Sports logo");
     expect(logo).toHaveClass("h-full", "w-full", "object-contain");
     expect(logo).not.toHaveClass("object-cover");
@@ -383,6 +382,21 @@ describe("PartnerLandingPage featured competition", () => {
     expect(lockup.querySelector('[data-testid="partner-logo-separator"]')).toBeInTheDocument();
     expect(within(lockup).getByText("Tournament")).toBeInTheDocument();
     expect(within(lockup).getByText("Kinectem")).toBeInTheDocument();
+  });
+
+  it("does not restore an old Full 360 logo after the saved logo is removed", async () => {
+    mockedFetch.mockResolvedValue(
+      partnerResponse(null, [], {
+        slug: "full360",
+        officialName: "Full 360 Sports",
+        logoUrl: null,
+      }) as never,
+    );
+
+    renderWithProviders(<PartnerLandingPage />);
+
+    await screen.findByTestId("partner-logo-tile");
+    expect(screen.queryByTestId("partner-logo-image")).not.toBeInTheDocument();
   });
 
   it.each([

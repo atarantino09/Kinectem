@@ -13,7 +13,6 @@ import { ClaimedOrgAccessDialog } from "@/components/ClaimedOrgAccessDialog";
 import { useWhoami } from "@/hooks/useWhoami";
 import { formatOrgName } from "@/lib/format";
 import kinectemIcon from "@assets/kinectem_icon_1788367110859.png";
-import full360HeroLogo from "@assets/full-360-sports-logo-cropped.png";
 import {
   ArrowRight,
   Building2,
@@ -276,7 +275,6 @@ export default function PartnerLandingPage() {
   }
   const { page } = data;
   const isFull360 = page.slug === "full360";
-  const heroLogoUrl = isFull360 ? full360HeroLogo : page.logoUrl;
   const foreground = readableText(page.primaryColor);
   const heroShade = partnerHeroShade(
     page.primaryColor,
@@ -457,9 +455,9 @@ export default function PartnerLandingPage() {
                 }`}
                 data-testid="partner-logo-tile"
               >
-                {heroLogoUrl ? (
+                {page.logoUrl ? (
                   <img
-                    src={heroLogoUrl}
+                    src={page.logoUrl}
                     alt={`${page.officialName} logo`}
                     className="block h-full w-full object-contain"
                     data-testid="partner-logo-image"
