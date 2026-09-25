@@ -354,7 +354,7 @@ describe("PartnerLandingPage featured competition", () => {
     expect(lockup.querySelector('[alt="Kinectem logo"]')).toBeInTheDocument();
   });
 
-  it("uses the cropped Full 360 artwork only in its wider, phone-safe hero lockup", async () => {
+  it("uses high-resolution cropped Full 360 artwork in matching square, phone-safe hero tiles", async () => {
     mockedFetch.mockResolvedValue(
       partnerResponse(null, [], {
         slug: "full360",
@@ -369,12 +369,17 @@ describe("PartnerLandingPage featured competition", () => {
     const lockup = await screen.findByTestId("partner-logo-lockup");
     const tile = screen.getByTestId("partner-logo-tile");
     const logo = screen.getByTestId("partner-logo-image");
+    const kinectemTile = screen.getByTestId("kinectem-logo-tile");
     expect(logo).toHaveAttribute("src", full360HeroLogo);
     expect(logo).toHaveAttribute("alt", "Full 360 Sports logo");
-    expect(logo).toHaveClass("object-contain");
-    expect(tile).toHaveClass("h-24", "w-36", "p-2", "md:h-40", "md:w-72", "md:p-3");
-    expect(lockup).toHaveClass("grid-cols-[9rem_1rem_6rem]", "md:grid-cols-[18rem_2.5rem_10rem]");
-    expect(screen.getByTestId("kinectem-logo-tile")).toHaveClass("h-24", "w-24", "md:h-40", "md:w-40");
+    expect(logo).toHaveClass("h-full", "w-full", "object-contain");
+    expect(logo).not.toHaveClass("object-cover");
+    for (const logoTile of [tile, kinectemTile]) {
+      expect(logoTile).toHaveClass("h-28", "w-28", "min-[360px]:h-32", "min-[360px]:w-32", "md:h-40", "md:w-40");
+    }
+    expect(tile).toHaveClass("p-1", "md:p-1.5");
+    expect(tile).not.toHaveClass("w-36", "md:w-72");
+    expect(lockup).toHaveClass("grid-cols-[7rem_1.5rem_7rem]", "min-[360px]:grid-cols-[8rem_1.5rem_8rem]", "md:grid-cols-[10rem_2.5rem_10rem]");
     expect(lockup.querySelector('[data-testid="partner-logo-separator"]')).toBeInTheDocument();
     expect(within(lockup).getByText("Tournament")).toBeInTheDocument();
     expect(within(lockup).getByText("Kinectem")).toBeInTheDocument();
@@ -399,8 +404,10 @@ describe("PartnerLandingPage featured competition", () => {
     const logo = screen.getByTestId("partner-logo-image");
     const kinectemTile = screen.getByTestId("kinectem-logo-tile");
     expect(tile).toHaveClass(
-      "h-32",
-      "w-32",
+      "h-28",
+      "w-28",
+      "min-[360px]:h-32",
+      "min-[360px]:w-32",
       "overflow-hidden",
       "p-5",
       "md:h-40",
@@ -410,7 +417,7 @@ describe("PartnerLandingPage featured competition", () => {
     expect(logo).toHaveClass("block", "h-full", "w-full", "object-contain");
     expect(logo).not.toHaveClass("object-cover");
     expect(logo).toHaveAttribute("src", configuredLogo);
-    expect(screen.getByTestId("partner-logo-lockup")).toHaveClass("grid-cols-[8rem_1.5rem_8rem]");
+    expect(screen.getByTestId("partner-logo-lockup")).toHaveClass("grid-cols-[7rem_1.5rem_7rem]", "min-[360px]:grid-cols-[8rem_1.5rem_8rem]");
     expect(kinectemTile).toHaveClass(
       "overflow-hidden",
       "rounded-3xl",

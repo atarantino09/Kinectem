@@ -448,18 +448,12 @@ export default function PartnerLandingPage() {
               Proud partner with Kinectem
             </p>
             <div
-              className={`mx-auto grid w-fit items-center gap-y-2 ${
-                isFull360
-                  ? "grid-cols-[9rem_1rem_6rem] gap-x-2 sm:grid-cols-[14rem_1.5rem_8rem] sm:gap-x-4 md:grid-cols-[18rem_2.5rem_10rem] md:gap-x-5"
-                  : "grid-cols-[8rem_1.5rem_8rem] gap-x-3 sm:gap-x-5 md:grid-cols-[10rem_2.5rem_10rem]"
-              }`}
+              className="mx-auto grid w-fit grid-cols-[7rem_1.5rem_7rem] items-center gap-x-2 gap-y-2 min-[360px]:grid-cols-[8rem_1.5rem_8rem] min-[360px]:gap-x-3 sm:gap-x-5 md:grid-cols-[10rem_2.5rem_10rem]"
               data-testid="partner-logo-lockup"
             >
               <div
-                className={`grid min-h-0 min-w-0 place-items-center overflow-hidden rounded-3xl bg-white/95 shadow-xl ${
-                  isFull360
-                    ? "h-24 w-36 p-2 sm:h-32 sm:w-56 sm:p-3 md:h-40 md:w-72 md:p-3"
-                    : "h-32 w-32 p-5 md:h-40 md:w-40 md:p-6"
+                className={`grid h-28 w-28 min-h-0 min-w-0 place-items-center overflow-hidden rounded-3xl bg-white/95 shadow-xl min-[360px]:h-32 min-[360px]:w-32 md:h-40 md:w-40 ${
+                  isFull360 ? "p-1 md:p-1.5" : "p-5 md:p-6"
                 }`}
                 data-testid="partner-logo-tile"
               >
@@ -476,9 +470,7 @@ export default function PartnerLandingPage() {
               </div>
               <span className="text-center text-3xl font-light opacity-70 md:text-5xl" aria-hidden="true" data-testid="partner-logo-separator">×</span>
               <div
-                className={`grid min-h-0 min-w-0 place-items-center overflow-hidden rounded-3xl bg-[linear-gradient(145deg,#b400ff_0%,#6d00ff_46%,#006cff_100%)] shadow-xl [clip-path:inset(0_round_1.5rem)] ${
-                  isFull360 ? "h-24 w-24 sm:h-32 sm:w-32 md:h-40 md:w-40" : "h-32 w-32 md:h-40 md:w-40"
-                }`}
+                className="grid h-28 w-28 min-h-0 min-w-0 place-items-center overflow-hidden rounded-3xl bg-[linear-gradient(145deg,#b400ff_0%,#6d00ff_46%,#006cff_100%)] shadow-xl [clip-path:inset(0_round_1.5rem)] min-[360px]:h-32 min-[360px]:w-32 md:h-40 md:w-40"
                 data-testid="kinectem-logo-tile"
               >
                 <img
