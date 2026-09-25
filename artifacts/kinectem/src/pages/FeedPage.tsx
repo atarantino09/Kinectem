@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatOrgName } from "@/lib/format";
 import { Link } from "wouter";
-import { ChevronRight, ChevronDown, Pin, PinOff, Medal, Building2 } from "lucide-react";
+import { ChevronRight, ChevronDown, Pin, PinOff, Medal, Building2, Sparkles, ArrowUpRight } from "lucide-react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import {
@@ -11,6 +11,7 @@ import {
   useListUserOrganizations,
   useListUserTeams,
   queryOpts,
+  type FeedPost,
 } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,6 +21,9 @@ import { OrgLogo } from "@/components/OrgLogoFallback";
 import { PostCard } from "@/components/PostCard";
 import { SuggestionsPanel } from "@/components/SuggestionsPanel";
 import { BrandPageHeader } from "@/components/BrandPageHeader";
+import { ExploreReel } from "@/components/ExploreReel";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import "./GameDayFeed.css";
 import { usePinnedOrgs } from "@/hooks/usePinnedOrgs";
 import { usePinnedTeams } from "@/hooks/usePinnedTeams";
 
@@ -41,6 +45,7 @@ type SidebarOrg = {
 };
 
 export default function FeedPage() {
+  const [feedMode, setFeedMode] = useState<"following" | "explore">("following");
   const { data: me } = useGetLoggedInUser();
   const { data: myOrgs } = useListUserOrganizations(me?.id ?? "", undefined, {
     query: queryOpts({ enabled: !!me?.id }),
@@ -178,6 +183,8 @@ export default function FeedPage() {
   const {
     data: feedPages,
     isLoading: feedLoading,
+    isError: feedError,
+    refetch: retryFeed,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
@@ -240,6 +247,7 @@ export default function FeedPage() {
     : -1;
   useEffect(() => {
     if (
+      feedMode === "following" &&
       lastItemIndex >= posts.length - 1 &&
       hasNextPage &&
       !isFetchingNextPage
@@ -248,6 +256,7 @@ export default function FeedPage() {
     }
   }, [
     lastItemIndex,
+    feedMode,
     posts.length,
     hasNextPage,
     isFetchingNextPage,
@@ -255,9 +264,10 @@ export default function FeedPage() {
   ]);
 
   const displayName = me ? `${me.firstName} ${me.lastName}` : "";
+  const spotlight = posts.find((post) => post.assets?.some((asset) => asset.fileType?.startsWith("image/")) && post.postType === "long");
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)_300px] gap-6">
+    <div className="grid grid-cols-1 lg:grid-cols-[228px_minmax(0,1fr)_240px] gap-5">
       {/* Left sidebar */}
       <aside className="hidden lg:block lg:sticky lg:top-16 lg:self-start lg:max-h-[calc(100vh-4rem-1.5rem)] lg:overflow-y-auto space-y-4">
         {me && (
@@ -458,16 +468,37 @@ export default function FeedPage() {
 
       {/* Center feed */}
       <div className="space-y-4 min-w-0">
-        <BrandPageHeader
-          eyebrow="Your community pulse"
-          title={
-            <>
-              Latest <span className="brand-gradient-text">Activity</span>
-            </>
-          }
-          description="The latest highlights, recaps, and updates from the people and teams you follow."
-        />
-        {feedLoading ? (
+        <div className="game-day-intro">
+          <div>
+            <span className="game-day-eyebrow"><Sparkles size={13} /> Your community pulse</span>
+            <h1>Game day, <span>together.</span></h1>
+            <p>Recaps, highlights, and the moments your teams will talk about all week.</p>
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="shrink-0 gap-1 font-bold" aria-label={`Feed view: ${feedMode === "following" ? "Following" : "Explore"}`}>
+                {feedMode === "following" ? "Following" : "Explore"} <ChevronDown size={14} />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => setFeedMode("following")}>Following · Latest</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setFeedMode("explore")}>Explore · Stories</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+        {feedMode === "explore" ? <ExploreReel active /> : <>
+        {spotlight && <GameDaySpotlight post={spotlight} />}
+        <div className="game-day-feed-heading">
+          <div><span className="game-day-eyebrow">Keep up with your teams</span><h2>Latest activity</h2></div>
+          <a href="#following-posts" className="text-xs font-bold text-primary flex items-center gap-1">View all <ArrowUpRight size={14} /></a>
+        </div>
+        <div id="following-posts" />
+        {feedError ? (
+          <div role="alert" className="app-surface rounded-xl p-6 text-center space-y-3">
+            <p>Couldn't load your feed.</p>
+            <Button variant="outline" onClick={() => void retryFeed()}>Try again</Button>
+          </div>
+        ) : feedLoading ? (
           <>
             <Skeleton className="h-48 rounded-xl" />
             <Skeleton className="h-48 rounded-xl" />
@@ -509,6 +540,7 @@ export default function FeedPage() {
             {isFetchingNextPage && <Skeleton className="h-48 rounded-xl" />}
           </>
         )}
+        </>}
       </div>
 
       {/* Right sidebar: three single-type "to follow" cards */}
@@ -543,6 +575,28 @@ export default function FeedPage() {
         />
       </aside>
     </div>
+  );
+}
+
+function GameDaySpotlight({ post }: { post: FeedPost }) {
+  const image = post.assets.find((asset) => asset.fileType?.startsWith("image/"));
+  if (!image) return null;
+  return (
+    <article className="game-day-lead">
+      <div className="game-day-lead-image">
+        <img src={image.url ?? undefined} alt="" />
+        <span className="game-day-lead-tag">Spotlight recap</span>
+      </div>
+      <div className="game-day-lead-copy">
+        <span className="game-day-lead-meta">{post.context.name} · {post.author.displayName}</span>
+        <h2>{post.title || "A moment worth sharing"}</h2>
+        <p className="line-clamp-4">{post.description || post.body || "Catch up with the latest from your community."}</p>
+        <div className="game-day-lead-footer">
+          <span className="text-xs text-muted-foreground">From your teams</span>
+          <Link href={`/posts/${post.id}`}><Button size="sm" className="gap-1">Read story <ArrowUpRight size={14} /></Button></Link>
+        </div>
+      </div>
+    </article>
   );
 }
 

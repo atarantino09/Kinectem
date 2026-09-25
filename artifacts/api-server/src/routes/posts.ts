@@ -40,8 +40,10 @@ import {
   isNull,
   lte,
   ne,
+  notInArray,
   or,
   sql,
+  type SQLWrapper,
 } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
@@ -145,6 +147,329 @@ import {
 } from "../lib/coppa";
 
 const router: IRouter = Router();
+
+// Extra-spec discovery endpoint. Explore is intentionally separate from the
+// followed feed: it only returns public recaps/highlights from teams that the
+// viewer does not already follow, ranked by sport and self-entered location.
+router.get(
+  "/posts/explore",
+  asyncHandler(async (req, res): Promise<void> => {
+    const me = req.sessionUser;
+    if (!me) {
+      apiError(res, 401, "Not authenticated");
+      return;
+    }
+
+    const rawLimit = req.query["limit"];
+    let limit = 20;
+    if (rawLimit !== undefined) {
+      if (typeof rawLimit !== "string" || !/^\d+$/.test(rawLimit)) {
+        apiError(res, 400, "Invalid limit");
+        return;
+      }
+      limit = Number(rawLimit);
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50) {
+        apiError(res, 400, "Limit must be between 1 and 50");
+        return;
+      }
+    }
+
+    type ExploreCursor = { rank: 1 | 2; createdAt: Date; id: string };
+    let cursor: ExploreCursor | null = null;
+    const rawCursor = req.query["cursor"];
+    if (rawCursor !== undefined) {
+      if (typeof rawCursor !== "string" || rawCursor.length > 512) {
+        apiError(res, 400, "Invalid cursor");
+        return;
+      }
+      try {
+        const decoded = Buffer.from(rawCursor, "base64url").toString("utf8");
+        const value: unknown = JSON.parse(decoded);
+        if (
+          typeof value !== "object" ||
+          value === null ||
+          !("rank" in value) ||
+          !("createdAt" in value) ||
+          !("id" in value) ||
+          (value.rank !== 1 && value.rank !== 2) ||
+          typeof value.createdAt !== "string" ||
+          typeof value.id !== "string" ||
+          !/^(article|highlight)-[0-9a-f-]{36}$/i.test(value.id)
+        ) {
+          apiError(res, 400, "Invalid cursor");
+          return;
+        }
+        const createdAt = new Date(value.createdAt);
+        if (
+          Number.isNaN(createdAt.getTime()) ||
+          createdAt.toISOString() !== value.createdAt
+        ) {
+          apiError(res, 400, "Invalid cursor");
+          return;
+        }
+        cursor = { rank: value.rank, createdAt, id: value.id };
+      } catch {
+        apiError(res, 400, "Invalid cursor");
+        return;
+      }
+    }
+
+    const [followedTeamRows, followedOrgRows] = await Promise.all([
+      db.select({ id: teamFollowers.teamId }).from(teamFollowers)
+        .where(eq(teamFollowers.userId, me.id)),
+      db.select({ id: organizationFollowers.organizationId })
+        .from(organizationFollowers).where(eq(organizationFollowers.userId, me.id)),
+    ]);
+    const followedTeamIds = followedTeamRows.map((r) => r.id);
+    const followedOrgIds = followedOrgRows.map((r) => r.id);
+    const [followedSports, orgSports, teamSports] = await Promise.all([
+      db.select({ sport: teams.sport }).from(teamFollowers)
+        .innerJoin(teams, eq(teamFollowers.teamId, teams.id))
+        .where(eq(teamFollowers.userId, me.id)),
+      followedOrgIds.length
+        ? db.select({ sport: organizations.sport }).from(organizations)
+            .where(inArray(organizations.id, followedOrgIds))
+        : Promise.resolve([] as { sport: string | null }[]),
+      followedTeamIds.length
+        ? db.select({ sport: teams.sport }).from(teams)
+            .where(inArray(teams.id, followedTeamIds))
+        : Promise.resolve([] as { sport: string | null }[]),
+    ]);
+    const sports = Array.from(new Set([
+      me.sport,
+      ...followedSports.map((r) => r.sport),
+      ...orgSports.map((r) => r.sport),
+      ...teamSports.map((r) => r.sport),
+    ].filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+      .map((s) => s.trim().toLowerCase())));
+    const city = me.city?.trim().toLowerCase() ?? "";
+    const state = me.state?.trim().toLowerCase() ?? "";
+    const hasLocation = city.length > 0 || state.length > 0;
+    if (sports.length === 0 && !hasLocation) {
+      res.json({
+        data: [],
+        pagination: { hasMore: false, nextCursor: null },
+        reason: "add_sport_or_location",
+      });
+      return;
+    }
+
+    const teamSportColumn = sql.raw('"teams"."sport"');
+    const orgSportColumn = sql.raw('"organizations"."sport"');
+    const orgCityColumn = sql.raw('"organizations"."city"');
+    const orgStateColumn = sql.raw('"organizations"."state"');
+    const sportMatch = sports.length > 0
+      ? sql`(${inArray(sql<string>`lower(coalesce(${teamSportColumn}, ''))`, sports)}
+          or ${inArray(sql<string>`lower(coalesce(${orgSportColumn}, ''))`, sports)})`
+      : sql`false`;
+    const locationParts: SQLWrapper[] = [];
+    if (city) locationParts.push(sql`lower(coalesce(${orgCityColumn}, '')) = ${city}`);
+    if (state) locationParts.push(sql`lower(coalesce(${orgStateColumn}, '')) = ${state}`);
+    const locationMatch = locationParts.length
+      ? sql`(${sql.join(locationParts, sql` and `)})`
+      : sql`false`;
+    const matchFilter = sql`(${sportMatch} or ${locationMatch})`;
+    const rankExpr = sql<number>`case
+      when (${sportMatch}) and (${locationMatch}) then 2
+      when (${sportMatch}) or (${locationMatch}) then 1
+      else 0 end`;
+    const rankCursorCondition = (createdAt: SQLWrapper, compositeId: SQLWrapper) =>
+      cursor
+        ? sql`(
+            ${rankExpr} < ${cursor.rank}
+            or (${rankExpr} = ${cursor.rank} and ${createdAt} < ${cursor.createdAt})
+            or (${rankExpr} = ${cursor.rank} and ${createdAt} = ${cursor.createdAt}
+              and ${compositeId} < ${cursor.id})
+          )`
+        : undefined;
+    const pendingArticle = () => sql`not exists (
+      select 1 from ${takedownRequests}
+      where "takedown_requests"."post_kind" = 'article'
+        and "takedown_requests"."post_ref_id" = "articles"."id"
+        and "takedown_requests"."status" = 'pending'
+    )`;
+    const pendingHighlight = () => sql`not exists (
+      select 1 from ${takedownRequests}
+      where "takedown_requests"."post_kind" = 'highlight'
+        and "takedown_requests"."post_ref_id" = "highlights"."id"
+        and "takedown_requests"."status" = 'pending'
+    )`;
+    const articleCompositeId = sql<string>`'article-' || "articles"."id"::text`;
+    const highlightCompositeId = sql<string>`'highlight-' || "highlights"."id"::text`;
+    const visibilityFilter =
+      // Discovery is public-only. In particular, following a private adult
+      // does not grant permission for their posts to appear in Explore.
+      or(isNull(users.id), and(
+        eq(users.accountStatus, "active"),
+        isNull(users.deletedAt),
+        eq(users.profileVisibility, "public"),
+      ));
+    const sharedCursor = (createdAt: SQLWrapper, compositeId: SQLWrapper) =>
+      rankCursorCondition(createdAt, compositeId);
+    const articleCreatedAtColumn = sql.raw('"articles"."created_at"');
+    const highlightCreatedAtColumn = sql.raw('"highlights"."created_at"');
+    const [articleRows, highlightRows] = await Promise.all([
+      db.select({ a: articles, team: teams, org: organizations, author: users })
+        .from(articles)
+        .innerJoin(teams, eq(articles.teamId, teams.id))
+        .leftJoin(organizations, eq(teams.organizationId, organizations.id))
+        .leftJoin(users, eq(articles.authorId, users.id))
+        .where(and(
+          eq(articles.status, "published"),
+          or(isNull(articles.articleKind), eq(articles.articleKind, "recap")),
+          isNull(articles.hiddenAt),
+          isNull(teams.archivedAt),
+          or(isNull(articles.authorId), ne(articles.authorId, me.id)),
+          sql`not exists (
+            select 1 from "article_authors"
+            where "article_authors"."article_id" = "articles"."id"
+              and "article_authors"."user_id" = ${me.id}
+          )`,
+          followedTeamIds.length ? notInArray(articles.teamId, followedTeamIds) : undefined,
+          followedOrgIds.length ? or(isNull(teams.organizationId), notInArray(teams.organizationId, followedOrgIds)) : undefined,
+          visibilityFilter,
+          matchFilter,
+          pendingArticle(),
+          sharedCursor(articleCreatedAtColumn, articleCompositeId),
+        ))
+        .orderBy(desc(rankExpr), desc(articles.createdAt), desc(articleCompositeId))
+        .limit(limit + 1),
+      db.select({ h: highlights, team: teams, org: organizations, uploader: users })
+        .from(highlights)
+        .innerJoin(teams, eq(highlights.teamId, teams.id))
+        .leftJoin(organizations, eq(teams.organizationId, organizations.id))
+        .leftJoin(users, eq(highlights.uploaderId, users.id))
+        .where(and(
+          eq(highlights.approvalStatus, "approved"),
+          isNull(highlights.hiddenAt),
+          isNotNull(highlights.teamId),
+          or(isNull(highlights.uploaderId), ne(highlights.uploaderId, me.id)),
+          followedTeamIds.length ? notInArray(highlights.teamId, followedTeamIds) : undefined,
+          followedOrgIds.length ? or(isNull(teams.organizationId), notInArray(teams.organizationId, followedOrgIds)) : undefined,
+          isNull(teams.archivedAt),
+          visibilityFilter,
+          matchFilter,
+          pendingHighlight(),
+          sharedCursor(highlightCreatedAtColumn, highlightCompositeId),
+        ))
+        .orderBy(desc(rankExpr), desc(highlights.createdAt), desc(highlightCompositeId))
+        .limit(limit + 1),
+    ]);
+
+    type ExploreRow =
+      | { kind: "article"; row: (typeof articleRows)[number]; rank: number; createdAt: Date; id: string }
+      | { kind: "highlight"; row: (typeof highlightRows)[number]; rank: number; createdAt: Date; id: string };
+    const candidates: ExploreRow[] = [
+      ...articleRows.map((row) => ({
+        kind: "article" as const, row,
+        rank: (sports.includes(row.team.sport?.trim().toLowerCase() ?? "") ||
+          sports.includes(row.org?.sport?.trim().toLowerCase() ?? "") ? 1 : 0) +
+          ((city && row.org?.city?.trim().toLowerCase() === city && (!state || row.org?.state?.trim().toLowerCase() === state)) ||
+           (state && row.org?.state?.trim().toLowerCase() === state && !city) ? 1 : 0),
+        createdAt: row.a.createdAt, id: `article-${row.a.id}`,
+      })),
+      ...highlightRows.map((row) => ({
+        kind: "highlight" as const, row,
+        rank: (sports.includes(row.team?.sport?.trim().toLowerCase() ?? "") ||
+          sports.includes(row.org?.sport?.trim().toLowerCase() ?? "") ? 1 : 0) +
+          ((city && row.org?.city?.trim().toLowerCase() === city && (!state || row.org?.state?.trim().toLowerCase() === state)) ||
+           (state && row.org?.state?.trim().toLowerCase() === state && !city) ? 1 : 0),
+        createdAt: row.h.createdAt, id: `highlight-${row.h.id}`,
+      })),
+    ].filter((item) => item.rank > 0);
+    candidates.sort((a, b) =>
+      b.rank - a.rank ||
+      b.createdAt.getTime() - a.createdAt.getTime() ||
+      (a.id < b.id ? 1 : a.id > b.id ? -1 : 0),
+    );
+    const page = candidates.slice(0, limit);
+    const hasMore = candidates.length > limit;
+    const candidateUsers = page.map((item) =>
+      item.kind === "article" ? item.row.author : item.row.uploader,
+    );
+    const highlightIds = page.filter((x) => x.kind === "highlight")
+      .map((x) => x.kind === "highlight" ? x.row.h.id : "");
+    const minorTagIds = highlightIds.length
+      ? (await db.selectDistinct({ id: highlightTags.userId })
+          .from(highlightTags).innerJoin(users, eq(users.id, highlightTags.userId))
+          .where(and(inArray(highlightTags.highlightId, highlightIds), eq(users.isMinor, true))))
+          .map((r) => r.id)
+      : [];
+    const minorCtx = await buildMinorNameContext(
+      { id: me.id, role: req.realUser?.role ?? null },
+      [...candidateUsers.map((u) => u?.id).filter((id): id is string => !!id), ...minorTagIds],
+    );
+    const statKeys = page.map((item) => ({
+      kind: item.kind,
+      refId: item.kind === "article" ? item.row.a.id : item.row.h.id,
+    }));
+    const articleIds = page.filter((x) => x.kind === "article")
+      .map((x) => x.kind === "article" ? x.row.a.id : "");
+    const highlightIdsOnPage = page.filter((x) => x.kind === "highlight")
+      .map((x) => x.kind === "highlight" ? x.row.h.id : "");
+    const [stats, shares, tagViews, currentUserTags] = await Promise.all([
+      loadPostStats(me.id, statKeys),
+      loadPostShareStats(me.id, statKeys),
+      loadHighlightTagViews(
+        me.id,
+        page.filter((x) => x.kind === "highlight").map((x) => ({
+          id: x.kind === "highlight" ? x.row.h.id : "",
+          uploaderId: x.kind === "highlight" ? x.row.h.uploaderId : null,
+        })),
+        minorCtx,
+      ),
+      loadCurrentUserTags(me.id, { articleIds, highlightIds: highlightIdsOnPage }),
+    ]);
+    const brandMap = await loadCompetitionBrandMap(
+      page.filter((x) => x.kind === "article")
+        .map((x) => x.kind === "article" ? x.row.a.competitionId : null),
+    );
+    const data = page.map((item) => {
+      if (item.kind === "article") {
+        const { a, team, org, author } = item.row;
+        const post = articleToPost(a, {
+          team, org, author,
+          competition: brandMap.get(a.competitionId ?? "") ?? null,
+          canEdit: false,
+          authorRole: null,
+          ...statsFor(stats, "article", a.id),
+          ...shareStatsFor(shares, "article", a.id),
+          currentUserTag: currentUserTags.articleTagByArticleId.get(a.id) ?? null,
+          minorNameCtx: minorCtx,
+        });
+        return { post, teamId: team.id, orgId: org?.id ?? null, orgName: org?.name ?? null, teamName: team.name };
+      }
+      const { h, team, org, uploader } = item.row;
+      const post = highlightToPost(h, {
+        team, org, author: uploader,
+        canEdit: false,
+        canDelete: false,
+        ...statsFor(stats, "highlight", h.id),
+        ...shareStatsFor(shares, "highlight", h.id),
+        taggedUsers: tagViews.get(h.id) ?? [],
+        currentUserTag: currentUserTags.highlightTagByHighlightId.get(h.id) ?? null,
+        minorNameCtx: minorCtx,
+      });
+      return {
+        post, teamId: team?.id ?? null, orgId: org?.id ?? null,
+        orgName: org?.name ?? null, teamName: team?.name ?? null,
+      };
+    });
+    const last = page[page.length - 1];
+    const nextCursor = hasMore && last
+      ? Buffer.from(JSON.stringify({
+          rank: last.rank,
+          createdAt: last.createdAt.toISOString(),
+          id: last.id,
+        }), "utf8").toString("base64url")
+      : null;
+    res.json({
+      data,
+      pagination: { hasMore: nextCursor !== null, nextCursor },
+      ...(data.length === 0 ? { reason: "no_matches" } : {}),
+    });
+  }),
+);
 
 async function canAccessPracticePlan(
   userId: string | null | undefined,

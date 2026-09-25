@@ -1,0 +1,69 @@
+.game-day-intro {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 3px 2px;
+}
+.game-day-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: hsl(var(--brand-purple));
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.game-day-intro h1 {
+  font-family: var(--app-font-display);
+  font-size: clamp(27px, 3vw, 36px);
+  font-weight: 900;
+  letter-spacing: -.05em;
+  line-height: 1.05;
+  margin-top: 8px;
+}
+.game-day-intro h1 span {
+  background: var(--k-glyph-gradient);
+  color: transparent;
+  background-clip: text;
+}
+.game-day-intro p {
+  max-width: 460px;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  margin-top: 8px;
+  line-height: 1.55;
+}
+.game-day-lead {
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 46% 54%;
+  min-height: 268px;
+  border: 1px solid hsl(var(--brand-purple) / .24);
+  border-radius: 14px;
+  background: hsl(var(--card));
+  box-shadow: 0 16px 44px hsl(var(--brand-purple) / .12);
+}
+.game-day-lead-image { position: relative; min-height: 268px; overflow: hidden; background: #12132b; }
+.game-day-lead-image img { width: 100%; height: 100%; object-fit: cover; transition: transform .4s ease; }
+.game-day-lead:hover img { transform: scale(1.035); }
+.game-day-lead-image::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent 55%, #15132b99), linear-gradient(0deg, #15132b99, transparent 55%); pointer-events: none; }
+.game-day-lead-tag { position: absolute; z-index: 1; top: 15px; left: 16px; border-radius: 99px; padding: 6px 9px; background: #171427bc; color: white; font-size: 10px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
+.game-day-lead-copy { min-width: 0; padding: 25px 24px; display: flex; flex-direction: column; justify-content: center; }
+.game-day-lead-meta { color: hsl(var(--muted-foreground)); font-size: 11px; font-weight: 700; }
+.game-day-lead-copy h2 { font-family: var(--app-font-display); font-size: 26px; font-weight: 900; line-height: 1.08; letter-spacing: -.045em; margin: 16px 0 10px; }
+.game-day-lead-copy p { color: hsl(var(--muted-foreground)); font-size: 12px; line-height: 1.6; max-width: 390px; }
+.game-day-lead-footer { display: flex; align-items: center; justify-content: space-between; gap: 9px; border-top: 1px solid hsl(var(--border)); margin-top: 17px; padding-top: 13px; }
+.game-day-feed-heading { display: flex; justify-content: space-between; align-items: end; padding: 14px 3px 0; border-top: 1px solid hsl(var(--border)); }
+.game-day-feed-heading h2 { font-family: var(--app-font-display); font-size: 22px; font-weight: 900; letter-spacing: -.04em; margin-top: 5px; }
+.game-day-explore-stage { touch-action: pan-y; }
+@media (max-width: 680px) {
+  .game-day-intro { align-items: start; }
+  .game-day-intro h1 { font-size: 27px; }
+  .game-day-intro p { font-size: 11px; max-width: 285px; }
+  .game-day-lead { display: block; }
+  .game-day-lead-image { height: 205px; min-height: 205px; }
+  .game-day-lead-copy { padding: 17px 16px; }
+  .game-day-lead-copy h2 { font-size: 23px; margin: 12px 0 8px; }
+}
