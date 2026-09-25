@@ -54,17 +54,33 @@ export function GameDaySpotlight({ post }: { post: FeedPost }) {
         <span className="game-day-lead-tag">{post.postType === "long" ? "Spotlight recap" : "Community post"}</span>
       </div>
       <div className="game-day-lead-copy">
-        <span className="game-day-lead-meta">{post.context.name} · {post.author.displayName}</span>
-        {post.context.type === "team" && post.context.orgName && (
-          <div className="game-day-lead-org" data-testid="text-spotlight-organization">
-            <span>Organization</span>
-            {post.context.orgId ? (
-              <Link href={`/organizations/${post.context.orgId}`}>{post.context.orgName}</Link>
-            ) : (
-              <strong>{post.context.orgName}</strong>
-            )}
-          </div>
-        )}
+        <div className="game-day-lead-attribution">
+          {post.context.type === "team" && (
+            <div className="game-day-lead-attribution-row">
+              <span className="game-day-lead-attribution-label">Team</span>
+              <Link href={`/teams/${post.context.id}`} className="game-day-lead-attribution-link" data-testid="link-spotlight-team">
+                {post.context.name || "View team"}
+              </Link>
+            </div>
+          )}
+          {post.context.type === "team" && post.context.orgName && (
+            <div className="game-day-lead-attribution-row" data-testid="text-spotlight-organization">
+              <span className="game-day-lead-attribution-label">Organization</span>
+              {post.context.orgId ? (
+                <Link href={`/organizations/${post.context.orgId}`} className="game-day-lead-attribution-link">{post.context.orgName}</Link>
+              ) : (
+                <strong>{post.context.orgName}</strong>
+              )}
+            </div>
+          )}
+          {post.context.type === "organization" && (
+            <div className="game-day-lead-attribution-row">
+              <span className="game-day-lead-attribution-label">Organization</span>
+              <Link href={`/organizations/${post.context.id}`} className="game-day-lead-attribution-link">{post.context.name || "View organization"}</Link>
+            </div>
+          )}
+          <span className="game-day-lead-byline">By {post.author.displayName}</span>
+        </div>
         <h2>{post.title || "A moment worth sharing"}</h2>
         <p className="line-clamp-4">{post.description || post.body || "Catch up with the latest from your community."}</p>
         <div className="game-day-lead-footer">

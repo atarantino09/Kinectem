@@ -48,7 +48,9 @@ describe("GameDaySpotlight image priority", () => {
   it("names and links the parent organization even when a recap has its own photo", () => {
     render(<GameDaySpotlight post={post([{ id: "asset-1", fileType: "image/jpeg", url: "/recap.jpg", displayOrder: 0 }])} />);
     expect(screen.getByTestId("text-spotlight-organization")).toHaveTextContent("Organization");
+    expect(screen.getByRole("link", { name: "Falcons" })).toHaveAttribute("href", "/teams/team-1");
     expect(screen.getByRole("link", { name: "Falcons Club" })).toHaveAttribute("href", "/organizations/org-1");
+    expect(screen.getByText("By Coach")).toBeInTheDocument();
   });
 
   it("uses the team banner when there is no recap photo", () => {
