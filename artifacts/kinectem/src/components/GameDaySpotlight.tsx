@@ -55,6 +55,16 @@ export function GameDaySpotlight({ post }: { post: FeedPost }) {
       </div>
       <div className="game-day-lead-copy">
         <span className="game-day-lead-meta">{post.context.name} · {post.author.displayName}</span>
+        {post.context.type === "team" && post.context.orgName && (
+          <div className="game-day-lead-org" data-testid="text-spotlight-organization">
+            <span>Organization</span>
+            {post.context.orgId ? (
+              <Link href={`/organizations/${post.context.orgId}`}>{post.context.orgName}</Link>
+            ) : (
+              <strong>{post.context.orgName}</strong>
+            )}
+          </div>
+        )}
         <h2>{post.title || "A moment worth sharing"}</h2>
         <p className="line-clamp-4">{post.description || post.body || "Catch up with the latest from your community."}</p>
         <div className="game-day-lead-footer">

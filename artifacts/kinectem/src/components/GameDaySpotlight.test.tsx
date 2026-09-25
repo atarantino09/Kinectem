@@ -23,7 +23,7 @@ const post = (assets: FeedPost["assets"] = []): FeedPost => ({
   isEdited: false,
   createdAt: "2026-09-25T12:00:00Z",
   author: { id: "author-1", displayName: "Coach", avatarUrl: null },
-  context: { type: "team", id: "team-1", name: "Falcons", orgId: "org-1" },
+  context: { type: "team", id: "team-1", name: "Falcons", orgId: "org-1", orgName: "Falcons Club" },
   assets,
   reactionCount: 0,
   hasReacted: false,
@@ -43,6 +43,12 @@ describe("GameDaySpotlight image priority", () => {
     render(<GameDaySpotlight post={post([{ id: "asset-1", fileType: "image/jpeg", url: "/recap.jpg", displayOrder: 0 }])} />);
     expect(screen.getByRole("presentation")).toHaveAttribute("src", "/recap.jpg");
     expect(mocks.team).toHaveBeenCalledWith("", expect.objectContaining({ query: expect.objectContaining({ enabled: false }) }));
+  });
+
+  it("names and links the parent organization even when a recap has its own photo", () => {
+    render(<GameDaySpotlight post={post([{ id: "asset-1", fileType: "image/jpeg", url: "/recap.jpg", displayOrder: 0 }])} />);
+    expect(screen.getByTestId("text-spotlight-organization")).toHaveTextContent("Organization");
+    expect(screen.getByRole("link", { name: "Falcons Club" })).toHaveAttribute("href", "/organizations/org-1");
   });
 
   it("uses the team banner when there is no recap photo", () => {
