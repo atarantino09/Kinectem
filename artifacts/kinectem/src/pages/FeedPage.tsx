@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatOrgName } from "@/lib/format";
 import { Link } from "wouter";
-import { ChevronRight, ChevronDown, Pin, PinOff, Medal, Building2, Sparkles, ArrowUpRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronDown, Pin, PinOff, Medal, Building2, Sparkles, ArrowUpRight } from "lucide-react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import {
@@ -264,7 +264,27 @@ export default function FeedPage() {
   ]);
 
   const displayName = me ? `${me.firstName} ${me.lastName}` : "";
-  const spotlight = posts.find((post) => post.assets?.some((asset) => asset.fileType?.startsWith("image/")) && post.postType === "long");
+  const [selectedSpotlightId, setSelectedSpotlightId] = useState<string | null>(null);
+  const spotlightIndex = selectedSpotlightId && posts.some((post) => post.id === selectedSpotlightId)
+    ? posts.findIndex((post) => post.id === selectedSpotlightId)
+    : Math.max(0, posts.findIndex((post) => post.postType === "long" && post.assets?.some((asset) => asset.fileType?.startsWith("image/"))));
+  const spotlight = posts[spotlightIndex];
+  useEffect(() => {
+    recomputeMargin();
+  }, [spotlight?.id, recomputeMargin]);
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const previousSpotlight = () => {
+    if (spotlightIndex > 0) setSelectedSpotlightId(posts[spotlightIndex - 1].id);
+  };
+  const nextSpotlight = async () => {
+    if (spotlightIndex + 1 < posts.length) {
+      setSelectedSpotlightId(posts[spotlightIndex + 1].id);
+    } else if (hasNextPage && !isFetchingNextPage) {
+      const result = await fetchNextPage();
+      const nextPosts = result.data?.pages.flatMap((page) => page.data) ?? [];
+      if (nextPosts[spotlightIndex + 1]) setSelectedSpotlightId(nextPosts[spotlightIndex + 1].id);
+    }
+  };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[228px_minmax(0,1fr)_240px] gap-5">
@@ -487,7 +507,31 @@ export default function FeedPage() {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        {feedMode === "following" && spotlight && <GameDaySpotlight post={spotlight} />}
+        {feedMode === "following" && spotlight && <>
+          {(posts.length > 1 || hasNextPage) && (
+            <nav className="game-day-spotlight-nav" aria-label="Spotlight posts">
+              <span data-testid="text-spotlight-position">Post {spotlightIndex + 1} of {posts.length}{hasNextPage ? "+" : ""}</span>
+              <div className="game-day-spotlight-actions">
+                <Button variant="outline" size="sm" onClick={previousSpotlight} disabled={spotlightIndex === 0} aria-label="Previous post" data-testid="button-previous-spotlight"><ChevronLeft size={16} /> Previous</Button>
+                <Button variant="outline" size="sm" onClick={() => void nextSpotlight()} disabled={(spotlightIndex === posts.length - 1 && !hasNextPage) || isFetchingNextPage} aria-label="Next post" data-testid="button-next-spotlight">Next post <ChevronRight size={16} /></Button>
+              </div>
+            </nav>
+          )}
+          <div className="game-day-spotlight-stage"
+            onTouchStart={(event) => { touchStart.current = { x: event.touches[0].clientX, y: event.touches[0].clientY }; }}
+            onTouchEnd={(event) => {
+              if (!touchStart.current) return;
+              const dx = event.changedTouches[0].clientX - touchStart.current.x;
+              const dy = event.changedTouches[0].clientY - touchStart.current.y;
+              touchStart.current = null;
+              if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+                if (dx < 0) void nextSpotlight();
+                else previousSpotlight();
+              }
+            }}>
+            <GameDaySpotlight key={spotlight.id} post={spotlight} />
+          </div>
+        </>}
         </section>
         {feedMode === "explore" ? <ExploreReel active /> : <>
         <div className="game-day-feed-heading">
@@ -582,12 +626,11 @@ export default function FeedPage() {
 
 function GameDaySpotlight({ post }: { post: FeedPost }) {
   const image = post.assets.find((asset) => asset.fileType?.startsWith("image/"));
-  if (!image) return null;
   return (
     <article className="game-day-lead">
-      <div className="game-day-lead-image">
-        <img src={image.url ?? undefined} alt="" />
-        <span className="game-day-lead-tag">Spotlight recap</span>
+      <div className={`game-day-lead-image${image?.url ? "" : " game-day-lead-image-empty"}`}>
+        {image?.url ? <img src={image.url} alt="" /> : <Sparkles size={48} aria-hidden="true" />}
+        <span className="game-day-lead-tag">{post.postType === "long" ? "Spotlight recap" : "Community post"}</span>
       </div>
       <div className="game-day-lead-copy">
         <span className="game-day-lead-meta">{post.context.name} · {post.author.displayName}</span>
