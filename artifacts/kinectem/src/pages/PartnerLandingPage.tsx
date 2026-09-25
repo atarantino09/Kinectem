@@ -13,6 +13,7 @@ import { ClaimedOrgAccessDialog } from "@/components/ClaimedOrgAccessDialog";
 import { useWhoami } from "@/hooks/useWhoami";
 import { formatOrgName } from "@/lib/format";
 import kinectemIcon from "@assets/kinectem_icon_1788367110859.png";
+import "./PartnerLandingPage.css";
 import {
   ArrowRight,
   Building2,
@@ -274,7 +275,6 @@ export default function PartnerLandingPage() {
     return <div className="mx-auto max-w-xl p-8 text-center"><h1 className="text-2xl font-black">Partner page unavailable</h1><p className="mt-2 text-muted-foreground">This page may be unpublished or the URL may be incorrect.</p></div>;
   }
   const { page } = data;
-  const isFull360 = page.slug === "full360";
   const foreground = readableText(page.primaryColor);
   const heroShade = partnerHeroShade(
     page.primaryColor,
@@ -450,20 +450,28 @@ export default function PartnerLandingPage() {
               data-testid="partner-logo-lockup"
             >
               <div
-                className={`grid h-28 w-28 min-h-0 min-w-0 place-items-center overflow-hidden rounded-3xl bg-white/95 shadow-xl min-[360px]:h-32 min-[360px]:w-32 md:h-40 md:w-40 ${
-                  isFull360 ? "p-1 md:p-1.5" : "p-5 md:p-6"
-                }`}
+                className="partner-logo-tile relative isolate grid h-28 w-28 min-h-0 min-w-0 place-items-center overflow-hidden rounded-3xl border border-white/20 shadow-xl min-[360px]:h-32 min-[360px]:w-32 md:h-40 md:w-40"
                 data-testid="partner-logo-tile"
               >
                 {page.logoUrl ? (
-                  <img
-                    src={page.logoUrl}
-                    alt={`${page.officialName} logo`}
-                    className="block h-full w-full object-contain"
-                    data-testid="partner-logo-image"
-                  />
+                  <>
+                    <img
+                      src={page.logoUrl}
+                      alt=""
+                      aria-hidden="true"
+                      className="partner-logo-ambient absolute inset-0 h-full w-full object-cover"
+                      data-testid="partner-logo-ambient"
+                    />
+                    <div className="partner-logo-veil absolute inset-0" aria-hidden="true" />
+                    <img
+                      src={page.logoUrl}
+                      alt={`${page.officialName} logo`}
+                      className="partner-logo-mark relative block h-[92%] w-[92%] object-contain"
+                      data-testid="partner-logo-image"
+                    />
+                  </>
                 ) : (
-                  <Building2 className="h-16 w-16 text-slate-500 md:h-20 md:w-20" />
+                  <Building2 className="h-16 w-16 text-white/80 md:h-20 md:w-20" />
                 )}
               </div>
               <span className="text-center text-3xl font-light opacity-70 md:text-5xl" aria-hidden="true" data-testid="partner-logo-separator">×</span>

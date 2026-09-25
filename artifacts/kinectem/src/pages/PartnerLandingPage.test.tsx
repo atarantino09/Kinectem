@@ -368,15 +368,19 @@ describe("PartnerLandingPage featured competition", () => {
     const lockup = await screen.findByTestId("partner-logo-lockup");
     const tile = screen.getByTestId("partner-logo-tile");
     const logo = screen.getByTestId("partner-logo-image");
+    const ambient = screen.getByTestId("partner-logo-ambient");
     const kinectemTile = screen.getByTestId("kinectem-logo-tile");
     expect(logo).toHaveAttribute("src", "/uploads/full-360-original-square.png");
     expect(logo).toHaveAttribute("alt", "Full 360 Sports logo");
-    expect(logo).toHaveClass("h-full", "w-full", "object-contain");
+    expect(logo).toHaveClass("partner-logo-mark", "object-contain");
     expect(logo).not.toHaveClass("object-cover");
+    expect(ambient).toHaveAttribute("src", logo.getAttribute("src"));
+    expect(ambient).toHaveAttribute("aria-hidden", "true");
+    expect(tile).toHaveClass("partner-logo-tile");
+    expect(tile).not.toHaveClass("bg-white/95");
     for (const logoTile of [tile, kinectemTile]) {
       expect(logoTile).toHaveClass("h-28", "w-28", "min-[360px]:h-32", "min-[360px]:w-32", "md:h-40", "md:w-40");
     }
-    expect(tile).toHaveClass("p-1", "md:p-1.5");
     expect(tile).not.toHaveClass("w-36", "md:w-72");
     expect(lockup).toHaveClass("grid-cols-[7rem_1.5rem_7rem]", "min-[360px]:grid-cols-[8rem_1.5rem_8rem]", "md:grid-cols-[10rem_2.5rem_10rem]");
     expect(lockup.querySelector('[data-testid="partner-logo-separator"]')).toBeInTheDocument();
@@ -402,7 +406,7 @@ describe("PartnerLandingPage featured competition", () => {
   it.each([
     ["wide", "400", "120"],
     ["tall", "120", "400"],
-  ])("contains edge-reaching %s partner artwork inside a padded fixed-size tile", async (_, width, height) => {
+  ])("contains edge-reaching %s partner artwork inside a softened fixed-size tile", async (_, width, height) => {
     const configuredLogo = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='${width}' height='${height}'%3E%3Crect width='${width}' height='${height}' fill='navy'/%3E%3C/svg%3E`;
     mockedFetch.mockResolvedValue(
       partnerResponse(null, [], {
@@ -423,12 +427,10 @@ describe("PartnerLandingPage featured competition", () => {
       "min-[360px]:h-32",
       "min-[360px]:w-32",
       "overflow-hidden",
-      "p-5",
       "md:h-40",
       "md:w-40",
-      "md:p-6",
     );
-    expect(logo).toHaveClass("block", "h-full", "w-full", "object-contain");
+    expect(logo).toHaveClass("block", "partner-logo-mark", "object-contain");
     expect(logo).not.toHaveClass("object-cover");
     expect(logo).toHaveAttribute("src", configuredLogo);
     expect(screen.getByTestId("partner-logo-lockup")).toHaveClass("grid-cols-[7rem_1.5rem_7rem]", "min-[360px]:grid-cols-[8rem_1.5rem_8rem]");
