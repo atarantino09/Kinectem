@@ -13,6 +13,7 @@ import { ClaimedOrgAccessDialog } from "@/components/ClaimedOrgAccessDialog";
 import { useWhoami } from "@/hooks/useWhoami";
 import { formatOrgName } from "@/lib/format";
 import kinectemIcon from "@assets/kinectem_icon_1788367110859.png";
+import full360HeroLogo from "@assets/full-360-sports-logo-cropped.png";
 import {
   ArrowRight,
   Building2,
@@ -274,6 +275,8 @@ export default function PartnerLandingPage() {
     return <div className="mx-auto max-w-xl p-8 text-center"><h1 className="text-2xl font-black">Partner page unavailable</h1><p className="mt-2 text-muted-foreground">This page may be unpublished or the URL may be incorrect.</p></div>;
   }
   const { page } = data;
+  const isFull360 = page.slug === "full360";
+  const heroLogoUrl = isFull360 ? full360HeroLogo : page.logoUrl;
   const foreground = readableText(page.primaryColor);
   const heroShade = partnerHeroShade(
     page.primaryColor,
@@ -445,16 +448,24 @@ export default function PartnerLandingPage() {
               Proud partner with Kinectem
             </p>
             <div
-              className="mx-auto grid w-fit grid-cols-[8rem_1.5rem_8rem] items-center gap-x-3 gap-y-2 sm:gap-x-5 md:grid-cols-[10rem_2.5rem_10rem]"
+              className={`mx-auto grid w-fit items-center gap-y-2 ${
+                isFull360
+                  ? "grid-cols-[9rem_1rem_6rem] gap-x-2 sm:grid-cols-[14rem_1.5rem_8rem] sm:gap-x-4 md:grid-cols-[18rem_2.5rem_10rem] md:gap-x-5"
+                  : "grid-cols-[8rem_1.5rem_8rem] gap-x-3 sm:gap-x-5 md:grid-cols-[10rem_2.5rem_10rem]"
+              }`}
               data-testid="partner-logo-lockup"
             >
               <div
-                className="grid h-32 w-32 min-h-0 min-w-0 place-items-center overflow-hidden rounded-3xl bg-white/95 p-5 shadow-xl md:h-40 md:w-40 md:p-6"
+                className={`grid min-h-0 min-w-0 place-items-center overflow-hidden rounded-3xl bg-white/95 shadow-xl ${
+                  isFull360
+                    ? "h-24 w-36 p-2 sm:h-32 sm:w-56 sm:p-3 md:h-40 md:w-72 md:p-3"
+                    : "h-32 w-32 p-5 md:h-40 md:w-40 md:p-6"
+                }`}
                 data-testid="partner-logo-tile"
               >
-                {page.logoUrl ? (
+                {heroLogoUrl ? (
                   <img
-                    src={page.logoUrl}
+                    src={heroLogoUrl}
                     alt={`${page.officialName} logo`}
                     className="block h-full w-full object-contain"
                     data-testid="partner-logo-image"
@@ -465,7 +476,9 @@ export default function PartnerLandingPage() {
               </div>
               <span className="text-center text-3xl font-light opacity-70 md:text-5xl" aria-hidden="true" data-testid="partner-logo-separator">×</span>
               <div
-                className="grid h-32 w-32 min-h-0 min-w-0 place-items-center overflow-hidden rounded-3xl bg-[linear-gradient(145deg,#b400ff_0%,#6d00ff_46%,#006cff_100%)] shadow-xl [clip-path:inset(0_round_1.5rem)] md:h-40 md:w-40"
+                className={`grid min-h-0 min-w-0 place-items-center overflow-hidden rounded-3xl bg-[linear-gradient(145deg,#b400ff_0%,#6d00ff_46%,#006cff_100%)] shadow-xl [clip-path:inset(0_round_1.5rem)] ${
+                  isFull360 ? "h-24 w-24 sm:h-32 sm:w-32 md:h-40 md:w-40" : "h-32 w-32 md:h-40 md:w-40"
+                }`}
                 data-testid="kinectem-logo-tile"
               >
                 <img

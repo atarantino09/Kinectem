@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { customFetch } from "@workspace/api-client-react";
 import { renderWithProviders } from "@/test/renderWithProviders";
 import { useWhoami } from "@/hooks/useWhoami";
+import full360HeroLogo from "@assets/full-360-sports-logo-cropped.png";
 import PartnerLandingPage, {
   claimedOrgAccessSeenKey,
   partnerHeroShade,
@@ -353,12 +354,42 @@ describe("PartnerLandingPage featured competition", () => {
     expect(lockup.querySelector('[alt="Kinectem logo"]')).toBeInTheDocument();
   });
 
-  it("contains edge-reaching partner artwork inside a padded fixed-size tile", async () => {
+  it("uses the cropped Full 360 artwork only in its wider, phone-safe hero lockup", async () => {
     mockedFetch.mockResolvedValue(
       partnerResponse(null, [], {
+        slug: "full360",
+        officialName: "Full 360 Sports",
+        associationLabel: "Tournament",
+        logoUrl: "/uploads/full-360-original-square.png",
+      }) as never,
+    );
+
+    renderWithProviders(<PartnerLandingPage />);
+
+    const lockup = await screen.findByTestId("partner-logo-lockup");
+    const tile = screen.getByTestId("partner-logo-tile");
+    const logo = screen.getByTestId("partner-logo-image");
+    expect(logo).toHaveAttribute("src", full360HeroLogo);
+    expect(logo).toHaveAttribute("alt", "Full 360 Sports logo");
+    expect(logo).toHaveClass("object-contain");
+    expect(tile).toHaveClass("h-24", "w-36", "p-2", "md:h-40", "md:w-72", "md:p-3");
+    expect(lockup).toHaveClass("grid-cols-[9rem_1rem_6rem]", "md:grid-cols-[18rem_2.5rem_10rem]");
+    expect(screen.getByTestId("kinectem-logo-tile")).toHaveClass("h-24", "w-24", "md:h-40", "md:w-40");
+    expect(lockup.querySelector('[data-testid="partner-logo-separator"]')).toBeInTheDocument();
+    expect(within(lockup).getByText("Tournament")).toBeInTheDocument();
+    expect(within(lockup).getByText("Kinectem")).toBeInTheDocument();
+  });
+
+  it.each([
+    ["wide", "400", "120"],
+    ["tall", "120", "400"],
+  ])("contains edge-reaching %s partner artwork inside a padded fixed-size tile", async (_, width, height) => {
+    const configuredLogo = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='${width}' height='${height}'%3E%3Crect width='${width}' height='${height}' fill='navy'/%3E%3C/svg%3E`;
+    mockedFetch.mockResolvedValue(
+      partnerResponse(null, [], {
+        slug: "wide-edge-league",
         officialName: "Wide Edge League",
-        logoUrl:
-          "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='120'%3E%3Crect width='400' height='120' fill='navy'/%3E%3C/svg%3E",
+        logoUrl: configuredLogo,
       }) as never,
     );
 
@@ -378,6 +409,8 @@ describe("PartnerLandingPage featured competition", () => {
     );
     expect(logo).toHaveClass("block", "h-full", "w-full", "object-contain");
     expect(logo).not.toHaveClass("object-cover");
+    expect(logo).toHaveAttribute("src", configuredLogo);
+    expect(screen.getByTestId("partner-logo-lockup")).toHaveClass("grid-cols-[8rem_1.5rem_8rem]");
     expect(kinectemTile).toHaveClass(
       "overflow-hidden",
       "rounded-3xl",
