@@ -11,7 +11,6 @@ import {
   useListUserOrganizations,
   useListUserTeams,
   queryOpts,
-  type FeedPost,
 } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -22,6 +21,7 @@ import { PostCard } from "@/components/PostCard";
 import { SuggestionsPanel } from "@/components/SuggestionsPanel";
 import { BrandPageHeader } from "@/components/BrandPageHeader";
 import { ExploreReel } from "@/components/ExploreReel";
+import { GameDaySpotlight } from "@/components/GameDaySpotlight";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import "./GameDayFeed.css";
 import { usePinnedOrgs } from "@/hooks/usePinnedOrgs";
@@ -624,27 +624,6 @@ export default function FeedPage() {
         />
       </aside>
     </div>
-  );
-}
-
-function GameDaySpotlight({ post }: { post: FeedPost }) {
-  const image = post.assets.find((asset) => asset.fileType?.startsWith("image/"));
-  return (
-    <article className="game-day-lead">
-      <div className={`game-day-lead-image${image?.url ? "" : " game-day-lead-image-empty"}`}>
-        {image?.url ? <img src={image.url} alt="" /> : <Sparkles size={48} aria-hidden="true" />}
-        <span className="game-day-lead-tag">{post.postType === "long" ? "Spotlight recap" : "Community post"}</span>
-      </div>
-      <div className="game-day-lead-copy">
-        <span className="game-day-lead-meta">{post.context.name} · {post.author.displayName}</span>
-        <h2>{post.title || "A moment worth sharing"}</h2>
-        <p className="line-clamp-4">{post.description || post.body || "Catch up with the latest from your community."}</p>
-        <div className="game-day-lead-footer">
-          <span className="text-xs text-muted-foreground">From your teams</span>
-          <Link href={`/posts/${post.id}`}><Button size="sm" className="gap-1">Read story <ArrowUpRight size={14} /></Button></Link>
-        </div>
-      </div>
-    </article>
   );
 }
 

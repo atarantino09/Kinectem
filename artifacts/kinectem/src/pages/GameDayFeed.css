@@ -96,8 +96,25 @@
 .game-day-lead-image { position: relative; min-height: 268px; overflow: hidden; background: #12132b; }
 .game-day-lead-image-empty { display: flex; align-items: center; justify-content: center; color: #a9bfff; background: var(--brand-gradient-dark); }
 .game-day-lead-image-empty svg { position: relative; z-index: 1; }
+.game-day-fallback-image { position: absolute; inset: 0; overflow: hidden; background: var(--brand-gradient-dark); }
+.game-day-fallback-image img:first-of-type {
+  object-fit: cover;
+  transform: scale(1.15);
+  filter: blur(22px) brightness(.7);
+}
+.game-day-fallback-image img:last-of-type {
+  object-fit: contain;
+  mask-image: radial-gradient(ellipse 88% 88% at center, #000 56%, transparent 100%);
+}
+.game-day-lead-image-logo .game-day-fallback-image img:last-of-type {
+  inset: 14%;
+  width: 72%;
+  height: 72%;
+  mask-image: none;
+  filter: drop-shadow(0 8px 20px rgba(0, 0, 0, .25));
+}
 .game-day-lead-image img { width: 100%; height: 100%; object-fit: cover; transition: transform .4s ease; }
-.game-day-lead:hover img { transform: scale(1.035); }
+.game-day-lead-image:not(.game-day-lead-image-fallback):hover img { transform: scale(1.035); }
 .game-day-lead-image::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent 55%, #15132b99), linear-gradient(0deg, #15132b99, transparent 55%); pointer-events: none; }
 .game-day-lead-tag { position: absolute; z-index: 1; top: 15px; left: 16px; border-radius: 99px; padding: 6px 9px; background: #171427bc; color: white; font-size: 10px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
 .game-day-lead-copy { min-width: 0; padding: 25px 24px; display: flex; flex-direction: column; justify-content: center; }
