@@ -118,12 +118,11 @@
 .game-day-lead-image::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent 55%, #15132b99), linear-gradient(0deg, #15132b99, transparent 55%); pointer-events: none; }
 .game-day-lead-tag { position: absolute; z-index: 1; top: 15px; left: 16px; border-radius: 99px; padding: 6px 9px; background: #171427bc; color: white; font-size: 10px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
 .game-day-lead-copy { min-width: 0; padding: 25px 24px; display: flex; flex-direction: column; justify-content: center; }
-.game-day-lead-attribution { display: flex; flex-direction: column; gap: 5px; padding-bottom: 9px; border-bottom: 1px solid hsl(var(--border)); font-size: 11px; line-height: 1.35; }
-.game-day-lead-attribution-row { display: grid; grid-template-columns: 76px minmax(0, 1fr); align-items: start; gap: 8px; min-width: 0; }
-.game-day-lead-attribution-label { color: hsl(var(--muted-foreground)); font-size: 9px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
-.game-day-lead-attribution-link, .game-day-lead-attribution-row strong { min-width: 0; color: hsl(var(--foreground)); font-weight: 700; overflow-wrap: anywhere; }
-.game-day-lead-attribution-link:hover { text-decoration: underline; }
-.game-day-lead-byline { color: hsl(var(--muted-foreground)); font-weight: 600; }
+.game-day-lead-attribution { display: flex; flex-direction: column; gap: 4px; padding-bottom: 9px; border-bottom: 1px solid hsl(var(--border)); line-height: 1.3; }
+.game-day-lead-org-name { color: hsl(var(--muted-foreground)); font-size: 11px; font-weight: 600; overflow-wrap: anywhere; }
+.game-day-lead-team-name { color: hsl(var(--foreground)); font-size: 14px; font-weight: 800; overflow-wrap: anywhere; }
+.game-day-lead-org-name a:hover, .game-day-lead-team-name:hover { text-decoration: underline; }
+.game-day-lead-byline { color: hsl(var(--muted-foreground)); font-size: 11px; font-weight: 600; }
 .game-day-lead-copy h2 { font-family: var(--app-font-display); font-size: 26px; font-weight: 900; line-height: 1.08; letter-spacing: -.045em; margin: 12px 0 10px; }
 .game-day-lead-copy p { color: hsl(var(--muted-foreground)); font-size: 12px; line-height: 1.6; max-width: 390px; }
 .game-day-lead-footer { display: flex; align-items: center; justify-content: space-between; gap: 9px; border-top: 1px solid hsl(var(--border)); margin-top: 17px; padding-top: 13px; }

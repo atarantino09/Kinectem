@@ -55,29 +55,22 @@ export function GameDaySpotlight({ post }: { post: FeedPost }) {
       </div>
       <div className="game-day-lead-copy">
         <div className="game-day-lead-attribution">
-          {post.context.type === "team" && (
-            <div className="game-day-lead-attribution-row">
-              <span className="game-day-lead-attribution-label">Team</span>
-              <Link href={`/teams/${post.context.id}`} className="game-day-lead-attribution-link" data-testid="link-spotlight-team">
-                {post.context.name || "View team"}
-              </Link>
-            </div>
-          )}
           {post.context.type === "team" && post.context.orgName && (
-            <div className="game-day-lead-attribution-row" data-testid="text-spotlight-organization">
-              <span className="game-day-lead-attribution-label">Organization</span>
+            <div className="game-day-lead-org-name" data-testid="text-spotlight-organization">
               {post.context.orgId ? (
-                <Link href={`/organizations/${post.context.orgId}`} className="game-day-lead-attribution-link">{post.context.orgName}</Link>
+                <Link href={`/organizations/${post.context.orgId}`}>{post.context.orgName}</Link>
               ) : (
                 <strong>{post.context.orgName}</strong>
               )}
             </div>
           )}
+          {post.context.type === "team" && (
+            <Link href={`/teams/${post.context.id}`} className="game-day-lead-team-name" data-testid="link-spotlight-team">
+              {post.context.name || "View team"}
+            </Link>
+          )}
           {post.context.type === "organization" && (
-            <div className="game-day-lead-attribution-row">
-              <span className="game-day-lead-attribution-label">Organization</span>
-              <Link href={`/organizations/${post.context.id}`} className="game-day-lead-attribution-link">{post.context.name || "View organization"}</Link>
-            </div>
+            <Link href={`/organizations/${post.context.id}`} className="game-day-lead-org-name">{post.context.name || "View organization"}</Link>
           )}
           <span className="game-day-lead-byline">By {post.author.displayName}</span>
         </div>
