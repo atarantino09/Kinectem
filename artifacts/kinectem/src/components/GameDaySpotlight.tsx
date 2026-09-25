@@ -9,6 +9,7 @@ import {
 } from "@workspace/api-client-react";
 import { BlurFillImage } from "@/components/BlurFillImage";
 import { Button } from "@/components/ui/button";
+import { featuredRecapPreviewText } from "@/lib/featuredRecapPreview";
 
 export function GameDaySpotlight({ post }: { post: FeedPost }) {
   const [failedBanner, setFailedBanner] = useState(false);
@@ -30,6 +31,12 @@ export function GameDaySpotlight({ post }: { post: FeedPost }) {
   const bannerUrl = !failedBanner ? team?.bannerUrl : null;
   const logoUrl = !bannerUrl && !failedLogo ? org?.logoUrl : null;
   const fallbackUrl = bannerUrl || logoUrl;
+  const previewText = post.postType === "long"
+    ? featuredRecapPreviewText({
+        body: post.body ?? null,
+        summary: post.description ?? null,
+      })
+    : post.description || post.body;
 
   return (
     <article className="game-day-lead">
@@ -75,7 +82,9 @@ export function GameDaySpotlight({ post }: { post: FeedPost }) {
           <span className="game-day-lead-byline">By {post.author.displayName}</span>
         </div>
         <h2>{post.title || "A moment worth sharing"}</h2>
-        <p className="line-clamp-4">{post.description || post.body || "Catch up with the latest from your community."}</p>
+        <p className="line-clamp-4" data-testid="text-spotlight-preview">
+          {previewText || "Catch up with the latest from your community."}
+        </p>
         <div className="game-day-lead-footer">
           <span className="text-xs text-muted-foreground">From your teams</span>
           <Link href={`/posts/${post.id}`}><Button size="sm" className="gap-1">Read story <ArrowUpRight size={14} /></Button></Link>

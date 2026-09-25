@@ -14,7 +14,7 @@ vi.mock("@workspace/api-client-react", () => ({
   useGetOrganizationById: mocks.org,
 }));
 
-const post = (assets: FeedPost["assets"] = []): FeedPost => ({
+const post = (assets: FeedPost["assets"] = [], overrides: Partial<FeedPost> = {}): FeedPost => ({
   id: "post-1",
   postType: "long",
   title: "Friday recap",
@@ -28,6 +28,7 @@ const post = (assets: FeedPost["assets"] = []): FeedPost => ({
   reactionCount: 0,
   hasReacted: false,
   commentCount: 0,
+  ...overrides,
 });
 
 describe("GameDaySpotlight image priority", () => {
@@ -73,5 +74,46 @@ describe("GameDaySpotlight image priority", () => {
     render(<GameDaySpotlight post={post()} />);
     fireEvent.error(screen.getByAltText("Falcons photo"));
     expect(screen.getByAltText("Falcons Club logo")).toHaveAttribute("src", "/org-logo.png");
+  });
+
+  it("previews a later paragraph of a recap rather than its repetitive opening summary", () => {
+    render(<GameDaySpotlight post={post([], {
+      body: "What a way to close out the tournament.\n\nAfter halftime, the midfield pressed higher and created three clear chances.\n\nThe team stayed composed through the final whistle.",
+      description: "What a way to close out the tournament.",
+    })} />);
+
+    expect(screen.getByTestId("text-spotlight-preview")).toHaveTextContent(
+      "After halftime, the midfield pressed higher and created three clear chances.",
+    );
+    expect(screen.getByTestId("text-spotlight-preview")).not.toHaveTextContent("What a way");
+  });
+
+  it("previews a later sentence when a recap has no paragraph breaks", () => {
+    render(<GameDaySpotlight post={post([], {
+      body: "What a way to close out the tournament. The defense made the difference after halftime.",
+      description: "What a way to close out the tournament.",
+    })} />);
+
+    expect(screen.getByTestId("text-spotlight-preview")).toHaveTextContent(
+      "The defense made the difference after halftime.",
+    );
+    expect(screen.getByTestId("text-spotlight-preview")).not.toHaveTextContent("What a way");
+  });
+
+  it("falls back to the summary for a recap without a body", () => {
+    render(<GameDaySpotlight post={post([], {
+      body: null,
+      description: "A late winner decided the match.",
+    })} />);
+    expect(screen.getByTestId("text-spotlight-preview")).toHaveTextContent("A late winner decided the match.");
+  });
+
+  it("keeps the original preview order for short community posts", () => {
+    render(<GameDaySpotlight post={post([], {
+      postType: "short",
+      body: "A longer account of the moment.",
+      description: "A quick highlight.",
+    })} />);
+    expect(screen.getByTestId("text-spotlight-preview")).toHaveTextContent("A quick highlight.");
   });
 });
