@@ -90,3 +90,4 @@
 - [Critical email MIME parity](critical-email-mime-parity.md) — compliance, security, and billing terms must remain equivalent in HTML and plaintext even when only HTML is visually restructured.
 - [Vite invalid hook after dependency merge](vite-invalid-hook-cache.md) — if all components fail at React hooks after lockfile changes, clear the artifact's Vite cache before changing app code.
 - [Mockup sandbox preview routing](mockup-sandbox-routing.md) — old canvas iframes may outlive missing sandbox files; verify dev-domain routing before debugging the design.
+- [Post-merge schema safety](post-merge-schema-safety.md) — forced Drizzle push can prompt and exit 0 without applying schema; use registered startup migrations after merges.

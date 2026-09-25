@@ -1,7 +1,10 @@
 #!/bin/bash
 set -e
 pnpm install --frozen-lockfile
-pnpm --filter db push-force
+# The API service runs its registered, idempotent migrations on startup.
+# Workflow reconciliation restarts it after this script. A forced Drizzle push
+# can prompt to truncate populated tables despite --force and then exit 0
+# without applying the change when stdin is closed.
 # Idempotent backstop: NULL out any users.avatar_url rows whose data: URL
 # is corrupt or oversized. The serializer guard (safeAvatarUrl) catches the
 # oversized case at egress, but cleaning the source table prevents the

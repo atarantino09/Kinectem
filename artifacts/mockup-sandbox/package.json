@@ -8,14 +8,14 @@
     "build": "vite build"
   },
   "dependencies": {
-    "lucide-react": "*",
-    "react": "*",
-    "react-dom": "*"
+    "lucide-react": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "*",
-    "@vitejs/plugin-react": "*",
-    "tailwindcss": "*",
-    "vite": "*"
+    "@tailwindcss/vite": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "tailwindcss": "catalog:",
+    "vite": "catalog:"
   }
 }
