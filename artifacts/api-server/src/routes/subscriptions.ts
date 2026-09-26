@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, promoCodes, orgSubscriptions, organizations } from "@workspace/db";
-import { desc, eq, sql, isNotNull, or } from "drizzle-orm";
+import { db, promoCodes, promoUsage, orgSubscriptions, organizations } from "@workspace/db";
+import { desc, eq, sql, isNotNull, or, and, gte, lt } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import {
   PLAN_TEAM_LIMITS,
@@ -23,6 +23,7 @@ import {
   billingStartAtOrAfterPolicy,
   FREE_PERIOD_DAYS,
 } from "../lib/stripe-billing";
+import { parseUsageFilters, usageCsv, type UsageRow } from "../lib/promo-usage-report";
 
 const router: IRouter = Router();
 
@@ -330,7 +331,7 @@ router.put(
       apiError(res, 401, "Not authenticated", { code: "UNAUTHENTICATED" });
       return;
     }
-    const orgId = req.params.orgId;
+    const orgId = req.params.orgId as string;
     if (!(await canManageOrganization(me.id, orgId))) {
       apiError(res, 403, "You don't manage this organization.", {
         code: "FORBIDDEN",
@@ -346,6 +347,12 @@ router.put(
     }
     const { plan, promoCode } = parsed.data;
 
+    const [currentPromo] = await db
+      .select({ promoCodeId: orgSubscriptions.promoCodeId })
+      .from(orgSubscriptions)
+      .where(eq(orgSubscriptions.organizationId, orgId))
+      .limit(1);
+    const currentPromoId = currentPromo?.promoCodeId ?? null;
     const [orgPromoState] = await db
       .select({ pendingPromoCodeId: organizations.pendingPromoCodeId })
       .from(organizations)
@@ -357,14 +364,16 @@ router.put(
       // A capped promo may appear fully redeemed because this organization
       // already owns one of its staged reservations. Let the transaction
       // validate and consume that reservation instead of rejecting it here.
-      if (!promoRow && orgPromoState?.pendingPromoCodeId) {
+      if (!promoRow) {
         const [reservedPromo] = await db
           .select()
           .from(promoCodes)
           .where(eq(promoCodes.code, promoCode.trim().toLowerCase()))
           .limit(1);
         if (
-          reservedPromo?.id === orgPromoState.pendingPromoCodeId &&
+          reservedPromo &&
+          (reservedPromo.id === orgPromoState?.pendingPromoCodeId ||
+            reservedPromo.id === currentPromoId) &&
           reservedPromo.active &&
           (!reservedPromo.expiresAt ||
             reservedPromo.expiresAt.getTime() > Date.now())
@@ -433,27 +442,47 @@ router.put(
         | { pending_promo_code_id: string | null }
         | undefined;
       const [existing] = await tx
-        .select({ promoCodeId: orgSubscriptions.promoCodeId })
+        .select({
+          promoCodeId: orgSubscriptions.promoCodeId,
+          plan: orgSubscriptions.plan,
+          stripeSubscriptionId: orgSubscriptions.stripeSubscriptionId,
+        })
         .from(orgSubscriptions)
         .where(eq(orgSubscriptions.organizationId, orgId))
         .limit(1);
       const oldPromoId = existing?.promoCodeId ?? null;
+      if (
+        existing?.stripeSubscriptionId &&
+        (existing.plan !== plan || oldPromoId !== newPromoId)
+      ) {
+        return { error: "Cancel billing before changing your plan or promo.", locked: true } as const;
+      }
 
+      let appliedPromo: {
+        code: string;
+        discount_type: "percent" | "amount";
+        discount_value: number;
+      } | null = null;
       if (newPromoId) {
         type LockedPromo = {
           id: string;
+          code: string;
+          discount_type: "percent" | "amount";
+          discount_value: number;
           active: boolean;
           expires_at: Date | null;
           max_redemptions: number | null;
           redemption_count: number;
         };
         const promoResult = await tx.execute<LockedPromo>(sql`
-          SELECT id, active, expires_at, max_redemptions, redemption_count
+          SELECT id, code, discount_type, discount_value,
+                 active, expires_at, max_redemptions, redemption_count
           FROM promo_codes
-          WHERE id = ${newPromoId}
+          WHERE id = ${newPromoId} OR id = ${oldPromoId}
+          ORDER BY id
           FOR UPDATE
         `);
-        const lockedPromo = (promoResult.rows ?? promoResult)[0] as
+        const lockedPromo = (promoResult.rows ?? promoResult).find((row) => row.id === newPromoId) as
           | LockedPromo
           | undefined;
         if (
@@ -466,6 +495,7 @@ router.put(
             error: "That promo code is no longer active.",
           } as const;
         }
+        appliedPromo = lockedPromo;
         if (lockedPromo.max_redemptions != null) {
           const [pending] = await tx
             .select({ count: sql<number>`count(*)` })
@@ -527,6 +557,26 @@ router.put(
             .update(promoCodes)
             .set({ redemptionCount: sql`${promoCodes.redemptionCount} + 1` })
             .where(eq(promoCodes.id, newPromoId));
+          const [org] = await tx
+            .select({ name: organizations.name })
+            .from(organizations)
+            .where(eq(organizations.id, orgId))
+            .limit(1);
+          // The subscription UPDATE trigger closes the previous application
+          // before this insert. Snapshots remain even after entity deletion.
+          await tx.insert(promoUsage).values({
+            promoCodeId: newPromoId,
+            organizationId: orgId,
+            actorUserId: me.id,
+            code: appliedPromo!.code,
+            organizationName: org!.name,
+            actorName: me.name,
+            actorEmail: me.email,
+            plan,
+            discountType: appliedPromo!.discount_type,
+            discountValue: appliedPromo!.discount_value,
+            appliedAt: new Date(),
+          });
         }
       }
       // A staged promo is a one-time handoff hint. Once the organization
@@ -545,7 +595,7 @@ router.put(
       "error" in subscriptionResult
     ) {
       apiError(res, 409, subscriptionResult.error, {
-        code: "PROMO_INVALID",
+        code: "locked" in subscriptionResult ? "PLAN_LOCKED" : "PROMO_INVALID",
       });
       return;
     }
@@ -859,6 +909,63 @@ router.get(
       .from(promoCodes)
       .orderBy(desc(promoCodes.createdAt));
     res.json({ data: rows.map(adminPromo) });
+  }),
+);
+
+// Dates filter exact application instants in inclusive UTC calendar days.
+// Legacy rows have no reliable instant; they appear only without date filters.
+router.get(
+  "/admin/promo-usage",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const filters = parseUsageFilters(req.query);
+    if (!filters) {
+      apiError(res, 400, "Use valid UTC dates (YYYY-MM-DD), with start before end.", {
+        code: "VALIDATION_FAILED",
+      });
+      return;
+    }
+    const from = filters.from ? new Date(`${filters.from}T00:00:00Z`) : null;
+    const toExclusive = filters.to
+      ? new Date(Date.parse(`${filters.to}T00:00:00Z`) + 86_400_000)
+      : null;
+    const where = from || toExclusive
+      ? and(from ? gte(promoUsage.appliedAt, from) : undefined,
+          toExclusive ? lt(promoUsage.appliedAt, toExclusive) : undefined)
+      : undefined;
+    const [{ total }] = await db
+      .select({ total: sql<number>`count(*)` })
+      .from(promoUsage)
+      .where(where);
+    const select = db.select().from(promoUsage).where(where)
+      .orderBy(sql`${promoUsage.appliedAt} DESC NULLS LAST`, desc(promoUsage.id));
+    const rows = filters.format === "csv"
+      ? await select
+      : await select.limit(25).offset((filters.page - 1) * 25);
+    const report: UsageRow[] = rows.map((row) => ({
+      ...row,
+      // This table intentionally snapshots deleted entities and users.
+      appliedAt: row.appliedAt,
+      endedAt: row.endedAt,
+    }));
+    if (filters.format === "csv") {
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", 'attachment; filename="promo-usage.csv"');
+      res.send(usageCsv(report));
+      return;
+    }
+    res.json({
+      data: report.map((row) => ({
+        ...row,
+        appliedAt: row.appliedAt?.toISOString() ?? null,
+        endedAt: row.endedAt?.toISOString() ?? null,
+      })),
+      total: Number(total),
+      page: filters.page,
+      pageSize: 25,
+      legacyExcluded: Boolean(from || toExclusive),
+      timezone: "UTC",
+    });
   }),
 );
 

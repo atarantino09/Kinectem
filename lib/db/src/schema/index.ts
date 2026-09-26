@@ -1876,6 +1876,30 @@ export const orgSubscriptions = pgTable("org_subscriptions", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// Historical applications are snapshots, not dependent on the lifetime of a
+// promo, org, or user. A null appliedAt means a pre-tracking application whose
+// exact time cannot be recovered from the mutable subscription row.
+export const promoUsage = pgTable("promo_usage", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  promoCodeId: uuid("promo_code_id"),
+  organizationId: uuid("organization_id").notNull(),
+  actorUserId: uuid("actor_user_id"),
+  code: text("code").notNull(),
+  organizationName: text("organization_name").notNull(),
+  actorName: text("actor_name"),
+  actorEmail: text("actor_email"),
+  plan: planTierEnum("plan").notNull(),
+  discountType: promoDiscountTypeEnum("discount_type").notNull(),
+  discountValue: integer("discount_value").notNull(),
+  appliedAt: timestamp("applied_at", { withTimezone: true }),
+  endedAt: timestamp("ended_at", { withTimezone: true }),
+  endReason: text("end_reason"),
+}, (t) => ({
+  appliedIdx: index("promo_usage_applied_idx").on(t.appliedAt, t.id),
+  orgIdx: index("promo_usage_org_idx").on(t.organizationId),
+  currentIdx: uniqueIndex("promo_usage_current_org_idx").on(t.organizationId).where(sql`${t.endedAt} IS NULL`),
+}));
+
 // ---------------------------------------------------------------------------
 // Task #628 — Tournament signup funnel. An operator uploads a pre-made
 // tournament schedule (CSV of match slots) which becomes a public funnel:

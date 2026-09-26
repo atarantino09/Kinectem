@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Pencil, Plus, Tag, Trash2 } from "lucide-react";
+import { PromoUsageReport } from "./PromoUsageReport";
 
 type PromoCode = {
   id: string;
@@ -50,8 +51,10 @@ export default function AdminPromoCodes() {
       }),
   });
 
-  const refresh = () =>
+  const refresh = () => {
     qc.invalidateQueries({ queryKey: ["admin", "promo-codes"] });
+    qc.invalidateQueries({ queryKey: ["admin", "promo-usage"] });
+  };
 
   const [createOpen, setCreateOpen] = useState(false);
   const [code, setCode] = useState("");
@@ -245,7 +248,7 @@ export default function AdminPromoCodes() {
                     <tr className="text-left text-muted-foreground border-b">
                       <th className="py-2 pr-4 font-semibold">Code</th>
                       <th className="py-2 pr-4 font-semibold">Discount</th>
-                      <th className="py-2 pr-4 font-semibold">Redemptions</th>
+                       <th className="py-2 pr-4 font-semibold">Currently applied</th>
                       <th className="py-2 pr-4 font-semibold">Expires</th>
                       <th className="py-2 pr-4 font-semibold">Status</th>
                       <th className="py-2 pr-4 font-semibold text-right">Actions</th>
@@ -326,6 +329,7 @@ export default function AdminPromoCodes() {
             )}
           </CardContent>
         </Card>
+        <PromoUsageReport />
       </div>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>

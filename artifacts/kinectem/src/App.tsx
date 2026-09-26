@@ -60,7 +60,6 @@ const AdminDashboard = lazy(() => import("@/pages/admin/AdminDashboard"));
 const AdminUsers = lazy(() => import("@/pages/admin/AdminUsers"));
 const AdminModeration = lazy(() => import("@/pages/admin/AdminModeration"));
 const AdminActivity = lazy(() => import("@/pages/admin/AdminActivity"));
-const AdminFounding100 = lazy(() => import("@/pages/admin/AdminFounding100"));
 const AdminOrgQuickSetup = lazy(
   () => import("@/pages/admin/AdminOrgQuickSetup"),
 );
@@ -234,10 +233,12 @@ function Router() {
                 <Route path="/admin/users" component={AdminUsers} />
                 <Route path="/admin/moderation" component={AdminModeration} />
                 <Route path="/admin/activity" component={AdminActivity} />
-                <Route
-                  path="/admin/founding-100"
-                  component={AdminFounding100}
-                />
+                {/* The in-app Founding 100 destination is retired. Old bookmarks
+                    return to admin; signup data and the separate password-gated
+                    /api/founding-admin manager remain available unchanged. */}
+                <Route path="/admin/founding-100">
+                  <Redirect to="/admin" replace />
+                </Route>
                 {/* Keep old Org Links bookmarks working while the workflow lives
                 inside the Organizations admin page. */}
                 <Route path="/admin/org-claim-links">

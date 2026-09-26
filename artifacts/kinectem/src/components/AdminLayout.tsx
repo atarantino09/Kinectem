@@ -4,7 +4,6 @@ import {
   Users,
   ShieldAlert,
   History,
-  Sparkles,
   Bot,
   Mail,
   Eye,
@@ -25,12 +24,13 @@ import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
+// Founding 100 is intentionally absent: its in-app destination is retired,
+// while the separate /api/founding-admin manager is preserved.
 const NAV = [
   { href: "/admin", label: "Dashboard", icon: BarChart3 },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/moderation", label: "Moderation", icon: ShieldAlert },
   { href: "/admin/activity", label: "Activity log", icon: History },
-  { href: "/admin/founding-100", label: "Founding 100", icon: Sparkles },
   {
     href: "/admin/competition-claim-links",
     label: "Competition links",

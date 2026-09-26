@@ -1379,6 +1379,64 @@ CREATE INDEX IF NOT EXISTS roster_invites_coach_invite_group_id_idx
 // hint: Logic changed on both sides. Requires understanding intent of each change.
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
+    name: "2026-09-26-promo-usage-history",
+    sql: `
+      CREATE TABLE IF NOT EXISTS promo_usage (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        promo_code_id uuid,
+        organization_id uuid NOT NULL,
+        actor_user_id uuid,
+        code text NOT NULL,
+        organization_name text NOT NULL,
+        actor_name text,
+        actor_email text,
+        plan plan_tier NOT NULL,
+        discount_type promo_discount_type NOT NULL,
+        discount_value integer NOT NULL,
+        applied_at timestamptz,
+        ended_at timestamptz,
+        end_reason text
+      );
+      CREATE INDEX IF NOT EXISTS promo_usage_applied_idx ON promo_usage (applied_at, id);
+      CREATE INDEX IF NOT EXISTS promo_usage_org_idx ON promo_usage (organization_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS promo_usage_current_org_idx
+        ON promo_usage (organization_id) WHERE ended_at IS NULL;
+
+      -- FK SET NULL and organization cascades also pass through this trigger.
+      -- History survives deletion because the table deliberately has no FKs.
+      CREATE OR REPLACE FUNCTION close_promo_usage_on_subscription_change()
+      RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        IF TG_OP = 'DELETE' THEN
+          UPDATE promo_usage SET ended_at = now(), end_reason = 'removed'
+          WHERE organization_id = OLD.organization_id AND ended_at IS NULL;
+        ELSIF OLD.promo_code_id IS DISTINCT FROM NEW.promo_code_id THEN
+          UPDATE promo_usage SET ended_at = now(),
+            end_reason = CASE WHEN NEW.promo_code_id IS NULL THEN 'removed' ELSE 'replaced' END
+          WHERE organization_id = OLD.organization_id AND ended_at IS NULL;
+        END IF;
+        RETURN NULL;
+      END $$;
+      DROP TRIGGER IF EXISTS close_promo_usage_trigger ON org_subscriptions;
+      CREATE TRIGGER close_promo_usage_trigger
+        AFTER UPDATE OF promo_code_id OR DELETE ON org_subscriptions
+        FOR EACH ROW EXECUTE FUNCTION close_promo_usage_on_subscription_change();
+
+      -- No historical time or actor can be inferred from updated_at.
+      INSERT INTO promo_usage
+        (promo_code_id, organization_id, code, organization_name, plan, discount_type, discount_value)
+      SELECT p.id, s.organization_id, p.code, o.name, s.plan, p.discount_type, p.discount_value
+      FROM org_subscriptions s
+      JOIN promo_codes p ON p.id = s.promo_code_id
+      JOIN organizations o ON o.id = s.organization_id
+      WHERE NOT EXISTS (
+        SELECT 1 FROM promo_usage u
+        WHERE u.organization_id = s.organization_id AND u.ended_at IS NULL
+      )
+      ON CONFLICT DO NOTHING;
+    `,
+  },
+  {
     name: "2026-10-02-team-partner-import-provenance",
     sql: `
       ALTER TABLE teams
