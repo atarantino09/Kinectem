@@ -32,7 +32,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
+import { MoreHorizontal } from "lucide-react";
 
 type AdminUser = {
   id: string;
@@ -228,16 +235,16 @@ export default function AdminUsers() {
           Include deactivated
         </label>
       </div>
-      <Table>
+      <Table className="min-w-[650px]">
         <TableHeader>
           <TableRow>
             <TableHead>Name</TableHead>
             <TableHead>Email</TableHead>
             <TableHead>Role</TableHead>
-            <TableHead>Created</TableHead>
-            <TableHead>Last sign-in</TableHead>
+            <TableHead className="hidden xl:table-cell">Created</TableHead>
+            <TableHead className="hidden xl:table-cell">Last sign-in</TableHead>
             <TableHead>Status</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
+            <TableHead className="sticky right-0 z-10 bg-background text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -250,12 +257,12 @@ export default function AdminUsers() {
           ) : (
             (data?.data ?? []).map((u) => (
               <TableRow key={u.id} data-testid={`row-user-${u.email ?? u.id}`}>
-                <TableCell className="font-medium">{u.displayName}</TableCell>
-                <TableCell className="text-sm text-muted-foreground">{u.email}</TableCell>
+                <TableCell className="max-w-32 truncate font-medium" title={u.displayName}>{u.displayName}</TableCell>
+                <TableCell className="max-w-48 truncate text-sm text-muted-foreground" title={u.email ?? undefined}>{u.email}</TableCell>
                 <TableCell>
                   <Select value={u.role} onValueChange={(v) => updateRole(u.id, v)}>
                     <SelectTrigger
-                      className="h-8 w-32"
+                      className="h-8 w-28"
                       data-testid={`select-role-${u.email}`}
                     >
                       <SelectValue />
@@ -269,10 +276,10 @@ export default function AdminUsers() {
                     </SelectContent>
                   </Select>
                 </TableCell>
-                <TableCell className="text-sm">
+                <TableCell className="hidden text-sm xl:table-cell">
                   {new Date(u.createdAt).toLocaleDateString()}
                 </TableCell>
-                <TableCell className="text-sm">
+                <TableCell className="hidden text-sm xl:table-cell">
                   {u.lastSignInAt
                     ? new Date(u.lastSignInAt).toLocaleDateString()
                     : "—"}
@@ -284,69 +291,49 @@ export default function AdminUsers() {
                     <Badge variant="secondary">Active</Badge>
                   )}
                 </TableCell>
-                <TableCell className="text-right space-x-1">
-                  {u.deletedAt ? (
-                    <>
+                <TableCell className="sticky right-0 z-10 bg-background text-right">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => restore(u.id)}
-                        data-testid={`btn-restore-${u.email}`}
+                        aria-label={`Actions for ${u.displayName}`}
+                        data-testid={`btn-user-actions-${u.email ?? u.id}`}
                       >
-                        Restore
+                        Actions <MoreHorizontal className="ml-1 h-4 w-4" aria-hidden="true" />
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => setPermDeleting(u)}
-                        data-testid={`btn-permanent-delete-${u.email}`}
-                      >
-                        Permanently delete
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setEditing(u)}
-                        data-testid={`btn-edit-${u.email}`}
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setAssigning(u)}
-                        data-testid={`btn-assign-${u.email}`}
-                      >
-                        Assign
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => masquerade(u.id)}
-                        data-testid={`btn-masquerade-${u.email}`}
-                      >
-                        View as
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => resetPassword(u.id)}
-                      >
-                        Reset PW
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => softDelete(u.id)}
-                        data-testid={`btn-delete-${u.email}`}
-                      >
-                        Deactivate
-                      </Button>
-                    </>
-                  )}
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-44">
+                      {u.deletedAt ? (
+                        <>
+                          <DropdownMenuItem onSelect={() => void restore(u.id)} data-testid={`btn-restore-${u.email}`}>
+                            Restore
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => setPermDeleting(u)} className="text-destructive focus:text-destructive" data-testid={`btn-permanent-delete-${u.email}`}>
+                            Permanently delete
+                          </DropdownMenuItem>
+                        </>
+                      ) : (
+                        <>
+                          <DropdownMenuItem onSelect={() => setEditing(u)} data-testid={`btn-edit-${u.email}`}>
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => setAssigning(u)} data-testid={`btn-assign-${u.email}`}>
+                            Assign
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => void masquerade(u.id)} data-testid={`btn-masquerade-${u.email}`}>
+                            View as
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => void resetPassword(u.id)}>
+                            Reset PW
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => void softDelete(u.id)} className="text-destructive focus:text-destructive" data-testid={`btn-delete-${u.email}`}>
+                            Deactivate
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </TableCell>
               </TableRow>
             ))
