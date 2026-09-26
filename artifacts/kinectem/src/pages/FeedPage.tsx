@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatOrgName } from "@/lib/format";
 import { Link } from "wouter";
-import { ChevronLeft, ChevronRight, ChevronDown, Pin, PinOff, Medal, Building2, Sparkles, ArrowUpRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronDown, Pin, PinOff, Medal, Building2, Sparkles } from "lucide-react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import {
@@ -540,9 +540,7 @@ export default function FeedPage() {
         </section>
         <div className="game-day-feed-heading">
           <div><span className="game-day-eyebrow">Keep up with your teams</span><h2>Latest activity</h2></div>
-          <a href="#following-posts" className="text-xs font-bold text-primary flex items-center gap-1">View all <ArrowUpRight size={14} /></a>
         </div>
-        <div id="following-posts" />
         {feedError ? (
           <div role="alert" className="app-surface rounded-xl p-6 text-center space-y-3">
             <p>Couldn't load your feed.</p>
