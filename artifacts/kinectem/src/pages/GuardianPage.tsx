@@ -134,14 +134,14 @@ export default function GuardianPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3" data-testid="family-header">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center">
+    <div className="min-w-0 space-y-6">
+      <div className="flex min-w-0 items-start gap-3 sm:items-center" data-testid="family-header">
+        <div className="w-10 h-10 shrink-0 rounded-xl bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center">
           <Users className="w-5 h-5 text-white" />
         </div>
-        <div>
-          <h1 className="text-3xl font-black tracking-tight">Family</h1>
-          <p className="text-sm text-muted-foreground">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-3xl font-black tracking-tight [overflow-wrap:anywhere]">Family</h1>
+          <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">
             Link your children's accounts and control how they appear on
             Kinectem.
           </p>
@@ -154,8 +154,8 @@ export default function GuardianPage() {
           className="rounded-xl border-border"
           data-testid="card-no-children"
         >
-          <CardContent className="p-6 space-y-2">
-            <h2 className="font-black tracking-tight">
+          <CardContent className="p-4 sm:p-6 space-y-2">
+            <h2 className="font-black tracking-tight [overflow-wrap:anywhere]">
               You haven't linked a child yet
             </h2>
             <p className="text-sm text-muted-foreground">
@@ -177,8 +177,8 @@ export default function GuardianPage() {
       <EmailPrefCard enabled={isGuardian} />
 
       <Card className="rounded-xl border-border" data-testid="card-linked-children">
-        <CardContent className="p-6 space-y-4">
-          <h2 className="font-black tracking-tight">Linked children</h2>
+        <CardContent className="min-w-0 p-4 sm:p-6 space-y-4">
+          <h2 className="font-black tracking-tight [overflow-wrap:anywhere]">Linked children</h2>
           {dash.loading ? (
             <Skeleton className="h-20 rounded-lg" />
            ) : dash.children.length === 0 ? (

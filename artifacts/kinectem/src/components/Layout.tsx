@@ -401,9 +401,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <MobileTopBar
           meId={currentUser?.id}
           unreadCount={unreadCount}
-          isGuardian={
-            whoami?.isGuardian === true || whoami?.realUser?.role === "parent"
-          }
           onOpenNav={() => setMobileNavOpen(true)}
         />
       ) : (
@@ -417,7 +414,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             />
           </Link>
 
-          <form onSubmit={onSearchSubmit} className="flex-1 max-w-md relative">
+          <form onSubmit={onSearchSubmit} className="relative hidden min-w-0 max-w-md flex-1 lg:block">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               type="search"
@@ -428,6 +425,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
               data-testid="input-header-search"
             />
           </form>
+          <Link
+            href="/search"
+            aria-label="Search"
+            className="ml-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-md hover:bg-muted lg:hidden"
+          >
+            <Search className="h-5 w-5" />
+          </Link>
 
           <nav className="hidden md:flex items-center gap-1">
             {navItems.map((item) => {
@@ -443,11 +447,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   <Button
                     variant={navVariant(active)}
                     size="sm"
-                     className={cn("font-semibold", active && "shadow-sm")}
+                    aria-label={item.label}
+                    className={cn("px-2 font-semibold lg:px-3", active && "shadow-sm")}
                     data-active={active ? "true" : undefined}
                     data-testid={item.testId}
                   >
-                    <Icon className="w-4 h-4 mr-2" /> {item.label}
+                    <Icon className="h-4 w-4 lg:mr-2" />
+                    <span className="hidden lg:inline">{item.label}</span>
                     {hasBadge && (
                       <span
                         className="brand-count-marker ml-2 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-black flex items-center justify-center"
@@ -468,7 +474,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="sm" className="h-9 px-2 gap-2">
                 <Plus className="w-4 h-4" />
-                <span className="hidden sm:inline font-semibold">Create</span>
+                <span className="hidden font-semibold lg:inline">Create</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
@@ -593,7 +599,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </header>
       )}
 
-      <main className="mx-auto max-w-6xl px-4 py-6 pb-16 md:pb-8">{children}</main>
+      <main className="mx-auto max-w-6xl px-4 py-6 pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-8">{children}</main>
 
       {isMobile && (
         <MobileBottomNav

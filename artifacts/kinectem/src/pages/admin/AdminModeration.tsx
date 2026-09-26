@@ -83,12 +83,12 @@ export default function AdminModeration() {
     <AdminLayout>
       <h1 className="text-2xl font-black mb-4">Moderation</h1>
       <Tabs defaultValue={initialTab}>
-        <TabsList>
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:inline-flex sm:h-9 sm:w-auto">
           <TabsTrigger value="reports" data-testid="tab-reports">Reports</TabsTrigger>
           <TabsTrigger value="content" data-testid="tab-content">Content</TabsTrigger>
           <TabsTrigger value="takedowns" data-testid="tab-takedowns">Takedowns</TabsTrigger>
           <TabsTrigger value="org-claims" data-testid="tab-org-claims">Org claims</TabsTrigger>
-          <TabsTrigger value="competitions" data-testid="tab-competitions">Competitions</TabsTrigger>
+          <TabsTrigger value="competitions" className="col-span-2 sm:col-auto" data-testid="tab-competitions">Competitions</TabsTrigger>
         </TabsList>
         <TabsContent value="reports">
           <ReportsPanel />

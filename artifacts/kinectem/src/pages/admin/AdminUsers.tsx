@@ -176,6 +176,51 @@ export default function AdminUsers() {
   const showingFrom = totalCount === 0 ? 0 : page * PAGE_SIZE + 1;
   const showingTo = Math.min(totalCount, page * PAGE_SIZE + (data?.data.length ?? 0));
 
+  const userActions = (u: AdminUser) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          size="sm"
+          variant="outline"
+          aria-label={`Actions for ${u.displayName}`}
+          data-testid={`btn-user-actions-${u.email ?? u.id}`}
+        >
+          Actions <MoreHorizontal className="ml-1 h-4 w-4" aria-hidden="true" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-44">
+        {u.deletedAt ? (
+          <>
+            <DropdownMenuItem onSelect={() => void restore(u.id)} data-testid={`btn-restore-${u.email}`}>
+              Restore
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setPermDeleting(u)} className="text-destructive focus:text-destructive" data-testid={`btn-permanent-delete-${u.email}`}>
+              Permanently delete
+            </DropdownMenuItem>
+          </>
+        ) : (
+          <>
+            <DropdownMenuItem onSelect={() => setEditing(u)} data-testid={`btn-edit-${u.email}`}>
+              Edit
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setAssigning(u)} data-testid={`btn-assign-${u.email}`}>
+              Assign
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void masquerade(u.id)} data-testid={`btn-masquerade-${u.email}`}>
+              View as
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void resetPassword(u.id)}>
+              Reset PW
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void softDelete(u.id)} className="text-destructive focus:text-destructive" data-testid={`btn-delete-${u.email}`}>
+              Deactivate
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
   return (
     <AdminLayout>
       <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
@@ -235,6 +280,49 @@ export default function AdminUsers() {
           Include deactivated
         </label>
       </div>
+      <div className="space-y-3 lg:hidden" data-testid="admin-users-mobile-list">
+        {isLoading ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p>
+        ) : (data?.data ?? []).length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">No users found.</p>
+        ) : (data?.data ?? []).map((u) => (
+          <article
+            key={u.id}
+            className="min-w-0 rounded-xl border bg-card p-4 shadow-sm"
+            data-testid={`card-user-${u.email ?? u.id}`}
+          >
+            <div className="flex min-w-0 items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="break-words font-semibold leading-snug [overflow-wrap:anywhere]">{u.displayName}</h2>
+                <p className="mt-1 break-all text-sm text-muted-foreground">{u.email ?? "No email address"}</p>
+              </div>
+              <div className="shrink-0">
+                {u.deletedAt ? <Badge variant="destructive">Deactivated</Badge> : <Badge variant="secondary">Active</Badge>}
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap items-end justify-between gap-3 border-t pt-3">
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground" htmlFor={`mobile-role-${u.id}`}>Role</Label>
+                <Select value={u.role} onValueChange={(v) => updateRole(u.id, v)}>
+                  <SelectTrigger id={`mobile-role-${u.id}`} className="h-10 w-32" data-testid={`select-mobile-role-${u.email}`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              {userActions(u)}
+            </div>
+            <p className="mt-3 text-xs text-muted-foreground">
+              Created {new Date(u.createdAt).toLocaleDateString()}
+              <span className="mx-2" aria-hidden="true">·</span>
+              Last sign-in {u.lastSignInAt ? new Date(u.lastSignInAt).toLocaleDateString() : "—"}
+            </p>
+          </article>
+        ))}
+      </div>
+      <div className="hidden lg:block" data-testid="admin-users-table">
       <Table className="min-w-[650px]">
         <TableHeader>
           <TableRow>
@@ -291,56 +379,14 @@ export default function AdminUsers() {
                     <Badge variant="secondary">Active</Badge>
                   )}
                 </TableCell>
-                <TableCell className="sticky right-0 z-10 bg-background text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        aria-label={`Actions for ${u.displayName}`}
-                        data-testid={`btn-user-actions-${u.email ?? u.id}`}
-                      >
-                        Actions <MoreHorizontal className="ml-1 h-4 w-4" aria-hidden="true" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-44">
-                      {u.deletedAt ? (
-                        <>
-                          <DropdownMenuItem onSelect={() => void restore(u.id)} data-testid={`btn-restore-${u.email}`}>
-                            Restore
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onSelect={() => setPermDeleting(u)} className="text-destructive focus:text-destructive" data-testid={`btn-permanent-delete-${u.email}`}>
-                            Permanently delete
-                          </DropdownMenuItem>
-                        </>
-                      ) : (
-                        <>
-                          <DropdownMenuItem onSelect={() => setEditing(u)} data-testid={`btn-edit-${u.email}`}>
-                            Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onSelect={() => setAssigning(u)} data-testid={`btn-assign-${u.email}`}>
-                            Assign
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onSelect={() => void masquerade(u.id)} data-testid={`btn-masquerade-${u.email}`}>
-                            View as
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onSelect={() => void resetPassword(u.id)}>
-                            Reset PW
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onSelect={() => void softDelete(u.id)} className="text-destructive focus:text-destructive" data-testid={`btn-delete-${u.email}`}>
-                            Deactivate
-                          </DropdownMenuItem>
-                        </>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
+                <TableCell className="sticky right-0 z-10 bg-background text-right">{userActions(u)}</TableCell>
               </TableRow>
             ))
           )}
         </TableBody>
       </Table>
-      <div className="flex items-center justify-between mt-4 text-sm text-muted-foreground">
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 mt-4 text-sm text-muted-foreground">
         <div data-testid="users-pagination-info">
           Showing {showingFrom}–{showingTo} of {totalCount}
         </div>
@@ -521,13 +567,13 @@ function CreateUserDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create user</DialogTitle>
           <DialogDescription>Manually provision an account.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <Label>First name</Label>
               <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} data-testid="input-create-firstname" />
@@ -679,7 +725,7 @@ function EditUserDialog({
         onOpenChange(v);
       }}
     >
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-lg overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit user</DialogTitle>
           <DialogDescription>
@@ -687,7 +733,7 @@ function EditUserDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <Label>First name</Label>
               <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} data-testid="input-edit-firstname" />
@@ -716,7 +762,7 @@ function EditUserDialog({
               </SelectContent>
             </Select>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <Label>Sport</Label>
               <Input value={sport} onChange={(e) => setSport(e.target.value)} />
@@ -914,7 +960,7 @@ function AssignUserDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent data-testid="dialog-assign-user">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto" data-testid="dialog-assign-user">
         <DialogHeader>
           <DialogTitle>Assign {user?.displayName ?? "user"}</DialogTitle>
           <DialogDescription>
@@ -1110,7 +1156,7 @@ function InviteUserDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent data-testid="dialog-invite-user">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto" data-testid="dialog-invite-user">
         <DialogHeader>
           <DialogTitle>Invite a user</DialogTitle>
           <DialogDescription>

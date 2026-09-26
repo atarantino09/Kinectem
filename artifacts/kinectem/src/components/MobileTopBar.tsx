@@ -1,20 +1,17 @@
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { NotificationsBell } from "@/components/NotificationsBell";
-import { Bell, Mail, Menu, Search, Users } from "lucide-react";
+import { Bell, Mail, Menu, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Props = {
   meId: string | undefined;
   unreadCount: number;
-  isGuardian: boolean;
   onOpenNav: () => void;
 };
 
-export function MobileTopBar({ meId, unreadCount, isGuardian, onOpenNav }: Props) {
-  const [location, setLocation] = useLocation();
-  const familyActive =
-    location === "/family" || location.startsWith("/family/");
+export function MobileTopBar({ meId, unreadCount, onOpenNav }: Props) {
+  const [, setLocation] = useLocation();
 
   return (
     <header
@@ -30,7 +27,7 @@ export function MobileTopBar({ meId, unreadCount, isGuardian, onOpenNav }: Props
             onClick={onOpenNav}
             aria-label="Open navigation menu"
             data-testid="mobile-top-menu"
-            className="shrink-0"
+            className="h-11 w-11 shrink-0"
           >
             <Menu className="w-5 h-5" />
           </Button>
@@ -43,34 +40,19 @@ export function MobileTopBar({ meId, unreadCount, isGuardian, onOpenNav }: Props
             <img
               src={`${import.meta.env.BASE_URL}logo-horizontal.png`}
               alt="Kinectem"
-              className="h-7 w-auto"
+              className="h-7 w-auto max-[359px]:max-w-24 max-[359px]:object-contain"
             />
           </Link>
         </div>
 
-        <div className="flex items-center gap-1 shrink-0">
-          {isGuardian && (
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Family"
-              aria-current={familyActive ? "page" : undefined}
-              data-testid="mobile-top-family"
-              data-active={familyActive ? "true" : undefined}
-              onClick={() => setLocation("/family")}
-              className={cn(
-                familyActive && "bg-secondary text-secondary-foreground shadow-sm",
-              )}
-            >
-              <Users className="w-5 h-5" />
-            </Button>
-          )}
+        <div className="flex shrink-0 items-center gap-1 [&_[data-testid=button-notifications]]:!h-11 [&_[data-testid=button-notifications]]:!w-11 [&_[data-testid=button-notifications]]:!px-0">
           <Button
             variant="ghost"
             size="icon"
             aria-label="Search"
             data-testid="mobile-top-search"
             onClick={() => setLocation("/search")}
+            className="h-11 w-11"
           >
             <Search className="w-5 h-5" />
           </Button>
@@ -84,7 +66,7 @@ export function MobileTopBar({ meId, unreadCount, isGuardian, onOpenNav }: Props
             }
             data-testid="mobile-top-messages"
             onClick={() => setLocation("/messages")}
-            className="relative"
+            className="relative h-11 w-11"
           >
             <Mail className="w-5 h-5" />
             {unreadCount > 0 && (
@@ -104,6 +86,7 @@ export function MobileTopBar({ meId, unreadCount, isGuardian, onOpenNav }: Props
               size="icon"
               aria-label="Notifications"
               onClick={() => setLocation("/login")}
+              className="h-11 w-11"
             >
               <Bell className="w-5 h-5" />
             </Button>

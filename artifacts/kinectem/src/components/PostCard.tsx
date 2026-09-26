@@ -605,7 +605,7 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-7 w-7 p-0"
+                  className="h-11 w-11 p-0 sm:h-7 sm:w-7"
                   data-testid={`btn-post-menu-${post.id}`}
                   aria-label="Post actions"
                 >
@@ -941,13 +941,13 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
           />
         )}
 
-        <div className="px-5 py-3 border-t border-border/60 flex items-center gap-2">
+        <div className="px-5 py-3 border-t border-border/60 flex flex-wrap items-center gap-2">
           <Button
             variant={post.hasReacted ? "default" : "outline"}
             size="sm"
             onClick={onToggleReaction}
             disabled={addReaction.isPending || removeReaction.isPending}
-            className="font-bold gap-1.5 h-8"
+            className="font-bold gap-1.5 h-11 sm:h-8"
             data-testid={`button-reaction-${post.id}`}
           >
             <Heart
@@ -959,7 +959,7 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
             <Button
               variant="outline"
               size="sm"
-              className="font-bold gap-1.5 h-8"
+              className="font-bold gap-1.5 h-11 sm:h-8"
             >
               <MessageSquare className="w-3.5 h-3.5" />
               {post.commentCount}
@@ -971,7 +971,7 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
               size="sm"
               onClick={onToggleShare}
               disabled={sharePost.isPending || unsharePost.isPending}
-              className="font-bold gap-1.5 h-8"
+              className="font-bold gap-1.5 h-11 sm:h-8"
               data-testid={`button-share-${post.id}`}
               aria-pressed={post.hasShared}
               aria-label={
@@ -992,7 +992,7 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
               <Button
                 variant="outline"
                 size="sm"
-                className="font-bold gap-1.5 h-8"
+                className="font-bold gap-1.5 h-11 sm:h-8"
                 data-testid={`button-album-${post.id}`}
                 aria-label="Open photo and video album"
               >
@@ -1017,7 +1017,7 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
                 e.stopPropagation();
                 setShareImageOpen(true);
               }}
-              className="font-bold gap-1.5 h-8"
+              className="font-bold gap-1.5 h-11 sm:h-8"
               data-testid={`btn-share-image-${post.id}`}
               aria-label="Share as image"
             >

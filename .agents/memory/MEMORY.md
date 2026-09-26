@@ -95,3 +95,4 @@
 - [Game-day discovery intent](game-day-discovery-intent.md) — Explore swaps only the featured story; Latest activity stays below in both modes, with no autoplay or global fallback.
 - [API workflow port ownership](api-workflow-port-ownership.md) — a managed restart can leave an older watcher bound to the API port; verify the listener, not just workflow status.
 - [Promo usage accounting](promo-usage-accounting.md) — pre-tracking dates may use qualified subscription-creation estimates; redemption is not proof of a paid invoice discount.
+- [Kinectem standalone build environment](kinectem-build-env.md) — a shell build does not inherit web-workflow PORT/BASE_PATH; supply both explicitly.

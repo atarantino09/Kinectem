@@ -444,7 +444,7 @@ export default function UserProfilePage() {
 
   return (
     <div
-      className={`grid grid-cols-1 ${
+      className={`grid min-w-0 grid-cols-1 ${
         hasAnyAffiliation ? "lg:grid-cols-[minmax(0,1fr)_340px]" : ""
       } gap-6 lg:gap-8 items-start`}
     >
@@ -489,7 +489,7 @@ export default function UserProfilePage() {
                 />
               </AvatarLightbox>
               {user.isOwnProfile && "email" in user ? (
-                <div className="mt-24 flex items-center gap-2">
+                <div className="mt-24 flex max-w-full min-w-0 flex-wrap items-center justify-end gap-2 sm:flex-nowrap">
                   <Link href="/me/tags">
                     <Button
                       variant="outline"
@@ -504,14 +504,14 @@ export default function UserProfilePage() {
                 </div>
               ) : isActiveGuardianOfThisUser || isParentOfThisUser ? (
                 <div
-                  className="mt-24 flex items-center gap-2"
+                  className="mt-24 flex max-w-full min-w-0 flex-wrap items-center justify-end gap-2 sm:flex-nowrap"
                   data-testid="parent-actions"
                 >
                   {isParentOfThisUser && <EditProfileDialog user={user as PrivateUserResponse} />}
                   {isActiveGuardianOfThisUser && <Button variant="outline" className="font-bold rounded-full" onClick={() => setFamilyInviteOpen(true)} data-testid={`button-invite-family-profile-${userId}`}>Invite family contact</Button>}
                 </div>
               ) : (
-                <div className="mt-24 flex items-center gap-2">
+                <div className="mt-24 flex max-w-full min-w-0 flex-wrap items-center justify-end gap-2 sm:flex-nowrap">
                   <Button
                     variant="outline"
                     className="font-bold rounded-full"
@@ -538,11 +538,11 @@ export default function UserProfilePage() {
                 </div>
               )}
             </div>
-            <div className="mt-2">
-              <h1 className="text-4xl font-black tracking-tight leading-[1.05]">
+            <div className="mt-2 min-w-0">
+              <h1 className="text-3xl sm:text-4xl font-black tracking-tight leading-[1.05] [overflow-wrap:anywhere]">
                 {displayName}
               </h1>
-              <div className="flex items-center gap-5 mt-2">
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-1 mt-2">
                 <button
                   type="button"
                   onClick={() => setFollowersOpen(true)}

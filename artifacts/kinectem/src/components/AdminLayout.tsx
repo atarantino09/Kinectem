@@ -15,12 +15,13 @@ import {
   Trophy,
   CalendarClock,
   ArrowLeft,
+  ChevronDown,
   Lock,
   ClipboardCheck,
   Handshake,
 } from "lucide-react";
 import { useWhoami } from "@/hooks/useWhoami";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -56,6 +57,7 @@ const NAV = [
 
 export function AdminLayout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
+  const [navOpen, setNavOpen] = useState(false);
   const { data: who, isLoading } = useWhoami();
 
   useEffect(() => {
@@ -110,7 +112,24 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
       className="grid grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)] gap-6"
       data-testid="admin-layout"
     >
-      <aside className="md:sticky md:top-20 self-start space-y-1">
+      <aside className="min-w-0 self-start space-y-1 md:sticky md:top-20">
+        <button
+          type="button"
+          className="flex min-h-11 w-full items-center justify-between rounded-lg border bg-card px-4 py-2 text-left text-sm font-semibold md:hidden"
+          aria-expanded={navOpen}
+          aria-controls="admin-sections"
+          onClick={() => setNavOpen((open) => !open)}
+          data-testid="admin-mobile-sections"
+        >
+          <span>Admin · {location.startsWith("/admin/organizations") && new URLSearchParams(window.location.search).get("section") === "partner"
+            ? "Partner landing page"
+            : NAV.find((item) => item.href === location)?.label ?? "Sections"}</span>
+          <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${navOpen ? "rotate-180" : ""}`} aria-hidden="true" />
+        </button>
+        <div
+          id="admin-sections"
+          className={`${navOpen ? "block" : "hidden"} max-h-[60vh] space-y-1 overflow-y-auto rounded-lg border bg-card p-2 md:block md:max-h-none md:overflow-visible md:rounded-none md:border-0 md:bg-transparent md:p-0`}
+        >
         <Link
           href="/"
           className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-4"
@@ -147,12 +166,14 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
                   ? "bg-primary text-primary-foreground"
                   : "hover:bg-muted text-foreground"
               }`}
+              onClick={() => setNavOpen(false)}
               data-testid={`admin-nav-${item.testId ?? item.href.split("/").pop() ?? "dashboard"}`}
             >
               <Icon className="w-4 h-4" /> {item.label}
             </Link>
           );
         })}
+        </div>
       </aside>
       <section className="min-w-0">{children}</section>
     </div>
