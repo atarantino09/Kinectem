@@ -17,7 +17,7 @@ import { z } from "zod";
 import { asyncHandler } from "../lib/async-handler";
 import { isActiveGuardian } from "../lib/guardian-links";
 import { apiError, notFound, paginate } from "../lib/spec-helpers";
-import { canManageTeam, canViewTeamSchedule } from "../lib/permissions";
+import { canManageTeam, canViewTeamSchedule, canViewFamilyContactTeamSchedule } from "../lib/permissions";
 import { notifyTeamOfScheduleChange } from "../lib/schedule-notifications";
 import { buildIcsCalendar, type IcsEvent } from "../lib/ics";
 import { appBaseUrl } from "../lib/email";
@@ -179,7 +179,8 @@ router.get(
     if (!me) return apiError(res, 401, "Not authenticated");
     const team = await loadTeam(req.params.teamId);
     if (!team) return notFound(res);
-    if (!(await canViewTeamSchedule(me.id, team))) {
+    if (!(await canViewTeamSchedule(me.id, team)) &&
+        !(await canViewFamilyContactTeamSchedule(me.id, team.id))) {
       return apiError(res, 403, "Team members only");
     }
     const canManage = await canManageTeam(me.id, team);
@@ -224,7 +225,8 @@ router.get(
     if (!me) return apiError(res, 401, "Not authenticated");
     const team = await loadTeam(req.params.teamId);
     if (!team) return notFound(res);
-    if (!(await canViewTeamSchedule(me.id, team))) {
+    if (!(await canViewTeamSchedule(me.id, team)) &&
+        !(await canViewFamilyContactTeamSchedule(me.id, team.id))) {
       return apiError(res, 403, "Team members only");
     }
     const [event] = await db

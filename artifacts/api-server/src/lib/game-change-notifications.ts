@@ -32,6 +32,7 @@ import {
   competitionFollowers,
 } from "@workspace/db";
 import { and, eq, inArray } from "drizzle-orm";
+import { getActiveFamilyContactIdsForTeam } from "./family-contacts";
 
 export const GAME_CHANGED_NOTIF_KIND = "competition_game_changed";
 export const GAME_STATUS_NOTIF_KIND = "competition_game_status";
@@ -166,6 +167,13 @@ export async function resolveCompetitionFollowers(
   return new Set(rows.map((r) => r.userId));
 }
 
+async function resolveTeamFamilyContacts(teamIds: string[]): Promise<Set<string>> {
+  const ids = await Promise.all(
+    Array.from(new Set(teamIds.filter(Boolean))).map(getActiveFamilyContactIdsForTeam),
+  );
+  return new Set(ids.flat());
+}
+
 // ---------------------------------------------------------------------------
 // Fan-out
 // ---------------------------------------------------------------------------
@@ -220,10 +228,13 @@ export async function notifyGameEdited(args: {
   actorUserId: string;
 }): Promise<void> {
   if (args.changes.length === 0) return;
-  const staff = await resolveTeamStaff(args.teamIds);
+  const [staff, contacts] = await Promise.all([
+    resolveTeamStaff(args.teamIds),
+    resolveTeamFamilyContacts(args.teamIds),
+  ]);
   const message = `${args.competition.name}: ${gameLabel(args.game)} changed — ${describeChanges(args.changes)}.`;
   await insertForRecipients(
-    staff,
+    new Set([...staff, ...contacts]),
     args.actorUserId,
     GAME_CHANGED_NOTIF_KIND,
     message,
@@ -250,11 +261,12 @@ export async function notifyGameStatusChanged(args: {
   const phrase = STATUS_PHRASE[args.status] ?? `is now ${args.status}`;
   const reasonSuffix = args.reason?.trim() ? ` (${args.reason.trim()})` : "";
   const message = `${args.competition.name}: ${gameLabel(args.game)} ${phrase}${reasonSuffix}.`;
-  const [staff, followers] = await Promise.all([
+  const [staff, followers, contacts] = await Promise.all([
     resolveTeamStaff(args.teamIds),
     resolveCompetitionFollowers(args.competition.id),
+    resolveTeamFamilyContacts(args.teamIds),
   ]);
-  const recipients = new Set([...staff, ...followers]);
+  const recipients = new Set([...staff, ...followers, ...contacts]);
   await insertForRecipients(
     recipients,
     args.actorUserId,
@@ -284,7 +296,13 @@ export async function notifyBulkGamesChanged(args: {
 
   // Resolve staff per game, then invert to recipient → affected-game count.
   const staffByGame = await Promise.all(
-    args.changedGames.map((g) => resolveTeamStaff(g.teamIds)),
+    args.changedGames.map(async (g) => {
+      const [staff, contacts] = await Promise.all([
+        resolveTeamStaff(g.teamIds),
+        resolveTeamFamilyContacts(g.teamIds),
+      ]);
+      return new Set([...staff, ...contacts]);
+    }),
   );
   const countByUser = new Map<string, number>();
   for (const staff of staffByGame) {

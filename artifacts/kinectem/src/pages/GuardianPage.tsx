@@ -10,8 +10,10 @@ import { ChildRow } from "@/components/guardian-page/ChildRow";
 import { MinorControls } from "@/components/guardian-page/MinorControls";
 import { ChildGuardiansSection } from "@/components/guardian-page/ChildGuardiansSection";
 import { PendingGuardianInvites } from "@/components/guardian-page/PendingGuardianInvites";
+import { FamilyContactInvitations } from "@/components/guardian-page/FamilyContactInvitations";
 import { useGuardianDashboard } from "@/components/guardian-page/useGuardianDashboard";
 import { useWhoami } from "@/hooks/useWhoami";
+import { useFamilyContactInvitations } from "@/hooks/useFamilyContacts";
 import {
   SpotlightTour,
   type TourStep,
@@ -27,6 +29,10 @@ export default function GuardianPage() {
   // Guardian capability is "this user has at least one linked child"
   // (any role), not `role === "parent"`. Whoami exposes this directly.
   const isGuardian = whoami?.isGuardian === true;
+  const { data: contactInvites } = useFamilyContactInvitations(!!(whoami?.viewingAs?.id ?? whoami?.realUser?.id));
+  const followsChild = (contactInvites?.data ?? []).some(
+    (invite) => invite.status === "active" || invite.status === "accepted",
+  );
   // Task #755 — effective user id (the masqueraded user when admins are
   // impersonating). Drives the guardian-invite inbox + per-child guardian
   // lists below.
@@ -69,8 +75,8 @@ export default function GuardianPage() {
             Each of your children shows up here. You can approve their follow
             requests, DMs, comments, and tags, edit their profile, and control
             their privacy — all on their behalf. Co-parenting? Use{" "}
-            <strong>Invite co-parent</strong> on a child's card to give the
-            other parent guardian access too.
+             <strong>Invite family contact</strong> on a child's card to give
+             another parent guardian access or someone else updates-only access.
           </>
         ),
       },
@@ -136,7 +142,8 @@ export default function GuardianPage() {
         </div>
       </div>
 
-      {!isGuardian && (
+       <FamilyContactInvitations />
+       {!isGuardian && !followsChild && (
         <Card
           className="rounded-xl border-border"
           data-testid="card-no-children"
@@ -168,10 +175,11 @@ export default function GuardianPage() {
           <h2 className="font-black tracking-tight">Linked children</h2>
           {dash.loading ? (
             <Skeleton className="h-20 rounded-lg" />
-          ) : dash.children.length === 0 ? (
+           ) : dash.children.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              You haven't linked any children yet. Find an athlete below to get
-              started.
+               {followsChild
+                 ? "You don't manage a child account. Children whose updates you follow are listed above."
+                 : "You haven't linked any children yet. Find an athlete below to get started."}
             </p>
           ) : (
             <div className="space-y-3">

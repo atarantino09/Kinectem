@@ -48,6 +48,7 @@ import { TeamSchedulePanel } from "@/components/team-page/schedule/TeamScheduleP
 import { ScheduleUpNext } from "@/components/team-page/schedule/ScheduleUpNext";
 import { BroadcastComposeDialog } from "@/components/broadcasts/BroadcastComposeDialog";
 import { useIsLg } from "@/hooks/use-mobile";
+import { useFamilyContactInvitations } from "@/hooks/useFamilyContacts";
 
 // First-run walkthrough is shown ONCE per user, per browser (the OpenAPI
 // contract is locked, so there's no server-side "seen onboarding" flag). The
@@ -164,6 +165,7 @@ export default function TeamPage() {
   });
   const { data: me } = useGetLoggedInUser();
   const { data: who } = useWhoami();
+  const { data: familyInvitations } = useFamilyContactInvitations(!!me?.id);
 
   // Mirrors `canManageTeam` on the server: org admins/owners always
   // can, and so can anyone whose accepted roster entry has a coach-
@@ -237,7 +239,13 @@ export default function TeamPage() {
         Array.isArray(m.parents) &&
         m.parents.some((p) => p.id === me.id),
     );
-  const canViewSchedule = isTeamMember || canManage || isParentOfActiveMember;
+  const isAcceptedFamilyContact = (familyInvitations?.data ?? []).some(
+    (invite) =>
+      (invite.status === "active" || invite.status === "accepted") &&
+      invite.teams?.some((linkedTeam) => linkedTeam.id === teamId),
+  );
+  const canViewPracticePlans = isTeamMember || canManage || isParentOfActiveMember;
+  const canViewSchedule = canViewPracticePlans || isAcceptedFamilyContact;
   // Server-derived authoring capability for this team — single source
   // of truth for both the "Create Game Recap" CTA and the "Waiting
   // for approval" pending-recaps section in TeamPostsSection. Mirrors
@@ -490,7 +498,7 @@ export default function TeamPage() {
           staffCount={staff.length}
           followPending={followTeam.isPending || unfollowTeam.isPending}
           canViewSchedule={canViewSchedule}
-          canViewPracticePlans={canViewSchedule}
+          canViewPracticePlans={canViewPracticePlans}
           onSetExpanded={setExpanded}
           onToggleFollow={onToggleFollow}
           onEdit={() => setEditOpen(true)}
@@ -564,7 +572,7 @@ export default function TeamPage() {
           </>
         )}
 
-        {expanded === "practice-plans" && canViewSchedule && (
+        {expanded === "practice-plans" && canViewPracticePlans && (
           <PracticePlansSection
             teamId={teamId}
             canManage={canManage}

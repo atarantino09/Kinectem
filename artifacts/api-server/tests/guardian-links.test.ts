@@ -95,7 +95,7 @@ describe("Task #755 — guardian links invariants", () => {
     const inviteEmail = `task755-coparent-${Date.now()}@example.com`;
     const res = await marcus
       .post(`/api/v1/users/${samiraId}/guardians/invite`)
-      .send({ email: inviteEmail, relationshipType: "parent" });
+      .send({ firstName: "Test", lastName: "Guardian", email: inviteEmail, relationshipType: "parent" });
     expect(res.status).toBe(201);
     expect(res.body.status).toBe("pending");
     expect(res.body.isPrimary).toBe(false);

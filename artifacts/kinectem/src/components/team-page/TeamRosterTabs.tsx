@@ -8,6 +8,8 @@ import {
   useWithdrawRosterInvite,
   getListTeamMembersQueryKey,
   getListRosterInvitesQueryKey,
+  useListUserChildren,
+  getListUserChildrenQueryKey,
 } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -58,6 +60,7 @@ import {
   Users,
 } from "lucide-react";
 import { EditRosterMemberDialog } from "./EditRosterMemberDialog";
+import { InviteFamilyContactDialog } from "@/components/guardian-page/InviteFamilyContactDialog";
 
 export type ParentRef = {
   id: string;
@@ -122,6 +125,11 @@ export function TeamRosterTabs({
     () => new Set<string>(),
   );
   const [editingMember, setEditingMember] = useState<RosterMember | null>(null);
+  const [familyInvitePlayer, setFamilyInvitePlayer] = useState<RosterMember | null>(null);
+  const { data: childLinks } = useListUserChildren(meId ?? "", {
+    query: { enabled: !!meId, queryKey: getListUserChildrenQueryKey(meId ?? "") },
+  });
+  const myChildIds = new Set((childLinks?.data ?? []).filter((l) => l.status === "active").map((l) => l.child.id));
   // The invite whose "Share link" dialog is open (null = closed). Task #673.
   const [shareInvite, setShareInvite] = useState<RosterInvite | null>(null);
 
@@ -543,10 +551,24 @@ export function TeamRosterTabs({
     </div>
   );
 
+  const renderFamilyAdd = (m: RosterMember) =>
+    myChildIds.has(m.userId) ? (
+      <Button
+        size="sm"
+        variant="outline"
+        className="mt-2 font-bold"
+        onClick={() => setFamilyInvitePlayer(m)}
+        data-testid={`button-invite-family-roster-${m.id}`}
+      >
+        <UserPlus className="h-4 w-4 mr-1" /> Add parent or contact
+      </Button>
+    ) : null;
+
   const renderPlayerCard = (m: RosterMember) => {
     const parents = m.parents ?? [];
     const isExpanded = expandedPlayers.has(m.id);
     const hasParents = parents.length > 0;
+    const canAddFamily = myChildIds.has(m.userId);
     return (
       <div
         key={m.id}
@@ -583,7 +605,7 @@ export function TeamRosterTabs({
                 )}
               </span>
               {renderStatusBadge(m.status === "pending")}
-              {hasParents && (
+              {(hasParents || canAddFamily) && (
                 <button
                   type="button"
                   onClick={() => togglePlayerExpand(m.id)}
@@ -596,7 +618,7 @@ export function TeamRosterTabs({
                     <ChevronRight className="w-4 h-4" />
                   )}
                   <span>
-                    {parents.length} parent{parents.length > 1 ? "s" : ""}
+                    {hasParents ? `${parents.length} parent${parents.length > 1 ? "s" : ""}` : "Family"}
                   </span>
                 </button>
               )}
@@ -604,12 +626,13 @@ export function TeamRosterTabs({
           </div>
           <div className="shrink-0">{renderActions(m)}</div>
         </div>
-        {isExpanded && hasParents && (
+        {isExpanded && (hasParents || canAddFamily) && (
           <div
             className="mt-3 ml-11 rounded-md bg-muted/30 p-2"
             data-testid={`row-parents-${m.id}`}
           >
-            {renderParentList(parents)}
+            {hasParents && renderParentList(parents)}
+            {renderFamilyAdd(m)}
           </div>
         )}
       </div>
@@ -706,6 +729,7 @@ export function TeamRosterTabs({
     const parents = m.parents ?? [];
     const isExpanded = expandedPlayers.has(m.id);
     const hasParents = parents.length > 0;
+    const canAddFamily = myChildIds.has(m.userId);
     return (
       <Fragment key={m.id}>
         <TableRow
@@ -713,7 +737,7 @@ export function TeamRosterTabs({
           data-roster-entry-id={m.id}
         >
           <TableCell className="w-8 pr-0">
-            {hasParents ? (
+            {hasParents || canAddFamily ? (
               <button
                 type="button"
                 onClick={() => togglePlayerExpand(m.id)}
@@ -761,7 +785,7 @@ export function TeamRosterTabs({
           <TableCell>{renderStatusBadge(m.status === "pending")}</TableCell>
           <TableCell className="text-right">{renderActions(m)}</TableCell>
         </TableRow>
-        {isExpanded && hasParents && (
+        {isExpanded && (hasParents || canAddFamily) && (
           <TableRow
             key={`${m.id}-parents`}
             className="bg-muted/30"
@@ -769,7 +793,8 @@ export function TeamRosterTabs({
           >
             <TableCell />
             <TableCell colSpan={5} className="py-2">
-              {renderParentList(parents)}
+              {hasParents && renderParentList(parents)}
+              {renderFamilyAdd(m)}
             </TableCell>
           </TableRow>
         )}
@@ -808,6 +833,8 @@ export function TeamRosterTabs({
   );
 
   return (
+    <>
+    {familyInvitePlayer && <InviteFamilyContactDialog childId={familyInvitePlayer.userId} childName={familyInvitePlayer.displayName} open={true} onOpenChange={(open) => { if (!open) setFamilyInvitePlayer(null); }} />}
     <Tabs value={tab} onValueChange={setTab}>
       <TabsList>
         <TabsTrigger value="roster" className="font-bold">
@@ -1118,5 +1145,6 @@ export function TeamRosterTabs({
         </DialogContent>
       </Dialog>
     </Tabs>
+    </>
   );
 }

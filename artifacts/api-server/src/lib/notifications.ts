@@ -8,6 +8,7 @@ import {
 import { and, eq, inArray, ne, or } from "drizzle-orm";
 import { articlePostId, highlightPostId } from "./spec-helpers";
 import { dispatchNotificationEmailToMany } from "./notification-email";
+import { getActiveFamilyContactIdsForTeam } from "./family-contacts";
 import {
   appBaseUrl,
   buildGameRecapReminderEmail,
@@ -405,9 +406,21 @@ export async function notifyTeamFollowersOfNewRecap(args: {
     .select({ userId: teamFollowers.userId })
     .from(teamFollowers)
     .where(eq(teamFollowers.teamId, args.teamId));
-  const recipientIds = rows
-    .map((r) => r.userId)
+  const contacts = (await getActiveFamilyContactIdsForTeam(args.teamId))
     .filter((id) => id !== args.actorUserId);
+  const recipientIds = Array.from(new Set([
+    ...rows.map((r) => r.userId),
+    ...contacts,
+  ])).filter((id) => id !== args.actorUserId);
+  if (contacts.length) {
+    await db.insert(notifications).values(contacts.map((userId) => ({
+      userId,
+      kind: "family_contact_team_recap",
+      message: `A new game recap was posted to ${args.teamName ?? "your child's team"}.`,
+      link: `/posts/${articlePostId(args.articleId)}`,
+      actorUserId: args.actorUserId,
+    })));
+  }
   if (recipientIds.length === 0) return;
   const postUrl = `${appBaseUrl()}/app/posts/${articlePostId(args.articleId)}`;
   await dispatchNotificationEmailToMany({
@@ -443,9 +456,21 @@ export async function notifyTeamFollowersOfNewHighlight(args: {
     .select({ userId: teamFollowers.userId })
     .from(teamFollowers)
     .where(eq(teamFollowers.teamId, args.teamId));
-  const recipientIds = rows
-    .map((r) => r.userId)
+  const contacts = (await getActiveFamilyContactIdsForTeam(args.teamId))
     .filter((id) => id !== args.actorUserId);
+  const recipientIds = Array.from(new Set([
+    ...rows.map((r) => r.userId),
+    ...contacts,
+  ])).filter((id) => id !== args.actorUserId);
+  if (contacts.length) {
+    await db.insert(notifications).values(contacts.map((userId) => ({
+      userId,
+      kind: "family_contact_team_highlight",
+      message: `A new highlight was posted to ${args.teamName ?? "your child's team"}.`,
+      link: `/posts/${highlightPostId(args.highlightId)}`,
+      actorUserId: args.actorUserId,
+    })));
+  }
   if (recipientIds.length === 0) return;
   const postUrl = `${appBaseUrl()}/app/posts/${highlightPostId(args.highlightId)}`;
   await dispatchNotificationEmailToMany({

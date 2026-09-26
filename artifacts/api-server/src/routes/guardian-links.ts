@@ -82,12 +82,19 @@ function toGuardianLinkResponse(
     guardian: guardian
       ? {
           id: guardian.id,
-          displayName: displayName(guardian),
+          displayName:
+            link.status === "pending" &&
+            [link.inviteFirstName, link.inviteLastName].some(Boolean)
+              ? [link.inviteFirstName, link.inviteLastName].filter(Boolean).join(" ")
+              : displayName(guardian),
           avatarUrl: safeAvatarUrl(guardian.avatarUrl),
         }
       : {
           id: link.id,
-          displayName: link.inviteEmail ?? "Invited guardian",
+          displayName:
+            [link.inviteFirstName, link.inviteLastName].filter(Boolean).join(" ") ||
+            link.inviteEmail ||
+            "Invited guardian",
           avatarUrl: null,
         },
     relationshipType: link.relationshipType,
@@ -267,12 +274,21 @@ router.post(
         (isAdmin(me) || (await isActiveGuardian(me.id, childId))));
     if (!allowed) return apiError(res, 403, "Not allowed");
 
+    const firstName =
+      typeof req.body?.firstName === "string" ? req.body.firstName.trim() : "";
+    const lastName =
+      typeof req.body?.lastName === "string" ? req.body.lastName.trim() : "";
     const email = String(req.body?.email ?? "").trim().toLowerCase();
     const relationshipType =
       req.body?.relationshipType === "legal_guardian"
         ? ("legal_guardian" as const)
         : ("parent" as const);
-    if (!email) return apiError(res, 400, "email required");
+    if (!firstName || !lastName || !email) {
+      return apiError(res, 400, "firstName, lastName, and email are required");
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return apiError(res, 400, "A valid email is required");
+    }
     if (child.email && child.email.toLowerCase() === email) {
       return apiError(res, 400, "A child cannot be their own guardian");
     }
@@ -322,6 +338,8 @@ router.post(
         childId,
         guardianId: invitee?.id ?? null,
         inviteEmail: email,
+        inviteFirstName: firstName,
+        inviteLastName: lastName,
         relationshipType,
         isPrimary: false,
         status: "pending",
@@ -356,6 +374,7 @@ router.post(
       await sendGuardianLinkInviteEmail(email, {
         childName: child.name,
         inviterName: displayName(me),
+        inviteeName: `${firstName} ${lastName}`,
         relationshipType,
       });
     } catch (err) {

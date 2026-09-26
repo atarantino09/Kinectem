@@ -3,20 +3,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   useListUserGuardians,
   getListUserGuardiansQueryKey,
-  useInviteGuardian,
   useRemoveGuardianLink,
   useTransferPrimaryGuardian,
   type GuardianLinkResponse,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,18 +18,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { UserAvatar } from "@/components/UserAvatar";
 import { useToast } from "@/hooks/use-toast";
-import { ShieldCheck, UserPlus, Star, Trash2 } from "lucide-react";
+import { ShieldCheck, UserPlus, Star, Trash2, Mail } from "lucide-react";
+import { InviteFamilyContactDialog } from "./InviteFamilyContactDialog";
+import { useFamilyContacts, useRemoveFamilyContact } from "@/hooks/useFamilyContacts";
 import type { Child } from "./types";
 
 interface Props {
@@ -72,12 +56,11 @@ export function ChildGuardiansSection({ child, myUserId }: Props) {
   );
   const iAmPrimary = myLink?.isPrimary === true;
   const activeCount = links.filter((l) => l.status === "active").length;
+  const contacts = useFamilyContacts(child.id, !!myLink);
+  const removeContact = useRemoveFamilyContact(child.id);
 
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRel, setInviteRel] = useState<"parent" | "legal_guardian">(
-    "parent",
-  );
+  const [confirmContactRemove, setConfirmContactRemove] = useState<{ id: string; name: string } | null>(null);
   const [confirmRemove, setConfirmRemove] =
     useState<GuardianLinkResponse | null>(null);
   const [confirmTransfer, setConfirmTransfer] =
@@ -87,27 +70,6 @@ export function ChildGuardiansSection({ child, myUserId }: Props) {
     const e = err as { error?: string; message?: string } | undefined;
     return e?.error ?? e?.message ?? fallback;
   };
-
-  const invite = useInviteGuardian({
-    mutation: {
-      onSuccess: (res) => {
-        void refresh();
-        setInviteOpen(false);
-        setInviteEmail("");
-        toast({
-          title:
-            "message" in res
-              ? res.message
-              : "Invitation sent. They'll get an email with the next steps.",
-        });
-      },
-      onError: (err) =>
-        toast({
-          title: errMsg(err, "Couldn't send the invitation"),
-          variant: "destructive",
-        }),
-    },
-  });
 
   const remove = useRemoveGuardianLink({
     mutation: {
@@ -166,7 +128,7 @@ export function ChildGuardiansSection({ child, myUserId }: Props) {
             data-testid={`btn-invite-guardian-${child.id}`}
           >
             <UserPlus className="w-3.5 h-3.5 mr-1" />
-            Invite co-parent
+            Invite family contact
           </Button>
         )}
       </div>
@@ -248,79 +210,26 @@ export function ChildGuardiansSection({ child, myUserId }: Props) {
         })}
       </div>
 
-      <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
-        <DialogContent data-testid={`dialog-invite-guardian-${child.id}`}>
-          <DialogHeader>
-            <DialogTitle>Invite the other parent</DialogTitle>
-            <DialogDescription>
-              They'll get an email inviting them to become a guardian of{" "}
-              {child.firstName}. Once they accept, they'll see everything you
-              see on this dashboard.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor={`invite-email-${child.id}`}>Their email</Label>
-              <Input
-                id={`invite-email-${child.id}`}
-                type="email"
-                placeholder="parent@example.com"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                data-testid={`input-invite-email-${child.id}`}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Relationship to {child.firstName}</Label>
-              <Select
-                value={inviteRel}
-                onValueChange={(v) =>
-                  setInviteRel(v as "parent" | "legal_guardian")
-                }
-              >
-                <SelectTrigger
-                  data-testid={`select-invite-relationship-${child.id}`}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="parent">Parent</SelectItem>
-                  <SelectItem value="legal_guardian">
-                    Legal guardian
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+      {myLink && <div className="pt-2 border-t border-border space-y-2">
+        <p className="text-xs font-black uppercase tracking-wider text-primary flex items-center gap-2"><Mail className="h-3.5 w-3.5" />Updates-only contacts</p>
+        {contacts.isLoading ? <p className="text-xs text-muted-foreground">Loading contacts…</p> : contacts.isError ? (
+          <Button size="sm" variant="outline" onClick={() => void contacts.refetch()} data-testid={`button-retry-contacts-${child.id}`}>Couldn't load contacts. Retry</Button>
+        ) : (contacts.data?.data ?? []).length === 0 ? (
+          <p className="text-xs text-muted-foreground">No updates-only contacts yet.</p>
+        ) : contacts.data?.data.map((contact) => (
+          <div key={contact.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/30 p-2.5" data-testid={`row-family-contact-${contact.id}`}>
+            <div className="min-w-0 flex-1"><p className="font-bold text-sm">{contact.firstName} {contact.lastName}</p><p className="text-xs text-muted-foreground break-all">{contact.email}</p></div>
+            <span className="text-xs font-semibold capitalize text-muted-foreground" data-testid={`status-family-contact-${contact.id}`}>{contact.status}</span>
+            <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-destructive" aria-label={`Remove ${contact.firstName} ${contact.lastName}`} onClick={() => setConfirmContactRemove({ id: contact.id, name: `${contact.firstName} ${contact.lastName}` })} data-testid={`button-remove-family-contact-${contact.id}`}><Trash2 className="h-4 w-4" /></Button>
           </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setInviteOpen(false)}
-              data-testid={`btn-cancel-invite-${child.id}`}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="brand"
-              disabled={
-                invite.isPending || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(inviteEmail)
-              }
-              onClick={() =>
-                invite.mutate({
-                  userId: child.id,
-                  data: {
-                    email: inviteEmail.trim(),
-                    relationshipType: inviteRel,
-                  },
-                })
-              }
-              data-testid={`btn-send-invite-${child.id}`}
-            >
-              {invite.isPending ? "Sending…" : "Send invitation"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        ))}
+      </div>}
+      <InviteFamilyContactDialog childId={child.id} childName={child.firstName} open={inviteOpen} onOpenChange={setInviteOpen} />
+      <AlertDialog open={!!confirmContactRemove} onOpenChange={(open) => { if (!open) setConfirmContactRemove(null); }}>
+        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Remove updates-only contact?</AlertDialogTitle><AlertDialogDescription>{confirmContactRemove?.name} will no longer receive updates about {child.firstName}.</AlertDialogDescription></AlertDialogHeader>
+          <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction disabled={removeContact.isPending} className="bg-destructive text-destructive-foreground" onClick={async (e) => { e.preventDefault(); if (!confirmContactRemove) return; try { await removeContact.mutateAsync(confirmContactRemove.id); toast({ title: "Contact removed" }); setConfirmContactRemove(null); } catch (err) { toast({ title: errMsg(err, "Couldn't remove contact"), variant: "destructive" }); } }} data-testid="button-confirm-remove-family-contact">{removeContact.isPending ? "Removing…" : "Remove"}</AlertDialogAction></AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog
         open={confirmRemove != null}

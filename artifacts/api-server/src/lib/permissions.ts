@@ -2,6 +2,7 @@ import {
   db,
   articleAuthors,
   guardianLinks,
+  familyContacts,
   organizationAdmins,
   rosterEntries,
   teams,
@@ -207,6 +208,27 @@ export async function canViewTeamSchedule(
     )
     .limit(1);
   return Boolean(row);
+}
+
+// Read-only family contacts may see the schedule for a team their linked
+// child actively belongs to. Keep this OUT of canViewTeamSchedule: several
+// schedule write routes use that broader helper for their existing gates.
+export async function canViewFamilyContactTeamSchedule(
+  userId: string,
+  teamId: string,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: rosterEntries.id })
+    .from(rosterEntries)
+    .innerJoin(familyContacts, eq(familyContacts.childId, rosterEntries.userId))
+    .where(and(
+      eq(rosterEntries.teamId, teamId),
+      eq(rosterEntries.status, "accepted"),
+      eq(familyContacts.invitedUserId, userId),
+      eq(familyContacts.status, "active"),
+    ))
+    .limit(1);
+  return !!row;
 }
 
 // Practice plans intentionally have the same private audience as schedules:

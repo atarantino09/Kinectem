@@ -2855,6 +2855,44 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
         FOREIGN KEY (source_organization_id) REFERENCES organizations(id) ON DELETE SET NULL;
     `,
   },
+  {
+    // Task #1091 — read-only family contacts are independent of guardian
+    // links. Guardian invite names are additive and nullable for old rows.
+    name: "2026-09-18-task-1091-family-contacts",
+    sql: `
+      ALTER TABLE guardian_links
+        ADD COLUMN IF NOT EXISTS invite_first_name text,
+        ADD COLUMN IF NOT EXISTS invite_last_name text;
+
+      DO $migration$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'family_contact_status') THEN
+          CREATE TYPE family_contact_status AS ENUM ('pending', 'active', 'revoked', 'declined');
+        END IF;
+      END$migration$;
+
+      CREATE TABLE IF NOT EXISTS family_contacts (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        child_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        invite_email text NOT NULL,
+        first_name text NOT NULL,
+        last_name text NOT NULL,
+        invited_by_guardian_id uuid REFERENCES users(id) ON DELETE SET NULL,
+        invited_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+        status family_contact_status NOT NULL DEFAULT 'pending',
+        accepted_at timestamp,
+        created_at timestamp NOT NULL DEFAULT now(),
+        updated_at timestamp NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS family_contacts_child_status_idx
+        ON family_contacts (child_id, status);
+      CREATE INDEX IF NOT EXISTS family_contacts_invited_user_idx
+        ON family_contacts (invited_user_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS family_contacts_live_email_idx
+        ON family_contacts (child_id, lower(invite_email))
+        WHERE status IN ('pending', 'active');
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

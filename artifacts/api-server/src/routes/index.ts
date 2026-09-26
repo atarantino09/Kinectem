@@ -21,6 +21,7 @@ import tagsStubRouter from "./tags-stub";
 import tagsRouter from "./tags";
 import guardiansRouter from "./guardians";
 import guardianLinksRouter from "./guardian-links";
+import familyContactsRouter from "./family-contacts";
 import guardiansCoppaRouter from "./guardians-coppa";
 import childConversationsRouter from "./child-conversations";
 import searchRouter from "./search";
@@ -74,6 +75,7 @@ router.use(guardiansRouter);
 // GET /users/:userId/children never shadows the legacy literal
 // GET /users/me/children above.
 router.use(guardianLinksRouter);
+router.use(familyContactsRouter);
 router.use(guardiansCoppaRouter);
 router.use(childConversationsRouter);
 router.use(searchRouter);

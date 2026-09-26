@@ -735,6 +735,7 @@ export async function sendGuardianLinkInviteEmail(
   args: {
     childName: string;
     inviterName: string;
+    inviteeName: string;
     relationshipType: "parent" | "legal_guardian";
   },
 ): Promise<void> {
@@ -744,12 +745,14 @@ export async function sendGuardianLinkInviteEmail(
   await sendEmail({
     to,
     kind: "guardian_link_invite",
-    subject: `${args.inviterName} invited you to be ${args.childName}'s ${roleLabel} on Kinectem`,
-    text: `${args.inviterName} invited you to join Kinectem as ${args.childName}'s ${roleLabel}.
+    subject: `${args.inviterName} invited ${args.inviteeName} to be ${args.childName}'s ${roleLabel} on Kinectem`,
+    text: `Hi ${args.inviteeName},
+
+${args.inviterName} invited you to join Kinectem as ${args.childName}'s ${roleLabel}.
 
 ${KINECTEM_INVITE_CONTEXT}
 
-Once you accept, you'll see ${args.childName} on your Family dashboard, follow their teams automatically, and receive updates about their activity.
+As a parent or legal guardian, accepting links you to ${args.childName}'s family account and lets you manage family settings and consent as permitted by Kinectem.
 
 To accept or decline, open your Family dashboard:
 ${url}
@@ -757,11 +760,40 @@ ${url}
 If you don't have a Kinectem account yet, sign up using this email address (${to}) and the invitation will be waiting for you.
 
 If you don't recognize this invitation, you can ignore this email or decline it in the app.`,
-    html: emailSection(`Join ${args.childName}'s family`, `<p><strong>${escapeHtml(args.inviterName)}</strong> invited you to join Kinectem as <strong>${escapeHtml(args.childName)}</strong>'s ${roleLabel}.</p>
+    html: emailSection(`Join ${args.childName}'s family`, `<p>Hi ${escapeHtml(args.inviteeName)},</p><p><strong>${escapeHtml(args.inviterName)}</strong> invited you to join Kinectem as <strong>${escapeHtml(args.childName)}</strong>'s ${roleLabel}.</p>
 <p>${escapeHtml(KINECTEM_INVITE_CONTEXT)}</p>
-<p>Once you accept, you'll see ${escapeHtml(args.childName)} on your Family dashboard, follow their teams automatically, and receive updates about their activity.</p>
+<p>As a parent or legal guardian, accepting links you to ${escapeHtml(args.childName)}'s family account and lets you manage family settings and consent as permitted by Kinectem.</p>
 ${emailButton({ href: url, label: "Open Family dashboard" })}
 <p class="email-muted" style="color:#65758b;font-size:14px;">If you don't have an account yet, sign up using this email address (${escapeHtml(to)}). If you don't recognize this invitation, ignore it or decline it in the app.</p>`),
+  });
+}
+
+// Updates-only contact invitation. Acceptance grants read-only access to
+// child/team activity, never guardian, consent, profile-edit, or roster powers.
+export async function sendFamilyContactInviteEmail(
+  to: string,
+  args: { childName: string; inviterName: string; inviteeName: string },
+): Promise<void> {
+  const url = buildFamilyUrl();
+  await sendEmail({
+    to,
+    kind: "family_contact_invite",
+    subject: `${args.inviterName} invited you to follow ${args.childName}'s updates on Kinectem`,
+    text: `Hi ${args.inviteeName},
+
+${args.inviterName} invited you to be an updates-only family contact for ${args.childName} on Kinectem.
+
+Kinectem helps families share a child's sports activity and team updates. If you accept, you can view permitted child and team activity and receive relevant updates. This is read-only access: you cannot manage the child's account, make consent decisions, edit their profile, act as the child, or get parent, coach, or roster permissions.
+
+Sign in or create an account using this email address (${to}), then open the Family dashboard to accept or decline:
+${url}
+
+If you don't recognize this invitation, ignore it or decline it in the app.`,
+    html: emailSection(`Updates for ${args.childName}`, `<p>Hi ${escapeHtml(args.inviteeName)},</p><p><strong>${escapeHtml(args.inviterName)}</strong> invited you to be an updates-only family contact for <strong>${escapeHtml(args.childName)}</strong> on Kinectem.</p>
+<p>Kinectem helps families share a child's sports activity and team updates. If you accept, you can view permitted child and team activity and receive relevant updates.</p>
+<p><strong>Read-only access:</strong> you cannot manage the child's account, make consent decisions, edit their profile, act as the child, or get parent, coach, or roster permissions.</p>
+${emailButton({ href: url, label: "Open Family dashboard" })}
+<p class="email-muted" style="color:#65758b;font-size:14px;">Sign in or create an account using this email address (${escapeHtml(to)}). If you don't recognize this invitation, ignore it or decline it in the app.</p>`),
   });
 }
 

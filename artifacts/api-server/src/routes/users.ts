@@ -40,6 +40,7 @@ import {
   isActiveGuardian,
   patchParentIdForViewer,
 } from "../lib/guardian-links";
+import { isActiveFamilyContact } from "../lib/family-contacts";
 import { sendGuardianConfirmationEmail, sendGuardianExpiredEmail, sendPasswordResetEmail } from "../lib/email";
 import {
   canCreateRecap,
@@ -205,6 +206,8 @@ router.get(
       // the guardian intended when leaving the profile non-`public`.
       // Task #755 — any ACTIVE guardian link qualifies, not just primary.
       const isLinkedGuardian = !!me && (await isActiveGuardian(me.id, u.id));
+      const isReadOnlyContact = !!me && !req.isMasquerading &&
+        (await isActiveFamilyContact(me.id, u.id));
       const isPlatformAdmin = req.realUser?.role === "admin";
       let isApprovedFollower = false;
       if (!isLinkedGuardian && !isPlatformAdmin && me) {
@@ -221,7 +224,7 @@ router.get(
           .limit(1);
         isApprovedFollower = followRow.length > 0;
       }
-      if (!isLinkedGuardian && !isPlatformAdmin && !isApprovedFollower) {
+      if (!isLinkedGuardian && !isPlatformAdmin && !isApprovedFollower && !isReadOnlyContact) {
         return notFound(res);
       }
       // Task #367 — minor profile pages must not be search-indexed.
@@ -760,6 +763,8 @@ router.get(
     if (!isSelf && !isAdmin && me && !req.isMasquerading) {
       isParent = await isActiveGuardian(me.id, u.id);
     }
+    const isReadOnlyContact = !!me && !req.isMasquerading &&
+      (await isActiveFamilyContact(me.id, u.id));
     const canSeePending = isSelf || isAdmin || isParent;
 
     // Task #367 — minor profile listings mirror the visibility carve-out
@@ -774,7 +779,7 @@ router.get(
     // minor, OR an approved follower. Everyone else gets 404 — we do
     // NOT 403 because that would leak existence of the minor.
     const minorIsRestricted = u.isMinor && u.profileVisibility !== "public";
-    if (minorIsRestricted && !isSelf && !isAdmin && !isParent) {
+    if (minorIsRestricted && !isSelf && !isAdmin && !isParent && !isReadOnlyContact) {
       // Task #367 — narrow audience matches GET /users/:userId for
       // restricted minors: self/guardian/platform admin (handled
       // above) OR an approved follower. Shared-team-admin is NOT

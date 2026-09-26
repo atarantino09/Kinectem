@@ -16,6 +16,7 @@ import {
   buildScheduleChangeMessage,
 } from "./email";
 import { dispatchNotificationEmailToMany } from "./notification-email";
+import { getActiveFamilyContactIdsForTeam } from "./family-contacts";
 
 export interface ScheduleEmailEventInfo {
   teamId: string;
@@ -82,13 +83,13 @@ export function scheduleEmailWhenText(
 export async function resolveTeamScheduleRecipientUserIds(
   teamId: string,
 ): Promise<string[]> {
-  const roster = await db
-    .select({ userId: rosterEntries.userId })
-    .from(rosterEntries)
-    .where(
-      and(eq(rosterEntries.teamId, teamId), eq(rosterEntries.status, "accepted")),
-    );
-  return Array.from(new Set(roster.map((r) => r.userId)));
+  const [roster, contacts] = await Promise.all([
+    db.select({ userId: rosterEntries.userId })
+      .from(rosterEntries)
+      .where(and(eq(rosterEntries.teamId, teamId), eq(rosterEntries.status, "accepted"))),
+    getActiveFamilyContactIdsForTeam(teamId),
+  ]);
+  return Array.from(new Set([...roster.map((r) => r.userId), ...contacts]));
 }
 
 // Fan out the ~24h reminder. Returns the number of target users dispatched

@@ -6,6 +6,8 @@ import {
   useGetUserSports,
   getGetUserSportsQueryKey,
   useGetLoggedInUser,
+  useListUserChildren,
+  getListUserChildrenQueryKey,
   listUserPosts,
   getListUserPostsQueryKey,
   useListUserOrganizations,
@@ -58,15 +60,20 @@ import { FollowListDialog } from "@/components/FollowListDialog";
 import { AvatarLightbox } from "@/components/AvatarLightbox";
 import { useInfiniteScrollSentinel } from "@/hooks/useInfiniteScrollSentinel";
 import { EmptyState } from "@/components/EmptyState";
+import { InviteFamilyContactDialog } from "@/components/guardian-page/InviteFamilyContactDialog";
 
 export default function UserProfilePage() {
   const params = useParams<{ userId: string }>();
   const userId = params.userId;
   const [followersOpen, setFollowersOpen] = useState(false);
   const [followingOpen, setFollowingOpen] = useState(false);
+  const [familyInviteOpen, setFamilyInviteOpen] = useState(false);
   const isLg = useIsLg();
   const { data: user, isLoading } = useGetUserById(userId);
   const { data: me } = useGetLoggedInUser();
+  const { data: myChildren } = useListUserChildren(me?.id ?? "", {
+    query: { enabled: !!me?.id, queryKey: getListUserChildrenQueryKey(me?.id ?? "") },
+  });
   // Task #500 — sports list. The endpoint is self-only (returns 403 for
   // strangers), so we only enable the query when viewing your own
   // profile to avoid a guaranteed-failed request. If product later wants
@@ -221,6 +228,9 @@ export default function UserProfilePage() {
   // is the linked parent, so the simple comparison below is sufficient.
   const isParentOfThisUser =
     !!me && "parentId" in user && !!user.parentId && user.parentId === me.id;
+  const isActiveGuardianOfThisUser = (myChildren?.data ?? []).some(
+    (link) => link.child.id === userId && link.status === "active",
+  );
 
   // Pre-render the per-section item arrays so the same content can be
   // dropped into the right rail (lg+) or inline below the hero (mobile).
@@ -443,6 +453,7 @@ export default function UserProfilePage() {
           the page from the static index.html before the API call
           completes. */}
       {(user as { isMinor?: boolean }).isMinor ? <NoIndex /> : null}
+      {isActiveGuardianOfThisUser && <InviteFamilyContactDialog childId={userId} childName={user.firstName} open={familyInviteOpen} onOpenChange={setFamilyInviteOpen} />}
       <div className="space-y-6 lg:space-y-8 min-w-0">
         {/* Hero */}
         <div className="app-surface overflow-hidden">
@@ -491,12 +502,13 @@ export default function UserProfilePage() {
                   </Link>
                   <EditProfileDialog user={user as PrivateUserResponse} />
                 </div>
-              ) : isParentOfThisUser ? (
+              ) : isActiveGuardianOfThisUser || isParentOfThisUser ? (
                 <div
                   className="mt-24 flex items-center gap-2"
                   data-testid="parent-actions"
                 >
-                  <EditProfileDialog user={user as PrivateUserResponse} />
+                  {isParentOfThisUser && <EditProfileDialog user={user as PrivateUserResponse} />}
+                  {isActiveGuardianOfThisUser && <Button variant="outline" className="font-bold rounded-full" onClick={() => setFamilyInviteOpen(true)} data-testid={`button-invite-family-profile-${userId}`}>Invite family contact</Button>}
                 </div>
               ) : (
                 <div className="mt-24 flex items-center gap-2">

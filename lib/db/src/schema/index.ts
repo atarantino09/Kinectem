@@ -1791,6 +1791,8 @@ export const guardianLinks = pgTable(
     }),
     // Lowercased invite target. Kept after acceptance for audit purposes.
     inviteEmail: text("invite_email"),
+    inviteFirstName: text("invite_first_name"),
+    inviteLastName: text("invite_last_name"),
     relationshipType: guardianRelationshipEnum("relationship_type")
       .notNull()
       .default("parent"),
@@ -1818,6 +1820,47 @@ export const guardianLinks = pgTable(
       .where(sql`${t.status} <> 'revoked'`),
   }),
 );
+
+export const familyContactStatusEnum = pgEnum("family_contact_status", [
+  "pending",
+  "active",
+  "revoked",
+  "declined",
+]);
+
+// Updates-only relationships are kept separate from guardian_links so they
+// can never inherit guardian consent or account-management privileges.
+export const familyContacts = pgTable(
+  "family_contacts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    childId: uuid("child_id")
+      .notNull()
+      .references((): AnyPgColumn => users.id, { onDelete: "cascade" }),
+    inviteEmail: text("invite_email").notNull(),
+    firstName: text("first_name").notNull(),
+    lastName: text("last_name").notNull(),
+    invitedByGuardianId: uuid("invited_by_guardian_id").references(
+      (): AnyPgColumn => users.id,
+      { onDelete: "set null" },
+    ),
+    invitedUserId: uuid("invited_user_id").references((): AnyPgColumn => users.id, {
+      onDelete: "set null",
+    }),
+    status: familyContactStatusEnum("status").notNull().default("pending"),
+    acceptedAt: timestamp("accepted_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    childStatusIdx: index("family_contacts_child_status_idx").on(t.childId, t.status),
+    invitedUserIdx: index("family_contacts_invited_user_idx").on(t.invitedUserId),
+    oneLiveInvitePerEmail: uniqueIndex("family_contacts_live_email_idx")
+      .on(t.childId, sql`lower(${t.inviteEmail})`)
+      .where(sql`${t.status} IN ('pending', 'active')`),
+  }),
+);
+
 export const subscriptionStatusEnum = pgEnum("subscription_status", [
   "trialing",
   "active",
