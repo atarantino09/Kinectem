@@ -93,3 +93,4 @@
 - [Post-merge schema safety](post-merge-schema-safety.md) — forced Drizzle push can prompt and exit 0 without applying schema; use registered startup migrations after merges.
 - [Game-day discovery intent](game-day-discovery-intent.md) — Explore swaps only the featured story; Latest activity stays below in both modes, with no autoplay or global fallback.
 - [API workflow port ownership](api-workflow-port-ownership.md) — a managed restart can leave an older watcher bound to the API port; verify the listener, not just workflow status.
+- [Promo usage accounting](promo-usage-accounting.md) — undated pre-tracking applications cannot be assigned to a quarter; a redemption is not proof of a paid invoice discount.

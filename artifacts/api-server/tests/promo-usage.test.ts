@@ -3,6 +3,8 @@ import { db, organizations, orgSubscriptions, promoCodes, promoUsage } from "@wo
 import { eq } from "drizzle-orm";
 import { request, app, loginAs } from "./helpers";
 import { csvCell, parseUsageFilters, usageCsv } from "../src/lib/promo-usage-report";
+import { billingResultFromInvoices } from "../src/lib/promo-billing-status";
+import type Stripe from "stripe";
 
 async function makeOrg(name: string) {
   const [org] = await db.insert(organizations).values({ name }).returning();
@@ -118,6 +120,12 @@ describe("promo usage history and report", () => {
     const filtered = await agent.get("/api/v1/admin/promo-usage?from=2026-01-01&to=2026-12-31");
     expect(filtered.body.total).toBe(0);
     expect(filtered.body.legacyExcluded).toBe(true);
+    expect(filtered.body.legacyTotal).toBe(1);
+    expect(filtered.body.legacy[0].code).toBe("legacy");
+    const datedCsv = await agent.get("/api/v1/admin/promo-usage?format=csv&from=2026-01-01&to=2026-12-31");
+    expect(datedCsv.text).toContain("Unknown — not attributable to selected range");
+    expect(datedCsv.text).toContain("Unknown (before tracking)");
+    expect(datedCsv.text).toContain('"legacy"');
 
     // Preserve exact instants at both edges of a UTC day.
     await db.update(promoUsage).set({ appliedAt: new Date("2026-03-31T23:59:59.999Z") }).where(eq(promoUsage.organizationId, org.id));
@@ -141,9 +149,34 @@ describe("promo usage history and report", () => {
     const csv = await agent.get("/api/v1/admin/promo-usage?format=csv&from=2026-01-01&to=2026-01-31");
     expect(csv.status).toBe(200);
     expect(csv.headers["content-type"]).toContain("text/csv");
+    expect(csv.text).toContain("Billing result");
+    expect(csv.text).toContain("Paid at (UTC)");
     expect(csv.text.split("\r\n")).toHaveLength(29); // header + 27 + trailing newline
     expect(csvCell(' =HYPERLINK("bad")')).toBe('"\' =HYPERLINK(""bad"")"');
     expect(usageCsv([{ ...rows[0], id: "id", actorUserId: null, promoCodeId: null, actorName: "=cmd", actorEmail: null, endReason: "removed" }])).toContain("\"'=cmd\"");
     expect(parseUsageFilters({ from: "2026-02-29" })).toBeNull();
+  });
+
+  it("marks a promo billed only when its coupon actually discounted a paid invoice", () => {
+    const usage = {
+      id: "usage", code: "EARLY", organizationId: "org", organizationName: "Org",
+      actorName: null, actorEmail: null, appliedAt: new Date(), plan: "starter",
+      discountType: "percent", discountValue: 25, endedAt: null, endReason: null,
+    };
+    const invoice = (couponId: string, status: "paid" | "open", paid: number) => ({
+      status, amount_paid: paid, status_transitions: { paid_at: status === "paid" ? 1780000000 : null },
+      total_discount_amounts: [{
+        amount: 2500, discount: { source: { type: "coupon", coupon: couponId } },
+      }],
+    }) as unknown as Stripe.Invoice;
+    expect(billingResultFromInvoices(usage, [])).toMatchObject({ billingStatus: "not_billed" });
+    expect(billingResultFromInvoices(usage, [invoice("kinectem_promo_EARLY_y1", "open", 0)]))
+      .toMatchObject({ billingStatus: "discount_on_unpaid_invoice" });
+    expect(billingResultFromInvoices(usage, [invoice("kinectem_promo_EARLY_y1", "paid", 7500)]))
+      .toMatchObject({ billingStatus: "discounted_paid", actualDiscountCents: 2500 });
+    expect(billingResultFromInvoices(usage, [invoice("kinectem_promo_OTHER_y1", "paid", 7500)]))
+      .toMatchObject({ billingStatus: "paid_without_discount" });
+    expect(billingResultFromInvoices(usage, [invoice("kinectem_promo_EARLY_y1", "paid", 0)]))
+      .toMatchObject({ billingStatus: "discounted_no_charge" });
   });
 });

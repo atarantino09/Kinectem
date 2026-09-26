@@ -21,8 +21,45 @@ type Usage = {
   discountValue: number;
   endedAt: string | null;
   endReason: string | null;
+  billingStatus: string;
+  billedAt: string | null;
+  actualDiscountCents: number | null;
 };
-type Report = { data: Usage[]; total: number; pageSize: number; legacyExcluded: boolean };
+type Report = { data: Usage[]; total: number; pageSize: number; legacyExcluded: boolean; legacy: Usage[]; legacyTotal: number };
+
+const billingLabels: Record<string, string> = {
+  not_billed: "Not billed yet",
+  discounted_paid: "Yes — discount on paid invoice",
+  discounted_no_charge: "Discount on $0 invoice",
+  paid_without_discount: "Paid without this discount",
+  discount_on_unpaid_invoice: "Discount on unpaid invoice",
+  verification_unavailable: "Could not verify with Stripe",
+  unknown: "Unknown",
+};
+
+function UsageTable({ rows }: { rows: Usage[] }) {
+  return <div className="overflow-x-auto">
+    <table className="w-full min-w-[1040px] text-left text-sm">
+      <thead><tr className="border-b text-muted-foreground">
+        <th className="p-2">Code</th><th className="p-2">Organization</th><th className="p-2">Applied by</th>
+        <th className="p-2">Applied (UTC)</th><th className="p-2">Plan / discount</th><th className="p-2">Status</th>
+        <th className="p-2">Billing result</th><th className="p-2">Paid (UTC)</th>
+      </tr></thead>
+      <tbody>{rows.map((row) => (
+        <tr key={row.id} className="border-b">
+          <td className="p-2 font-semibold">{row.code}</td>
+          <td className="p-2">{row.organizationName}<div className="text-xs text-muted-foreground">{row.organizationId}</div></td>
+          <td className="p-2">{row.actorName ?? "Unknown"}{row.actorEmail && <div className="text-xs text-muted-foreground">{row.actorEmail}</div>}</td>
+          <td className="p-2">{row.appliedAt ? new Date(row.appliedAt).toLocaleString("en-US", { timeZone: "UTC", dateStyle: "medium", timeStyle: "short" }) : "Legacy — exact time unknown"}</td>
+          <td className="p-2 capitalize">{row.plan} · {row.discountType === "percent" ? `${row.discountValue}%` : `$${row.discountValue} off`}</td>
+          <td className="p-2">{row.endedAt ? (row.endReason === "replaced" ? "Replaced" : "Removed") : "Current"}</td>
+          <td className="p-2">{billingLabels[row.billingStatus] ?? "Unknown"}{row.actualDiscountCents != null && <div className="text-xs text-muted-foreground">${(row.actualDiscountCents / 100).toFixed(2)} discount</div>}</td>
+          <td className="p-2">{row.billedAt ? new Date(row.billedAt).toLocaleString("en-US", { timeZone: "UTC", dateStyle: "medium", timeStyle: "short" }) : "—"}</td>
+        </tr>
+      ))}</tbody>
+    </table>
+  </div>;
+}
 
 export function quarterDates(year: number, quarter: number) {
   const startMonth = (quarter - 1) * 3;
@@ -91,8 +128,8 @@ export function PromoUsageReport() {
       <CardHeader>
         <CardTitle className="text-base">Usage history</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Applications of promo codes, not payments or billed revenue. Dates and quarter boundaries use UTC.
-          Legacy applications with unknown exact dates appear only when no date filter is set.
+          Dates and quarter boundaries use UTC. Billing results are checked against Stripe invoices when available.
+          Older applications without a recorded date cannot be assigned to a quarter; they appear separately below and in the export.
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -127,29 +164,15 @@ export function PromoUsageReport() {
         {valid && !isLoading && !isFetching && !error && data && (
           <>
             <p className="text-sm text-muted-foreground">
-              {data.total} application{data.total === 1 ? "" : "s"} match.
-              {data.legacyExcluded && " Unknown-date legacy applications are excluded from dated ranges."}
+              {data.total} dated application{data.total === 1 ? "" : "s"} match.
+              {data.legacyExcluded && ` ${data.legacyTotal} older application${data.legacyTotal === 1 ? "" : "s"} ${data.legacyTotal === 1 ? "has" : "have"} an unknown date and ${data.legacyTotal === 1 ? "is" : "are"} not counted in this range.`}
             </p>
-            {data.total === 0 ? <p className="rounded-md border p-6 text-center text-sm text-muted-foreground">No applications in this range. Export still includes the CSV headings.</p> : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[780px] text-left text-sm">
-                  <thead><tr className="border-b text-muted-foreground">
-                    <th className="p-2">Code</th><th className="p-2">Organization</th><th className="p-2">Applied by</th>
-                    <th className="p-2">Applied (UTC)</th><th className="p-2">Plan / discount</th><th className="p-2">Status</th>
-                  </tr></thead>
-                  <tbody>{data.data.map((row) => (
-                    <tr key={row.id} className="border-b">
-                      <td className="p-2 font-semibold">{row.code}</td>
-                      <td className="p-2">{row.organizationName}<div className="text-xs text-muted-foreground">{row.organizationId}</div></td>
-                      <td className="p-2">{row.actorName ?? "Unknown"}{row.actorEmail && <div className="text-xs text-muted-foreground">{row.actorEmail}</div>}</td>
-                      <td className="p-2">{row.appliedAt ? new Date(row.appliedAt).toLocaleString("en-US", { timeZone: "UTC", dateStyle: "medium", timeStyle: "short" }) : "Legacy — exact time unknown"}</td>
-                      <td className="p-2 capitalize">{row.plan} · {row.discountType === "percent" ? `${row.discountValue}%` : `$${row.discountValue} off`}</td>
-                      <td className="p-2">{row.endedAt ? (row.endReason === "replaced" ? "Replaced" : "Removed") : "Current"}</td>
-                    </tr>
-                  ))}</tbody>
-                </table>
-              </div>
-            )}
+            {data.total === 0 ? <p className="rounded-md border p-6 text-center text-sm text-muted-foreground">No dated applications in this range.</p> : <UsageTable rows={data.data} />}
+            {data.legacyExcluded && data.legacyTotal > 0 && <section className="space-y-2" aria-label="Applications with unknown date">
+              <h3 className="font-semibold">Earlier applications — date unknown</h3>
+              <p className="text-sm text-muted-foreground">These cannot be attributed to the selected quarter. The CSV includes them clearly marked as undated.{data.legacyTotal > data.legacy.length && " Clear the filter to see all earlier applications."}</p>
+              <UsageTable rows={data.legacy} />
+            </section>}
             {data.total > data.pageSize && <div className="flex items-center justify-end gap-3">
               <Button variant="outline" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</Button>
               <span className="text-sm">Page {page} of {Math.ceil(data.total / data.pageSize)}</span>

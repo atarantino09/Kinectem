@@ -9,7 +9,7 @@ beforeEach(() => {
   urls.length = 0;
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     urls.push(String(input));
-    return new Response(JSON.stringify({ data: [], total: 0, pageSize: 25, legacyExcluded: false }), {
+    return new Response(JSON.stringify({ data: [], total: 0, pageSize: 25, legacyExcluded: false, legacy: [], legacyTotal: 0 }), {
       headers: { "content-type": "application/json" },
     });
   }));
@@ -32,6 +32,24 @@ describe("promo usage controls", () => {
     await waitFor(() => expect(urls.some((url) =>
       url.includes("from=2026-04-01") && url.includes("to=2026-06-30"),
     )).toBe(true));
-    expect(await screen.findByText(/No applications in this range/)).toBeTruthy();
+    expect(await screen.findByText(/No dated applications in this range/)).toBeTruthy();
+  });
+
+  it("shows undated historical applications beside, not inside, a selected quarter", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      data: [], total: 0, pageSize: 25, legacyExcluded: true, legacyTotal: 1,
+      legacy: [{
+        id: "old-1", code: "OLD25", organizationId: "org-1",
+        organizationName: "Old Club", actorName: null, actorEmail: null,
+        appliedAt: null, plan: "starter", discountType: "percent", discountValue: 25,
+        endedAt: null, endReason: null, billingStatus: "not_billed",
+        billedAt: null, actualDiscountCents: null,
+      }],
+    }), { headers: { "content-type": "application/json" } })));
+    renderWithProviders(<PromoUsageReport />);
+    expect(await screen.findByText("OLD25")).toBeInTheDocument();
+    expect(screen.getByText(/1 older application has an unknown date/)).toBeInTheDocument();
+    expect(screen.getByText("Earlier applications — date unknown")).toBeInTheDocument();
+    expect(screen.getByText("Not billed yet")).toBeInTheDocument();
   });
 });

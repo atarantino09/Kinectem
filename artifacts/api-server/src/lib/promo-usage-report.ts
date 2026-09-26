@@ -32,6 +32,9 @@ export type UsageRow = {
   discountValue: number;
   endedAt: Date | null;
   endReason: string | null;
+  billingStatus?: string;
+  billedAt?: Date | null;
+  actualDiscountCents?: number | null;
 };
 
 // Quote every cell and neutralize spreadsheet formulas, including values with
@@ -41,15 +44,29 @@ export function csvCell(input: string): string {
   return `"${safe.replace(/"/g, '""')}"`;
 }
 
-export function usageCsv(rows: UsageRow[]): string {
-  const headers = ["Promo code", "Organization", "Organization ID", "Applied by", "Account email", "Applied at (UTC)", "Time precision", "Plan at application", "Discount type", "Discount value", "Current status", "Ended at (UTC)"];
+const billingLabels: Record<string, string> = {
+  not_billed: "Not billed yet",
+  discounted_paid: "Yes — discount applied to paid invoice",
+  discounted_no_charge: "Applied to invoice — no payment due",
+  paid_without_discount: "No — paid without this discount",
+  discount_on_unpaid_invoice: "Discount on unpaid invoice",
+  verification_unavailable: "Could not verify with Stripe",
+  unknown: "Unknown",
+};
+
+export function usageCsv(rows: UsageRow[], dateFiltered = false): string {
+  const headers = ["Promo code", "Organization", "Organization ID", "Applied by", "Account email", "Applied at (UTC)", "Time precision", "Date range match", "Plan at application", "Discount type", "Discount value", "Current status", "Ended at (UTC)", "Billing result", "Paid at (UTC)", "Actual discount (USD)"];
   const data = rows.map((r) => [
     r.code, r.organizationName, r.organizationId, r.actorName ?? "",
-    r.actorEmail ?? "", r.appliedAt?.toISOString() ?? "",
+    r.actorEmail ?? "", r.appliedAt?.toISOString() ?? "Unknown (before tracking)",
     r.appliedAt ? "Exact" : "Legacy — exact time unknown",
+    r.appliedAt ? (dateFiltered ? "Yes" : "Not filtered") : "Unknown — not attributable to selected range",
     r.plan, r.discountType, String(r.discountValue),
     r.endedAt ? (r.endReason ?? "removed") : "Current",
     r.endedAt?.toISOString() ?? "",
+    billingLabels[r.billingStatus ?? "unknown"] ?? "Unknown",
+    r.billedAt?.toISOString() ?? "",
+    r.actualDiscountCents == null ? "" : (r.actualDiscountCents / 100).toFixed(2),
   ]);
   return [headers, ...data].map((row) => row.map(csvCell).join(",")).join("\r\n") + "\r\n";
 }

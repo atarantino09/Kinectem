@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, promoCodes, promoUsage, orgSubscriptions, organizations } from "@workspace/db";
-import { desc, eq, sql, isNotNull, or, and, gte, lt } from "drizzle-orm";
+import { desc, eq, sql, isNotNull, isNull, or, and, gte, lt } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import {
   PLAN_TEAM_LIMITS,
@@ -24,6 +24,7 @@ import {
   FREE_PERIOD_DAYS,
 } from "../lib/stripe-billing";
 import { parseUsageFilters, usageCsv, type UsageRow } from "../lib/promo-usage-report";
+import { resolvePromoBilling } from "../lib/promo-billing-status";
 
 const router: IRouter = Router();
 
@@ -913,7 +914,7 @@ router.get(
 );
 
 // Dates filter exact application instants in inclusive UTC calendar days.
-// Legacy rows have no reliable instant; they appear only without date filters.
+// Undated legacy rows are shown separately, never counted as part of a quarter.
 router.get(
   "/admin/promo-usage",
   requireAdmin,
@@ -942,28 +943,43 @@ router.get(
     const rows = filters.format === "csv"
       ? await select
       : await select.limit(25).offset((filters.page - 1) * 25);
-    const report: UsageRow[] = rows.map((row) => ({
-      ...row,
-      // This table intentionally snapshots deleted entities and users.
-      appliedAt: row.appliedAt,
-      endedAt: row.endedAt,
-    }));
+    const filtered = Boolean(from || toExclusive);
+    const [{ total: undatedTotal }] = filtered
+      ? await db.select({ total: sql<number>`count(*)` }).from(promoUsage)
+        .where(isNull(promoUsage.appliedAt))
+      : [{ total: 0 }];
+    const undated = filtered
+      ? filters.format === "csv"
+        ? await db.select().from(promoUsage).where(isNull(promoUsage.appliedAt))
+            .orderBy(desc(promoUsage.id))
+        : await db.select().from(promoUsage).where(isNull(promoUsage.appliedAt))
+            .orderBy(desc(promoUsage.id)).limit(25)
+      : [];
+    // Snapshots survive deletion; never derive the application date from the
+    // mutable subscription. Stripe invoices are the only proof of billing.
+    const billing = await resolvePromoBilling([...rows, ...undated]);
+    const report: UsageRow[] = rows.map((row) => ({ ...row, ...billing.get(row.id) }));
+    const legacy: UsageRow[] = undated.map((row) => ({ ...row, ...billing.get(row.id) }));
     if (filters.format === "csv") {
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
       res.setHeader("Content-Disposition", 'attachment; filename="promo-usage.csv"');
-      res.send(usageCsv(report));
+      res.send(usageCsv([...report, ...legacy], filtered));
       return;
     }
+    const serialize = (row: UsageRow) => ({
+      ...row,
+      appliedAt: row.appliedAt?.toISOString() ?? null,
+      endedAt: row.endedAt?.toISOString() ?? null,
+      billedAt: row.billedAt?.toISOString() ?? null,
+    });
     res.json({
-      data: report.map((row) => ({
-        ...row,
-        appliedAt: row.appliedAt?.toISOString() ?? null,
-        endedAt: row.endedAt?.toISOString() ?? null,
-      })),
+      data: report.map(serialize),
+      legacy: legacy.map(serialize),
+      legacyTotal: Number(undatedTotal),
       total: Number(total),
       page: filters.page,
       pageSize: 25,
-      legacyExcluded: Boolean(from || toExclusive),
+      legacyExcluded: filtered,
       timezone: "UTC",
     });
   }),
