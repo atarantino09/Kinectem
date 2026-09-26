@@ -64,7 +64,18 @@ export default function FamilyInvitePage() {
   return (
     <main className="min-h-screen bg-background px-4 py-14">
       <div className="mx-auto max-w-lg">
-        <Link href="/" className="font-black text-2xl text-primary">Kinectem</Link>
+        <Link href="/" aria-label="Kinectem home" className="inline-flex items-center">
+          <img
+            src={`${import.meta.env.BASE_URL}logo-horizontal.png`}
+            alt="Kinectem"
+            className="block h-7 w-auto dark:hidden"
+          />
+          <img
+            src={`${import.meta.env.BASE_URL}logo-horizontal-mono-white-transparent.png`}
+            alt="Kinectem"
+            className="hidden h-7 w-auto dark:block"
+          />
+        </Link>
         <Card className="mt-8 rounded-2xl">
           <CardContent className="p-6 sm:p-8 space-y-5" data-testid="family-invite-landing">
             <h1 className="text-2xl font-black">Your family invitation</h1>
