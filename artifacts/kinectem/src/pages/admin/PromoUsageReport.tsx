@@ -16,6 +16,7 @@ type Usage = {
   actorName: string | null;
   actorEmail: string | null;
   appliedAt: string | null;
+  datePrecision: "exact" | "estimated" | "unknown";
   plan: string;
   discountType: "percent" | "amount";
   discountValue: number;
@@ -50,7 +51,10 @@ function UsageTable({ rows }: { rows: Usage[] }) {
           <td className="p-2 font-semibold">{row.code}</td>
           <td className="p-2">{row.organizationName}<div className="text-xs text-muted-foreground">{row.organizationId}</div></td>
           <td className="p-2">{row.actorName ?? "Unknown"}{row.actorEmail && <div className="text-xs text-muted-foreground">{row.actorEmail}</div>}</td>
-          <td className="p-2">{row.appliedAt ? new Date(row.appliedAt).toLocaleString("en-US", { timeZone: "UTC", dateStyle: "medium", timeStyle: "short" }) : "Legacy — exact time unknown"}</td>
+          <td className="p-2">{row.appliedAt ? <>
+            {new Date(row.appliedAt).toLocaleString("en-US", { timeZone: "UTC", dateStyle: "medium", timeStyle: "short" })}
+            {row.datePrecision === "estimated" && <div className="text-xs text-muted-foreground">Estimated from subscription creation</div>}
+          </> : "Legacy — exact time unknown"}</td>
           <td className="p-2 capitalize">{row.plan} · {row.discountType === "percent" ? `${row.discountValue}%` : `$${row.discountValue} off`}</td>
           <td className="p-2">{row.endedAt ? (row.endReason === "replaced" ? "Replaced" : "Removed") : "Current"}</td>
           <td className="p-2">{billingLabels[row.billingStatus] ?? "Unknown"}{row.actualDiscountCents != null && <div className="text-xs text-muted-foreground">${(row.actualDiscountCents / 100).toFixed(2)} discount</div>}</td>
@@ -128,8 +132,8 @@ export function PromoUsageReport() {
       <CardHeader>
         <CardTitle className="text-base">Usage history</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Dates and quarter boundaries use UTC. Billing results are checked against Stripe invoices when available.
-          Older applications without a recorded date cannot be assigned to a quarter; they appear separately below and in the export.
+          Dates and quarter boundaries use UTC. For older applications, a subscription's creation date is shown as an estimate when its promo is still attached and the code already existed. Billing results are checked against Stripe invoices when available.
+          Applications without even an estimated date appear separately below and in the export.
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -165,7 +169,7 @@ export function PromoUsageReport() {
           <>
             <p className="text-sm text-muted-foreground">
               {data.total} dated application{data.total === 1 ? "" : "s"} match.
-              {data.legacyExcluded && ` ${data.legacyTotal} older application${data.legacyTotal === 1 ? "" : "s"} ${data.legacyTotal === 1 ? "has" : "have"} an unknown date and ${data.legacyTotal === 1 ? "is" : "are"} not counted in this range.`}
+              {data.legacyExcluded && data.legacyTotal > 0 && ` ${data.legacyTotal} older application${data.legacyTotal === 1 ? "" : "s"} ${data.legacyTotal === 1 ? "has" : "have"} an unknown date and ${data.legacyTotal === 1 ? "is" : "are"} not counted in this range.`}
             </p>
             {data.total === 0 ? <p className="rounded-md border p-6 text-center text-sm text-muted-foreground">No dated applications in this range.</p> : <UsageTable rows={data.data} />}
             {data.legacyExcluded && data.legacyTotal > 0 && <section className="space-y-2" aria-label="Applications with unknown date">

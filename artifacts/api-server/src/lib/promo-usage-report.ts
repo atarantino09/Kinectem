@@ -27,6 +27,7 @@ export type UsageRow = {
   actorName: string | null;
   actorEmail: string | null;
   appliedAt: Date | null;
+  datePrecision?: "exact" | "estimated" | "unknown";
   plan: string;
   discountType: string;
   discountValue: number;
@@ -59,8 +60,10 @@ export function usageCsv(rows: UsageRow[], dateFiltered = false): string {
   const data = rows.map((r) => [
     r.code, r.organizationName, r.organizationId, r.actorName ?? "",
     r.actorEmail ?? "", r.appliedAt?.toISOString() ?? "Unknown (before tracking)",
-    r.appliedAt ? "Exact" : "Legacy — exact time unknown",
-    r.appliedAt ? (dateFiltered ? "Yes" : "Not filtered") : "Unknown — not attributable to selected range",
+    r.datePrecision === "estimated" ? "Estimated — subscription created"
+      : r.appliedAt ? "Exact" : "Legacy — exact time unknown",
+    r.appliedAt ? (dateFiltered ? r.datePrecision === "estimated" ? "Yes — estimated" : "Yes" : "Not filtered")
+      : dateFiltered ? "Unknown — not attributable to selected range" : "Unknown date",
     r.plan, r.discountType, String(r.discountValue),
     r.endedAt ? (r.endReason ?? "removed") : "Current",
     r.endedAt?.toISOString() ?? "",

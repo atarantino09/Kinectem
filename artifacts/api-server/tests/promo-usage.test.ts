@@ -107,7 +107,11 @@ describe("promo usage history and report", () => {
     const [promo] = await db.insert(promoCodes).values({
       code: "legacy", discountType: "percent", discountValue: 5,
     }).returning();
-    await db.insert(orgSubscriptions).values({ organizationId: org.id, plan: "starter", promoCodeId: promo.id });
+    // A subscription older than the code cannot provide a plausible proxy date.
+    await db.insert(orgSubscriptions).values({
+      organizationId: org.id, plan: "starter", promoCodeId: promo.id,
+      createdAt: new Date("2025-01-01T00:00:00Z"),
+    });
     await db.insert(promoUsage).values({
       promoCodeId: promo.id, organizationId: org.id, code: promo.code,
       organizationName: org.name, plan: "starter", discountType: "percent", discountValue: 5,
@@ -133,6 +137,39 @@ describe("promo usage history and report", () => {
     expect((await agent.get("/api/v1/admin/promo-usage?from=2026-04-01&to=2026-04-01")).body.total).toBe(0);
     await db.update(promoUsage).set({ appliedAt: new Date("2026-04-01T00:00:00.000Z") }).where(eq(promoUsage.organizationId, org.id));
     expect((await agent.get("/api/v1/admin/promo-usage?from=2026-04-01&to=2026-04-01")).body.total).toBe(1);
+  });
+
+  it("places pre-tracking applications in their subscription-creation quarter as estimates", async () => {
+    const { agent } = await loginAs((u) => u.role === "admin" && !!u.email);
+    const org = await makeOrg("Q3 Legacy Org");
+    const [promo] = await db.insert(promoCodes).values({
+      code: "q3legacy", discountType: "percent", discountValue: 20,
+      createdAt: new Date("2026-07-01T00:00:00Z"),
+    }).returning();
+    const creation = new Date("2026-08-14T18:00:00Z");
+    await db.insert(orgSubscriptions).values({
+      organizationId: org.id, plan: "starter", promoCodeId: promo.id,
+      createdAt: creation,
+    });
+    await db.insert(promoUsage).values({
+      promoCodeId: promo.id, organizationId: org.id, code: promo.code,
+      organizationName: org.name, plan: "starter", discountType: "percent",
+      discountValue: 20,
+    });
+    const q3 = await agent.get("/api/v1/admin/promo-usage?from=2026-07-01&to=2026-09-30");
+    expect(q3.status, q3.text).toBe(200);
+    expect(q3.body.total).toBe(1);
+    expect(q3.body.legacyTotal).toBe(0);
+    expect(q3.body.data[0]).toMatchObject({
+      code: "q3legacy", appliedAt: creation.toISOString(), datePrecision: "estimated",
+      billingStatus: "not_billed",
+    });
+    const q2 = await agent.get("/api/v1/admin/promo-usage?from=2026-04-01&to=2026-06-30");
+    expect(q2.body.total).toBe(0);
+    expect(q2.body.legacyTotal).toBe(0);
+    const csv = await agent.get("/api/v1/admin/promo-usage?format=csv&from=2026-07-01&to=2026-09-30");
+    expect(csv.text).toContain("Estimated — subscription created");
+    expect(csv.text).toContain(creation.toISOString());
   });
 
   it("exports more than a page with headers, quoted data, and formula protection", async () => {

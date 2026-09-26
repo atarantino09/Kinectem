@@ -52,4 +52,22 @@ describe("promo usage controls", () => {
     expect(screen.getByText("Earlier applications — date unknown")).toBeInTheDocument();
     expect(screen.getByText("Not billed yet")).toBeInTheDocument();
   });
+
+  it("labels recovered subscription-creation dates as estimates in the quarter table", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      data: [{
+        id: "estimated-1", code: "Q3PROMO", organizationId: "org-1",
+        organizationName: "Club", actorName: null, actorEmail: null,
+        appliedAt: "2026-08-14T18:00:00.000Z", datePrecision: "estimated",
+        plan: "starter", discountType: "percent", discountValue: 25,
+        endedAt: null, endReason: null, billingStatus: "not_billed",
+        billedAt: null, actualDiscountCents: null,
+      }],
+      total: 1, pageSize: 25, legacyExcluded: true, legacyTotal: 0, legacy: [],
+    }), { headers: { "content-type": "application/json" } })));
+    renderWithProviders(<PromoUsageReport />);
+    expect(await screen.findByText("Q3PROMO")).toBeInTheDocument();
+    expect(screen.getByText("Estimated from subscription creation")).toBeInTheDocument();
+    expect(screen.queryByText("Earlier applications — date unknown")).not.toBeInTheDocument();
+  });
 });

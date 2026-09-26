@@ -913,8 +913,10 @@ router.get(
   }),
 );
 
-// Dates filter exact application instants in inclusive UTC calendar days.
-// Undated legacy rows are shown separately, never counted as part of a quarter.
+// Dates filter application instants in inclusive UTC calendar days. For
+// pre-tracking current promos, subscription creation is the best available
+// estimate when the subscription was created after the code existed.
+// Everything else without a trustworthy date remains in a separate bucket.
 router.get(
   "/admin/promo-usage",
   requireAdmin,
@@ -930,36 +932,59 @@ router.get(
     const toExclusive = filters.to
       ? new Date(Date.parse(`${filters.to}T00:00:00Z`) + 86_400_000)
       : null;
+    // Raw aliases are deliberate: interpolating Drizzle columns inside a
+    // sql`` expression can render unqualified names across these joins.
+    const effectiveAt = sql<Date>`coalesce("promo_usage"."applied_at",
+      CASE WHEN "promo_usage"."ended_at" IS NULL
+        AND "org_subscriptions"."promo_code_id" = "promo_usage"."promo_code_id"
+        AND "org_subscriptions"."created_at" >= "promo_codes"."created_at"
+      THEN "org_subscriptions"."created_at" AT TIME ZONE 'UTC' END)`;
+    const joins = () => db.select({ usage: promoUsage, effectiveAt })
+      .from(promoUsage)
+      .leftJoin(orgSubscriptions, eq(orgSubscriptions.organizationId, promoUsage.organizationId))
+      .leftJoin(promoCodes, eq(promoCodes.id, promoUsage.promoCodeId));
     const where = from || toExclusive
-      ? and(from ? gte(promoUsage.appliedAt, from) : undefined,
-          toExclusive ? lt(promoUsage.appliedAt, toExclusive) : undefined)
+      ? and(from ? gte(effectiveAt, from) : undefined,
+          toExclusive ? lt(effectiveAt, toExclusive) : undefined)
       : undefined;
     const [{ total }] = await db
       .select({ total: sql<number>`count(*)` })
       .from(promoUsage)
+      .leftJoin(orgSubscriptions, eq(orgSubscriptions.organizationId, promoUsage.organizationId))
+      .leftJoin(promoCodes, eq(promoCodes.id, promoUsage.promoCodeId))
       .where(where);
-    const select = db.select().from(promoUsage).where(where)
-      .orderBy(sql`${promoUsage.appliedAt} DESC NULLS LAST`, desc(promoUsage.id));
+    const select = joins().where(where)
+      .orderBy(sql`${effectiveAt} DESC NULLS LAST`, desc(promoUsage.id));
     const rows = filters.format === "csv"
       ? await select
       : await select.limit(25).offset((filters.page - 1) * 25);
     const filtered = Boolean(from || toExclusive);
     const [{ total: undatedTotal }] = filtered
       ? await db.select({ total: sql<number>`count(*)` }).from(promoUsage)
-        .where(isNull(promoUsage.appliedAt))
+          .leftJoin(orgSubscriptions, eq(orgSubscriptions.organizationId, promoUsage.organizationId))
+          .leftJoin(promoCodes, eq(promoCodes.id, promoUsage.promoCodeId))
+          .where(isNull(effectiveAt))
       : [{ total: 0 }];
     const undated = filtered
       ? filters.format === "csv"
-        ? await db.select().from(promoUsage).where(isNull(promoUsage.appliedAt))
+        ? await joins().where(isNull(effectiveAt))
             .orderBy(desc(promoUsage.id))
-        : await db.select().from(promoUsage).where(isNull(promoUsage.appliedAt))
+        : await joins().where(isNull(effectiveAt))
             .orderBy(desc(promoUsage.id)).limit(25)
       : [];
-    // Snapshots survive deletion; never derive the application date from the
-    // mutable subscription. Stripe invoices are the only proof of billing.
-    const billing = await resolvePromoBilling([...rows, ...undated]);
-    const report: UsageRow[] = rows.map((row) => ({ ...row, ...billing.get(row.id) }));
-    const legacy: UsageRow[] = undated.map((row) => ({ ...row, ...billing.get(row.id) }));
+    const toUsage = (row: (typeof rows)[number]): UsageRow => ({
+      ...row.usage,
+      // Raw SQL expressions arrive as timestamp strings, unlike Drizzle's
+      // mapped timestamp columns.
+      appliedAt: row.effectiveAt ? new Date(row.effectiveAt as unknown as string) : null,
+      datePrecision: row.usage.appliedAt ? "exact" : row.effectiveAt ? "estimated" : "unknown",
+    });
+    const rawReport = rows.map(toUsage);
+    const rawLegacy = undated.map(toUsage);
+    // Snapshots survive deletion; only Stripe invoices prove paid billing.
+    const billing = await resolvePromoBilling([...rawReport, ...rawLegacy]);
+    const report: UsageRow[] = rawReport.map((row) => ({ ...row, ...billing.get(row.id) }));
+    const legacy: UsageRow[] = rawLegacy.map((row) => ({ ...row, ...billing.get(row.id) }));
     if (filters.format === "csv") {
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
       res.setHeader("Content-Disposition", 'attachment; filename="promo-usage.csv"');
