@@ -151,6 +151,9 @@ const router: IRouter = Router();
 // Extra-spec discovery endpoint. Explore is intentionally separate from the
 // followed feed: it only returns public recaps/highlights from teams that the
 // viewer does not already follow, ranked by sport and self-entered location.
+const EXPLORE_STATE_CODES = new Set(
+  "AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY".split(" "),
+);
 router.get(
   "/posts/explore",
   asyncHandler(async (req, res): Promise<void> => {
@@ -172,6 +175,34 @@ router.get(
         apiError(res, 400, "Limit must be between 1 and 50");
         return;
       }
+    }
+
+    // Explicit browse filters take precedence over profile-based discovery.
+    // State is required in this mode; an omitted sport means all sports there.
+    const rawState = req.query["state"];
+    const rawSport = req.query["sport"];
+    const browsing = rawState !== undefined || rawSport !== undefined;
+    let browseState = "";
+    let browseSport = "";
+    if (browsing) {
+      if (
+        typeof rawState !== "string" ||
+        !EXPLORE_STATE_CODES.has(rawState.trim().toUpperCase())
+      ) {
+        apiError(res, 400, "Choose a valid state");
+        return;
+      }
+      if (
+        rawSport !== undefined &&
+        (typeof rawSport !== "string" ||
+          rawSport.trim().length === 0 ||
+          rawSport.trim().length > 100)
+      ) {
+        apiError(res, 400, "Invalid sport");
+        return;
+      }
+      browseState = rawState.trim().toLowerCase();
+      browseSport = typeof rawSport === "string" ? rawSport.trim().toLowerCase() : "";
     }
 
     type ExploreCursor = { rank: 1 | 2; createdAt: Date; id: string };
@@ -235,17 +266,18 @@ router.get(
             .where(inArray(teams.id, followedTeamIds))
         : Promise.resolve([] as { sport: string | null }[]),
     ]);
-    const sports = Array.from(new Set([
+    const profileSports = Array.from(new Set([
       me.sport,
       ...followedSports.map((r) => r.sport),
       ...orgSports.map((r) => r.sport),
       ...teamSports.map((r) => r.sport),
     ].filter((s): s is string => typeof s === "string" && s.trim().length > 0)
       .map((s) => s.trim().toLowerCase())));
-    const city = me.city?.trim().toLowerCase() ?? "";
-    const state = me.state?.trim().toLowerCase() ?? "";
+    const sports = browsing ? (browseSport ? [browseSport] : []) : profileSports;
+    const city = browsing ? "" : me.city?.trim().toLowerCase() ?? "";
+    const state = browsing ? browseState : me.state?.trim().toLowerCase() ?? "";
     const hasLocation = city.length > 0 || state.length > 0;
-    if (sports.length === 0 && !hasLocation) {
+    if (!browsing && sports.length === 0 && !hasLocation) {
       res.json({
         data: [],
         pagination: { hasMore: false, nextCursor: null },
@@ -268,8 +300,12 @@ router.get(
     const locationMatch = locationParts.length
       ? sql`(${sql.join(locationParts, sql` and `)})`
       : sql`false`;
-    const matchFilter = sql`(${sportMatch} or ${locationMatch})`;
-    const rankExpr = sql<number>`case
+    const matchFilter = browsing
+      ? sports.length > 0
+        ? sql`(${sportMatch} and ${locationMatch})`
+        : locationMatch
+      : sql`(${sportMatch} or ${locationMatch})`;
+    const rankExpr = browsing ? sql<number>`1` : sql<number>`case
       when (${sportMatch}) and (${locationMatch}) then 2
       when (${sportMatch}) or (${locationMatch}) then 1
       else 0 end`;
@@ -362,7 +398,7 @@ router.get(
     const candidates: ExploreRow[] = [
       ...articleRows.map((row) => ({
         kind: "article" as const, row,
-        rank: (sports.includes(row.team.sport?.trim().toLowerCase() ?? "") ||
+        rank: browsing ? 1 : (sports.includes(row.team.sport?.trim().toLowerCase() ?? "") ||
           sports.includes(row.org?.sport?.trim().toLowerCase() ?? "") ? 1 : 0) +
           ((city && row.org?.city?.trim().toLowerCase() === city && (!state || row.org?.state?.trim().toLowerCase() === state)) ||
            (state && row.org?.state?.trim().toLowerCase() === state && !city) ? 1 : 0),
@@ -370,7 +406,7 @@ router.get(
       })),
       ...highlightRows.map((row) => ({
         kind: "highlight" as const, row,
-        rank: (sports.includes(row.team?.sport?.trim().toLowerCase() ?? "") ||
+        rank: browsing ? 1 : (sports.includes(row.team?.sport?.trim().toLowerCase() ?? "") ||
           sports.includes(row.org?.sport?.trim().toLowerCase() ?? "") ? 1 : 0) +
           ((city && row.org?.city?.trim().toLowerCase() === city && (!state || row.org?.state?.trim().toLowerCase() === state)) ||
            (state && row.org?.state?.trim().toLowerCase() === state && !city) ? 1 : 0),

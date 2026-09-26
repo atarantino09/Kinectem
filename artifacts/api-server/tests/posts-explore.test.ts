@@ -164,6 +164,9 @@ describe("GET /api/v1/posts/explore", () => {
     expect((await agent.get("/api/v1/posts/explore?limit=51")).status).toBe(400);
     expect((await agent.get("/api/v1/posts/explore?limit=abc")).status).toBe(400);
     expect((await agent.get("/api/v1/posts/explore?cursor=not-a-cursor")).status).toBe(400);
+    expect((await agent.get("/api/v1/posts/explore?sport=Soccer")).status).toBe(400);
+    expect((await agent.get("/api/v1/posts/explore?state=ZZ")).status).toBe(400);
+    expect((await agent.get("/api/v1/posts/explore?state=NJ&sport=")).status).toBe(400);
   });
 
   it("ranks two-signal matches and excludes followed, own, hidden, pending, private, and takedown content", async () => {
@@ -331,6 +334,34 @@ describe("GET /api/v1/posts/explore", () => {
     expect(ids).not.toContain(`highlight-${pendingHighlight.id}`);
     expect(ids).not.toContain(`highlight-${hiddenHighlight.id}`);
     expect(ids).not.toContain(`highlight-${ownHighlight.id}`);
+
+    // Browsing a state shows all sports there; choosing a sport narrows the
+    // results to that sport AND that state, not the viewer's profile city.
+    await db.update(organizations).set({ state: "WY" })
+      .where(inArray(organizations.id, [bothOrg.id, locationOrg.id]));
+    const stateOnly = await agent.get("/api/v1/posts/explore?state=WY&limit=50");
+    expect(stateOnly.status, stateOnly.text).toBe(200);
+    const stateIds = stateOnly.body.data.map((item: { post: { id: string } }) => item.post.id);
+    expect(stateIds).toContain(`article-${bothArticle.id}`);
+    expect(stateIds).toContain(`article-${locationArticle.id}`);
+    expect(stateIds).not.toContain(`article-${sportArticle.id}`);
+    expect(stateIds).not.toContain(`article-${followedTeamArticle.id}`);
+
+    const sportAndStateUrl = `/api/v1/posts/explore?state=WY&sport=${encodeURIComponent(signalSport)}`;
+    const selected = await agent.get(`${sportAndStateUrl}&limit=1`);
+    expect(selected.status, selected.text).toBe(200);
+    expect(selected.body.pagination.hasMore).toBe(true);
+    const nextSelected = await agent.get(
+      `${sportAndStateUrl}&limit=1&cursor=${encodeURIComponent(selected.body.pagination.nextCursor)}`,
+    );
+    expect(nextSelected.status, nextSelected.text).toBe(200);
+    const selectedIds = [...selected.body.data, ...nextSelected.body.data]
+      .map((item: { post: { id: string } }) => item.post.id);
+    expect(selectedIds).toContain(`article-${bothArticle.id}`);
+    expect(selectedIds).toContain(`highlight-${approvedHighlight.id}`);
+    expect(selectedIds).not.toContain(`article-${locationArticle.id}`);
+    expect(selectedIds).not.toContain(`article-${sportArticle.id}`);
+    expect(new Set(selectedIds).size).toBe(selectedIds.length);
 
     // Drop every source of Explore personalization and confirm the explicit
     // no-signal response rather than relying on an empty seeded result.

@@ -2,12 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch, getListFeedQueryKey, useFollowOrg, useFollowTeam, useGetLoggedInUser, type PostResponse } from "@workspace/api-client-react";
 import { ArrowLeft, ArrowRight, Compass, Sparkles } from "lucide-react";
-import { Link } from "wouter";
 import { PostCard } from "@/components/PostCard";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiErrorMessage } from "@/lib/api-errors";
+import { SPORTS } from "@/lib/sports";
+import { US_STATES } from "@/lib/usStates";
 
 export const EXPLORE_QUERY_KEY = ["/api/v1/posts/explore"] as const;
 
@@ -30,18 +31,28 @@ export function ExploreReel({ active }: { active: boolean }) {
   const followTeam = useFollowTeam();
   const followOrg = useFollowOrg();
   const { data: me } = useGetLoggedInUser();
+  const [sport, setSport] = useState("");
+  const [stateOverride, setStateOverride] = useState<string | null>(null);
+  const profileState = US_STATES.find(({ code, name }) =>
+    code.toLowerCase() === me?.state?.trim().toLowerCase() ||
+    name.toLowerCase() === me?.state?.trim().toLowerCase(),
+  )?.code ?? "";
+  const state = stateOverride ?? profileState;
+  const stateName = US_STATES.find((option) => option.code === state)?.name;
   const [index, setIndex] = useState(0);
   const [excludedSources, setExcludedSources] = useState<string[]>([]);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const { data, isLoading, isError, error, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
-    queryKey: EXPLORE_QUERY_KEY,
-    queryFn: ({ pageParam }) => customFetch<ExploreResponse>(
-      `/api/v1/posts/explore?limit=8${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ""}`,
-      { method: "GET" },
-    ),
+    queryKey: [...EXPLORE_QUERY_KEY, state, sport],
+    queryFn: ({ pageParam }) => {
+      const params = new URLSearchParams({ limit: "8", state });
+      if (sport) params.set("sport", sport);
+      if (pageParam) params.set("cursor", pageParam);
+      return customFetch<ExploreResponse>(`/api/v1/posts/explore?${params}`, { method: "GET" });
+    },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.pagination.hasMore ? page.pagination.nextCursor ?? undefined : undefined,
-    enabled: active,
+    enabled: active && !!state,
   });
   const items = useMemo(() => data?.pages.flatMap((page) => page.data) ?? [], [data]);
   const visibleItems = useMemo(() => items.filter(({ teamId, orgId }) =>
@@ -91,21 +102,59 @@ export function ExploreReel({ active }: { active: boolean }) {
     }
   };
 
-  if (isLoading) return <div aria-label="Loading Explore stories" className="space-y-3"><Skeleton className="h-12 rounded-xl" /><Skeleton className="h-96 rounded-xl" /></div>;
-  if (isError) return <div role="alert" className="app-surface rounded-xl p-8 text-center space-y-3">
-    <p>Explore stories couldn't load. {apiErrorMessage(error) ?? ""}</p>
-    <Button variant="outline" onClick={() => void refetch()}>Try again</Button>
-  </div>;
-  if (!current) return <div className="app-surface rounded-xl p-8 text-center space-y-3">
-    <Compass className="mx-auto h-8 w-8 text-primary" />
-    <h2 className="font-black text-xl">No stories to explore yet</h2>
-    <p className="text-sm text-muted-foreground">{data?.pages[0]?.reason === "add_sport_or_location"
-      ? "Add a sport or city and state to your profile to find relevant teams."
-      : "There are no new public recaps or highlights matching your sport or location right now."}</p>
-    {me && <Link href={`/users/${me.id}`}><Button variant="outline">View your profile</Button></Link>}
+  const filters = <div className="app-surface rounded-xl p-4 space-y-3" aria-label="Explore filters">
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div className="min-w-0 space-y-1">
+        <label htmlFor="explore-sport" className="block text-xs font-bold text-muted-foreground">Sport</label>
+        <select
+          id="explore-sport"
+          value={sport}
+          onChange={(event) => {
+            setSport(event.target.value);
+            setIndex(0);
+            setExcludedSources([]);
+          }}
+          className="h-10 w-full min-w-0 rounded-lg border border-input bg-background px-3 text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+        >
+          <option value="">All sports</option>
+          {SPORTS.map((option) => <option key={option} value={option}>{option}</option>)}
+        </select>
+      </div>
+      <div className="min-w-0 space-y-1">
+        <label htmlFor="explore-state" className="block text-xs font-bold text-muted-foreground">State</label>
+        <select
+          id="explore-state"
+          value={state}
+          onChange={(event) => {
+            setStateOverride(event.target.value);
+            setIndex(0);
+            setExcludedSources([]);
+          }}
+          className="h-10 w-full min-w-0 rounded-lg border border-input bg-background px-3 text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+        >
+          <option value="">Choose a state</option>
+          {US_STATES.map(({ code, name }) => <option key={code} value={code}>{name}</option>)}
+        </select>
+      </div>
+    </div>
+    <p className="text-xs text-muted-foreground" data-testid="explore-filter-summary">
+      {stateName ? `Showing ${sport || "all sports"} in ${stateName}` : "Choose a state to find public stories."}
+    </p>
   </div>;
 
-  return <section aria-label="Explore stories" className="space-y-4">
+  if (!state) return <div className="space-y-3">{filters}</div>;
+  if (isLoading) return <div className="space-y-3">{filters}<div aria-label="Loading Explore stories" className="space-y-3"><Skeleton className="h-12 rounded-xl" /><Skeleton className="h-96 rounded-xl" /></div></div>;
+  if (isError) return <div className="space-y-3">{filters}<div role="alert" className="app-surface rounded-xl p-8 text-center space-y-3">
+    <p>Explore stories couldn't load. {apiErrorMessage(error) ?? ""}</p>
+    <Button variant="outline" onClick={() => void refetch()}>Try again</Button>
+  </div></div>;
+  if (!current) return <div className="space-y-3">{filters}<div className="app-surface rounded-xl p-8 text-center space-y-3">
+    <Compass className="mx-auto h-8 w-8 text-primary" />
+    <h2 className="font-black text-xl">No stories to explore yet</h2>
+    <p className="text-sm text-muted-foreground">There are no new public recaps or highlights for {sport || "any sport"} in {stateName}. Try another sport or state.</p>
+  </div></div>;
+
+  return <div className="space-y-3">{filters}<section aria-label="Explore stories" className="space-y-4">
     <div className="app-surface rounded-xl p-4 flex flex-wrap items-center justify-between gap-3">
       <div>
         <p className="game-day-eyebrow"><Sparkles size={13} /> Discover your next team</p>
@@ -139,5 +188,5 @@ export function ExploreReel({ active }: { active: boolean }) {
     <p className="text-center text-xs text-muted-foreground sm:hidden">Swipe left or right for another story. No autoplay.</p>
     {isFetchingNextPage && <p className="text-center text-sm text-muted-foreground">Loading more stories…</p>}
     {!hasNextPage && currentIndex === visibleItems.length - 1 && <p className="text-center text-sm text-muted-foreground">You're all caught up.</p>}
-  </section>;
+  </section></div>;
 }
