@@ -32,6 +32,7 @@ const ChildConversationPage = lazy(
   () => import("@/pages/ChildConversationPage"),
 );
 const InviteAcceptPage = lazy(() => import("@/pages/InviteAcceptPage"));
+const FamilyInvitePage = lazy(() => import("@/pages/FamilyInvitePage"));
 const OrgInviteAcceptPage = lazy(() => import("@/pages/OrgInviteAcceptPage"));
 const AdminInviteAcceptPage = lazy(
   () => import("@/pages/AdminInviteAcceptPage"),
@@ -133,6 +134,7 @@ function Router() {
         <Route path="/privacy-policy" component={PrivacyPolicyPage} />
         <Route path="/coppa-notice" component={CoppaNoticePage} />
         <Route path="/invites/:token" component={InviteAcceptPage} />
+        <Route path="/family-invites/:kind/:id" component={FamilyInvitePage} />
         <Route path="/org-invites/:token" component={OrgInviteAcceptPage} />
         {/* Task #745 — hub/competition admin invite accept page. */}
         <Route path="/admin-invites/:token" component={AdminInviteAcceptPage} />

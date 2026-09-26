@@ -88,7 +88,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
     publicPostQuery.data?.postType === "long";
 
   useEffect(() => {
-    const status = (currentUserError as { status?: number } | null)?.status;
     // Task #850 — claim-link visits (`?claimToken=`) must stay viewable
     // logged-out so the recipient can preview the real page before signing
     // up; the claim banner on the page owns the signup hand-off.
@@ -100,20 +99,27 @@ export function Layout({ children }: { children: React.ReactNode }) {
     // recap (Task #864). Anything else falls through to the redirect.
     if (
       /^\/posts\/[^/]+$/.test(location) &&
-      status === 401 &&
+      isVisitor &&
       (publicPostQuery.isLoading || publicPostQuery.data?.postType === "long")
     )
       return;
-    if (status === 401 && location !== "/login" && !hasClaimToken) {
+    if (isVisitor && location !== "/login" && !hasClaimToken) {
       if (typeof window !== "undefined") {
         const base = import.meta.env.BASE_URL.replace(/\/$/, "");
-        window.location.assign(`${base}/login`);
+        // Older family-invite emails pointed at /family without an invite id.
+        // Preserve that destination through authentication so their pending
+        // invitation still appears after signup or sign-in.
+        const familyReturn = location === "/family"
+          ? "?familyInvite=1&returnTo=%2Ffamily"
+          : "";
+        window.location.assign(`${base}/login${familyReturn}`);
       } else {
         setLocation("/login");
       }
     }
   }, [
     currentUserError,
+    isVisitor,
     location,
     setLocation,
     publicPostQuery.isLoading,

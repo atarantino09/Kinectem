@@ -61,6 +61,9 @@ export default function LoginPage() {
   // Task #864 — visitors arriving from a public game recap get a warm
   // invitation banner explaining why they're here.
   const gate = readQueryParam("gate");
+  const familyInvite = initialSignup === "family" ||
+    (readQueryParam("familyInvite") === "1" && returnTo === "/family") ||
+    /^\/family-invites\/(contact|guardian)\/[0-9a-f-]+$/i.test(returnTo ?? "");
   const [mode, setMode] = useState<Mode>(initialSignup ? "signup" : "signin");
   const [error, setError] = useState<string | null>(null);
   const [forgotSentEmail, setForgotSentEmail] = useState("");
@@ -81,9 +84,13 @@ export default function LoginPage() {
   };
 
   const initialRole: Role =
-    initialSignup === "parent" ? "parent" : "athlete";
+    initialSignup === "parent" ? "parent" : familyInvite ? "fan" : "athlete";
 
   const heading = (() => {
+    if (familyInvite && (mode === "signup" || mode === "signin")) {
+      return { title: mode === "signup" ? "Create your account" : "Sign in for your invitation",
+        subtitle: "Use the email address that received the family invitation. You'll review it before deciding." };
+    }
     if (claimOrgName && mode === "signup") {
       return {
         title: "Create your individual account",
@@ -164,6 +171,12 @@ export default function LoginPage() {
               </p>
             </div>
           )}
+          {familyInvite && (mode === "signup" || mode === "signin") && (
+            <div className="rounded-xl border border-primary/25 bg-primary/5 px-4 py-3 text-sm">
+              Your invitation will be waiting after {mode === "signup" ? "account creation" : "sign-in"}.
+              Use the same email address that received the invitation.
+            </div>
+          )}
 
           {claimOrgName &&
             (mode === "signup" || mode === "signin") && (
@@ -212,7 +225,7 @@ export default function LoginPage() {
                 setSignupGuardianEmail(email);
                 setMode("signupPending");
               }}
-              skipPathStep={initialSignup === "parent" || !!claimOrgName}
+              skipPathStep={familyInvite || !!claimOrgName}
               claimingOrganizationName={claimOrgName}
               onPathChange={(path) => setSignupPath(path)}
             />

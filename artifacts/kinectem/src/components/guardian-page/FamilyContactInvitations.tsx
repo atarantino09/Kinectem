@@ -1,4 +1,4 @@
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { MailOpen, ArrowUpRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { useWhoami } from "@/hooks/useWhoami";
 
 export function FamilyContactInvitations() {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const { data: whoami } = useWhoami();
   const invitations = useFamilyContactInvitations(!!(whoami?.viewingAs?.id ?? whoami?.realUser?.id));
   const respond = useRespondToFamilyContactInvite();
@@ -23,6 +24,10 @@ export function FamilyContactInvitations() {
     try {
       await respond.mutateAsync({ id, action });
       toast({ title: action === "accept" ? "Invitation accepted" : "Invitation declined" });
+      if (action === "accept") {
+        const invite = pending.find((item) => item.id === id);
+        if (invite) navigate(`/users/${invite.child.id}`);
+      }
     } catch (err) {
       const e = err as { error?: string; message?: string };
       toast({ title: e?.error ?? e?.message ?? "Couldn't update the invitation", variant: "destructive" });

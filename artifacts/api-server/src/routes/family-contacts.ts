@@ -249,6 +249,7 @@ router.post(
     }
     try {
       await sendFamilyContactInviteEmail(email, {
+        inviteId: contact.id,
         childName: child.name,
         inviterName: displayName(me),
         inviteeName: familyContactName(contact),
@@ -258,6 +259,45 @@ router.post(
     }
     res.status(201).json({
       data: contactResponse(contact, child.name, displayName(me), child.avatarUrl),
+    });
+  }),
+);
+
+// One invitation at a time. No child details are returned until the
+// authenticated account matches the address to which the email was sent.
+router.get(
+  "/family-invitations/:kind/:id",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const kind = String(req.params.kind);
+    const id = String(req.params.id);
+    if (!["guardian", "contact"].includes(kind) ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) ||
+        !me.email) return apiError(res, 404, "Invitation unavailable");
+    const address = me.email.trim().toLowerCase();
+    if (kind === "contact") {
+      const [row] = await db.select().from(familyContacts).where(
+        and(eq(familyContacts.id, id), sql`lower(${familyContacts.inviteEmail}) = ${address}`),
+      ).limit(1);
+      if (!row || row.status === "revoked") return apiError(res, 404, "Invitation unavailable");
+      const details = await loadChildAndInviter(row);
+      return res.json({
+        kind, status: row.status, child: { id: row.childId, displayName: details.childName },
+        invitedBy: details.inviterName, access: "updates-only",
+      });
+    }
+    const [row] = await db.select().from(guardianLinks).where(
+      and(eq(guardianLinks.id, id), sql`lower(${guardianLinks.inviteEmail}) = ${address}`),
+    ).limit(1);
+    if (!row || row.status === "revoked") return apiError(res, 404, "Invitation unavailable");
+    const [child] = await db.select({ name: users.name }).from(users).where(eq(users.id, row.childId)).limit(1);
+    const [inviter] = row.invitedByUserId
+      ? await db.select({ name: users.name }).from(users).where(eq(users.id, row.invitedByUserId)).limit(1)
+      : [];
+    return res.json({
+      kind, status: row.status, child: { id: row.childId, displayName: child?.name ?? "your family member" },
+      invitedBy: inviter?.name ?? null, access: row.relationshipType,
     });
   }),
 );

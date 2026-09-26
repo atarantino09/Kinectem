@@ -372,6 +372,7 @@ router.post(
     // Email is best-effort — the invite also surfaces in-app.
     try {
       await sendGuardianLinkInviteEmail(email, {
+        inviteId: link.id,
         childName: child.name,
         inviterName: displayName(me),
         inviteeName: `${firstName} ${lastName}`,

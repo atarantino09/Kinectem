@@ -11,6 +11,7 @@ import {
   sendCompetitionAdminInviteEmail,
   sendCoachInviteEmail,
   sendGuardianLinkInviteEmail,
+  sendFamilyContactInviteEmail,
   sendOrganizationInviteEmail,
   sendStaffInviteEmail,
   sendEmail,
@@ -133,17 +134,33 @@ describe("invite email Kinectem context", () => {
 
   it("includes context in guardian-link invites and keeps values escaped", async () => {
     await sendGuardianLinkInviteEmail("recipient@example.com", {
+      inviteId: "guardian-id",
       childName: "<Sam & Lee>",
       inviterName: "Ava <Parent>",
+      inviteeName: "Recipient",
       relationshipType: "legal_guardian",
     });
 
     const email = lastSentEmail();
     expectSharedContext(email);
-    expect(email.text).toContain("Family dashboard");
-    expect(email.text).toContain("/app/family");
+    expect(email.text).toContain("/app/family-invites/guardian/guardian-id");
+    expect(email.html).toContain("/app/family-invites/guardian/guardian-id");
     expect(email.html).toContain("&lt;Sam &amp; Lee&gt;");
     expect(email.html).toContain("Ava &lt;Parent&gt;");
+    expect(email.html).not.toContain("<Sam & Lee>");
+  });
+
+  it("uses the same invitation-specific link in both contact email alternatives", async () => {
+    await sendFamilyContactInviteEmail("recipient@example.com", {
+      inviteId: "contact-id",
+      childName: "<Sam & Lee>",
+      inviterName: "Ava <Parent>",
+      inviteeName: "Recipient",
+    });
+    const email = lastSentEmail();
+    expect(email.text).toContain("/app/family-invites/contact/contact-id");
+    expect(email.html).toContain("/app/family-invites/contact/contact-id");
+    expect(email.html).toContain("&lt;Sam &amp; Lee&gt;");
     expect(email.html).not.toContain("<Sam & Lee>");
   });
 

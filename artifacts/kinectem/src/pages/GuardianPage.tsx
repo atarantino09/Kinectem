@@ -43,9 +43,15 @@ export default function GuardianPage() {
   const searchParams = new URLSearchParams(search);
   const wantsTour = searchParams.get("tour") === "1";
   const nextDest = searchParams.get("next");
+  const invitedChildId = searchParams.get("child");
 
   const [tourOpen, setTourOpen] = useState(false);
   const [tourHandled, setTourHandled] = useState(false);
+  useEffect(() => {
+    if (invitedChildId && dash.children.some((child) => child.id === invitedChildId)) {
+      dash.childRefs.current[invitedChildId]?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [invitedChildId, dash.children, dash.childRefs]);
 
   // Ring the first child's real "Require tag consent" toggle when we can; fall
   // back to the whole linked-children card before the roster has loaded.
