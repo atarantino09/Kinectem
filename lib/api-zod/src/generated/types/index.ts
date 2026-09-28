@@ -118,6 +118,7 @@ export * from "./adminReportStatus";
 export * from "./adminUpdateUserRequest";
 export * from "./adminUpdateUserRequestRole";
 export * from "./adminUser";
+export * from "./adminUserOrganizationsItem";
 export * from "./adminUserRole";
 export * from "./adminWhoamiUser";
 export * from "./adminWhoamiUserRole";

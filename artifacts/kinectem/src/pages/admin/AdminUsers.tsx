@@ -63,6 +63,7 @@ type AdminUser = {
   guardianEmail: string | null;
   guardianConfirmedAt: string | null;
   requireTagConsent: boolean;
+  organizations: { id: string; name: string }[];
 };
 
 type UsersResponse = {
@@ -175,6 +176,7 @@ export default function AdminUsers() {
   const totalCount = data?.pagination.totalCount ?? 0;
   const showingFrom = totalCount === 0 ? 0 : page * PAGE_SIZE + 1;
   const showingTo = Math.min(totalCount, page * PAGE_SIZE + (data?.data.length ?? 0));
+  const organizationNames = (u: AdminUser) => u.organizations.map((org) => org.name).join(", ") || "—";
 
   const userActions = (u: AdminUser) => (
     <DropdownMenu>
@@ -314,6 +316,10 @@ export default function AdminUsers() {
               </div>
               {userActions(u)}
             </div>
+            <p className="mt-3 break-words text-sm [overflow-wrap:anywhere]">
+              <span className="font-medium text-muted-foreground">Organizations: </span>
+              {organizationNames(u)}
+            </p>
             <p className="mt-3 text-xs text-muted-foreground">
               Created {new Date(u.createdAt).toLocaleDateString()}
               <span className="mx-2" aria-hidden="true">·</span>
@@ -322,13 +328,14 @@ export default function AdminUsers() {
           </article>
         ))}
       </div>
-      <div className="hidden lg:block" data-testid="admin-users-table">
-      <Table className="min-w-[650px]">
+      <div className="hidden lg:block overflow-x-auto" data-testid="admin-users-table">
+      <Table className="min-w-[830px] xl:min-w-[1080px]">
         <TableHeader>
           <TableRow>
             <TableHead>Name</TableHead>
             <TableHead>Email</TableHead>
             <TableHead>Role</TableHead>
+            <TableHead>Organizations</TableHead>
             <TableHead className="hidden xl:table-cell">Created</TableHead>
             <TableHead className="hidden xl:table-cell">Last sign-in</TableHead>
             <TableHead>Status</TableHead>
@@ -338,7 +345,7 @@ export default function AdminUsers() {
         <TableBody>
           {isLoading ? (
             <TableRow>
-              <TableCell colSpan={7} className="text-center py-6 text-muted-foreground">
+              <TableCell colSpan={8} className="text-center py-6 text-muted-foreground">
                 Loading…
               </TableCell>
             </TableRow>
@@ -363,6 +370,11 @@ export default function AdminUsers() {
                       ))}
                     </SelectContent>
                   </Select>
+                </TableCell>
+                <TableCell className="max-w-44 text-sm">
+                  <span className="block truncate" title={organizationNames(u)}>
+                    {organizationNames(u)}
+                  </span>
                 </TableCell>
                 <TableCell className="hidden text-sm xl:table-cell">
                   {new Date(u.createdAt).toLocaleDateString()}
@@ -420,6 +432,7 @@ export default function AdminUsers() {
       <AssignUserDialog
         user={assigning}
         onOpenChange={(v) => !v && setAssigning(null)}
+        onAssigned={refetch}
       />
       <EditUserDialog
         user={editing}
@@ -896,9 +909,11 @@ function teamLabel(t: AdminTeamRow): string {
 function AssignUserDialog({
   user,
   onOpenChange,
+  onAssigned,
 }: {
   user: AdminUser | null;
   onOpenChange: (v: boolean) => void;
+  onAssigned: () => void;
 }) {
   const open = !!user;
   const [target, setTarget] = useState<"org" | "team">("org");
@@ -946,6 +961,7 @@ function AssignUserDialog({
           description: `${user.displayName} was added as a ${position} (pending until they accept).`,
         });
       }
+      onAssigned();
       onOpenChange(false);
     } catch (err) {
       toast({

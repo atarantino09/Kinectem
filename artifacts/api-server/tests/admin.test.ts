@@ -73,6 +73,17 @@ describe("admin", () => {
   });
 
   describe("user CRUD + soft-delete", () => {
+    it("lists each organization once for users who are both org admins and team members", async () => {
+      const { agent } = await loginAs((u) => u.email === ADMIN_EMAIL);
+      const list = await agent.get("/api/v1/admin/users?q=coach%40kinectem.demo");
+      expect(list.status).toBe(200);
+      const coach = list.body.data.find((u: { email: string }) => u.email === "coach@kinectem.demo");
+      expect(coach).toBeDefined();
+      expect(coach.organizations.some((org: { name: string }) => org.name.includes("Westfield"))).toBe(true);
+      const ids = coach.organizations.map((org: { id: string }) => org.id);
+      expect(new Set(ids).size).toBe(ids.length);
+    });
+
     it("creates and deactivates a user, hiding them from non-admin lookups", async () => {
       const { agent } = await loginAs((u) => u.email === ADMIN_EMAIL);
       const create = await agent.post("/api/v1/admin/users").send({

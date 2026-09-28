@@ -8593,6 +8593,17 @@ export const ListAdminUsersResponse = zod.object({
       displayName: zod.string(),
       email: zod.string().nullable(),
       role: zod.enum(["athlete", "parent", "coach", "admin", "fan"]),
+      organizations: zod
+        .array(
+          zod.object({
+            id: zod.string().uuid(),
+            name: zod.string(),
+          }),
+        )
+        .optional()
+        .describe(
+          "Direct memberships, accepted team rosters, and organizations of children with active guardian links. Followers are excluded.",
+        ),
       createdAt: zod.coerce.date(),
       lastSignInAt: zod.coerce.date().nullish(),
       deletedAt: zod.coerce.date().nullish(),

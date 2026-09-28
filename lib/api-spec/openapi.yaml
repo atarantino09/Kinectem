@@ -11719,6 +11719,18 @@ components:
         role:
           type: string
           enum: [athlete, parent, coach, admin, fan]
+        organizations:
+          type: array
+          description: Direct memberships, accepted team rosters, and organizations of children with active guardian links. Followers are excluded.
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id:
+                type: string
+                format: uuid
+              name:
+                type: string
         createdAt:
           type: string
           format: date-time

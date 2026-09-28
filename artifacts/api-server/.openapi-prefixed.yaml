@@ -3990,7 +3990,7 @@ paths:
                   description: |
                     Optional short note shown to the uploader in the
                     decline notification. Trimmed; ignored when empty.
-                  example: Inappropriate language
+                  example: Misleading content
       responses:
         "200":
           description: Highlight declined
@@ -4441,7 +4441,7 @@ paths:
                 properties:
                   message:
                     type: string
-                    example: Hey, you free this weekend for an extra session?
+                    example: Want to grab some film review tomorrow?
         "201":
           description: Guardian link created in pending status
           content:
@@ -4861,7 +4861,7 @@ paths:
                         format: uuid
                       reason:
                         type: string
-                        example: Spam or off-topic
+                        example: Inappropriate language
                       note:
                         type: string
                         nullable: true
@@ -5589,7 +5589,7 @@ paths:
                 email:
                   type: string
                   format: email
-                  example: jordan@kinectem.demo
+                  example: coach@kinectem.demo
                 password:
                   type: string
                   minLength: 1
@@ -5641,15 +5641,15 @@ paths:
                 firstName:
                   type: string
                   minLength: 1
-                  example: Kai
+                  example: Riley
                 lastName:
                   type: string
                   minLength: 1
-                  example: Carter
+                  example: Rivera
                 email:
                   type: string
                   format: email
-                  example: marcus@kinectem.demo
+                  example: jordan@kinectem.demo
                 password:
                   type: string
                   minLength: 8
@@ -5752,7 +5752,7 @@ paths:
                 email:
                   type: string
                   format: email
-                  example: jordan@kinectem.demo
+                  example: coach@kinectem.demo
                 password:
                   type: string
                   minLength: 1
@@ -5839,7 +5839,7 @@ paths:
                 email:
                   type: string
                   format: email
-                  example: coach@kinectem.demo
+                  example: maya@kinectem.demo
       responses:
         "200":
           description: Reset email sent if the address is registered.
@@ -5855,7 +5855,7 @@ paths:
                     type: boolean
                   message:
                     type: string
-                    example: Hey, you free this weekend for an extra session?
+                    example: Want to grab some film review tomorrow?
         "429":
           $ref: "#/components/responses/TooManyRequests"
   /api/v1/auth/password-reset/complete:
@@ -6187,7 +6187,7 @@ paths:
                 email:
                   type: string
                   format: email
-                  example: marcus@kinectem.demo
+                  example: jordan@kinectem.demo
                 password:
                   type: string
       responses:
@@ -6250,7 +6250,7 @@ paths:
                     type: boolean
                   message:
                     type: string
-                    example: Practice moved to 4pm — pass it along to the team.
+                    example: Awesome game today. Proud of the effort.
         "400":
           $ref: "#/components/responses/BadRequest"
         "429":
@@ -6310,7 +6310,7 @@ paths:
                   minLength: 1
                   maxLength: 80
                   description: Human label so the owner can tell keys apart later.
-                  example: Lincoln High Football
+                  example: Cardinal Track & Field
                 scopes:
                   type: array
                   description: |
@@ -6398,10 +6398,10 @@ paths:
                       format: uuid
                     firstName:
                       type: string
-                      example: Lisa
+                      example: Samira
                     lastName:
                       type: string
-                      example: Walker
+                      example: Hayes
                     role:
                       type: string
                       enum:
@@ -6413,19 +6413,19 @@ paths:
                     email:
                       type: string
                       nullable: true
-                      example: jordan@kinectem.demo
+                      example: coach@kinectem.demo
                     avatarUrl:
                       type: string
                       nullable: true
-                      example: https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&h=400&fit=crop&crop=faces
+                      example: https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400&h=400&fit=crop&crop=faces
                     sport:
                       type: string
                       nullable: true
-                      example: Soccer
+                      example: Baseball
                     position:
                       type: string
                       nullable: true
-                      example: Midfielder
+                      example: Pitcher
   /api/v1/health:
     get:
       operationId: healthCheck
@@ -7119,11 +7119,11 @@ paths:
                     firstName:
                       type: string
                       minLength: 1
-                      example: Riley
+                      example: Quinn
                     lastName:
                       type: string
                       minLength: 1
-                      example: Bennett
+                      example: Chen
                   additionalProperties: false
       responses:
         "200":
@@ -11800,6 +11800,21 @@ components:
             - coach
             - admin
             - fan
+        organizations:
+          type: array
+          description: Direct memberships, accepted team rosters, and organizations of children with active guardian links. Followers are excluded.
+          items:
+            type: object
+            required:
+              - id
+              - name
+            properties:
+              id:
+                type: string
+                format: uuid
+              name:
+                type: string
+                example: Lincoln High Football
         createdAt:
           type: string
           format: date-time
@@ -11814,30 +11829,30 @@ components:
         avatarUrl:
           type: string
           nullable: true
-          example: https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=400&h=400&fit=crop&crop=faces
+          example: https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&h=400&fit=crop&crop=faces
         sport:
           type: string
           nullable: true
-          example: Volleyball
+          example: Lacrosse
         position:
           type: string
           nullable: true
-          example: Outside Hitter
+          example: Wide Receiver
         jerseyNumber:
           type: integer
           nullable: true
         grade:
           type: string
           nullable: true
-          example: Class of 2025
+          example: Class of 2026
         location:
           type: string
           nullable: true
-          example: Riverside, CA
+          example: Lincoln, NE
         bio:
           type: string
           nullable: true
-          example: Three-sport athlete with a love for the game and the grind.
+          example: Coach by day, fan by night. Building champions on and off the field.
         dateOfBirth:
           type: string
           format: date
@@ -11869,16 +11884,16 @@ components:
           type: string
           minLength: 1
           maxLength: 100
-          example: Kai
+          example: Riley
         lastName:
           type: string
           minLength: 1
           maxLength: 100
-          example: Reed
+          example: Foster
         email:
           type: string
           format: email
-          example: marcus@kinectem.demo
+          example: jordan@kinectem.demo
         password:
           type: string
           minLength: 8
@@ -11898,16 +11913,16 @@ components:
           type: string
           minLength: 1
           maxLength: 100
-          example: Avery
+          example: Marcus
         lastName:
           type: string
           minLength: 1
           maxLength: 100
-          example: Rivera
+          example: Bennett
         email:
           type: string
           format: email
-          example: maya@kinectem.demo
+          example: marcus@kinectem.demo
         role:
           type: string
           enum:
@@ -11919,31 +11934,31 @@ components:
         sport:
           type: string
           nullable: true
-          example: Soccer
+          example: Baseball
         position:
           type: string
           nullable: true
-          example: Midfielder
+          example: Pitcher
         jerseyNumber:
           type: integer
           nullable: true
         grade:
           type: string
           nullable: true
-          example: Class of 2026
+          example: Class of 2027
         location:
           type: string
           nullable: true
-          example: Lincoln, NE
+          example: Cedar Falls, IA
         bio:
           type: string
           maxLength: 5000
           nullable: true
-          example: Speed, hands, and vision. Dedicated to outworking the competition.
+          example: Three-sport athlete with a love for the game and the grind.
         avatarUrl:
           type: string
           nullable: true
-          example: https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&h=400&fit=crop&crop=faces
+          example: https://images.unsplash.com/photo-1607746882042-944635dfe10e?w=400&h=400&fit=crop&crop=faces
         dateOfBirth:
           type: string
           nullable: true
@@ -11985,11 +12000,11 @@ components:
         title:
           type: string
           nullable: true
-          example: Saturday's win secures playoff spot
+          example: "Senior night recap: a perfect ending"
         body:
           type: string
           nullable: true
-          example: Practice was a grind today. The work is paying off.
+          example: Big shoutout to the seniors for leading by example.
         authorId:
           type: string
           format: uuid
@@ -12026,7 +12041,7 @@ components:
           type: string
           minLength: 1
           maxLength: 120
-          example: Spam or off-topic
+          example: Inappropriate language
         note:
           type: string
           maxLength: 2000
@@ -12066,11 +12081,11 @@ components:
         title:
           type: string
           nullable: true
-          example: Spring tryouts open next week
+          example: Coach's notes from the championship
         body:
           type: string
           nullable: true
-          example: Thanks to all the families who came out to support us.
+          example: Great game tonight, team! Proud of how everyone showed up.
         hiddenAt:
           type: string
           format: date-time
@@ -12107,7 +12122,7 @@ components:
           format: uuid
         reason:
           type: string
-          example: Spam or off-topic
+          example: Inappropriate language
         note:
           type: string
           nullable: true
@@ -12264,7 +12279,7 @@ components:
                   name:
                     type: string
                     nullable: true
-                    example: Lincoln High Football
+                    example: Cardinal Track & Field
                   count:
                     type: integer
             followedUsers:
@@ -12282,11 +12297,11 @@ components:
                   name:
                     type: string
                     nullable: true
-                    example: Cardinal Track & Field
+                    example: Westfield Warriors
                   email:
                     type: string
                     nullable: true
-                    example: coach@kinectem.demo
+                    example: maya@kinectem.demo
                   count:
                     type: integer
             postersThisWeek:
@@ -12304,11 +12319,11 @@ components:
                   name:
                     type: string
                     nullable: true
-                    example: Riverside Soccer Club
+                    example: Eastside Eagles
                   email:
                     type: string
                     nullable: true
-                    example: marcus@kinectem.demo
+                    example: jordan@kinectem.demo
                   count:
                     type: integer
     ApiKey:
@@ -12328,7 +12343,7 @@ components:
         name:
           type: string
           description: Owner-supplied human label.
-          example: North Valley Athletic Association
+          example: Lincoln High Football
         prefix:
           type: string
           description: |

@@ -3404,6 +3404,11 @@ export const AdminUserRole = {
   fan: "fan",
 } as const;
 
+export type AdminUserOrganizationsItem = {
+  id: string;
+  name: string;
+};
+
 export interface AdminUser {
   id: string;
   firstName: string;
@@ -3412,6 +3417,8 @@ export interface AdminUser {
   /** @nullable */
   email: string | null;
   role: AdminUserRole;
+  /** Direct memberships, accepted team rosters, and organizations of children with active guardian links. Followers are excluded. */
+  organizations?: AdminUserOrganizationsItem[];
   createdAt: string;
   /** @nullable */
   lastSignInAt?: string | null;

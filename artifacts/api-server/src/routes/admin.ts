@@ -19,6 +19,7 @@ import {
   consentAuditLog,
   notifications,
   organizationAdmins,
+  rosterEntries,
   organizationClaimRequests,
   scheduleEvents,
   scheduleEventRsvps,
@@ -518,6 +519,57 @@ router.get(
         .from(users)
         .where(where),
     ]);
+    const organizationsByUser = new Map<string, Map<string, { id: string; name: string }>>();
+    if (rows.length) {
+      const userIds = rows.map((u) => u.id);
+      // Associations are resolved for the current page in batches, not one query per user.
+      // Following an organization does not make someone a member of it.
+      const [direct, roster, viaChildren] = await Promise.all([
+        db.select({
+          userId: organizationAdmins.userId,
+          organizationId: organizations.id,
+          organizationName: organizations.name,
+        })
+          .from(organizationAdmins)
+          .innerJoin(organizations, eq(organizationAdmins.organizationId, organizations.id))
+          .where(inArray(organizationAdmins.userId, userIds)),
+        db.select({
+          userId: rosterEntries.userId,
+          organizationId: organizations.id,
+          organizationName: organizations.name,
+        })
+          .from(rosterEntries)
+          .innerJoin(teams, eq(rosterEntries.teamId, teams.id))
+          .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+          .where(and(inArray(rosterEntries.userId, userIds), eq(rosterEntries.status, "accepted"))),
+        db.select({
+          userId: guardianLinks.guardianId,
+          organizationId: organizations.id,
+          organizationName: organizations.name,
+        })
+          .from(guardianLinks)
+          .innerJoin(rosterEntries, eq(guardianLinks.childId, rosterEntries.userId))
+          .innerJoin(teams, eq(rosterEntries.teamId, teams.id))
+          .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+          .where(and(
+            inArray(guardianLinks.guardianId, userIds),
+            eq(guardianLinks.status, "active"),
+            eq(rosterEntries.status, "accepted"),
+          )),
+      ]);
+      for (const association of [...direct, ...roster, ...viaChildren]) {
+        if (!association.userId) continue;
+        let orgs = organizationsByUser.get(association.userId);
+        if (!orgs) {
+          orgs = new Map();
+          organizationsByUser.set(association.userId, orgs);
+        }
+        orgs.set(association.organizationId, {
+          id: association.organizationId,
+          name: association.organizationName,
+        });
+      }
+    }
     const data = rows.map((u) => {
       const { firstName, lastName } = splitName(u.name);
       return {
@@ -544,6 +596,8 @@ router.get(
           ? u.guardianConfirmedAt.toISOString()
           : null,
         requireTagConsent: u.requireTagConsent,
+        organizations: [...(organizationsByUser.get(u.id)?.values() ?? [])]
+          .sort((a, b) => a.name.localeCompare(b.name)),
       };
     });
     res.json({

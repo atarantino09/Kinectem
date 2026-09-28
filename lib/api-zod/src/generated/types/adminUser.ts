@@ -80,6 +80,7 @@ are marked `deprecated: true` in this spec.
 
  * OpenAPI spec version: 0.1.0
  */
+import type { AdminUserOrganizationsItem } from "./adminUserOrganizationsItem";
 import type { AdminUserRole } from "./adminUserRole";
 
 export interface AdminUser {
@@ -90,6 +91,8 @@ export interface AdminUser {
   /** @nullable */
   email: string | null;
   role: AdminUserRole;
+  /** Direct memberships, accepted team rosters, and organizations of children with active guardian links. Followers are excluded. */
+  organizations?: AdminUserOrganizationsItem[];
   createdAt: Date;
   /** @nullable */
   lastSignInAt?: Date | null;
