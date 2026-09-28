@@ -150,7 +150,7 @@ export function ExploreReel({ active }: { active: boolean }) {
   </div></div>;
   if (!current) return <div className="space-y-3">{filters}<div className="app-surface rounded-xl p-8 text-center space-y-3">
     <Compass className="mx-auto h-8 w-8 text-primary" />
-    <h2 className="font-black text-xl">No stories to explore yet</h2>
+    <h2 className="game-day-empty-heading font-black text-xl">No stories to explore yet</h2>
     <p className="text-sm text-muted-foreground">There are no new public recaps or highlights for {sport || "any sport"} in {stateName}. Try another sport or state.</p>
   </div></div>;
 
