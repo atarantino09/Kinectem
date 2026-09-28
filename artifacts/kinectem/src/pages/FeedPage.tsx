@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatOrgName } from "@/lib/format";
 import { Link } from "wouter";
-import { ChevronLeft, ChevronRight, ChevronDown, Pin, PinOff, Medal, Building2, Sparkles } from "lucide-react";
+import { ChevronDown, ChevronRight, Pin, PinOff, Medal, Building2, Sparkles } from "lucide-react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import {
@@ -21,8 +21,6 @@ import { PostCard } from "@/components/PostCard";
 import { SuggestionsPanel } from "@/components/SuggestionsPanel";
 import { BrandPageHeader } from "@/components/BrandPageHeader";
 import { ExploreReel } from "@/components/ExploreReel";
-import { GameDaySpotlight } from "@/components/GameDaySpotlight";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import "./GameDayFeed.css";
 import { usePinnedOrgs } from "@/hooks/usePinnedOrgs";
 import { usePinnedTeams } from "@/hooks/usePinnedTeams";
@@ -45,7 +43,6 @@ type SidebarOrg = {
 };
 
 export default function FeedPage() {
-  const [feedMode, setFeedMode] = useState<"following" | "explore">("following");
   const { data: me } = useGetLoggedInUser();
   const { data: myOrgs } = useListUserOrganizations(me?.id ?? "", undefined, {
     query: queryOpts({ enabled: !!me?.id }),
@@ -269,27 +266,6 @@ export default function FeedPage() {
   ]);
 
   const displayName = me ? `${me.firstName} ${me.lastName}` : "";
-  const [selectedSpotlightId, setSelectedSpotlightId] = useState<string | null>(null);
-  const spotlightIndex = selectedSpotlightId && posts.some((post) => post.id === selectedSpotlightId)
-    ? posts.findIndex((post) => post.id === selectedSpotlightId)
-    : Math.max(0, posts.findIndex((post) => post.postType === "long" && post.assets?.some((asset) => asset.fileType?.startsWith("image/"))));
-  const spotlight = posts[spotlightIndex];
-  useEffect(() => {
-    recomputeMargin();
-  }, [spotlight?.id, recomputeMargin]);
-  const touchStart = useRef<{ x: number; y: number } | null>(null);
-  const previousSpotlight = () => {
-    if (spotlightIndex > 0) setSelectedSpotlightId(posts[spotlightIndex - 1].id);
-  };
-  const nextSpotlight = async () => {
-    if (spotlightIndex + 1 < posts.length) {
-      setSelectedSpotlightId(posts[spotlightIndex + 1].id);
-    } else if (hasNextPage && !isFetchingNextPage) {
-      const result = await fetchNextPage();
-      const nextPosts = result.data?.pages.flatMap((page) => page.data) ?? [];
-      if (nextPosts[spotlightIndex + 1]) setSelectedSpotlightId(nextPosts[spotlightIndex + 1].id);
-    }
-  };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[228px_minmax(0,1fr)_240px] gap-5">
@@ -493,50 +469,15 @@ export default function FeedPage() {
 
       {/* Center feed */}
       <div className="space-y-4 min-w-0">
-        <section ref={heroRef} className="game-day-hero" aria-label="Game day together">
+        <section ref={heroRef} className="game-day-hero" aria-label="Explore stories">
         <div className="game-day-intro">
           <div>
-            <span className="game-day-eyebrow"><Sparkles size={13} /> Your community pulse</span>
-            <h1>Game day, <span>together.</span></h1>
-            <p>Recaps, highlights, and the moments your teams will talk about all week.</p>
+            <span className="game-day-eyebrow"><Sparkles size={13} /> Explore</span>
+            <h1>Discover more, <span>together.</span></h1>
+            <p>Find stories and teams beyond the ones you already follow.</p>
           </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="shrink-0 gap-1 font-bold" aria-label={`Feed view: ${feedMode === "following" ? "Following" : "Explore"}`}>
-                {feedMode === "following" ? "Following" : "Explore"} <ChevronDown size={14} />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => setFeedMode("following")}>Following · Latest</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setFeedMode("explore")}>Explore · Stories</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
-        {feedMode === "explore" ? <ExploreReel active /> : spotlight && <>
-          {(posts.length > 1 || hasNextPage) && (
-            <nav className="game-day-spotlight-nav" aria-label="Spotlight posts">
-              <span data-testid="text-spotlight-position">Post {spotlightIndex + 1} of {posts.length}{hasNextPage ? "+" : ""}</span>
-              <div className="game-day-spotlight-actions">
-                <Button variant="outline" size="sm" onClick={previousSpotlight} disabled={spotlightIndex === 0} aria-label="Previous post" data-testid="button-previous-spotlight"><ChevronLeft size={16} /> Previous</Button>
-                <Button variant="outline" size="sm" onClick={() => void nextSpotlight()} disabled={(spotlightIndex === posts.length - 1 && !hasNextPage) || isFetchingNextPage} aria-label="Next post" data-testid="button-next-spotlight">Next post <ChevronRight size={16} /></Button>
-              </div>
-            </nav>
-          )}
-          <div className="game-day-spotlight-stage"
-            onTouchStart={(event) => { touchStart.current = { x: event.touches[0].clientX, y: event.touches[0].clientY }; }}
-            onTouchEnd={(event) => {
-              if (!touchStart.current) return;
-              const dx = event.changedTouches[0].clientX - touchStart.current.x;
-              const dy = event.changedTouches[0].clientY - touchStart.current.y;
-              touchStart.current = null;
-              if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.4) {
-                if (dx < 0) void nextSpotlight();
-                else previousSpotlight();
-              }
-            }}>
-            <GameDaySpotlight key={spotlight.id} post={spotlight} />
-          </div>
-        </>}
+        <ExploreReel active />
         </section>
         <div className="game-day-feed-heading">
           <div><span className="game-day-eyebrow">Keep up with your teams</span><h2>Latest activity</h2></div>

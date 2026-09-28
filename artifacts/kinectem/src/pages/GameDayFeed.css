@@ -25,34 +25,6 @@
   background: linear-gradient(90deg, #e7dcff, #82b4ff 80%, #c7e4ff);
   background-clip: text;
 }
-.game-day-hero .game-day-intro button {
-  color: #1c2140;
-  background: #fff;
-  border-color: rgba(255, 255, 255, .7);
-}
-.game-day-hero .game-day-intro button:hover { background: #edf2ff; }
-.game-day-spotlight-nav {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 0 3px;
-  color: #e3e9ff;
-  font-size: 12px;
-  font-weight: 700;
-}
-.game-day-spotlight-actions { display: flex; gap: 8px; }
-.game-day-spotlight-actions button {
-  display: inline-flex;
-  gap: 3px;
-  color: #1c2140;
-  background: #fff;
-  border-color: rgba(255, 255, 255, .7);
-}
-.game-day-spotlight-actions button:hover { background: #edf2ff; }
-.game-day-spotlight-actions button:disabled { opacity: .5; }
-.game-day-spotlight-stage { touch-action: pan-y; }
 .game-day-eyebrow {
   display: flex;
   align-items: center;
