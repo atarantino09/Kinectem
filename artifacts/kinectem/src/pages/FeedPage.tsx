@@ -169,6 +169,7 @@ export default function FeedPage() {
   }, [myOrgs, myTeams, pinnedIds, pinnedTeamIds]);
 
   const hasSidebarItems = orgGroups.length > 0 || orphanTeams.length > 0;
+  const [exploreExpanded, setExploreExpanded] = useState(false);
   const [expandedOrgs, setExpandedOrgs] = useState<Record<string, boolean>>({});
   const toggleOrg = (orgId: string) =>
     setExpandedOrgs((prev) => ({ ...prev, [orgId]: !prev[orgId] }));
@@ -469,15 +470,29 @@ export default function FeedPage() {
 
       {/* Center feed */}
       <div className="space-y-4 min-w-0">
-        <section ref={heroRef} className="game-day-hero" aria-label="Explore stories">
+        <section ref={heroRef} className={`game-day-hero${exploreExpanded ? "" : " game-day-hero-collapsed"}`} aria-label="Explore stories">
         <div className="game-day-intro">
           <div>
             <span className="game-day-eyebrow"><Sparkles size={13} /> Explore</span>
             <h1>Discover more, <span>together.</span></h1>
             <p>Find stories and teams beyond the ones you already follow.</p>
           </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="game-day-toggle shrink-0"
+            aria-expanded={exploreExpanded}
+            aria-controls="feed-explore-content"
+            onClick={() => setExploreExpanded((expanded) => !expanded)}
+          >
+            {exploreExpanded ? "Collapse" : "Explore stories"}
+            <ChevronDown size={16} className={`ml-1 transition-transform ${exploreExpanded ? "rotate-180" : ""}`} aria-hidden="true" />
+          </Button>
         </div>
-        <ExploreReel active />
+        <div id="feed-explore-content" hidden={!exploreExpanded}>
+          <ExploreReel active={exploreExpanded} />
+        </div>
         </section>
         <div className="game-day-feed-heading">
           <div><span className="game-day-eyebrow">Keep up with your teams</span><h2>Latest activity</h2></div>
