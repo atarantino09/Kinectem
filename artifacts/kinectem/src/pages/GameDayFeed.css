@@ -123,6 +123,7 @@
 .game-day-lead-copy p { color: hsl(var(--muted-foreground)); font-size: 12px; line-height: 1.6; max-width: 390px; }
 .game-day-lead-footer { display: flex; align-items: center; justify-content: space-between; gap: 9px; border-top: 1px solid hsl(var(--border)); margin-top: 17px; padding-top: 13px; }
 .game-day-feed-heading { padding: 14px 3px 0; border-top: 1px solid hsl(var(--border)); }
+.game-day-hero + .game-day-feed-heading { margin-top: 24px; }
 .game-day-feed-heading h2 { font-family: var(--app-font-display); font-size: 22px; font-weight: 900; letter-spacing: -.04em; margin-top: 5px; }
 .game-day-explore-stage { touch-action: pan-y; }
 @media (max-width: 680px) {
