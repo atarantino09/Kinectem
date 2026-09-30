@@ -420,6 +420,7 @@ export default function UserProfilePage() {
           icon={<Building2 className="w-5 h-5 text-primary" />}
           testId="orgs"
           items={orgItems}
+          previewCount={7}
         />
       )}
       {teamItems.length > 0 && (
@@ -781,18 +782,19 @@ function AffiliationColumn({
   testId,
   items,
   pinnedCount,
+  previewCount = 1,
 }: {
   title: string;
   icon: ReactNode;
   testId: string;
   items: ReactNode[];
   pinnedCount?: number;
+  previewCount?: number;
 }) {
   const [open, setOpen] = useState(false);
   // Caller must skip rendering this card when items is empty.
   if (items.length === 0) return null;
-  const hasMore = items.length > 1;
-  const first = items[0];
+  const hasMore = items.length > previewCount;
   const pinnedN = pinnedCount ?? 0;
   return (
     <div
@@ -813,7 +815,7 @@ function AffiliationColumn({
             {items.length}
           </Badge>
         </div>
-        {hasMore && (
+        {hasMore && previewCount === 1 && (
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
@@ -831,10 +833,10 @@ function AffiliationColumn({
           </button>
         )}
       </div>
-      <div className="px-3 pb-3" data-testid={`affiliation-content-${testId}`}>
+      <div id={`affiliation-content-${testId}`} className="px-3 pb-3" data-testid={`affiliation-content-${testId}`}>
         <div className="flex flex-col gap-3">
           {!open ? (
-            first
+            items.slice(0, previewCount)
           ) : pinnedN > 0 ? (
             <>
               <PinnedSectionLabel
@@ -852,6 +854,18 @@ function AffiliationColumn({
             items
           )}
         </div>
+        {hasMore && previewCount > 1 && (
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="mt-3 w-full rounded-lg px-2 py-2 text-sm font-bold text-primary hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            data-testid={`affiliation-toggle-${testId}`}
+            aria-expanded={open}
+            aria-controls={`affiliation-content-${testId}`}
+          >
+            {open ? "See less" : `See more (${items.length - previewCount})`}
+          </button>
+        )}
       </div>
     </div>
   );

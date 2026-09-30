@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { screen } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
 
 import { renderWithProviders } from "@/test";
 
@@ -10,6 +10,7 @@ const VIEWER_ID = "22222222-2222-4222-8222-222222222222";
 const useGetUserByIdMock = vi.fn();
 const useGetLoggedInUserMock = vi.fn();
 const useListUserTeamsMock = vi.fn();
+const useListUserOrganizationsMock = vi.fn();
 const useGetUserSportsMock = vi.fn();
 
 vi.mock("wouter", () => ({
@@ -50,11 +51,13 @@ vi.mock("@workspace/api-client-react", () => ({
   useGetUserById: (...args: unknown[]) => useGetUserByIdMock(...args),
   useGetLoggedInUser: (...args: unknown[]) =>
     useGetLoggedInUserMock(...args),
+  useListUserChildren: () => ({ data: { data: [] } }),
+  getListUserChildrenQueryKey: (id: string) => [`/api/v1/users/${id}/children`],
   useGetUserSports: (...args: unknown[]) => useGetUserSportsMock(...args),
   getGetUserSportsQueryKey: (id: string) => [`/api/v1/users/${id}/sports`],
   listUserPosts: vi.fn(),
   getListUserPostsQueryKey: (id: string) => [`/api/v1/users/${id}/posts`],
-  useListUserOrganizations: () => ({ data: { data: [] } }),
+  useListUserOrganizations: (...args: unknown[]) => useListUserOrganizationsMock(...args),
   useListUserTeams: (...args: unknown[]) => useListUserTeamsMock(...args),
   useFollowUser: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUnfollowUser: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -128,7 +131,48 @@ function profileFixture(overrides: Record<string, unknown> = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   useListUserTeamsMock.mockReturnValue({ data: { data: [] } });
+  useListUserOrganizationsMock.mockReturnValue({ data: { data: [] } });
   useGetUserSportsMock.mockReturnValue({ data: { sports: [] } });
+});
+
+describe("UserProfilePage organizations", () => {
+  const organizations = (count: number) =>
+    Array.from({ length: count }, (_, i) => ({
+      id: `org-${i + 1}`,
+      name: `Organization ${i + 1}`,
+      logoUrl: null,
+      role: "member",
+    }));
+
+  it("shows all seven organizations without a toggle", () => {
+    useGetUserByIdMock.mockReturnValue({ data: profileFixture(), isLoading: false });
+    useGetLoggedInUserMock.mockReturnValue({ data: { id: PROFILE_ID, role: "athlete" } });
+    useListUserOrganizationsMock.mockReturnValue({ data: { data: organizations(7) } });
+
+    renderWithProviders(<UserProfilePage />);
+
+    const column = screen.getByTestId("affiliation-column-orgs");
+    expect(within(column).getAllByRole("link")).toHaveLength(7);
+    expect(within(column).queryByTestId("affiliation-toggle-orgs")).not.toBeInTheDocument();
+  });
+
+  it("shows seven initially and reveals remaining organizations on See more", () => {
+    useGetUserByIdMock.mockReturnValue({ data: profileFixture(), isLoading: false });
+    useGetLoggedInUserMock.mockReturnValue({ data: { id: PROFILE_ID, role: "athlete" } });
+    useListUserOrganizationsMock.mockReturnValue({ data: { data: organizations(9) } });
+
+    renderWithProviders(<UserProfilePage />);
+
+    const column = screen.getByTestId("affiliation-column-orgs");
+    const toggle = within(column).getByRole("button", { name: "See more (2)" });
+    expect(within(column).getAllByRole("link")).toHaveLength(7);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(toggle);
+    expect(within(column).getAllByRole("link")).toHaveLength(9);
+    expect(within(column).getByRole("button", { name: "See less" })).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(within(column).getByRole("button", { name: "See less" }));
+    expect(within(column).getAllByRole("link")).toHaveLength(7);
+  });
 });
 
 describe("UserProfilePage profile highlight action", () => {
