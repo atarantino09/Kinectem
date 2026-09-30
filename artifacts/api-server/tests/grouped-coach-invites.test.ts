@@ -130,6 +130,40 @@ describe("grouped multi-team coach invitations", () => {
     expect(children.every((child) => child.status === "accepted")).toBe(true);
   });
 
+  it("skips an already-active team while inviting the same coach to another team", async () => {
+    const { agent: manager, user } = await loginAs(
+      (u) => u.email === "coach@kinectem.demo",
+    );
+    const { orgId } = await twoTeamsInOneOrganization();
+    const first = await manager.post(`/api/v1/organizations/${orgId}/teams`)
+      .send({ name: "Grouped Active Admin", sport: "Soccer" });
+    const { agent: platform } = await loginAs((u) => u.role === "admin");
+    const second = await platform.post(`/api/v1/organizations/${orgId}/teams`)
+      .send({ name: "Grouped Self Placement", sport: "Soccer" });
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    const assignments = [first.body.id, second.body.id].map((teamId) => ({
+      teamId, email: user.email,
+    }));
+    const result = await manager.post(`/api/v1/organizations/${orgId}/coach-invites`)
+      .send({ assignments });
+    expect(result.status).toBe(201);
+    expect(result.body.data[0].teamOutcomes).toEqual([
+      { teamId: first.body.id, outcome: "already_active" },
+      { teamId: second.body.id, outcome: "auto_approved" },
+    ]);
+    const repeated = await manager.post(`/api/v1/organizations/${orgId}/coach-invites`)
+      .send({ assignments });
+    expect(repeated.body.data[0].outcome).toBe("already_active");
+    const entries = await db.select().from(rosterEntries)
+      .where(and(eq(rosterEntries.userId, user.id), inArray(rosterEntries.teamId, [first.body.id, second.body.id])));
+    expect(entries).toHaveLength(2);
+    expect(entries.every((entry) => entry.status === "accepted")).toBe(true);
+    const invites = await db.select().from(rosterInvites)
+      .where(inArray(rosterInvites.teamId, [first.body.id, second.body.id]));
+    expect(invites.filter((invite) => invite.invitedEmail === user.email)).toHaveLength(0);
+  });
+
   it("does not grant a child invitation withdrawn before acceptance", async () => {
     const { agent: manager } = await loginAs((user) => user.role === "admin");
     const { orgId, teams: invitedTeams } = await twoTeamsInOneOrganization();

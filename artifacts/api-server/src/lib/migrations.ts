@@ -2893,6 +2893,48 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
         WHERE status IN ('pending', 'active');
     `,
   },
+  {
+    name: "2026-09-30-resolve-redundant-team-invites",
+    sql: `
+      CREATE TABLE IF NOT EXISTS one_time_migration_markers (
+        name text PRIMARY KEY,
+        applied_at timestamp NOT NULL DEFAULT now()
+      );
+      DO $migration$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM one_time_migration_markers
+          WHERE name = '2026-09-30-resolve-redundant-team-invites'
+        ) THEN
+          UPDATE roster_invites ri SET status = 'revoked'
+          FROM users u, roster_entries re
+          WHERE ri.status = 'pending'
+            AND ri.invited_email IS NOT NULL
+            AND lower(btrim(ri.invited_email)) = lower(btrim(u.email))
+            AND re.team_id = ri.team_id AND re.user_id = u.id
+            AND re.status = 'accepted'
+            AND ri.role = 'coach';
+
+          DELETE FROM roster_entries pending
+          USING roster_entries active
+          WHERE pending.team_id = active.team_id
+            AND pending.user_id = active.user_id
+            AND pending.status = 'pending' AND active.status = 'accepted';
+
+          UPDATE coach_invite_groups cg SET status = 'revoked', updated_at = now()
+          WHERE cg.status = 'pending'
+            AND EXISTS (SELECT 1 FROM roster_invites ri WHERE ri.coach_invite_group_id = cg.id)
+            AND NOT EXISTS (
+              SELECT 1 FROM roster_invites ri
+              WHERE ri.coach_invite_group_id = cg.id AND ri.status = 'pending'
+            );
+
+          INSERT INTO one_time_migration_markers (name)
+          VALUES ('2026-09-30-resolve-redundant-team-invites');
+        END IF;
+      END$migration$;
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

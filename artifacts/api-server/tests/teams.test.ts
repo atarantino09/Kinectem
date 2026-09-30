@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { db, guardianLinks } from "@workspace/db";
+import { db, guardianLinks, rosterInvites, rosterEntries } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { app, loginAs, request } from "./helpers";
 
@@ -129,6 +129,119 @@ describe("teams", () => {
       .post(`/api/v1/teams/${newTeamId}/members`)
       .send({ userId: targetUserId, position: "player" });
     expect(add.status).toBe(201);
+  });
+
+  it("approves an org admin's self-add immediately without an invitation", async () => {
+    const { agent, user } = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const { agent: platform } = await loginAs((u) => u.role === "admin");
+    const { org } = await getOrgAndTeams();
+    const created = await platform.post(`/api/v1/organizations/${org.id}/teams`)
+      .send({ name: "Self Approve Test", sport: "Soccer" });
+    expect(created.status).toBe(201);
+    const targetId = created.body.id as string;
+    const first = await agent.post(`/api/v1/teams/${targetId}/members`)
+      .send({ userId: user.id, position: "coach" });
+    expect(first.status).toBe(201);
+    expect(first.body.status).toBe("active");
+    expect(first.body.outcome).toBe("auto_approved");
+    const again = await agent.post(`/api/v1/teams/${targetId}/members`)
+      .send({ userId: user.id, position: "coach" });
+    expect(again.body.outcome).toBe("already_active");
+    const entries = await db.select().from(rosterEntries)
+      .where(and(eq(rosterEntries.teamId, targetId), eq(rosterEntries.userId, user.id)));
+    expect(entries).toHaveLength(1);
+    expect(entries[0].status).toBe("accepted");
+  });
+
+  it("approves an org admin's own coach email immediately and keeps parallel repeats idempotent", async () => {
+    const { agent, user } = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const { agent: platform } = await loginAs((u) => u.role === "admin");
+    const { org } = await getOrgAndTeams();
+    const created = await platform.post(`/api/v1/organizations/${org.id}/teams`)
+      .send({ name: "Self Email Approve Test", sport: "Soccer" });
+    expect(created.status).toBe(201);
+    const teamId = created.body.id as string;
+    const responses = await Promise.all([
+      agent.post(`/api/v1/teams/${teamId}/invites`).send({ email: user.email, position: "coach" }),
+      agent.post(`/api/v1/teams/${teamId}/invites`).send({ email: user.email, position: "coach" }),
+    ]);
+    expect(responses.map((r) => r.body.outcome).sort()).toEqual([
+      "already_active", "auto_approved",
+    ]);
+    const entries = await db.select().from(rosterEntries)
+      .where(and(eq(rosterEntries.teamId, teamId), eq(rosterEntries.userId, user.id)));
+    expect(entries).toHaveLength(1);
+    expect(entries[0].status).toBe("accepted");
+    const invites = await db.select().from(rosterInvites)
+      .where(eq(rosterInvites.teamId, teamId));
+    expect(invites).toHaveLength(0);
+  });
+
+  it("does not invite an accepted team Admin as Coach and resolves their stale invitation", async () => {
+    const { agent, user } = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const { org } = await getOrgAndTeams();
+    const created = await agent.post(`/api/v1/organizations/${org.id}/teams`)
+      .send({ name: "Redundant Coach Invite", sport: "Soccer" });
+    expect(created.status).toBe(201);
+    const teamId = created.body.id as string;
+    const [before] = await db.select().from(rosterEntries)
+      .where(and(eq(rosterEntries.teamId, teamId), eq(rosterEntries.userId, user.id)));
+    expect(before.position).toBe("admin");
+    await db.insert(rosterInvites).values({
+      token: `stale-coach-${teamId}`, teamId, invitedEmail: user.email,
+      role: "coach", invitedById: user.id,
+    });
+    const response = await agent.post(`/api/v1/teams/${teamId}/invites`)
+      .send({ email: user.email, position: "coach" });
+    expect(response.status).toBe(200);
+    expect(response.body.outcome).toBe("already_active");
+    const invites = await db.select().from(rosterInvites)
+      .where(and(eq(rosterInvites.teamId, teamId), eq(rosterInvites.invitedEmail, user.email)));
+    expect(invites).toHaveLength(1);
+    expect(invites[0].status).toBe("revoked");
+    const [after] = await db.select().from(rosterEntries)
+      .where(and(eq(rosterEntries.teamId, teamId), eq(rosterEntries.userId, user.id)));
+    expect(after.id).toBe(before.id);
+    expect(after.position).toBe("admin");
+    expect(after.status).toBe("accepted");
+  });
+
+  it("keeps a parent's player chooser invitation even when they are already active staff", async () => {
+    const { agent, user } = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const { org } = await getOrgAndTeams();
+    const created = await agent.post(`/api/v1/organizations/${org.id}/teams`)
+      .send({ name: "Parent Chooser Alongside Staff", sport: "Soccer" });
+    const teamId = created.body.id as string;
+    const player = await agent.post(`/api/v1/teams/${teamId}/invites`)
+      .send({ email: user.email, position: "player" });
+    expect(player.status).toBe(201);
+    expect(player.body.outcome).toBe("invited");
+    const coach = await agent.post(`/api/v1/teams/${teamId}/invites`)
+      .send({ email: user.email, position: "coach" });
+    expect(coach.body.outcome).toBe("already_active");
+    const [remaining] = await db.select().from(rosterInvites)
+      .where(and(eq(rosterInvites.teamId, teamId), eq(rosterInvites.role, "player")));
+    expect(remaining.status).toBe("pending");
+  });
+
+  it("does not let a parent-facing player invitation block a distinct coach invitation", async () => {
+    const { agent } = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const { org } = await getOrgAndTeams();
+    const created = await agent.post(`/api/v1/organizations/${org.id}/teams`)
+      .send({ name: "Player Coach Invite Overlap", sport: "Soccer" });
+    const teamId = created.body.id as string;
+    const marcus = await loginAs((u) => u.email === "marcus@kinectem.demo");
+    const player = await agent.post(`/api/v1/teams/${teamId}/invites`)
+      .send({ email: marcus.user.email, position: "player" });
+    expect(player.status).toBe(201);
+    const coach = await agent.post(`/api/v1/teams/${teamId}/invites`)
+      .send({ email: marcus.user.email, position: "coach" });
+    expect(coach.status).toBe(201);
+    expect(coach.body.outcome).toBe("invited");
+    const invites = await db.select().from(rosterInvites)
+      .where(and(eq(rosterInvites.teamId, teamId), eq(rosterInvites.invitedEmail, marcus.user.email)));
+    expect(invites.map((invite) => invite.role).sort()).toEqual(["coach", "player"]);
+    expect(invites.every((invite) => invite.status === "pending")).toBe(true);
   });
 
   it("does NOT add a platform admin to the roster when they create a team", async () => {

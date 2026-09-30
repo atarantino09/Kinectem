@@ -110,8 +110,9 @@ type LineResult = {
   reason?: string;
   // Outcome for the paired coach (only set when the team was created and an
   // email was given).
-  coach?: "invited" | "staged" | "failed";
+  coach?: "invited" | "already_active" | "auto_approved" | "already_pending" | "staged" | "failed";
   coachGrouped?: boolean;
+  coachOutcome?: "invited" | "already_active" | "auto_approved" | "already_pending";
   coachReason?: string;
 };
 
@@ -337,8 +338,22 @@ export function BulkAddTeamsDialog({
       for (const group of groupCoachInviteAssignments(toInvite)) {
         const grouped = group.assignments.length > 1;
         try {
+          let response: {
+            outcome?: "invited" | "already_active" | "auto_approved" | "already_pending";
+            data?: Array<{
+              outcome?: "invited" | "already_active" | "auto_approved" | "already_pending";
+              teamOutcomes?: Array<{
+                teamId: string;
+                outcome: "invited" | "already_active" | "auto_approved" | "already_pending";
+              }>;
+            }>;
+            teamOutcomes?: Array<{
+              teamId: string;
+              outcome: "invited" | "already_active" | "auto_approved" | "already_pending";
+            }>;
+          };
           if (grouped) {
-            await customFetch(`/api/v1/organizations/${orgId}/coach-invites`, {
+            response = await customFetch(`/api/v1/organizations/${orgId}/coach-invites`, {
               method: "POST",
               body: JSON.stringify({
                 assignments: group.assignments.map(({ teamId, email }) => ({
@@ -348,15 +363,33 @@ export function BulkAddTeamsDialog({
               }),
             });
           } else {
-            await customFetch(`/api/v1/teams/${group.assignments[0].teamId}/invites`, {
+            response = await customFetch(`/api/v1/teams/${group.assignments[0].teamId}/invites`, {
               method: "POST",
               body: JSON.stringify({ email: group.email, position: "coach" }),
             });
           }
-          coachInvitationCount++;
+          const inviteRow = response.data?.[0];
+          const overallOutcome = inviteRow?.outcome ?? response.outcome ?? "invited";
+          const teamOutcomes = inviteRow?.teamOutcomes ?? response.teamOutcomes;
+          if (
+            teamOutcomes
+              ? teamOutcomes.some((item) => item.outcome === "invited")
+              : overallOutcome === "invited"
+          ) coachInvitationCount++;
           for (const assignment of group.assignments) {
             const result = collected[assignment.resultIndex!];
-            result.coach = "invited";
+            const assignmentOutcome =
+              teamOutcomes?.find((item) => item.teamId === assignment.teamId)?.outcome ??
+              overallOutcome;
+            result.coach =
+              assignmentOutcome === "auto_approved"
+                ? "auto_approved"
+                : assignmentOutcome === "already_active"
+                  ? "already_active"
+                  : assignmentOutcome === "already_pending"
+                    ? "already_pending"
+                    : "invited";
+            result.coachOutcome = assignmentOutcome;
             result.coachGrouped = grouped;
           }
         } catch (err) {
@@ -423,6 +456,20 @@ export function BulkAddTeamsDialog({
     const succeeded = collected.filter((r) => r.status === "success").length;
     const failed = collected.length - succeeded;
     const coachFailed = collected.filter((r) => r.coach === "failed").length;
+    const coachAutoApproved = collected.filter((r) => r.coach === "auto_approved").length;
+    const coachAlreadyActive = collected.filter((r) => r.coach === "already_active").length;
+    const coachAlreadyPending = collected.filter((r) => r.coach === "already_pending").length;
+    const coachOutcomeNotes = [
+      coachAutoApproved > 0
+        ? "Your team assignment is already approved because you’re an organization admin. You don’t need to accept an invitation."
+        : "",
+      coachAlreadyActive > 0
+        ? `${coachAlreadyActive} coach assignment${coachAlreadyActive === 1 ? " is" : "s are"} already active; no invitation was sent.`
+        : "",
+      coachAlreadyPending > 0
+        ? `${coachAlreadyPending} coach invitation${coachAlreadyPending === 1 ? " is" : "s are"} already pending; no new invitation was sent.`
+        : "",
+    ].filter(Boolean).join(" ");
     // Keep only the failed lines (name + paired coach email) in the
     // textareas so the user can retry just those; clear entirely when
     // everything succeeded.
@@ -442,10 +489,12 @@ export function BulkAddTeamsDialog({
           succeeded === 1 ? "Team created!" : `${succeeded} teams created!`,
         description:
           coachDone === 0
-            ? undefined
+            ? staging
+              ? undefined
+              : coachOutcomeNotes || undefined
             : staging
               ? `${coachDone} coach${coachDone === 1 ? "" : "es"} staged for the owner to confirm.`
-              : `${coachDone} coach invitation${coachDone === 1 ? "" : "s"} sent.`,
+              : `${coachDone} coach invitation${coachDone === 1 ? "" : "s"} sent.${coachOutcomeNotes ? ` ${coachOutcomeNotes}` : ""}`,
       });
     } else if (failed === 0) {
       toast({
@@ -666,6 +715,23 @@ export function BulkAddTeamsDialog({
                         {r.coachGrouped
                           ? `One shared coach invite: ${r.email}`
                           : `Coach invited: ${r.email}`}
+                      </p>
+                    )}
+                    {r.coach === "already_active" && (
+                      <p className="text-muted-foreground">
+                        Coach already active on roster — no invite sent: {r.email}
+                      </p>
+                    )}
+                    {r.coach === "already_pending" && (
+                      <p className="text-muted-foreground">
+                        Coach invitation already pending — no new invitation was
+                        sent: {r.email}
+                      </p>
+                    )}
+                    {r.coach === "auto_approved" && (
+                      <p className="text-muted-foreground">
+                        Your team assignment is already approved because you’re an
+                        organization admin. You don’t need to accept an invitation.
                       </p>
                     )}
                     {r.coach === "staged" && (

@@ -60,7 +60,19 @@ type RowResult = {
   // an in-app notification (no email attempted); emailFailed: invite was
   // created but the email couldn't be sent (copy-link fallback shown);
   // error: the invite request itself failed.
-  status: "emailed" | "notified" | "emailFailed" | "error";
+  status:
+    | "emailed"
+    | "notified"
+    | "emailFailed"
+    | "alreadyActive"
+    | "autoApproved"
+    | "alreadyPending"
+    | "error";
+  outcome?: "invited" | "already_active" | "auto_approved" | "already_pending";
+  teamOutcomes?: Array<{
+    teamId: string;
+    outcome: "invited" | "already_active" | "auto_approved" | "already_pending";
+  }>;
   reason?: string;
   acceptUrl?: string;
 };
@@ -182,7 +194,17 @@ export function BulkAddCoachesDialog({
         const resp =
           grouped
             ? await customFetch<{
-                data: Array<{ emailSent?: boolean | null; acceptUrl?: string; notified?: boolean }>;
+                outcome?: "invited" | "already_active" | "auto_approved" | "already_pending";
+                data: Array<{
+                  emailSent?: boolean | null;
+                  acceptUrl?: string;
+                  notified?: boolean;
+                  outcome?: "invited" | "already_active" | "auto_approved" | "already_pending";
+                  teamOutcomes?: Array<{
+                    teamId: string;
+                    outcome: "invited" | "already_active" | "auto_approved" | "already_pending";
+                  }>;
+                }>;
               }>(`/api/v1/organizations/${orgId}/coach-invites`, {
                 method: "POST",
                 body: JSON.stringify({
@@ -201,19 +223,48 @@ export function BulkAddCoachesDialog({
               );
         // `emailSent` + `acceptUrl` are appended by the server outside the
         // locked openapi.yaml (same pattern as the single-invite flow).
-        const extra = (grouped
-          ? (
-              resp as {
-                data: Array<{
-                  emailSent?: boolean | null;
-                  acceptUrl?: string;
+        const groupedResponse = grouped
+          ? (resp as {
+              outcome?: "invited" | "already_active" | "auto_approved" | "already_pending";
+              data: Array<{
+                emailSent?: boolean | null;
+                acceptUrl?: string;
+                notified?: boolean;
+                outcome?: "invited" | "already_active" | "auto_approved" | "already_pending";
+                teamOutcomes?: Array<{
+                  teamId: string;
+                  outcome: "invited" | "already_active" | "auto_approved" | "already_pending";
                 }>;
-              }
-            ).data[0]
+              }>;
+            })
+          : null;
+        const extra = (grouped
+          ? groupedResponse?.data?.[0] ?? {}
           : resp) as {
           emailSent?: boolean | null;
           acceptUrl?: string;
+          outcome?: "invited" | "already_active" | "auto_approved" | "already_pending";
+          teamOutcomes?: Array<{
+            teamId: string;
+            outcome: "invited" | "already_active" | "auto_approved" | "already_pending";
+          }>;
         };
+        const overallOutcome =
+          extra.outcome ?? groupedResponse?.outcome ?? "invited";
+        const teamOutcomes = extra.teamOutcomes;
+        const hasTeamInvite =
+          teamOutcomes?.some((item) => item.outcome === "invited") ?? false;
+        const outcome = teamOutcomes
+          ? hasTeamInvite
+            ? "invited"
+            : teamOutcomes.some((item) => item.outcome === "already_pending")
+              ? "already_pending"
+              : teamOutcomes.some((item) => item.outcome === "auto_approved")
+                ? "auto_approved"
+                : teamOutcomes.some((item) => item.outcome === "already_active")
+                  ? "already_active"
+                  : overallOutcome
+          : overallOutcome;
         collected.push({
           teamId: teamIds[0],
           teamIds,
@@ -221,11 +272,19 @@ export function BulkAddCoachesDialog({
           email: group.email,
           grouped,
           status:
-            extra.emailSent === true
-              ? "emailed"
-              : extra.emailSent === false
-                ? "emailFailed"
-                : "notified",
+            outcome === "auto_approved"
+              ? "autoApproved"
+              : outcome === "already_active"
+                ? "alreadyActive"
+                : outcome === "already_pending"
+                  ? "alreadyPending"
+                  : extra.emailSent === true
+                  ? "emailed"
+                  : extra.emailSent === false
+                    ? "emailFailed"
+                    : "notified",
+          outcome,
+          teamOutcomes,
           acceptUrl: extra.acceptUrl,
         });
       } catch (err) {
@@ -257,22 +316,65 @@ export function BulkAddCoachesDialog({
     const failed = collected.filter((s) => s.status === "error").length;
     const emailFailed = collected.filter((s) => s.status === "emailFailed").length;
     const ok = collected.length - failed;
+    const invitationCount = collected.filter(
+      (r) => r.teamOutcomes
+        ? r.teamOutcomes.some((item) => item.outcome === "invited")
+        : r.status === "emailed" ||
+          r.status === "notified" ||
+          r.status === "emailFailed",
+    ).length;
+    const countTeamOutcome = (
+      outcome: "auto_approved" | "already_active" | "already_pending",
+      status: RowResult["status"],
+    ) =>
+      collected.reduce(
+        (count, row) =>
+          count +
+          (row.teamOutcomes
+            ? row.teamOutcomes.filter((item) => item.outcome === outcome).length
+            : row.status === status
+              ? 1
+              : 0),
+        0,
+      );
+    const autoApproved = countTeamOutcome("auto_approved", "autoApproved");
+    const alreadyActive = countTeamOutcome("already_active", "alreadyActive");
+    const alreadyPending = countTeamOutcome("already_pending", "alreadyPending");
+    const outcomeNotes = [
+      invitationCount > 0 && (autoApproved > 0 || alreadyActive > 0 || alreadyPending > 0)
+        ? `${invitationCount} new invitation${invitationCount === 1 ? "" : "s"} sent.`
+        : "",
+      autoApproved > 0
+        ? "Your team assignment is already approved because you’re an organization admin. You don’t need to accept an invitation."
+        : "",
+      alreadyActive > 0
+        ? `${alreadyActive} coach assignment${alreadyActive === 1 ? " is" : "s are"} already active; no invitation was sent.`
+        : "",
+      alreadyPending > 0
+        ? `${alreadyPending} coach invitation${alreadyPending === 1 ? " is" : "s are"} already pending; no new invitation was sent.`
+        : "",
+    ].filter(Boolean).join(" ");
     if (failed === 0 && emailFailed === 0) {
       toast({
         title:
           ok === 1
-            ? "Coach invite sent!"
-            : `${ok} coach invitation${ok === 1 ? "" : "s"} sent!`,
+            ? autoApproved || alreadyActive || alreadyPending
+              ? "Coach assignment updated"
+              : "Coach invite sent!"
+            : autoApproved || alreadyActive || alreadyPending
+              ? `${ok} coach assignments processed`
+              : `${ok} coach invitations sent!`,
+        description: outcomeNotes || undefined,
       });
     } else if (failed === 0) {
       toast({
-        title: `${ok} invite${ok === 1 ? "" : "s"} created, ${emailFailed} email${emailFailed === 1 ? "" : "s"} didn't send`,
-        description: "Copy those invite links below and share them directly.",
+        title: `${invitationCount} invite${invitationCount === 1 ? "" : "s"} created, ${emailFailed} email${emailFailed === 1 ? "" : "s"} didn't send`,
+        description: `${outcomeNotes ? `${outcomeNotes} ` : ""}Copy invite links below and share them directly.`,
         variant: "destructive",
       });
     } else {
       toast({
-        title: `${ok} sent, ${failed} failed`,
+        title: `${ok} completed, ${failed} failed`,
         description: "Each row's outcome is listed below.",
         variant: "destructive",
       });
@@ -475,6 +577,10 @@ export function BulkAddCoachesDialog({
                   <XCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
                 ) : r.status === "emailFailed" ? (
                   <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                ) : r.status === "alreadyActive" || r.status === "autoApproved" ? (
+                  <UserCheck className="w-4 h-4 text-green-600 shrink-0 mt-0.5" />
+                ) : r.status === "alreadyPending" ? (
+                  <Clock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                 ) : r.status === "notified" ? (
                   <Bell className="w-4 h-4 text-green-600 shrink-0 mt-0.5" />
                 ) : (
@@ -490,9 +596,11 @@ export function BulkAddCoachesDialog({
                   {r.status === "emailed" && (
                     <p className="text-muted-foreground flex items-center gap-1">
                       <Mail className="w-3 h-3" />{" "}
-                      {r.grouped
+                      {r.grouped && (!r.teamOutcomes || r.teamOutcomes.every((item) => item.outcome === "invited"))
                         ? "One invite email covers these teams"
-                        : "Invite email sent"}
+                        : r.teamOutcomes?.length
+                          ? "Invite outcomes are listed per team below"
+                          : "Invite email sent"}
                     </p>
                   )}
                   {r.status === "notified" && (
@@ -500,6 +608,36 @@ export function BulkAddCoachesDialog({
                       Has a Kinectem account — notified in-app
                     </p>
                   )}
+                  {r.status === "alreadyActive" && !r.teamOutcomes && (
+                    <p className="text-muted-foreground">
+                      Already active on the roster — no invite sent.
+                    </p>
+                  )}
+                  {r.status === "alreadyPending" && !r.teamOutcomes && (
+                    <p className="text-muted-foreground">
+                      An invitation is already pending — no new invitation was sent.
+                    </p>
+                  )}
+                  {r.status === "autoApproved" && !r.teamOutcomes && (
+                    <p className="text-muted-foreground">
+                      Your team assignment is already approved because you’re an
+                      organization admin. You don’t need to accept an invitation.
+                    </p>
+                  )}
+                  {r.teamOutcomes?.map((teamOutcome) => {
+                    const teamName = teams.find((team) => team.id === teamOutcome.teamId)?.name ?? teamOutcome.teamId;
+                    return (
+                      <p key={teamOutcome.teamId} className="text-muted-foreground">
+                        {teamName}: {teamOutcome.outcome === "auto_approved"
+                          ? "Your team assignment is already approved because you’re an organization admin. You don’t need to accept an invitation."
+                          : teamOutcome.outcome === "already_active"
+                            ? "Already active on the roster — no invite sent."
+                            : teamOutcome.outcome === "already_pending"
+                              ? "Invitation already pending — no new invitation sent."
+                              : "Invitation sent."}
+                      </p>
+                    );
+                  })}
                   {r.status === "emailFailed" && (
                     <div className="space-y-1">
                       <p className="text-muted-foreground">

@@ -951,15 +951,31 @@ function AssignUserDialog({
           description: `${user.displayName} is now a ${orgRole}.`,
         });
       } else {
-        await customFetch(`/api/v1/teams/${teamId}/members`, {
+        const result = await customFetch<{ outcome?: "already_active" | "auto_approved" | "invited" }>(
+          `/api/v1/teams/${teamId}/members`,
+          {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ userId: user.id, position }),
-        });
-        toast({
-          title: "Added to team",
-          description: `${user.displayName} was added as a ${position} (pending until they accept).`,
-        });
+          },
+        );
+        toast(
+          result.outcome === "auto_approved"
+            ? {
+                title: "Added to team",
+                description:
+                  "Your team assignment is already approved because you’re an organization admin. You don’t need to accept an invitation.",
+              }
+            : result.outcome === "already_active"
+              ? {
+                  title: "Already on team",
+                  description: `${user.displayName} is already an active member of this team.`,
+                }
+              : {
+                  title: "Added to team",
+                  description: `${user.displayName} was added as a ${position} (pending until they accept).`,
+                },
+        );
       }
       onAssigned();
       onOpenChange(false);
@@ -1122,7 +1138,10 @@ function InviteUserDialog({
     setSubmitting(true);
     try {
       if (target === "org") {
-        const r = await customFetch<{ emailSent?: boolean }>(
+        const r = await customFetch<{
+          emailSent?: boolean;
+          outcome?: "already_active" | "auto_approved" | "already_pending" | "invited";
+        }>(
           `/api/v1/organizations/${orgId}/invites`,
           {
             method: "POST",
@@ -1130,15 +1149,30 @@ function InviteUserDialog({
             body: JSON.stringify({ email: email.trim(), role: orgRole }),
           },
         );
-        toast({
-          title: "Invite created",
-          description:
-            r?.emailSent === false
-              ? "Invite saved, but the email could not be sent. Manage it from the organization page."
-              : `Invite email sent to ${email.trim()}.`,
-        });
+        toast(
+          r?.outcome === "auto_approved"
+            ? {
+                title: "Assignment approved",
+                description:
+                  "Your team assignment is already approved because you’re an organization admin. You don’t need to accept an invitation.",
+              }
+            : r?.outcome === "already_active"
+              ? { title: "Already a member", description: `${email.trim()} is already active. No invitation was sent.` }
+              : r?.outcome === "already_pending"
+                ? { title: "Invitation already pending", description: `A pending invitation already exists for ${email.trim()}. No new invitation was sent.` }
+              : {
+                  title: "Invite created",
+                  description:
+                    r?.emailSent === false
+                      ? "Invite saved, but the email could not be sent. Manage it from the organization page."
+                      : `Invite email sent to ${email.trim()}.`,
+                },
+        );
       } else {
-        const r = await customFetch<{ emailSent?: boolean | null }>(
+        const r = await customFetch<{
+          emailSent?: boolean | null;
+          outcome?: "already_active" | "auto_approved" | "already_pending" | "invited";
+        }>(
           `/api/v1/teams/${teamId}/invites`,
           {
             method: "POST",
@@ -1150,13 +1184,25 @@ function InviteUserDialog({
             }),
           },
         );
-        toast({
-          title: "Invite created",
-          description:
-            r?.emailSent === false
-              ? "Invite saved, but the email could not be sent. Manage it from the team roster."
-              : `Invite sent to ${email.trim()}.`,
-        });
+        toast(
+          r?.outcome === "auto_approved"
+            ? {
+                title: "Assignment approved",
+                description:
+                  "Your team assignment is already approved because you’re an organization admin. You don’t need to accept an invitation.",
+              }
+            : r?.outcome === "already_active"
+              ? { title: "Already on team", description: `${email.trim()} is already active on this team. No invitation was sent.` }
+              : r?.outcome === "already_pending"
+                ? { title: "Invitation already pending", description: `A pending invitation already exists for ${email.trim()}. No new invitation was sent.` }
+              : {
+                  title: "Invite created",
+                  description:
+                    r?.emailSent === false
+                      ? "Invite saved, but the email could not be sent. Manage it from the team roster."
+                      : `Invite sent to ${email.trim()}.`,
+                },
+        );
       }
       onOpenChange(false);
     } catch (err) {

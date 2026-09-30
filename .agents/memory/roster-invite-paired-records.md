@@ -19,3 +19,18 @@ notification/auto-follow re-fired.
 pending `roster_entries` behind; the re-invite guard saw that stale row
 and skipped placement/notification/auto-follow, so re-invites silently
 no-op'd while still returning 201.
+
+**Rule:** An already accepted staff assignment must prevent a new coach
+invitation for that account and team; resolve its obsolete pending coach
+invites without changing the active position. Do not blanket-revoke
+player invitations just because the addressed account is already on the
+roster in any role: a player's invitation email may address a parent who
+still needs the child-selection flow.
+
+**Why:** a team Admin was shown as both active staff and a pending Coach
+invite; broad email-only cleanup could wrongly cancel a legitimate
+parent-facing invitation for a different player.
+
+**How to apply:** resolve staff invites against the accepted account's
+team membership, but keep player chooser invitations distinct from
+staff assignments and preserve the accepted member's position.

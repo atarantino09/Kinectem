@@ -32,6 +32,7 @@ import {
   staffInviteRoleLabel,
 } from "@workspace/invite-copy";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
+import { findAccountByEmail, findPendingInvite, findRosterEntry, isOrganizationManager, lockRosterTeam, revokeRedundantInvites } from "../lib/roster-invite-consistency";
 import { asyncHandler } from "../lib/async-handler";
 import { getActiveGuardianIds, getActiveGuardianIdsForChildren, isActiveGuardian } from "../lib/guardian-links";
 import {
@@ -552,7 +553,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
     if (!me) return apiError(res, 401, "Not authenticated");
-    const teamId = req.params.teamId;
+    const teamId = req.params.teamId as string;
     const userId = String(req.body?.userId ?? "");
     if (!userId) return apiError(res, 400, "userId required");
     const [t] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
@@ -574,24 +575,34 @@ router.post(
       positionRaw === "admin"
         ? "coach"
         : "player";
-    const [existing] = await db
-      .select()
-      .from(rosterEntries)
-      .where(and(eq(rosterEntries.teamId, teamId), eq(rosterEntries.userId, userId)))
-      .limit(1);
-    let entry = existing;
-    if (!entry) {
-      [entry] = await db
-        .insert(rosterEntries)
-        .values({
-          teamId,
-          userId,
-          role: dbRole,
-          status: "pending",
-          position: positionRaw === "coach" ? null : positionRaw,
-          invitedById: me.id,
-        })
-        .returning();
+    const selfApproved = userId === me.id && await isOrganizationManager(me.id, t.organizationId);
+    const { entry, outcome, created } = await db.transaction(async (tx) => {
+      await lockRosterTeam(tx, teamId);
+      const existing = await findRosterEntry(tx, teamId, userId);
+      if (existing?.status === "accepted") {
+        if (u.email && existing.role === "coach")
+          await revokeRedundantInvites(tx, teamId, u.email);
+        return { entry: existing, outcome: "already_active" as const, created: false };
+      }
+      if (existing && !selfApproved) {
+        return { entry: existing, outcome: "already_pending" as const, created: false };
+      }
+      const [placed] = existing
+        ? await tx.update(rosterEntries).set({
+            role: dbRole, position: positionRaw === "coach" ? null : positionRaw,
+            status: "accepted", invitedById: me.id,
+          }).where(eq(rosterEntries.id, existing.id)).returning()
+        : await tx.insert(rosterEntries).values({
+            teamId, userId, role: dbRole,
+            status: selfApproved ? "accepted" : "pending",
+            position: positionRaw === "coach" ? null : positionRaw,
+            invitedById: me.id,
+          }).returning();
+      if (selfApproved && u.email && dbRole === "coach")
+        await revokeRedundantInvites(tx, teamId, u.email);
+      return { entry: placed, outcome: selfApproved ? "auto_approved" as const : "invited" as const, created: true };
+    });
+    if (created) {
       await ensureOrgFollowedForTeam(userId, teamId);
       // If the added member is a minor with a linked guardian, auto-follow
       // the team on the parent's behalf so it surfaces under the parent's
@@ -616,8 +627,9 @@ router.post(
       // the inviter under the masking model), so when the inviter is
       // a minor, mask at write time. Adult inviters keep full name.
       // Render-time viewer-aware notification text is Task #415.
-      const actorName = me.isMinor ? maskedDisplayName(me) : displayName(me);
-      await db.insert(notifications).values({
+      if (!selfApproved) {
+        const actorName = me.isMinor ? maskedDisplayName(me) : displayName(me);
+        await db.insert(notifications).values({
         userId,
         kind: "roster_invite",
         message: `${actorName} added you to ${t.name}. Tap to accept or decline.`,
@@ -625,11 +637,11 @@ router.post(
         // the Roster panel and scroll/highlight the invitee's pending row.
         link: `/teams/${teamId}?roster=1&entryId=${entry.id}`,
         actorUserId: me.id,
-      });
+        });
       // Task #633 — `team_roster` email mirror. The dispatch gate routes a
       // minor invitee's copy to their guardian, so we do NOT also email the
       // parent bell below (that would double-send to the guardian inbox).
-      await dispatchNotificationEmail({
+        await dispatchNotificationEmail({
         userId,
         // Suppress self-email when a guardian invites their own minor child
         // (the invitee's copy routes back to the actor guardian).
@@ -641,12 +653,12 @@ router.post(
             message: `${actorName} added you to ${t.name}. Tap to accept or decline.`,
             link: `${appBaseUrl()}/app/teams/${teamId}?roster=1&entryId=${entry.id}`,
           }),
-      });
+        });
       // Fan out to the linked guardians, if any. A parent managing an
       // under-13 athlete needs to see the invite in their own bell and
       // be able to accept on the child's behalf from /family.
       // Task #755 — ALL active guardians, not just the primary.
-      if (u.parentId) {
+        if (u.parentId) {
         const childFirstName =
           (u.name?.trim().split(/\s+/)[0] ?? "").length > 0
             ? u.name!.trim().split(/\s+/)[0]
@@ -662,9 +674,10 @@ router.post(
             actorUserId: me.id,
           });
         }
+        }
       }
     }
-    res.status(201).json(toTeamMember(entry, u));
+    res.status(201).json({ ...toTeamMember(entry, u), outcome });
   }),
 );
 
@@ -1043,7 +1056,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
     if (!me) return apiError(res, 401, "Not authenticated");
-    const teamId = req.params.teamId;
+    const teamId = req.params.teamId as string;
     const [t] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
     if (!t) return notFound(res);
     // Platform admins may invite users to any team from the admin console.
@@ -1063,19 +1076,75 @@ router.post(
       positionRaw === "admin"
         ? "coach"
         : "player";
-    const token = `inv-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`;
-    const [invite] = await db
-      .insert(rosterInvites)
-      .values({
-        token,
-        teamId,
-        invitedEmail: email,
-        invitedName: req.body?.name ?? null,
-        role: dbRole,
-        position: positionRaw === "coach" ? null : positionRaw,
-        invitedById: me.id,
-      })
-      .returning();
+    const normalizedEmail = email.toLowerCase();
+    // Player email invites enter the child chooser; the email owner is not
+    // necessarily the intended player, even when inviting themselves.
+    const selfApproved = dbRole === "coach" && normalizedEmail === me.email?.toLowerCase() &&
+      await isOrganizationManager(me.id, t.organizationId);
+    const placement = await db.transaction(async (tx) => {
+      await lockRosterTeam(tx, teamId);
+      const existingUser = await findAccountByEmail(tx, normalizedEmail);
+      const existingEntry = existingUser
+        ? await findRosterEntry(tx, teamId, existingUser.id) : undefined;
+      // A player email invite can address the parent of a *different* child.
+      // Only a staff invitation identifies the addressee as the member.
+      if (dbRole === "coach" && existingEntry?.status === "accepted") {
+        await revokeRedundantInvites(tx, teamId, normalizedEmail, dbRole);
+        return { outcome: "already_active" as const, existingUser, invite: null, entry: existingEntry };
+      }
+      if (selfApproved && existingUser) {
+        const [entry] = existingEntry
+          ? await tx.update(rosterEntries).set({
+              status: "accepted", role: dbRole,
+              position: positionRaw === "coach" ? null : positionRaw,
+              invitedById: me.id,
+            }).where(eq(rosterEntries.id, existingEntry.id)).returning()
+          : await tx.insert(rosterEntries).values({
+              teamId, userId: existingUser.id, role: dbRole, status: "accepted",
+              position: positionRaw === "coach" ? null : positionRaw, invitedById: me.id,
+            }).returning();
+        await revokeRedundantInvites(tx, teamId, normalizedEmail, dbRole);
+        return { outcome: "auto_approved" as const, existingUser, invite: null, entry };
+      }
+      const pendingInvite = dbRole === "coach"
+        ? await findPendingInvite(tx, teamId, normalizedEmail, dbRole)
+        : undefined;
+      if (pendingInvite) {
+        return { outcome: "already_pending" as const, existingUser, invite: pendingInvite, entry: existingEntry };
+      }
+      const token = `inv-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`;
+      const [invite] = await tx.insert(rosterInvites).values({
+        token, teamId, invitedEmail: normalizedEmail, invitedName: req.body?.name ?? null,
+        role: dbRole, position: positionRaw === "coach" ? null : positionRaw, invitedById: me.id,
+      }).returning();
+      let entry = existingEntry;
+      if (existingUser && dbRole === "coach") {
+        [entry] = entry
+          ? await tx.update(rosterEntries).set({
+              role: dbRole, status: "pending",
+              position: positionRaw === "coach" ? null : positionRaw, invitedById: me.id,
+            }).where(eq(rosterEntries.id, entry.id)).returning()
+          : await tx.insert(rosterEntries).values({
+              teamId, userId: existingUser.id, role: dbRole, status: "pending",
+              position: positionRaw === "coach" ? null : positionRaw, invitedById: me.id,
+            }).returning();
+      }
+      return { outcome: "invited" as const, existingUser, invite, entry };
+    });
+    if (placement.outcome === "already_active" || placement.outcome === "auto_approved") {
+      if (placement.outcome === "auto_approved") {
+        await ensureOrgFollowedForTeam(me.id, teamId);
+        await ensureTeamFollowed(me.id, teamId);
+      }
+      return res.status(200).json({ outcome: placement.outcome, emailSent: null });
+    }
+    if (placement.outcome === "already_pending") {
+      return res.status(200).json({
+        outcome: "already_pending", emailSent: null,
+        acceptUrl: buildInviteAcceptUrl(placement.invite!.token),
+      });
+    }
+    const { invite, existingUser, entry } = placement;
 
     // If a Kinectem account already exists for this email, fan out an
     // in-app notification so they (and their linked guardian, if any) can
@@ -1092,58 +1161,13 @@ router.post(
     // pick the actual player via the existing chooser. No roster row,
     // team-follow, or org-follow is created until the chooser completes —
     // this aligns the existing-account fast path with the email-link flow.
-    const [existingUser] = await db
-      .select()
-      .from(users)
-      .where(eq(users.email, email.toLowerCase()))
-      .limit(1);
     // Task #654 — report the email-send outcome to the coach. `null` means
     // no email was attempted (the invitee already has a Kinectem account and
     // was reached via an in-app notification instead); `true`/`false` only
     // apply to the no-account branch where we actually try to send.
     let emailSent: boolean | null = null;
     if (existingUser && dbRole === "coach") {
-      const [existingEntry] = await db
-        .select()
-        .from(rosterEntries)
-        .where(
-          and(
-            eq(rosterEntries.teamId, teamId),
-            eq(rosterEntries.userId, existingUser.id),
-          ),
-        )
-        .limit(1);
-      // Task #646 — only a genuinely active/accepted membership should
-      // short-circuit placement. A leftover `pending` (or `declined`)
-      // entry — e.g. from a previously revoked invite — must NOT block a
-      // fresh invite: reuse that row and re-fire the notification +
-      // auto-follow so the recipient actually hears about the re-invite.
-      if (!existingEntry || existingEntry.status !== "accepted") {
-        let entry = existingEntry;
-        if (entry) {
-          [entry] = await db
-            .update(rosterEntries)
-            .set({
-              role: dbRole,
-              status: "pending",
-              position: positionRaw === "coach" ? null : positionRaw,
-              invitedById: me.id,
-            })
-            .where(eq(rosterEntries.id, entry.id))
-            .returning();
-        } else {
-          [entry] = await db
-            .insert(rosterEntries)
-            .values({
-              teamId,
-              userId: existingUser.id,
-              role: dbRole,
-              status: "pending",
-              position: positionRaw === "coach" ? null : positionRaw,
-              invitedById: me.id,
-            })
-            .returning();
-        }
+      if (entry) {
         await ensureOrgFollowedForTeam(existingUser.id, teamId);
         // Task #434 — auto-follow on the invited user's own behalf in
         // addition to the existing parent-side follow. Best-effort.
@@ -1274,6 +1298,7 @@ router.post(
     // (mirrors the `hasOwner`/`myClaimStatus` pattern).
     res.status(201).json({
       ...toInvite(invite, me),
+      outcome: "invited",
       emailSent,
       acceptUrl: buildInviteAcceptUrl(invite.token),
     });
@@ -1432,6 +1457,19 @@ router.post(
       return apiError(res, 409, "Invite has no email to re-send", {
         code: "invite_no_email",
       });
+    if (invite.role === "coach") {
+      const accepted = await db.transaction(async (tx) => {
+        await lockRosterTeam(tx, teamId as string);
+        const account = await findAccountByEmail(tx, invite.invitedEmail!);
+        const entry = account && await findRosterEntry(tx, teamId as string, account.id);
+        if (entry?.status !== "accepted") return false;
+        await revokeRedundantInvites(tx, teamId as string, invite.invitedEmail!);
+        return true;
+      });
+      if (accepted) return apiError(res, 409, "Already active on this team", {
+        code: "already_active",
+      });
+    }
 
     const email = invite.invitedEmail;
     const [existingUser] = await db

@@ -57,7 +57,12 @@ type TeamResult = {
   teamName: string;
   email: string;
   grouped?: boolean;
-  status: "success" | "failed";
+  status: "success" | "already_active" | "auto_approved" | "already_pending" | "failed";
+  outcome?: "invited" | "already_active" | "auto_approved" | "already_pending";
+  teamOutcomes?: Array<{
+    teamId: string;
+    outcome: "invited" | "already_active" | "auto_approved" | "already_pending";
+  }>;
   reason?: string;
 };
 
@@ -195,8 +200,22 @@ export function CoachSetupDialog({
     for (const group of groupCoachInviteAssignments(assignments)) {
       const grouped = group.assignments.length > 1;
       try {
+        let response: {
+          outcome?: "invited" | "already_active" | "auto_approved" | "already_pending";
+          data?: Array<{
+            outcome?: "invited" | "already_active" | "auto_approved" | "already_pending";
+            teamOutcomes?: Array<{
+              teamId: string;
+              outcome: "invited" | "already_active" | "auto_approved" | "already_pending";
+            }>;
+          }>;
+          teamOutcomes?: Array<{
+            teamId: string;
+            outcome: "invited" | "already_active" | "auto_approved" | "already_pending";
+          }>;
+        };
         if (grouped) {
-          await customFetch(`/api/v1/organizations/${orgId}/coach-invites`, {
+          response = await customFetch(`/api/v1/organizations/${orgId}/coach-invites`, {
             method: "POST",
             body: JSON.stringify({
               assignments: group.assignments.map(({ teamId, email }) => ({
@@ -206,16 +225,28 @@ export function CoachSetupDialog({
             }),
           });
         } else {
-          await customFetch(`/api/v1/teams/${group.assignments[0].teamId}/invites`, {
+          response = await customFetch(`/api/v1/teams/${group.assignments[0].teamId}/invites`, {
             method: "POST",
             body: JSON.stringify({ email: group.email, position: "coach" }),
           });
         }
+        const inviteRow = response.data?.[0];
+        const outcome =
+          inviteRow?.outcome ?? response.outcome ?? "invited";
         collected.push({
           teamName: group.assignments.map((a) => a.teamName).join(", "),
           email: group.email,
           grouped,
-          status: "success",
+          status:
+            outcome === "auto_approved"
+              ? "auto_approved"
+              : outcome === "already_active"
+                ? "already_active"
+                : outcome === "already_pending"
+                  ? "already_pending"
+                  : "success",
+          outcome,
+          teamOutcomes: inviteRow?.teamOutcomes ?? response.teamOutcomes,
         });
         invitedStagedIds.push(
           ...stagedIdsForSuccessfulCoachInvite(group.assignments),
@@ -248,25 +279,61 @@ export function CoachSetupDialog({
     await qc.invalidateQueries({ queryKey: ["staged-coaches", orgId] });
     setBusy(false);
     const failed = collected.filter((r) => r.status === "failed").length;
-    const sent = collected.length - failed;
+    const sent = collected.filter((r) =>
+      r.teamOutcomes
+        ? r.teamOutcomes.some((item) => item.outcome === "invited")
+        : r.status === "success",
+    ).length;
+    const countTeamOutcome = (
+      outcome: "auto_approved" | "already_active" | "already_pending",
+      status: TeamResult["status"],
+    ) =>
+      collected.reduce(
+        (count, row) =>
+          count +
+          (row.teamOutcomes
+            ? row.teamOutcomes.filter((item) => item.outcome === outcome).length
+            : row.status === status
+              ? 1
+              : 0),
+        0,
+      );
+    const autoApproved = countTeamOutcome("auto_approved", "auto_approved");
+    const alreadyActive = countTeamOutcome("already_active", "already_active");
+    const alreadyPending = countTeamOutcome("already_pending", "already_pending");
+    const outcomeNotes = [
+      sent > 0 && (autoApproved > 0 || alreadyActive > 0 || alreadyPending > 0)
+        ? `${sent} new invitation${sent === 1 ? "" : "s"} sent.`
+        : "",
+      autoApproved > 0
+        ? "Your team assignment is already approved because you’re an organization admin. You don’t need to accept an invitation."
+        : "",
+      alreadyActive > 0
+        ? `${alreadyActive} coach assignment${alreadyActive === 1 ? " is" : "s are"} already active; no invitation was sent.`
+        : "",
+      alreadyPending > 0
+        ? `${alreadyPending} coach invitation${alreadyPending === 1 ? " is" : "s are"} already pending; no new invitation was sent.`
+        : "",
+    ].filter(Boolean).join(" ");
     toast(
       failed === 0
         ? {
-            title:
-              sent === 1
+            title: autoApproved || alreadyActive || alreadyPending
+              ? `${collected.length} coach assignment${collected.length === 1 ? "" : "s"} processed`
+              : sent === 1
                 ? "Coach invite sent!"
                 : `${sent} coach invites sent!`,
+            description: outcomeNotes || undefined,
           }
         : {
-            title: `${sent} sent, ${failed} failed`,
-            description:
-              "Failed invites stay in this list — reopen coach setup to retry.",
+            title: `${collected.length - failed} completed, ${failed} failed`,
+            description: `${outcomeNotes ? `${outcomeNotes} ` : ""}Failed invites stay in this list — reopen coach setup to retry.`,
             variant: "destructive",
           },
     );
   };
 
-  const done = !busy && results !== null;
+    const done = !busy && results !== null;
 
   return (
     <Dialog open={open} onOpenChange={(v) => !busy && onOpenChange(v)}>
@@ -362,7 +429,7 @@ export function CoachSetupDialog({
                 key={`${r.email}-${i}`}
                 className="flex items-start gap-2 px-3 py-2 text-xs"
               >
-                {r.status === "success" ? (
+                {r.status !== "failed" ? (
                   <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0 mt-0.5" />
                 ) : (
                   <XCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
@@ -374,11 +441,41 @@ export function CoachSetupDialog({
                       → {r.teamName}
                     </span>
                   </p>
-                  {r.status === "success" && r.grouped && (
+                  {r.status === "success" && r.grouped && !r.teamOutcomes && (
                     <p className="text-muted-foreground">
                       One shared invitation covers these teams
                     </p>
                   )}
+                  {r.status === "already_active" && !r.teamOutcomes && (
+                    <p className="text-muted-foreground">
+                      Already active on the roster — no invite sent.
+                    </p>
+                  )}
+                  {r.status === "auto_approved" && !r.teamOutcomes && (
+                    <p className="text-muted-foreground">
+                      Your team assignment is already approved because you’re an
+                      organization admin. You don’t need to accept an invitation.
+                    </p>
+                  )}
+                  {r.status === "already_pending" && !r.teamOutcomes && (
+                    <p className="text-muted-foreground">
+                      An invitation is already pending — no new invitation was sent.
+                    </p>
+                  )}
+                  {r.teamOutcomes?.map((teamOutcome) => {
+                    const teamName = teams.find((team) => team.id === teamOutcome.teamId)?.name ?? teamOutcome.teamId;
+                    return (
+                      <p key={teamOutcome.teamId} className="text-muted-foreground">
+                        {teamName}: {teamOutcome.outcome === "auto_approved"
+                          ? "Your team assignment is already approved because you’re an organization admin. You don’t need to accept an invitation."
+                          : teamOutcome.outcome === "already_active"
+                            ? "Already active on the roster — no invite sent."
+                            : teamOutcome.outcome === "already_pending"
+                              ? "Invitation already pending — no new invitation sent."
+                              : "Invitation sent."}
+                      </p>
+                    );
+                  })}
                   {r.status === "failed" && r.reason && (
                     <p className="text-muted-foreground">{r.reason}</p>
                   )}

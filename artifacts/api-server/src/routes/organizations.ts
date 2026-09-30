@@ -29,6 +29,7 @@ import {
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
+import { findAccountByEmail, findPendingInvite, findRosterEntry, isOrganizationManager, lockRosterTeam, revokeRedundantInvites } from "../lib/roster-invite-consistency";
 import { asyncHandler } from "../lib/async-handler";
 import {
   getActiveGuardianIds,
@@ -751,6 +752,7 @@ router.post(
     }
 
     const actorName = me.isMinor ? maskedDisplayName(me) : displayName(me);
+    const actorIsOrgManager = await isOrganizationManager(me.id, orgId);
     const outcomes: Array<{
       email: string;
       teamIds: string[];
@@ -759,45 +761,55 @@ router.post(
       notified: boolean;
       acceptUrl?: string;
       groupId?: string;
+      outcome?: string;
+      teamOutcomes?: Array<{ teamId: string; outcome: string }>;
     }> = [];
 
     for (const [email, groupedAssignments] of byEmail) {
       const groupTeamIds = groupedAssignments.map((a) => a.teamId);
       const groupTeamNames = groupTeamIds.map((id) => teamById.get(id)!.name);
-      const [existingUser] = await db
-        .select()
-        .from(users)
-        .where(eq(users.email, email))
-        .limit(1);
+      const existingUser = await db.transaction((tx) => findAccountByEmail(tx, email));
 
       if (existingUser) {
-        // Preserve the existing-account path: each team gets its familiar
-        // pending row + in-app roster notification, but the browser only made
-        // one manager action for the whole email group.
         const notificationRows: Array<{ teamId: string; entryId: string }> = [];
+        const approvedTeams: string[] = [];
+        const teamOutcomes: Array<{ teamId: string; outcome: string }> = [];
         await db.transaction(async (tx) => {
+          // Deterministic order prevents deadlocks on overlapping grouped sends.
+          for (const id of [...groupTeamIds].sort()) await lockRosterTeam(tx, id);
           for (const assignment of groupedAssignments) {
+            const existingEntry = await findRosterEntry(tx, assignment.teamId, existingUser.id);
+            if (existingEntry?.status === "accepted") {
+              await revokeRedundantInvites(tx, assignment.teamId, email);
+              teamOutcomes.push({ teamId: assignment.teamId, outcome: "already_active" });
+              continue;
+            }
+            if (existingUser.id === me.id && actorIsOrgManager) {
+              if (existingEntry) {
+                await tx.update(rosterEntries).set({
+                  role: "coach", status: "accepted", position: null, invitedById: me.id,
+                }).where(eq(rosterEntries.id, existingEntry.id));
+              } else {
+                await tx.insert(rosterEntries).values({
+                  teamId: assignment.teamId, userId: me.id, role: "coach",
+                  status: "accepted", position: null, invitedById: me.id,
+                });
+              }
+              await revokeRedundantInvites(tx, assignment.teamId, email);
+              approvedTeams.push(assignment.teamId);
+              teamOutcomes.push({ teamId: assignment.teamId, outcome: "auto_approved" });
+              continue;
+            }
+            if (await findPendingInvite(tx, assignment.teamId, email, "coach")) {
+              teamOutcomes.push({ teamId: assignment.teamId, outcome: "already_pending" });
+              continue;
+            }
             await tx.insert(rosterInvites).values({
-              token: generateToken(),
-              teamId: assignment.teamId,
-              invitedEmail: email,
-              role: "coach",
-              position: null,
-              invitedById: me.id,
+              token: generateToken(), teamId: assignment.teamId, invitedEmail: email,
+              role: "coach", position: null, invitedById: me.id,
             });
-            const [existingEntry] = await tx
-              .select()
-              .from(rosterEntries)
-              .where(
-                and(
-                  eq(rosterEntries.teamId, assignment.teamId),
-                  eq(rosterEntries.userId, existingUser.id),
-                ),
-              )
-              .limit(1);
             let entry = existingEntry;
-            if (!entry || entry.status !== "accepted") {
-              if (entry) {
+            if (entry) {
                 [entry] = await tx
                   .update(rosterEntries)
                   .set({
@@ -808,7 +820,7 @@ router.post(
                   })
                   .where(eq(rosterEntries.id, entry.id))
                   .returning();
-              } else {
+            } else {
                 [entry] = await tx
                   .insert(rosterEntries)
                   .values({
@@ -820,13 +832,17 @@ router.post(
                     invitedById: me.id,
                   })
                   .returning();
-              }
             }
             if (entry) {
               notificationRows.push({ teamId: assignment.teamId, entryId: entry.id });
             }
+            teamOutcomes.push({ teamId: assignment.teamId, outcome: "invited" });
           }
         });
+        for (const id of approvedTeams) {
+          await ensureOrgFollowedForTeam(me.id, id);
+          await ensureTeamFollowed(me.id, id);
+        }
         for (const row of notificationRows) {
           const team = teamById.get(row.teamId)!;
           await ensureOrgFollowedForTeam(existingUser.id, row.teamId);
@@ -854,13 +870,30 @@ router.post(
           teamIds: groupTeamIds,
           teamNames: groupTeamNames,
           emailSent: null,
-          notified: true,
+          notified: notificationRows.length > 0,
+          outcome: notificationRows.length ? "invited"
+            : approvedTeams.length ? "auto_approved"
+              : teamOutcomes.some((row) => row.outcome === "already_pending")
+                ? "already_pending" : "already_active",
+          teamOutcomes,
         });
         continue;
       }
 
       const token = generateToken();
-      const [group] = await db.transaction(async (tx) => {
+      const { group, newAssignments, teamOutcomes } = await db.transaction(async (tx) => {
+        for (const id of [...groupTeamIds].sort()) await lockRosterTeam(tx, id);
+        const newAssignments: typeof groupedAssignments = [];
+        const teamOutcomes: Array<{ teamId: string; outcome: string }> = [];
+        for (const assignment of groupedAssignments) {
+          if (await findPendingInvite(tx, assignment.teamId, email, "coach")) {
+            teamOutcomes.push({ teamId: assignment.teamId, outcome: "already_pending" });
+          } else {
+            newAssignments.push(assignment);
+            teamOutcomes.push({ teamId: assignment.teamId, outcome: "invited" });
+          }
+        }
+        if (!newAssignments.length) return { group: null, newAssignments, teamOutcomes };
         const [created] = await tx
           .insert(coachInviteGroups)
           .values({
@@ -872,7 +905,7 @@ router.post(
           })
           .returning();
         await tx.insert(rosterInvites).values(
-          groupedAssignments.map((assignment) => ({
+          newAssignments.map((assignment) => ({
             token: generateToken(),
             teamId: assignment.teamId,
             invitedEmail: email,
@@ -882,15 +915,22 @@ router.post(
             coachInviteGroupId: created.id,
           })),
         );
-        return [created];
+        return { group: created, newAssignments, teamOutcomes };
       });
+      if (!group) {
+        outcomes.push({
+          email, teamIds: groupTeamIds, teamNames: groupTeamNames,
+          emailSent: null, notified: false, outcome: "already_pending", teamOutcomes,
+        });
+        continue;
+      }
 
       let emailSent = false;
       try {
         await sendMultiTeamStaffInviteEmail(email, {
           inviterName: actorName,
           organizationName: organization.name,
-          teamNames: groupTeamNames,
+          teamNames: newAssignments.map((assignment) => teamById.get(assignment.teamId)!.name),
           roleLabel: staffInviteRoleLabel("coach"),
           token,
           groupId: group.id,
@@ -940,6 +980,8 @@ router.post(
         notified: false,
         acceptUrl: buildInviteAcceptUrl(token),
         groupId: group.id,
+        outcome: "invited",
+        teamOutcomes,
       });
     }
 

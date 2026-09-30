@@ -54,6 +54,7 @@ import {
   Copy,
   AlertTriangle,
   FileUp,
+  Clock,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getInitials } from "@/lib/format";
@@ -87,6 +88,7 @@ type ParsedRow = {
 type SendOutcome = {
   email: string;
   status: "success" | "skipped" | "failed";
+  outcome?: "invited" | "already_active" | "auto_approved" | "already_pending";
   reason?: string;
   // Task #654 — for successful sends, whether the invite email actually went
   // out (true), failed to send (false), or was not attempted because the
@@ -164,6 +166,7 @@ export function InviteRosterDialog({
     email: string;
     emailSent: boolean | null;
     acceptUrl: string;
+    outcome: "invited" | "already_active" | "auto_approved" | "already_pending";
   } | null>(null);
   const [resultCopied, setResultCopied] = useState(false);
   const [resultMsgCopied, setResultMsgCopied] = useState(false);
@@ -377,7 +380,7 @@ export function InviteRosterDialog({
 
   const onAddUser = async (u: SearchUser) => {
     try {
-      await addMember.mutateAsync({
+      const resp = await addMember.mutateAsync({
         teamId,
         data: {
           userId: u.id,
@@ -385,7 +388,18 @@ export function InviteRosterDialog({
           position,
         },
       });
-      toast({ title: `Added ${u.displayName} (pending acceptance)` });
+      const outcome = (resp as { outcome?: string })?.outcome;
+      toast(
+        outcome === "auto_approved"
+          ? {
+              title: `${u.displayName} added`,
+              description:
+                "Your team assignment is already approved because you’re an organization admin. You don’t need to accept an invitation.",
+            }
+          : outcome === "already_active"
+            ? { title: `${u.displayName} is already on the roster` }
+            : { title: `Added ${u.displayName} (pending acceptance)` },
+      );
       await invalidate();
       onOpenChange(false);
     } catch {
@@ -415,6 +429,7 @@ export function InviteRosterDialog({
         emailSent?: boolean | null;
         acceptUrl?: string;
         token?: string;
+        outcome?: "invited" | "already_active" | "auto_approved" | "already_pending";
       };
       const acceptUrl =
         extra.acceptUrl ??
@@ -425,6 +440,7 @@ export function InviteRosterDialog({
         email: email.trim(),
         emailSent: extra.emailSent ?? null,
         acceptUrl,
+        outcome: extra.outcome ?? "invited",
       });
       await invalidate();
     } catch {
@@ -513,10 +529,12 @@ export function InviteRosterDialog({
           const extra = resp as {
             emailSent?: boolean | null;
             acceptUrl?: string;
+            outcome?: "invited" | "already_active" | "auto_approved" | "already_pending";
           };
           sent.push({
             email: addr,
             status: "success",
+            outcome: extra.outcome ?? "invited",
             emailSent: extra.emailSent ?? null,
             acceptUrl: extra.acceptUrl,
           });
@@ -626,10 +644,15 @@ export function InviteRosterDialog({
             seasonId,
             position: row.position,
           });
-          const extra = resp as { emailSent?: boolean | null; acceptUrl?: string };
+          const extra = resp as {
+            emailSent?: boolean | null;
+            acceptUrl?: string;
+            outcome?: "invited" | "already_active" | "auto_approved" | "already_pending";
+          };
           sent.push({
             email: row.email,
             status: "success",
+            outcome: extra.outcome ?? "invited",
             emailSent: extra.emailSent ?? null,
             acceptUrl: extra.acceptUrl,
           });
@@ -681,14 +704,15 @@ export function InviteRosterDialog({
     return null;
   };
 
-  const successCount = bulkResults?.filter((r) => r.status === "success").length ?? 0;
+  const successCount =
+    bulkResults?.filter((r) => r.status === "success" && (r.outcome ?? "invited") === "invited").length ?? 0;
   const skippedCount = bulkResults?.filter((r) => r.status === "skipped").length ?? 0;
   const failedCount = bulkResults?.filter((r) => r.status === "failed").length ?? 0;
   // Task #654 — invites that were created but whose email did NOT send. These
   // need manual follow-up (copy the link), so surface them explicitly.
   const undelivered =
     bulkResults?.filter(
-      (r) => r.status === "success" && r.emailSent === false,
+      (r) => r.status === "success" && (r.outcome ?? "invited") === "invited" && r.emailSent === false,
     ) ?? [];
 
   return (
@@ -964,6 +988,40 @@ export function InviteRosterDialog({
           <TabsContent value="email" className="mt-4 space-y-4">
             {inviteResult ? (
               <div className="space-y-3" data-testid="invite-result-panel">
+                {inviteResult.outcome === "auto_approved" && (
+                  <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
+                    <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" />
+                    <p>
+                      <span className="font-bold">Team assignment approved.</span>{" "}
+                      Your team assignment is already approved because you’re an
+                      organization admin. You don’t need to accept an invitation.
+                    </p>
+                  </div>
+                )}
+                {inviteResult.outcome === "already_active" && (
+                  <div className="flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900">
+                    <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" />
+                    <p>
+                      <span className="font-bold">
+                        {inviteResult.email} is already on this team.
+                      </span>{" "}
+                      No invitation was sent.
+                    </p>
+                  </div>
+                )}
+                {inviteResult.outcome === "already_pending" && (
+                  <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                    <Clock className="w-4 h-4 mt-0.5 shrink-0" />
+                    <p>
+                      <span className="font-bold">
+                        An invitation for {inviteResult.email} is already pending.
+                      </span>{" "}
+                      No new invitation was sent.
+                    </p>
+                  </div>
+                )}
+                {inviteResult.outcome === "invited" && (
+                  <>
                 {inviteResult.emailSent === true && (
                   <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
                     <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" />
@@ -1078,6 +1136,8 @@ export function InviteRosterDialog({
                     {shortInviteMessage(inviteResult.acceptUrl)}
                   </pre>
                 </div>
+                  </>
+                )}
 
                 <DialogFooter>
                   <Button
@@ -1221,10 +1281,16 @@ export function InviteRosterDialog({
                       className="flex items-center gap-2 p-2"
                       data-testid={`bulk-result-row-${r.status}`}
                     >
-                      {r.status === "success" && r.emailSent !== false && (
+                      {r.status === "success" && (r.outcome ?? "invited") === "invited" && r.emailSent !== false && (
                         <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                       )}
-                      {r.status === "success" && r.emailSent === false && (
+                      {r.status === "success" && (r.outcome === "already_active" || r.outcome === "auto_approved") && (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      )}
+                      {r.status === "success" && r.outcome === "already_pending" && (
+                        <Clock className="w-4 h-4 text-amber-600 shrink-0" />
+                      )}
+                      {r.status === "success" && (r.outcome ?? "invited") === "invited" && r.emailSent === false && (
                         <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
                       )}
                       {r.status === "skipped" && (
@@ -1234,8 +1300,19 @@ export function InviteRosterDialog({
                         <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
                       )}
                       <span className="flex-1 truncate font-mono text-xs">{r.email}</span>
-                      {r.status === "success" && r.emailSent === false && (
+                      {r.status === "success" && (r.outcome ?? "invited") === "invited" && r.emailSent === false && (
                         <span className="text-[11px] text-amber-700">Email not delivered</span>
+                      )}
+                      {r.status === "success" && r.outcome === "already_active" && (
+                        <span className="text-[11px] text-muted-foreground">Already on roster — no invite sent</span>
+                      )}
+                      {r.status === "success" && r.outcome === "auto_approved" && (
+                        <span className="text-[11px] text-emerald-700">
+                          Your team assignment is already approved because you’re an organization admin. You don’t need to accept an invitation.
+                        </span>
+                      )}
+                      {r.status === "success" && r.outcome === "already_pending" && (
+                        <span className="text-[11px] text-amber-700">Invitation already pending — no new invitation sent</span>
                       )}
                       {r.reason && (
                         <span className="text-[11px] text-muted-foreground">{r.reason}</span>
@@ -1415,7 +1492,7 @@ export function InviteRosterDialog({
                 <div className="grid grid-cols-3 gap-2 text-center">
                   <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
                     <p className="text-2xl font-black text-emerald-700">
-                      {csvResults.filter((r) => r.status === "success").length}
+                      {csvResults.filter((r) => r.status === "success" && (r.outcome ?? "invited") === "invited").length}
                     </p>
                     <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Invited</p>
                   </div>
@@ -1439,8 +1516,14 @@ export function InviteRosterDialog({
                       className="flex items-center gap-2 p-2"
                       data-testid={`csv-result-row-${r.status}`}
                     >
-                      {r.status === "success" && r.emailSent !== false && (
+                      {r.status === "success" && (r.outcome ?? "invited") === "invited" && r.emailSent !== false && (
                         <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      )}
+                      {r.status === "success" && (r.outcome === "already_active" || r.outcome === "auto_approved") && (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      )}
+                      {r.status === "success" && r.outcome === "already_pending" && (
+                        <Clock className="w-4 h-4 text-amber-600 shrink-0" />
                       )}
                       {r.status === "success" && r.emailSent === false && (
                         <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
@@ -1452,7 +1535,18 @@ export function InviteRosterDialog({
                         <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
                       )}
                       <span className="flex-1 truncate font-mono text-xs">{r.email}</span>
-                      {r.status === "success" && r.emailSent === false && r.acceptUrl && (
+                      {r.status === "success" && r.outcome === "already_active" && (
+                        <span className="text-[11px] text-muted-foreground">Already on roster — no invite sent</span>
+                      )}
+                      {r.status === "success" && r.outcome === "auto_approved" && (
+                        <span className="text-[11px] text-emerald-700">
+                          Your team assignment is already approved because you’re an organization admin. You don’t need to accept an invitation.
+                        </span>
+                      )}
+                      {r.status === "success" && r.outcome === "already_pending" && (
+                        <span className="text-[11px] text-amber-700">Invitation already pending — no new invitation sent</span>
+                      )}
+                      {r.status === "success" && (r.outcome ?? "invited") === "invited" && r.emailSent === false && r.acceptUrl && (
                         <Button
                           type="button"
                           size="sm"
