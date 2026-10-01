@@ -45,6 +45,7 @@ import {
   buildFirstRecapMilestoneEmail,
   buildInviteAcceptUrl,
   sendMultiTeamStaffInviteEmail,
+  sendStaffInviteEmail,
 } from "../lib/email";
 import { dispatchNotificationEmail } from "../lib/notification-email";
 import {
@@ -753,6 +754,7 @@ router.post(
 
     const actorName = me.isMinor ? maskedDisplayName(me) : displayName(me);
     const actorIsOrgManager = await isOrganizationManager(me.id, orgId);
+    const resendPending = req.body?.resendPending === true;
     const outcomes: Array<{
       email: string;
       teamIds: string[];
@@ -763,6 +765,7 @@ router.post(
       groupId?: string;
       outcome?: string;
       teamOutcomes?: Array<{ teamId: string; outcome: string }>;
+      acceptUrls?: Array<{ teamId: string; url: string }>;
     }> = [];
 
     for (const [email, groupedAssignments] of byEmail) {
@@ -771,7 +774,8 @@ router.post(
       const existingUser = await db.transaction((tx) => findAccountByEmail(tx, email));
 
       if (existingUser) {
-        const notificationRows: Array<{ teamId: string; entryId: string }> = [];
+        const notificationRows: Array<{ teamId: string; entryId?: string; token?: string }> = [];
+        const emailRows: Array<{ teamId: string; id: string; token: string }> = [];
         const approvedTeams: string[] = [];
         const teamOutcomes: Array<{ teamId: string; outcome: string }> = [];
         await db.transaction(async (tx) => {
@@ -800,14 +804,24 @@ router.post(
               teamOutcomes.push({ teamId: assignment.teamId, outcome: "auto_approved" });
               continue;
             }
-            if (await findPendingInvite(tx, assignment.teamId, email, "coach")) {
-              teamOutcomes.push({ teamId: assignment.teamId, outcome: "already_pending" });
+            const pending = await findPendingInvite(tx, assignment.teamId, email, "coach");
+            if (pending) {
+              if (resendPending) {
+                emailRows.push({ teamId: assignment.teamId, id: pending.id, token: pending.token });
+                notificationRows.push({
+                  teamId: assignment.teamId,
+                  entryId: existingEntry?.status === "pending" ? existingEntry.id : undefined,
+                  token: pending.token,
+                });
+              }
+              teamOutcomes.push({ teamId: assignment.teamId, outcome: resendPending ? "reminded" : "already_pending" });
               continue;
             }
-            await tx.insert(rosterInvites).values({
+            const [invite] = await tx.insert(rosterInvites).values({
               token: generateToken(), teamId: assignment.teamId, invitedEmail: email,
               role: "coach", position: null, invitedById: me.id,
-            });
+            }).returning();
+            emailRows.push({ teamId: assignment.teamId, id: invite.id, token: invite.token });
             let entry = existingEntry;
             if (entry) {
                 [entry] = await tx
@@ -845,35 +859,66 @@ router.post(
         }
         for (const row of notificationRows) {
           const team = teamById.get(row.teamId)!;
-          await ensureOrgFollowedForTeam(existingUser.id, row.teamId);
-          try {
-            await ensureTeamFollowed(existingUser.id, row.teamId);
-            for (const guardianId of await getActiveGuardianIds(existingUser.id)) {
-              await ensureTeamFollowedAsGuardian(guardianId, row.teamId);
+          // A user may have signed up after an invite was created for an
+          // unknown address. Without a pending roster row, use the chooser
+          // link and don't follow their team before they accept.
+          if (row.entryId) {
+            await ensureOrgFollowedForTeam(existingUser.id, row.teamId);
+            try {
+              await ensureTeamFollowed(existingUser.id, row.teamId);
+              for (const guardianId of await getActiveGuardianIds(existingUser.id)) {
+                await ensureTeamFollowedAsGuardian(guardianId, row.teamId);
+              }
+            } catch (err) {
+              req.log.warn(
+                { err, userId: existingUser.id, teamId: row.teamId },
+                "auto-follow on grouped coach invite failed",
+              );
             }
-          } catch (err) {
-            req.log.warn(
-              { err, userId: existingUser.id, teamId: row.teamId },
-              "auto-follow on grouped coach invite failed",
-            );
           }
           await db.insert(notifications).values({
             userId: existingUser.id,
             kind: "roster_invite",
             message: `${actorName} invited you to ${team.name}. Tap to accept or decline.`,
-            link: `/teams/${row.teamId}?roster=1&entryId=${row.entryId}`,
+            link: row.entryId
+              ? `/teams/${row.teamId}?roster=1&entryId=${row.entryId}`
+              : `/invites/${row.token}`,
             actorUserId: me.id,
           });
+        }
+        let emailSent: boolean | null = emailRows.length ? true : null;
+        for (const row of emailRows) {
+          try {
+            await sendStaffInviteEmail(email, {
+              inviterName: actorName,
+              teamName: teamById.get(row.teamId)!.name,
+              roleLabel: staffInviteRoleLabel("coach"),
+              token: row.token,
+              inviteId: row.id,
+            });
+            await db.update(rosterInvites).set({ deliveryStatus: "sent", deliveryReason: null })
+              .where(eq(rosterInvites.id, row.id));
+          } catch (err) {
+            emailSent = false;
+            req.log.warn({ err, orgId, teamId: row.teamId }, "bulk coach email send failed");
+            await db.update(rosterInvites).set({
+              deliveryStatus: "unknown", deliveryReason: "Unable to send invite email",
+            }).where(eq(rosterInvites.id, row.id));
+          }
         }
         outcomes.push({
           email,
           teamIds: groupTeamIds,
           teamNames: groupTeamNames,
-          emailSent: null,
+          emailSent,
           notified: notificationRows.length > 0,
+          acceptUrls: emailRows.map((row) => ({ teamId: row.teamId, url: buildInviteAcceptUrl(row.token) })),
+          acceptUrl: emailRows.length === 1 ? buildInviteAcceptUrl(emailRows[0].token) : undefined,
           outcome: notificationRows.length ? "invited"
             : approvedTeams.length ? "auto_approved"
-              : teamOutcomes.some((row) => row.outcome === "already_pending")
+              : teamOutcomes.some((row) => row.outcome === "reminded")
+                ? "reminded"
+                : teamOutcomes.some((row) => row.outcome === "already_pending")
                 ? "already_pending" : "already_active",
           teamOutcomes,
         });
@@ -881,19 +926,23 @@ router.post(
       }
 
       const token = generateToken();
-      const { group, newAssignments, teamOutcomes } = await db.transaction(async (tx) => {
+      const { group, newAssignments, teamOutcomes, pendingRows } = await db.transaction(async (tx) => {
         for (const id of [...groupTeamIds].sort()) await lockRosterTeam(tx, id);
         const newAssignments: typeof groupedAssignments = [];
+        const pendingRows: Array<{ teamId: string; id: string; token: string }> = [];
         const teamOutcomes: Array<{ teamId: string; outcome: string }> = [];
         for (const assignment of groupedAssignments) {
-          if (await findPendingInvite(tx, assignment.teamId, email, "coach")) {
-            teamOutcomes.push({ teamId: assignment.teamId, outcome: "already_pending" });
+          const pending = await findPendingInvite(tx, assignment.teamId, email, "coach");
+          if (pending) {
+            if (resendPending)
+              pendingRows.push({ teamId: assignment.teamId, id: pending.id, token: pending.token });
+            teamOutcomes.push({ teamId: assignment.teamId, outcome: resendPending ? "reminded" : "already_pending" });
           } else {
             newAssignments.push(assignment);
             teamOutcomes.push({ teamId: assignment.teamId, outcome: "invited" });
           }
         }
-        if (!newAssignments.length) return { group: null, newAssignments, teamOutcomes };
+        if (!newAssignments.length) return { group: null, newAssignments, teamOutcomes, pendingRows };
         const [created] = await tx
           .insert(coachInviteGroups)
           .values({
@@ -915,12 +964,32 @@ router.post(
             coachInviteGroupId: created.id,
           })),
         );
-        return { group: created, newAssignments, teamOutcomes };
+        return { group: created, newAssignments, teamOutcomes, pendingRows };
       });
+      let reminderSent: boolean | null = pendingRows.length ? true : null;
+      for (const row of pendingRows) {
+        try {
+          await sendStaffInviteEmail(email, {
+            inviterName: actorName, teamName: teamById.get(row.teamId)!.name,
+            roleLabel: staffInviteRoleLabel("coach"), token: row.token, inviteId: row.id,
+          });
+          await db.update(rosterInvites).set({ deliveryStatus: "sent", deliveryReason: null })
+            .where(eq(rosterInvites.id, row.id));
+        } catch (err) {
+          reminderSent = false;
+          req.log.warn({ err, orgId, teamId: row.teamId }, "bulk coach reminder email failed");
+          await db.update(rosterInvites).set({
+            deliveryStatus: "unknown", deliveryReason: "Unable to send invite email",
+          }).where(eq(rosterInvites.id, row.id));
+        }
+      }
       if (!group) {
         outcomes.push({
           email, teamIds: groupTeamIds, teamNames: groupTeamNames,
-          emailSent: null, notified: false, outcome: "already_pending", teamOutcomes,
+          emailSent: reminderSent, notified: false,
+          outcome: pendingRows.length ? "reminded" : "already_pending", teamOutcomes,
+          acceptUrls: pendingRows.map((row) => ({ teamId: row.teamId, url: buildInviteAcceptUrl(row.token) })),
+          acceptUrl: pendingRows.length === 1 ? buildInviteAcceptUrl(pendingRows[0].token) : undefined,
         });
         continue;
       }
@@ -976,9 +1045,10 @@ router.post(
         email,
         teamIds: groupTeamIds,
         teamNames: groupTeamNames,
-        emailSent,
+        emailSent: reminderSent === false ? false : emailSent,
         notified: false,
         acceptUrl: buildInviteAcceptUrl(token),
+        acceptUrls: pendingRows.map((row) => ({ teamId: row.teamId, url: buildInviteAcceptUrl(row.token) })),
         groupId: group.id,
         outcome: "invited",
         teamOutcomes,

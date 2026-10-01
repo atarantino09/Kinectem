@@ -66,6 +66,7 @@ import {
   type PostKind,
 } from "../lib/spec-helpers";
 import { getOrCreateTeamJoinLink } from "../lib/team-join-link";
+import { findRosterEntry, lockRosterTeam } from "../lib/roster-invite-consistency";
 import {
   loadPostStats,
   statsFor,
@@ -2230,17 +2231,41 @@ router.post(
       });
     }
 
-    const [entry] = await db
-      .insert(rosterEntries)
-      .values({
-        teamId: invite.teamId,
-        userId: me.id,
-        role: invite.role,
-        status: "accepted",
-        position: invite.position,
-        invitedById: invite.invitedById,
-      })
-      .returning();
+    if (invite.role === "coach" && invite.invitedEmail &&
+        invite.invitedEmail.trim().toLowerCase() !== me.email?.trim().toLowerCase()) {
+      return apiError(res, 403, "This invite is for a different email address");
+    }
+    const entry = await db.transaction(async (tx) => {
+      // Group links and individual reminder links must serialize with one
+      // another. A withdrawn group must never be granted through a child link.
+      if (invite.coachInviteGroupId) {
+        const [group] = await tx.select().from(coachInviteGroups)
+          .where(eq(coachInviteGroups.id, invite.coachInviteGroupId)).for("update");
+        if (!group || group.status !== "pending") return null;
+      }
+      await lockRosterTeam(tx, invite.teamId);
+      const [live] = await tx.select().from(rosterInvites)
+        .where(eq(rosterInvites.id, invite.id)).for("update");
+      const [team] = await tx.select().from(teams).where(eq(teams.id, invite.teamId));
+      if (!live || live.status !== "pending" || !team || team.archivedAt) return null;
+      const existing = await findRosterEntry(tx, invite.teamId, me.id);
+      let acceptedEntry = existing;
+      if (existing?.status === "pending") {
+        [acceptedEntry] = await tx.update(rosterEntries).set({
+          role: invite.role, status: "accepted", position: invite.position,
+          invitedById: invite.invitedById,
+        }).where(eq(rosterEntries.id, existing.id)).returning();
+      } else if (!existing || existing.status !== "accepted" || existing.role !== invite.role) {
+        [acceptedEntry] = await tx.insert(rosterEntries).values({
+          teamId: invite.teamId, userId: me.id, role: invite.role,
+          status: "accepted", position: invite.position, invitedById: invite.invitedById,
+        }).returning();
+      }
+      await tx.update(rosterInvites).set({ status: "accepted" })
+        .where(eq(rosterInvites.id, invite.id));
+      return acceptedEntry;
+    });
+    if (!entry) return apiError(res, 409, "Invite no longer available");
     await ensureOrgFollowedForTeam(me.id, invite.teamId);
     // Task #434 — auto-follow the team for the accepter and any linked
     // parent so the team surfaces immediately on their feed/profile.
@@ -2258,10 +2283,6 @@ router.post(
         "auto-follow on token-accept failed",
       );
     }
-    await db
-      .update(rosterInvites)
-      .set({ status: "accepted" })
-      .where(eq(rosterInvites.id, invite.id));
     res.status(201).json(toTeamMember(entry, me));
   }),
 );

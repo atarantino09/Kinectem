@@ -37,10 +37,8 @@ import {
 
 // Task #835 — bulk-invite one coach per existing team from the org page.
 // Lists every active team with an email field; saving fans out to the
-// standard POST /teams/:teamId/invites endpoint with the coach role (email
-// invite for unknown addresses, in-app notification for existing accounts —
-// identical to the single-team flow), then shows per-row outcomes with a
-// copy-link fallback for failed email sends.
+// standard invite endpoints, resending a pending invitation when run again.
+// Account holders receive email as well as their in-app notification.
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -56,25 +54,28 @@ type RowResult = {
   email: string;
   teamIds?: string[];
   grouped?: boolean;
-  // emailed: invite email handed to SendGrid; notified: existing account got
-  // an in-app notification (no email attempted); emailFailed: invite was
-  // created but the email couldn't be sent (copy-link fallback shown);
+  // emailed/reminded: email handed to provider; emailFailed: the email
+  // couldn't be sent (copy-link fallback shown);
   // error: the invite request itself failed.
   status:
     | "emailed"
+    | "reminded"
     | "notified"
     | "emailFailed"
     | "alreadyActive"
     | "autoApproved"
     | "alreadyPending"
     | "error";
-  outcome?: "invited" | "already_active" | "auto_approved" | "already_pending";
+  outcome?: "invited" | "reminded" | "already_active" | "auto_approved" | "already_pending";
   teamOutcomes?: Array<{
     teamId: string;
-    outcome: "invited" | "already_active" | "auto_approved" | "already_pending";
+    outcome: "invited" | "reminded" | "already_active" | "auto_approved" | "already_pending";
   }>;
   reason?: string;
   acceptUrl?: string;
+  acceptUrls?: Array<{ teamId: string; url: string }>;
+  emailSent?: boolean | null;
+  groupId?: string;
 };
 
 export function BulkAddCoachesDialog({
@@ -194,16 +195,15 @@ export function BulkAddCoachesDialog({
         const resp =
           grouped
             ? await customFetch<{
-                outcome?: "invited" | "already_active" | "auto_approved" | "already_pending";
+                outcome?: RowResult["outcome"];
                 data: Array<{
                   emailSent?: boolean | null;
                   acceptUrl?: string;
+                  acceptUrls?: RowResult["acceptUrls"];
+                  groupId?: string;
                   notified?: boolean;
-                  outcome?: "invited" | "already_active" | "auto_approved" | "already_pending";
-                  teamOutcomes?: Array<{
-                    teamId: string;
-                    outcome: "invited" | "already_active" | "auto_approved" | "already_pending";
-                  }>;
+                  outcome?: RowResult["outcome"];
+                  teamOutcomes?: RowResult["teamOutcomes"];
                 }>;
               }>(`/api/v1/organizations/${orgId}/coach-invites`, {
                 method: "POST",
@@ -212,6 +212,7 @@ export function BulkAddCoachesDialog({
                     teamId,
                     email,
                   })),
+                  resendPending: true,
                 }),
               })
             : await customFetch<Record<string, unknown>>(
@@ -225,30 +226,36 @@ export function BulkAddCoachesDialog({
         // locked openapi.yaml (same pattern as the single-invite flow).
         const groupedResponse = grouped
           ? (resp as {
-              outcome?: "invited" | "already_active" | "auto_approved" | "already_pending";
+              outcome?: RowResult["outcome"];
               data: Array<{
                 emailSent?: boolean | null;
                 acceptUrl?: string;
+                acceptUrls?: RowResult["acceptUrls"];
+                groupId?: string;
                 notified?: boolean;
-                outcome?: "invited" | "already_active" | "auto_approved" | "already_pending";
-                teamOutcomes?: Array<{
-                  teamId: string;
-                  outcome: "invited" | "already_active" | "auto_approved" | "already_pending";
-                }>;
+                outcome?: RowResult["outcome"];
+                teamOutcomes?: RowResult["teamOutcomes"];
               }>;
             })
           : null;
-        const extra = (grouped
+        let extra = (grouped
           ? groupedResponse?.data?.[0] ?? {}
           : resp) as {
           emailSent?: boolean | null;
           acceptUrl?: string;
-          outcome?: "invited" | "already_active" | "auto_approved" | "already_pending";
-          teamOutcomes?: Array<{
-            teamId: string;
-            outcome: "invited" | "already_active" | "auto_approved" | "already_pending";
-          }>;
+          acceptUrls?: RowResult["acceptUrls"];
+          groupId?: string;
+          inviteId?: string;
+          outcome?: RowResult["outcome"];
+          teamOutcomes?: RowResult["teamOutcomes"];
         };
+        if (!grouped && extra.outcome === "already_pending" && extra.inviteId) {
+          const resent = await customFetch<{ emailSent: boolean; acceptUrl: string }>(
+            `/api/v1/teams/${teamIds[0]}/invites/${extra.inviteId}/resend`,
+            { method: "POST" },
+          );
+          extra = { ...extra, ...resent, outcome: "reminded" };
+        }
         const overallOutcome =
           extra.outcome ?? groupedResponse?.outcome ?? "invited";
         const teamOutcomes = extra.teamOutcomes;
@@ -257,6 +264,8 @@ export function BulkAddCoachesDialog({
         const outcome = teamOutcomes
           ? hasTeamInvite
             ? "invited"
+            : teamOutcomes.some((item) => item.outcome === "reminded")
+              ? "reminded"
             : teamOutcomes.some((item) => item.outcome === "already_pending")
               ? "already_pending"
               : teamOutcomes.some((item) => item.outcome === "auto_approved")
@@ -272,20 +281,25 @@ export function BulkAddCoachesDialog({
           email: group.email,
           grouped,
           status:
-            outcome === "auto_approved"
+            extra.emailSent === false
+              ? "emailFailed"
+              : outcome === "auto_approved"
               ? "autoApproved"
               : outcome === "already_active"
                 ? "alreadyActive"
                 : outcome === "already_pending"
                   ? "alreadyPending"
+                  : outcome === "reminded"
+                    ? "reminded"
                   : extra.emailSent === true
                   ? "emailed"
-                  : extra.emailSent === false
-                    ? "emailFailed"
-                    : "notified",
+                  : "notified",
           outcome,
           teamOutcomes,
           acceptUrl: extra.acceptUrl,
+          acceptUrls: extra.acceptUrls,
+          emailSent: extra.emailSent,
+          groupId: extra.groupId,
         });
       } catch (err) {
         collected.push({
@@ -340,6 +354,11 @@ export function BulkAddCoachesDialog({
     const autoApproved = countTeamOutcome("auto_approved", "autoApproved");
     const alreadyActive = countTeamOutcome("already_active", "alreadyActive");
     const alreadyPending = countTeamOutcome("already_pending", "alreadyPending");
+    const reminders = collected.reduce(
+      (count, row) => count + (row.teamOutcomes
+        ? row.teamOutcomes.filter((item) => item.outcome === "reminded").length
+        : row.outcome === "reminded" ? 1 : 0), 0,
+    );
     const outcomeNotes = [
       invitationCount > 0 && (autoApproved > 0 || alreadyActive > 0 || alreadyPending > 0)
         ? `${invitationCount} new invitation${invitationCount === 1 ? "" : "s"} sent.`
@@ -353,22 +372,29 @@ export function BulkAddCoachesDialog({
       alreadyPending > 0
         ? `${alreadyPending} coach invitation${alreadyPending === 1 ? " is" : "s are"} already pending; no new invitation was sent.`
         : "",
+      reminders > 0
+        ? `${reminders} pending invitation${reminders === 1 ? "" : "s"} ${emailFailed ? "had an email reminder attempted" : "emailed again"} without creating a new invitation.`
+        : "",
     ].filter(Boolean).join(" ");
     if (failed === 0 && emailFailed === 0) {
       toast({
         title:
           ok === 1
-            ? autoApproved || alreadyActive || alreadyPending
+            ? reminders && invitationCount === 0 && !autoApproved && !alreadyActive
+              ? "Coach reminder email sent!"
+              : autoApproved || alreadyActive || alreadyPending || reminders
               ? "Coach assignment updated"
               : "Coach invite sent!"
-            : autoApproved || alreadyActive || alreadyPending
+            : reminders && invitationCount === 0 && !autoApproved && !alreadyActive
+              ? `${reminders} coach reminder emails sent!`
+              : autoApproved || alreadyActive || alreadyPending || reminders
               ? `${ok} coach assignments processed`
               : `${ok} coach invitations sent!`,
         description: outcomeNotes || undefined,
       });
     } else if (failed === 0) {
       toast({
-        title: `${invitationCount} invite${invitationCount === 1 ? "" : "s"} created, ${emailFailed} email${emailFailed === 1 ? "" : "s"} didn't send`,
+        title: `${emailFailed} email${emailFailed === 1 ? "" : "s"} didn't send`,
         description: `${outcomeNotes ? `${outcomeNotes} ` : ""}Copy invite links below and share them directly.`,
         variant: "destructive",
       });
@@ -391,7 +417,7 @@ export function BulkAddCoachesDialog({
 
   const done = !busy && results !== null;
   const hasEmailedInvites =
-    results?.some((result) => result.status === "emailed") ?? false;
+    results?.some((result) => result.status === "emailed" || result.status === "reminded") ?? false;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -405,8 +431,9 @@ export function BulkAddCoachesDialog({
           </DialogTitle>
           <DialogDescription>
             Add a coach email next to any team and send every invite at once.
-            Rows left blank are skipped. When the same new coach is assigned to
-            multiple teams, they receive one secure invitation listing them all.
+            Rows left blank are skipped. New coaches assigned to multiple teams
+            receive one secure invitation listing them all. Sending again also
+            emails reminders for pending invitations without creating duplicates.
           </DialogDescription>
         </DialogHeader>
 
@@ -593,10 +620,12 @@ export function BulkAddCoachesDialog({
                       → {r.email}
                     </span>
                   </p>
-                  {r.status === "emailed" && (
+                  {(r.status === "emailed" || r.status === "reminded") && (
                     <p className="text-muted-foreground flex items-center gap-1">
                       <Mail className="w-3 h-3" />{" "}
-                      {r.grouped && (!r.teamOutcomes || r.teamOutcomes.every((item) => item.outcome === "invited"))
+                      {r.status === "reminded"
+                        ? "Reminder email sent for the pending invitation"
+                        : r.groupId && r.teamOutcomes?.every((item) => item.outcome === "invited")
                         ? "One invite email covers these teams"
                         : r.teamOutcomes?.length
                           ? "Invite outcomes are listed per team below"
@@ -605,7 +634,7 @@ export function BulkAddCoachesDialog({
                   )}
                   {r.status === "notified" && (
                     <p className="text-muted-foreground">
-                      Has a Kinectem account — notified in-app
+                      Invite status available in-app; email status not confirmed
                     </p>
                   )}
                   {r.status === "alreadyActive" && !r.teamOutcomes && (
@@ -634,15 +663,20 @@ export function BulkAddCoachesDialog({
                             ? "Already active on the roster — no invite sent."
                             : teamOutcome.outcome === "already_pending"
                               ? "Invitation already pending — no new invitation sent."
-                              : "Invitation sent."}
+                              : teamOutcome.outcome === "reminded"
+                                ? r.emailSent === false
+                                  ? "Reminder attempted; one or more emails did not send."
+                                  : "Reminder email sent — no new invitation created."
+                                : r.emailSent === false
+                                  ? "Invitation created; one or more emails did not send."
+                                  : "Invitation email sent."}
                       </p>
                     );
                   })}
                   {r.status === "emailFailed" && (
                     <div className="space-y-1">
                       <p className="text-muted-foreground">
-                        Invite created, but the email didn't send — share the
-                        link directly:
+                        One or more emails didn't send. The invitation is still pending — share the link directly:
                       </p>
                       {r.acceptUrl && (
                         <Button
@@ -656,6 +690,19 @@ export function BulkAddCoachesDialog({
                           <Copy className="w-3 h-3 mr-1" /> Copy invite link
                         </Button>
                       )}
+                      {r.acceptUrls?.map(({ teamId, url }) => (
+                        <Button
+                          key={teamId}
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-6 px-2 text-[11px] font-bold mr-1"
+                          onClick={() => copyLink(url)}
+                        >
+                          <Copy className="w-3 h-3 mr-1" />
+                          {teams.find((t) => t.id === teamId)?.name ?? "Team"} link
+                        </Button>
+                      ))}
                     </div>
                   )}
                   {r.status === "error" && r.reason && (

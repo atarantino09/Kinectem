@@ -3,6 +3,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import {
   coachInviteGroups,
   db,
+  notifications,
   rosterEntries,
   rosterInvites,
   teams,
@@ -162,6 +163,114 @@ describe("grouped multi-team coach invitations", () => {
     const invites = await db.select().from(rosterInvites)
       .where(inArray(rosterInvites.teamId, [first.body.id, second.body.id]));
     expect(invites.filter((invite) => invite.invitedEmail === user.email)).toHaveLength(0);
+  });
+
+  it("emails registered coaches on bulk add and emails pending invites again without duplicates", async () => {
+    const { agent: manager } = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const { agent: platform } = await loginAs((u) => u.role === "admin");
+    const { orgId } = await twoTeamsInOneOrganization();
+    const teamIds: string[] = [];
+    for (const name of ["Bulk Registered One", "Bulk Registered Two"]) {
+      const team = await platform.post(`/api/v1/organizations/${orgId}/teams`)
+        .send({ name, sport: "Soccer" });
+      expect(team.status).toBe(201);
+      teamIds.push(team.body.id);
+    }
+    const { user, agent: recipient } = await loginAs((u) => u.email === "marcus@kinectem.demo");
+    const assignments = teamIds.map((teamId) => ({ teamId, email: user.email }));
+    const first = await manager.post(`/api/v1/organizations/${orgId}/coach-invites`)
+      .send({ assignments, resendPending: true });
+    expect(first.status).toBe(201);
+    expect(first.body.data[0].emailSent).toBe(true);
+    expect(first.body.data[0].notified).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const invites = await db.select().from(rosterInvites)
+      .where(inArray(rosterInvites.teamId, teamIds));
+    expect(invites).toHaveLength(2);
+    const before = await db.select().from(notifications)
+      .where(and(eq(notifications.userId, user.id), eq(notifications.kind, "roster_invite")));
+    fetchMock.mockClear();
+    const again = await manager.post(`/api/v1/organizations/${orgId}/coach-invites`)
+      .send({ assignments, resendPending: true });
+    expect(again.status).toBe(201);
+    expect(again.body.data[0].emailSent).toBe(true);
+    expect(again.body.data[0].teamOutcomes.map((row: { outcome: string }) => row.outcome))
+      .toEqual(["reminded", "reminded"]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const after = await db.select().from(notifications)
+      .where(and(eq(notifications.userId, user.id), eq(notifications.kind, "roster_invite")));
+    expect(after).toHaveLength(before.length + 2);
+    const finalInvites = await db.select().from(rosterInvites)
+      .where(inArray(rosterInvites.teamId, teamIds));
+    expect(finalInvites.map((invite) => invite.token).sort()).toEqual(invites.map((invite) => invite.token).sort());
+    fetchMock.mockResolvedValue(new Response("unavailable", { status: 500 }));
+    const failed = await manager.post(`/api/v1/organizations/${orgId}/coach-invites`)
+      .send({ assignments, resendPending: true });
+    expect(failed.body.data[0].emailSent).toBe(false);
+    expect(failed.body.data[0].acceptUrls).toHaveLength(2);
+    const stillPending = await db.select().from(rosterInvites)
+      .where(inArray(rosterInvites.teamId, teamIds));
+    expect(stillPending.every((invite) => invite.status === "pending")).toBe(true);
+    const accepted = await recipient.post(`/api/v1/invites/${invites[0].token}/accept`);
+    expect(accepted.status).toBe(201);
+    const entries = await db.select().from(rosterEntries)
+      .where(and(eq(rosterEntries.userId, user.id), inArray(rosterEntries.teamId, teamIds)));
+    expect(entries).toHaveLength(2);
+    expect(entries.filter((entry) => entry.status === "accepted")).toHaveLength(1);
+  });
+
+  it("re-emails pending grouped invitations to new addresses using existing child links", async () => {
+    const { agent: manager } = await loginAs((u) => u.role === "admin");
+    const { orgId, teams: invitedTeams } = await twoTeamsInOneOrganization();
+    const email = `bulk-reminder-${Date.now()}@kinectem.test`;
+    const assignments = invitedTeams.map((team) => ({ teamId: team.id, email }));
+    const first = await manager.post(`/api/v1/organizations/${orgId}/coach-invites`)
+      .send({ assignments, resendPending: true });
+    expect(first.body.data[0].emailSent).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    fetchMock.mockClear();
+    const again = await manager.post(`/api/v1/organizations/${orgId}/coach-invites`)
+      .send({ assignments, resendPending: true });
+    expect(again.body.data[0].outcome).toBe("reminded");
+    expect(again.body.data[0].emailSent).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const { url } of again.body.data[0].acceptUrls as Array<{ url: string }>) {
+      const token = url.split("/").pop();
+      expect((await request(app).get(`/api/v1/invites/${token}`)).status).toBe(200);
+    }
+    const children = await db.select().from(rosterInvites)
+      .where(eq(rosterInvites.invitedEmail, email));
+    expect(children).toHaveLength(2);
+    const groups = await db.select().from(coachInviteGroups)
+      .where(eq(coachInviteGroups.invitedEmail, email));
+    expect(groups).toHaveLength(1);
+    const recipient = request.agent(app);
+    const signup = await recipient.post("/api/v1/auth/signup").send({
+      firstName: "Reminder", lastName: "Coach", email,
+      role: "coach", password: "supersecret1",
+    });
+    expect(signup.status).toBe(201);
+    fetchMock.mockClear();
+    const afterSignup = await manager.post(`/api/v1/organizations/${orgId}/coach-invites`)
+      .send({ assignments, resendPending: true });
+    expect(afterSignup.body.data[0].emailSent).toBe(true);
+    expect(afterSignup.body.data[0].notified).toBe(true);
+    // Auto-follow can send a separate notification email. Count only invites.
+    const inviteEmails = fetchMock.mock.calls
+      .map(([, options]) => JSON.parse(String((options as RequestInit).body)))
+      .filter((payload) => payload.personalizations?.[0]?.custom_args?.kinectem_invite_kind === "roster");
+    expect(inviteEmails).toHaveLength(2);
+    const nudges = await db.select().from(notifications)
+      .where(and(eq(notifications.userId, signup.body.id), eq(notifications.kind, "roster_invite")));
+    expect(nudges).toHaveLength(2);
+    expect(nudges.every((nudge) => nudge.link?.startsWith("/invites/"))).toBe(true);
+    expect((await recipient.post(`/api/v1/invites/${children[0].token}/accept`)).status).toBe(201);
+    const groupToken = first.body.data[0].acceptUrl.split("/").pop();
+    expect((await recipient.post(`/api/v1/invites/${groupToken}/accept`)).status).toBe(201);
+    const entries = await db.select().from(rosterEntries)
+      .where(and(eq(rosterEntries.userId, signup.body.id), inArray(rosterEntries.teamId, invitedTeams.map((team) => team.id))));
+    expect(entries).toHaveLength(2);
+    expect(entries.every((entry) => entry.status === "accepted")).toBe(true);
   });
 
   it("does not grant a child invitation withdrawn before acceptance", async () => {

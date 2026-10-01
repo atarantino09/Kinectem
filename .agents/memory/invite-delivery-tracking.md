@@ -5,18 +5,21 @@ description: How pending team/org invites flag undelivered email and always offe
 
 # Invite delivery tracking (SendGrid Event Webhook)
 
-**Delivery rule:** A pending single-team email invitation should be handed to
-the email provider even if the address belongs to an existing account; an
-in-app notification is additional, never the sole way to reach the invitee.
-Apply the same rule when resending. Show a send failure so the inviter can
-share the link, and distinguish provider hand-off from confirmed delivery.
+**Delivery rule:** A pending email invitation should be handed to the email
+provider even if the address belongs to an existing account; an in-app
+notification is additional, never the sole way to reach the invitee. This
+includes grouped coach invitations and bulk-add reminders for still-pending
+assignments. Show a send failure so the inviter can share the link, and
+distinguish provider hand-off from confirmed delivery.
 
 **Why:** Account holders may not be in the app to see the notification. A
 "Resend invite email" control that only nudges them in-app is misleading.
 
-**How to apply:** Keep the pending token and notification flow, send the
-existing invite link by email to the invited address, and retain the
-copy-link fallback when the provider rejects the send.
+**How to apply:** Keep pending tokens and notification flow, email invite
+links to the invited address, and retain the copy-link fallback when the
+provider rejects the send. For grouped invites, the group token is hashed:
+repeat sends can reuse child links, but individual acceptance must respect
+group status and reuse any pending roster entry instead of inserting a second.
 
 Pending invites (team roster + org) carry a `delivery_status` enum
 (`unknown|sent|delivered|deferred|bounced|dropped|spam`) plus

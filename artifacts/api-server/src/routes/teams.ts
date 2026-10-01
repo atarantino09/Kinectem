@@ -1141,6 +1141,7 @@ router.post(
     if (placement.outcome === "already_pending") {
       return res.status(200).json({
         outcome: "already_pending", emailSent: null,
+        inviteId: placement.invite!.id,
         acceptUrl: buildInviteAcceptUrl(placement.invite!.token),
       });
     }
