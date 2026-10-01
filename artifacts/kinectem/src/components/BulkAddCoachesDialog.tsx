@@ -212,7 +212,6 @@ export function BulkAddCoachesDialog({
                     teamId,
                     email,
                   })),
-                  resendPending: true,
                 }),
               })
             : await customFetch<Record<string, unknown>>(

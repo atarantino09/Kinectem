@@ -17,6 +17,20 @@ beforeEach(() => {
 });
 
 describe("bulk coach email reminders", () => {
+  it("does not send a second reminder when the one-team endpoint already resent it", async () => {
+    fetchMock.mockImplementation(async (_url, options) => {
+      if (options?.method === "GET") return { data: [] };
+      return { outcome: "reminded", emailSent: true, acceptUrl: "/app/invites/existing" };
+    });
+    renderWithProviders(<BulkAddCoachesDialog orgId="org" teams={teams} open onOpenChange={vi.fn()} />);
+    fireEvent.change(screen.getByTestId("input-bulk-coach-one"), { target: { value: "coach@example.com" } });
+    fireEvent.click(screen.getByTestId("btn-bulk-coaches-send"));
+    await screen.findByText("Reminder email sent for the pending invitation");
+    const sends = fetchMock.mock.calls.filter(([, options]) => options?.method === "POST");
+    expect(sends).toHaveLength(1);
+    expect(sends[0][0]).toBe("/api/v1/teams/one/invites");
+  });
+
   it("uses the dedicated resend endpoint for an already-pending one-team invite", async () => {
     fetchMock.mockImplementation(async (url, options) => {
       if (options?.method === "GET") return { data: [] };
@@ -32,7 +46,7 @@ describe("bulk coach email reminders", () => {
     expect(screen.queryByText(/no new invitation was sent/i)).not.toBeInTheDocument();
   });
 
-  it("asks the multi-team endpoint to resend pending emails and shows reminder outcomes", async () => {
+  it("submits multi-team assignments and shows automatic reminder outcomes", async () => {
     let payload: unknown;
     fetchMock.mockImplementation(async (_url, options) => {
       if (options?.method === "GET") return { data: [] };
@@ -49,7 +63,6 @@ describe("bulk coach email reminders", () => {
     await screen.findByText("Reminder email sent for the pending invitation");
     expect(payload).toEqual({
       assignments: teams.map((team) => ({ teamId: team.id, email: "coach@example.com" })),
-      resendPending: true,
     });
     expect(screen.getAllByText(/Reminder email sent — no new invitation created/)).toHaveLength(2);
   });

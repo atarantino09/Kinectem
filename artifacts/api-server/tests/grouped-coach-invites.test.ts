@@ -191,7 +191,7 @@ describe("grouped multi-team coach invitations", () => {
       .where(and(eq(notifications.userId, user.id), eq(notifications.kind, "roster_invite")));
     fetchMock.mockClear();
     const again = await manager.post(`/api/v1/organizations/${orgId}/coach-invites`)
-      .send({ assignments, resendPending: true });
+      .send({ assignments });
     expect(again.status).toBe(201);
     expect(again.body.data[0].emailSent).toBe(true);
     expect(again.body.data[0].teamOutcomes.map((row: { outcome: string }) => row.outcome))
@@ -205,7 +205,7 @@ describe("grouped multi-team coach invitations", () => {
     expect(finalInvites.map((invite) => invite.token).sort()).toEqual(invites.map((invite) => invite.token).sort());
     fetchMock.mockResolvedValue(new Response("unavailable", { status: 500 }));
     const failed = await manager.post(`/api/v1/organizations/${orgId}/coach-invites`)
-      .send({ assignments, resendPending: true });
+      .send({ assignments });
     expect(failed.body.data[0].emailSent).toBe(false);
     expect(failed.body.data[0].acceptUrls).toHaveLength(2);
     const stillPending = await db.select().from(rosterInvites)
@@ -230,7 +230,7 @@ describe("grouped multi-team coach invitations", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     fetchMock.mockClear();
     const again = await manager.post(`/api/v1/organizations/${orgId}/coach-invites`)
-      .send({ assignments, resendPending: true });
+      .send({ assignments });
     expect(again.body.data[0].outcome).toBe("reminded");
     expect(again.body.data[0].emailSent).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -252,7 +252,7 @@ describe("grouped multi-team coach invitations", () => {
     expect(signup.status).toBe(201);
     fetchMock.mockClear();
     const afterSignup = await manager.post(`/api/v1/organizations/${orgId}/coach-invites`)
-      .send({ assignments, resendPending: true });
+      .send({ assignments });
     expect(afterSignup.body.data[0].emailSent).toBe(true);
     expect(afterSignup.body.data[0].notified).toBe(true);
     // Auto-follow can send a separate notification email. Count only invites.

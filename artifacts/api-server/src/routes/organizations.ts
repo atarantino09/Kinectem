@@ -754,7 +754,9 @@ router.post(
 
     const actorName = me.isMinor ? maskedDisplayName(me) : displayName(me);
     const actorIsOrgManager = await isOrganizationManager(me.id, orgId);
-    const resendPending = req.body?.resendPending === true;
+    // Submitting an invitation again is an explicit reminder, even from an
+    // older client that doesn't send a resend flag. Deduplicate records, not
+    // delivery attempts.
     const outcomes: Array<{
       email: string;
       teamIds: string[];
@@ -806,15 +808,13 @@ router.post(
             }
             const pending = await findPendingInvite(tx, assignment.teamId, email, "coach");
             if (pending) {
-              if (resendPending) {
-                emailRows.push({ teamId: assignment.teamId, id: pending.id, token: pending.token });
-                notificationRows.push({
-                  teamId: assignment.teamId,
-                  entryId: existingEntry?.status === "pending" ? existingEntry.id : undefined,
-                  token: pending.token,
-                });
-              }
-              teamOutcomes.push({ teamId: assignment.teamId, outcome: resendPending ? "reminded" : "already_pending" });
+              emailRows.push({ teamId: assignment.teamId, id: pending.id, token: pending.token });
+              notificationRows.push({
+                teamId: assignment.teamId,
+                entryId: existingEntry?.status === "pending" ? existingEntry.id : undefined,
+                token: pending.token,
+              });
+              teamOutcomes.push({ teamId: assignment.teamId, outcome: "reminded" });
               continue;
             }
             const [invite] = await tx.insert(rosterInvites).values({
@@ -914,12 +914,9 @@ router.post(
           notified: notificationRows.length > 0,
           acceptUrls: emailRows.map((row) => ({ teamId: row.teamId, url: buildInviteAcceptUrl(row.token) })),
           acceptUrl: emailRows.length === 1 ? buildInviteAcceptUrl(emailRows[0].token) : undefined,
-          outcome: notificationRows.length ? "invited"
-            : approvedTeams.length ? "auto_approved"
-              : teamOutcomes.some((row) => row.outcome === "reminded")
-                ? "reminded"
-                : teamOutcomes.some((row) => row.outcome === "already_pending")
-                ? "already_pending" : "already_active",
+          outcome: teamOutcomes.some((row) => row.outcome === "invited") ? "invited"
+            : teamOutcomes.some((row) => row.outcome === "reminded") ? "reminded"
+              : approvedTeams.length ? "auto_approved" : "already_active",
           teamOutcomes,
         });
         continue;
@@ -934,9 +931,8 @@ router.post(
         for (const assignment of groupedAssignments) {
           const pending = await findPendingInvite(tx, assignment.teamId, email, "coach");
           if (pending) {
-            if (resendPending)
-              pendingRows.push({ teamId: assignment.teamId, id: pending.id, token: pending.token });
-            teamOutcomes.push({ teamId: assignment.teamId, outcome: resendPending ? "reminded" : "already_pending" });
+            pendingRows.push({ teamId: assignment.teamId, id: pending.id, token: pending.token });
+            teamOutcomes.push({ teamId: assignment.teamId, outcome: "reminded" });
           } else {
             newAssignments.push(assignment);
             teamOutcomes.push({ teamId: assignment.teamId, outcome: "invited" });

@@ -150,6 +150,59 @@ describe("coach invite resend (task #655)", () => {
     expect(entries).toHaveLength(1);
   });
 
+  it("repeating a pending coach email invite automatically emails and notifies again", async () => {
+    const { agent } = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const { user } = await loginAs((u) => u.email === "morgan@kinectem.demo");
+    const teamId = await getFootballTeamId();
+    await db.delete(rosterEntries).where(and(
+      eq(rosterEntries.teamId, teamId), eq(rosterEntries.userId, user.id),
+    ));
+    const endpoint = `/api/v1/teams/${teamId}/invites`;
+    const first = await agent.post(endpoint).send({ email: user.email, position: "coach" });
+    expect(first.status).toBe(201);
+    const before = await db.select().from(notifications)
+      .where(and(eq(notifications.userId, user.id), eq(notifications.kind, "roster_invite")));
+    fetchMock.mockClear();
+    const again = await agent.post(endpoint).send({ email: user.email, position: "coach" });
+    expect(again.status).toBe(200);
+    expect(again.body.outcome).toBe("reminded");
+    expect(again.body.emailSent).toBe(true);
+    expect(again.body.id).toBe(first.body.id);
+    expect(again.body.token).toBe(first.body.token);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const after = await db.select().from(notifications)
+      .where(and(eq(notifications.userId, user.id), eq(notifications.kind, "roster_invite")));
+    expect(after).toHaveLength(before.length + 1);
+    const entries = await db.select().from(rosterEntries)
+      .where(and(eq(rosterEntries.teamId, teamId), eq(rosterEntries.userId, user.id)));
+    expect(entries).toHaveLength(1);
+  });
+
+  it("re-adding a pending member sends another notification and email without another roster row", async () => {
+    const { agent } = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const { user } = await loginAs((u) => u.email === "marcus@kinectem.demo");
+    const teamId = await getFootballTeamId();
+    await db.delete(rosterEntries).where(and(
+      eq(rosterEntries.teamId, teamId), eq(rosterEntries.userId, user.id),
+    ));
+    const endpoint = `/api/v1/teams/${teamId}/members`;
+    const first = await agent.post(endpoint).send({ userId: user.id, position: "coach" });
+    expect(first.status).toBe(201);
+    const before = await db.select().from(notifications)
+      .where(and(eq(notifications.userId, user.id), eq(notifications.kind, "roster_invite")));
+    fetchMock.mockClear();
+    const again = await agent.post(endpoint).send({ userId: user.id, position: "coach" });
+    expect(again.status).toBe(201);
+    expect(again.body.id).toBe(first.body.id);
+    expect(fetchMock).toHaveBeenCalled();
+    const after = await db.select().from(notifications)
+      .where(and(eq(notifications.userId, user.id), eq(notifications.kind, "roster_invite")));
+    expect(after).toHaveLength(before.length + 1);
+    const entries = await db.select().from(rosterEntries)
+      .where(and(eq(rosterEntries.teamId, teamId), eq(rosterEntries.userId, user.id)));
+    expect(entries).toHaveLength(1);
+  });
+
   it("reports emailSent false when re-delivery fails (invite stays pending)", async () => {
     const { agent } = await loginAs((u) => u.email === "coach@kinectem.demo");
     const teamId = await getFootballTeamId();

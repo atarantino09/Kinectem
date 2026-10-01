@@ -602,7 +602,7 @@ router.post(
         await revokeRedundantInvites(tx, teamId, u.email);
       return { entry: placed, outcome: selfApproved ? "auto_approved" as const : "invited" as const, created: true };
     });
-    if (created) {
+    if (created || outcome === "already_pending") {
       await ensureOrgFollowedForTeam(userId, teamId);
       // If the added member is a minor with a linked guardian, auto-follow
       // the team on the parent's behalf so it surfaces under the parent's
@@ -1138,13 +1138,9 @@ router.post(
       }
       return res.status(200).json({ outcome: placement.outcome, emailSent: null });
     }
-    if (placement.outcome === "already_pending") {
-      return res.status(200).json({
-        outcome: "already_pending", emailSent: null,
-        inviteId: placement.invite!.id,
-        acceptUrl: buildInviteAcceptUrl(placement.invite!.token),
-      });
-    }
+    // An explicit repeat submission reuses the invite and roster row but
+    // sends another notification/email; pending is not a delivery no-op.
+    const reminded = placement.outcome === "already_pending";
     const { invite, existingUser, entry } = placement;
 
     // If a Kinectem account already exists for this email, fan out an
@@ -1210,6 +1206,15 @@ router.post(
             });
           }
         }
+      } else {
+        const actorName = me.isMinor ? maskedDisplayName(me) : displayName(me);
+        await db.insert(notifications).values({
+          userId: existingUser.id,
+          kind: "roster_invite",
+          message: `${actorName} invited you to ${t.name}. Tap to accept or decline.`,
+          link: `/invites/${invite.token}`,
+          actorUserId: me.id,
+        });
       }
     } else if (existingUser) {
       // Task #645 — player invite to an existing account. Create NO roster
@@ -1293,9 +1298,9 @@ router.post(
     // Task #654 — append the email-send outcome and the public accept URL
     // outside the locked openapi.yaml; the client reads them via a narrow cast
     // (mirrors the `hasOwner`/`myClaimStatus` pattern).
-    res.status(201).json({
+    res.status(reminded ? 200 : 201).json({
       ...toInvite(invite, me),
-      outcome: "invited",
+      outcome: reminded ? "reminded" : "invited",
       emailSent,
       acceptUrl: buildInviteAcceptUrl(invite.token),
     });

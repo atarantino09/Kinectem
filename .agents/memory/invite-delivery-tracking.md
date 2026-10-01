@@ -17,7 +17,10 @@ distinguish provider hand-off from confirmed delivery.
 
 **How to apply:** Keep pending tokens and notification flow, email invite
 links to the invited address, and retain the copy-link fallback when the
-provider rejects the send. For grouped invites, the group token is hashed:
+provider rejects the send. Repeat submissions must trigger delivery on the
+server without requiring a client resend flag: an open browser tab can still
+have the old form after publishing. "Already pending" prevents duplicate
+records, not a fresh notification or email attempt. For grouped invites, the group token is hashed:
 repeat sends can reuse child links, but individual acceptance must respect
 group status and reuse any pending roster entry instead of inserting a second.
 
