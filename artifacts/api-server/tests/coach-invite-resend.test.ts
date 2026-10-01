@@ -9,7 +9,7 @@ import { app, loginAs, request } from "./helpers";
 // existing pending invite WITHOUT minting a new token or creating duplicate
 // roster rows, and reports the same `emailSent` outcome as the original send:
 //   - unknown address  → re-sends the coach email (emailSent true/false)
-//   - known address    → re-fires the in-app notification (emailSent null)
+//   - known address    → emails the invite and re-fires the in-app notification
 // We stub the SendGrid env + global `fetch` (mirrors coach-invite-email.test)
 // so the genuine helper renders and "sends".
 async function getFootballTeamId(): Promise<string> {
@@ -79,7 +79,7 @@ describe("coach invite resend (task #655)", () => {
     expect(rows[0].token).toBe(token);
   });
 
-  it("re-fires the in-app notification (no email) for a known address", async () => {
+  it("emails a known address and re-fires its in-app notification", async () => {
     const { agent } = await loginAs((u) => u.email === "coach@kinectem.demo");
     const teamId = await getFootballTeamId();
 
@@ -119,9 +119,11 @@ describe("coach invite resend (task #655)", () => {
       `/api/v1/teams/${teamId}/invites/${inviteId}/resend`,
     );
     expect(res.status).toBe(200);
-    expect(res.body.emailSent).toBeNull();
-    // Known address → no email.
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(res.body.emailSent).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const sent = JSON.parse(String((fetchMock.mock.calls[0] as [string, RequestInit])[1].body));
+    expect(sent.personalizations[0].to[0].email).toBe(morgan.email);
+    expect(sent.content.some((part: { value: string }) => part.value.includes(created.body.token))).toBe(true);
 
     // A fresh in-app notification was written.
     const after = await db
@@ -173,6 +175,28 @@ describe("coach invite resend (task #655)", () => {
       .where(eq(rosterInvites.id, inviteId))
       .limit(1);
     expect(invite.status).toBe("pending");
+  });
+
+  it("keeps the known user's notification and pending invite when their email fails", async () => {
+    const { agent } = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const teamId = await getFootballTeamId();
+    const { user } = await loginAs((u) => u.email === "morgan@kinectem.demo");
+    const created = await agent.post(`/api/v1/teams/${teamId}/invites`)
+      .send({ email: user.email, position: "player" });
+    expect(created.status).toBe(201);
+    fetchMock.mockClear();
+    fetchMock.mockResolvedValue(new Response("boom", { status: 500 }));
+    const before = await db.select().from(notifications)
+      .where(and(eq(notifications.userId, user.id), eq(notifications.kind, "roster_invite")));
+    const res = await agent.post(`/api/v1/teams/${teamId}/invites/${created.body.id}/resend`);
+    expect(res.status).toBe(200);
+    expect(res.body.emailSent).toBe(false);
+    const [invite] = await db.select().from(rosterInvites)
+      .where(eq(rosterInvites.id, created.body.id));
+    expect(invite.status).toBe("pending");
+    const after = await db.select().from(notifications)
+      .where(and(eq(notifications.userId, user.id), eq(notifications.kind, "roster_invite")));
+    expect(after).toHaveLength(before.length + 1);
   });
 
   it("409s when the invite is no longer pending", async () => {

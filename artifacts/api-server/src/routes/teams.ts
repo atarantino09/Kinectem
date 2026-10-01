@@ -1161,10 +1161,8 @@ router.post(
     // pick the actual player via the existing chooser. No roster row,
     // team-follow, or org-follow is created until the chooser completes —
     // this aligns the existing-account fast path with the email-link flow.
-    // Task #654 — report the email-send outcome to the coach. `null` means
-    // no email was attempted (the invitee already has a Kinectem account and
-    // was reached via an in-app notification instead); `true`/`false` only
-    // apply to the no-account branch where we actually try to send.
+    // Every new pending email invitation is emailed, including invitations
+    // addressed to existing accounts that also receive an in-app alert.
     let emailSent: boolean | null = null;
     if (existingUser && dbRole === "coach") {
       if (entry) {
@@ -1247,13 +1245,11 @@ router.post(
           });
         }
       }
-    } else {
-      // Task #634 — no Kinectem account exists for this address, so the
-      // in-app notification fan-out above can't reach anyone. Send the
-      // coach's "join Kinectem" invite email instead, pointing at the
-      // /invites/:token accept flow. Minor-actor masking mirrors the
-      // notification path. Best-effort: a delivery failure must not fail
-      // the invite creation (the pending token is already persisted).
+    }
+    {
+      // Deliver the invite link by email whether or not the recipient has an
+      // account. The in-app notification above is an additional channel, not
+      // a substitute: existing users may not be signed in when invited.
       const actorName = me.isMinor ? maskedDisplayName(me) : displayName(me);
       try {
         // Task #837 — staff invitees (coach / assistant coach / manager) get
@@ -1478,16 +1474,14 @@ router.post(
       .where(eq(users.email, email.toLowerCase()))
       .limit(1);
 
-    // Mirror the create path's outcome contract: `null` = no email was
-    // attempted (reached via in-app notification instead); `true`/`false`
-    // only apply to the no-account branch where we actually send.
+    // A pending invitation is emailed even when the recipient already has an
+    // account; the in-app notification below remains an additional channel.
     let emailSent: boolean | null = null;
     // Write-time mask when the actor is a minor (mirrors the create path).
     const actorName = me.isMinor ? maskedDisplayName(me) : displayName(me);
 
     if (existingUser) {
-      // Account exists — re-fire the in-app notification rather than an
-      // email, exactly as the original send did. We do NOT create or
+      // Re-fire the in-app notification too. We do NOT create or
       // modify roster_entries here: the original send already placed any
       // coach invitee, so re-sending must not duplicate roster rows.
       if (invite.role === "coach") {
@@ -1556,10 +1550,11 @@ router.post(
           }
         }
       }
-    } else {
-      // No Kinectem account — re-send the coach invite email, reusing the
-      // existing token. Best-effort: a delivery failure is reported (not
-      // fatal) so the coach can fall back to copying the link.
+    }
+    {
+      // Re-send the existing token to the invited email whether or not the
+      // address has an account. Failure is reported so the inviter can share
+      // the link manually; it must not change the pending invite.
       try {
         // Task #837 — mirror the create path's role branching: a pending
         // staff invite re-sends the staff email, not the parent one. A null

@@ -277,14 +277,14 @@ describe("coach invite email (task #636)", () => {
       .send({ email: "morgan@kinectem.demo", position: "player" });
     expect(res.status).toBe(201);
 
-    // Task #654 — a known invitee is reached via in-app notification, so no
-    // email is attempted: emailSent is null (not false). The accept URL is
-    // still emitted for copy-link parity.
-    expect(res.body.emailSent).toBeNull();
+    // Existing users get the email as well as the in-app notification.
+    expect(res.body.emailSent).toBe(true);
     expect(res.body.acceptUrl).toBe(buildInviteAcceptUrl(res.body.token));
 
-    // Known address → no coach invite email.
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const sent = JSON.parse(String((fetchMock.mock.calls[0] as [string, RequestInit])[1].body));
+    expect(sent.personalizations[0].to[0].email).toBe(morgan.email);
+    expect(sent.content.some((part: { value: string }) => part.value.includes(res.body.token))).toBe(true);
 
     // Task #645 — a player invite to an existing account creates NO roster
     // entry (the matched account may be the parent, not the player). The

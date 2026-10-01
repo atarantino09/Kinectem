@@ -239,7 +239,7 @@ export function TeamRosterTabs({
   // landed in spam). The endpoint reuses the existing token (no new invite
   // row), so we call it directly via customFetch — it's intentionally not
   // in the locked openapi.yaml, like the other invite extras. The 200 body
-  // carries `emailSent` (true/false/null), appended outside the spec.
+  // carries `emailSent` (true/false), appended outside the spec.
   const [resendingId, setResendingId] = useState<string | null>(null);
   const onResend = async (inviteId: string, label: string) => {
     setResendingId(inviteId);
@@ -254,13 +254,10 @@ export function TeamRosterTabs({
           description: `The invite for ${label} is still active — copy its link and share it directly.`,
           variant: "destructive",
         });
-      } else if (resp.emailSent === null) {
-        toast({
-          title: "Notification re-sent",
-          description: `${label} already has an account — we nudged them in-app.`,
-        });
+      } else if (resp.emailSent === true) {
+        toast({ title: `Invite email sent to ${label}` });
       } else {
-        toast({ title: `Invite re-sent to ${label}` });
+        toast({ title: "Couldn't confirm the email was sent", variant: "destructive" });
       }
       await invalidate();
     } catch {
