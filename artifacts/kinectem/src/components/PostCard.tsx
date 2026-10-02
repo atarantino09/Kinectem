@@ -163,6 +163,9 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
   ).newsLink;
   const isNews = post.id.startsWith("news-") && !!newsLink;
   const [confirmNewsDelete, setConfirmNewsDelete] = useState(false);
+  const [confirmHistoricalDelete, setConfirmHistoricalDelete] = useState(false);
+  const [deletingHistorical, setDeletingHistorical] = useState(false);
+  const [historicalDeleted, setHistoricalDeleted] = useState(false);
   const [editNewsGameDateOpen, setEditNewsGameDateOpen] = useState(false);
   const [deletingNews, setDeletingNews] = useState(false);
   const deleteNewsLink = async () => {
@@ -250,6 +253,38 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
     (post as { competitionFeatured?: boolean }).competitionFeatured === true;
   const historical = getHistorical(post);
   const isHistorical = !!historical && !isNews && !isShort;
+  // Historical editing is restricted to the author and scoped managers.
+  // Direct organization history may omit the legacy article-only canDelete
+  // field; its server-provided canEdit capability covers the same actors.
+  const canDeleteHistorical =
+    isHistorical && !(post as { hidden?: boolean }).hidden &&
+    (post.canDelete === true || canEditPost);
+  const deleteHistorical = async () => {
+    if (deletingHistorical) return;
+    setDeletingHistorical(true);
+    try {
+      await customFetch(`/api/v1/posts/${encodeURIComponent(post.id)}`, { method: "DELETE" });
+      setConfirmHistoricalDelete(false);
+      setHistoricalDeleted(true);
+      toast({ title: "Historical recap deleted" });
+      void qc.invalidateQueries({
+        predicate: (q) =>
+          typeof q.queryKey[0] === "string" &&
+          /^\/api\/v1\/(feed|posts|drafts|users|teams|organizations)(\/|$|\?)/.test(q.queryKey[0]),
+      });
+      if (currentPath === `/posts/${post.id}`) {
+        setLocation(getContextHref(post.context));
+      }
+    } catch (err) {
+      toast({
+        title: "Couldn't delete the historical recap",
+        description: apiErrorMessage(err) ?? "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingHistorical(false);
+    }
+  };
   const label = isHistorical
     ? "Historical Recap"
     : isNews
@@ -421,6 +456,8 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
         ).orgBrandSecondaryColor,
       })
     : null;
+
+  if (historicalDeleted) return null;
 
   return (
     <Card
@@ -681,6 +718,15 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
                     data-testid={`menuitem-edit-${post.id}`}
                   >
                     <Pencil className="w-4 h-4 mr-2" /> Edit post
+                  </DropdownMenuItem>
+                )}
+                {canDeleteHistorical && (
+                  <DropdownMenuItem
+                    onSelect={() => setConfirmHistoricalDelete(true)}
+                    className="text-destructive focus:text-destructive"
+                    data-testid={`menuitem-delete-historical-${post.id}`}
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" /> Delete historical recap
                   </DropdownMenuItem>
                 )}
                 {asChildId && childPlausiblyLinked && (
@@ -1126,6 +1172,37 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
           </>
         )}
       </CardContent>
+        <AlertDialog
+          open={confirmHistoricalDelete}
+          onOpenChange={(open) => {
+            if (!deletingHistorical) setConfirmHistoricalDelete(open);
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete historical recap?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will remove the recap and its original newspaper clipping
+                from public view, including organization pages, team pages,
+                and shared posts. You cannot undo this here.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deletingHistorical}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={deletingHistorical}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                data-testid={`confirm-delete-historical-${post.id}`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  void deleteHistorical();
+                }}
+              >
+                {deletingHistorical ? "Deleting…" : "Delete recap"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       {canShareAsImage && shareImageOpen && (
         <ShareRecapImageDialog
           // FeedPost is the feed-shaped subset of PostResponse; the share

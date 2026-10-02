@@ -147,6 +147,88 @@ function renderWithClient(ui: React.ReactElement) {
   };
 }
 
+describe("Historical recap deletion", () => {
+  beforeEach(() => {
+    customFetchMock.mockReset().mockResolvedValue(null);
+    toastMock.mockClear();
+  });
+
+  function historicalPost(id = "article-history", canEdit = true): PostResponse {
+    return {
+      ...basePost({ id, canEdit, canDelete: false }),
+      recapKind: "historical",
+      historical: {
+        gameDate: null, year: 1974, newspaper: "Local Gazette",
+        byline: null, publicationDate: null, rightsConfirmed: true, reviewed: true,
+      },
+      context: {
+        ...basePost().context,
+        ...(id.startsWith("orgpost-") ? { type: "organization", id: "school-1" } : {}),
+      },
+    } as unknown as PostResponse;
+  }
+
+  it.each(["article-history", "orgpost-history"])(
+    "confirms deletion of %s and refreshes every historical post surface",
+    async (id) => {
+      const user = userEvent.setup();
+      const { qc } = renderWithClient(<PostCard post={historicalPost(id)} />);
+      const keys = [
+        ["/api/v1/feed"],
+        ["/api/v1/teams/team-1/posts", "infinite"],
+        ["/api/v1/organizations/school-1/posts", "infinite"],
+        ["/api/v1/users/user-1/posts"],
+        ["/api/v1/posts/drafts"],
+        ["/api/v1/posts/" + id],
+      ];
+      keys.forEach((key) => qc.setQueryData(key, { data: [] }));
+      await user.click(screen.getByTestId(`btn-post-menu-${id}`));
+      await user.click(screen.getByTestId(`menuitem-delete-historical-${id}`));
+      expect(screen.getByRole("alertdialog")).toHaveTextContent("original newspaper clipping");
+      expect(customFetchMock).not.toHaveBeenCalled();
+      await user.click(screen.getByTestId(`confirm-delete-historical-${id}`));
+      await waitFor(() => expect(customFetchMock).toHaveBeenCalledWith(
+        `/api/v1/posts/${id}`, { method: "DELETE" },
+      ));
+      expect(screen.queryByTestId(`btn-post-menu-${id}`)).not.toBeInTheDocument();
+      keys.forEach((key) =>
+        expect(qc.getQueryCache().find({ queryKey: key })?.state.isInvalidated).toBe(true),
+      );
+    },
+  );
+
+  it("does not offer deletion to an ordinary viewer", async () => {
+    const user = userEvent.setup();
+    renderWithClient(<PostCard post={historicalPost("article-history", false)} />);
+    await user.click(screen.getByTestId("btn-post-menu-article-history"));
+    expect(screen.queryByTestId("menuitem-delete-historical-article-history")).not.toBeInTheDocument();
+  });
+
+  it("keeps the recap when confirmation is cancelled", async () => {
+    const user = userEvent.setup();
+    renderWithClient(<PostCard post={historicalPost()} />);
+    await user.click(screen.getByTestId("btn-post-menu-article-history"));
+    await user.click(screen.getByTestId("menuitem-delete-historical-article-history"));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(customFetchMock).not.toHaveBeenCalled();
+    expect(screen.getByTestId("btn-post-menu-article-history")).toBeInTheDocument();
+  });
+
+  it("keeps the recap and confirmation available if deletion fails", async () => {
+    customFetchMock.mockRejectedValueOnce(new Error("Request failed"));
+    const user = userEvent.setup();
+    renderWithClient(<PostCard post={historicalPost()} />);
+    await user.click(screen.getByTestId("btn-post-menu-article-history"));
+    await user.click(screen.getByTestId("menuitem-delete-historical-article-history"));
+    await user.click(screen.getByTestId("confirm-delete-historical-article-history"));
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith(expect.objectContaining({
+      title: "Couldn't delete the historical recap", variant: "destructive",
+    })));
+    expect(screen.getByTestId("btn-post-menu-article-history")).toBeInTheDocument();
+    expect(screen.getByTestId("confirm-delete-historical-article-history")).toBeEnabled();
+  });
+});
+
 describe("PostCard untag cache invalidation predicate", () => {
   it("invalidates the viewer's own tagged feed even when the post author is someone else", async () => {
     const qc = new QueryClient();
