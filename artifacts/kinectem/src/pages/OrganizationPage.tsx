@@ -138,6 +138,7 @@ export default function OrganizationPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [followersOpen, setFollowersOpen] = useState(false);
   const [newPostOpen, setNewPostOpen] = useState(false);
+  const [postOptionsOpen, setPostOptionsOpen] = useState(false);
   const [newsletterOpen, setNewsletterOpen] = useState(false);
   const [manageMembersOpen, setManageMembersOpen] = useState(false);
   const [ownershipHandoffOpen, setOwnershipHandoffOpen] = useState(false);
@@ -1470,24 +1471,6 @@ export default function OrganizationPage() {
           {/* Teams + archived: inline on mobile, in rail on lg+. The
               hook ensures only one instance mounts at a time so testids
               stay unique. */}
-          {isOrgManager && (
-            <div className="flex flex-wrap gap-3" data-testid="historical-recap-actions">
-              <Link
-                href={`/historical-recap?organizationId=${orgId}`}
-                className="inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-bold hover:bg-muted"
-                data-testid="link-historical-recap-org"
-              >
-                Historical Recap
-              </Link>
-              <Link
-                href="/drafts"
-                className="inline-flex items-center px-1 py-2 text-sm font-semibold underline"
-                data-testid="link-historical-drafts-org"
-              >
-                Drafts
-              </Link>
-            </div>
-          )}
           {!isLg && (
             <div className="space-y-4">
               <TeamsRail
@@ -1519,15 +1502,43 @@ export default function OrganizationPage() {
                   <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground mr-1">
                     Publish
                   </span>
-                  <Button
-                    size="sm"
-                    variant="brand"
-                    onClick={() => setNewPostOpen(true)}
-                    className="font-bold rounded-full"
-                    data-testid="btn-new-org-post"
-                  >
-                    <Plus className="w-4 h-4 mr-1" /> New post
-                  </Button>
+                  <DropdownMenu open={postOptionsOpen} onOpenChange={setPostOptionsOpen}>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="brand"
+                        className="font-bold rounded-full"
+                        data-testid="btn-new-org-post"
+                      >
+                        <Plus className="w-4 h-4 mr-1" /> New post
+                        <ChevronDown className="w-3.5 h-3.5 ml-1" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-60">
+                      <DropdownMenuItem
+                        onSelect={() => setNewPostOpen(true)}
+                        data-testid="menu-new-org-announcement"
+                      >
+                        <Megaphone className="w-4 h-4 mr-2" />
+                        Announcement
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link
+                          href={`/historical-recap?organizationId=${orgId}`}
+                          data-testid="link-historical-recap-org"
+                        >
+                          <Archive className="w-4 h-4 mr-2" />
+                          Historical Recap
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/drafts" data-testid="link-historical-drafts-org">
+                          <Pencil className="w-4 h-4 mr-2" />
+                          Drafts
+                        </Link>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                   <Button
                     size="sm"
                     variant="outline"
@@ -1590,7 +1601,7 @@ export default function OrganizationPage() {
                           <Button
                             size="sm"
                             variant="brand"
-                            onClick={() => setNewPostOpen(true)}
+                            onClick={() => setPostOptionsOpen(true)}
                             className="font-bold rounded-full"
                             data-testid="btn-empty-new-org-post"
                           >

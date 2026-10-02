@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { forwardRef, type AnchorHTMLAttributes } from "react";
 
 import { renderWithProviders } from "@/test";
 import {
@@ -20,6 +21,9 @@ const ORG_TOUR_STORAGE_KEY = "kinectem:org-tour-v3";
 
 vi.mock("wouter", () => ({
   ...wouterMock,
+  Link: forwardRef<HTMLAnchorElement, AnchorHTMLAttributes<HTMLAnchorElement>>(
+    (props, ref) => <a ref={ref} {...props} />,
+  ),
   useParams: () => ({ orgId: ORG_ID }),
 }));
 vi.mock("@/hooks/use-toast", () => useToastMock);
@@ -76,7 +80,8 @@ vi.mock("@/components/BulkAddTeamsDialog", () => ({
   BulkAddTeamsDialog: () => null,
 }));
 vi.mock("@/components/NewOrgPostDialog", () => ({
-  NewOrgPostDialog: () => null,
+  NewOrgPostDialog: ({ open }: { open: boolean }) =>
+    open ? <div data-testid="mock-new-org-post-dialog" /> : null,
 }));
 vi.mock("@/components/NewsletterDialog", () => ({
   NewsletterDialog: () => null,
@@ -241,6 +246,36 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("OrganizationPage — admin control gating", () => {
+  it("puts historical recaps and drafts in New post instead of standalone page links", async () => {
+    installHandlers({ role: "admin" });
+    const user = userEvent.setup();
+    renderWithProviders(<OrganizationPage />);
+    expect(screen.queryByTestId("link-historical-recap-org")).not.toBeInTheDocument();
+    await user.click(screen.getByTestId("btn-new-org-post"));
+    expect(screen.getByTestId("menu-new-org-announcement")).toBeInTheDocument();
+    expect(screen.getByTestId("link-historical-recap-org")).toHaveAttribute(
+      "href", "/historical-recap?organizationId=org-1",
+    );
+    expect(screen.getByTestId("link-historical-drafts-org")).toHaveAttribute("href", "/drafts");
+  });
+
+  it("lets the first-post prompt open the same post choices", async () => {
+    installHandlers({ role: "admin" });
+    const user = userEvent.setup();
+    renderWithProviders(<OrganizationPage />);
+    await user.click(screen.getByTestId("btn-empty-new-org-post"));
+    expect(screen.getByTestId("link-historical-recap-org")).toBeInTheDocument();
+  });
+
+  it("still opens the regular announcement composer from New post", async () => {
+    installHandlers({ role: "admin" });
+    const user = userEvent.setup();
+    renderWithProviders(<OrganizationPage />);
+    await user.click(screen.getByTestId("btn-new-org-post"));
+    await user.click(screen.getByTestId("menu-new-org-announcement"));
+    expect(screen.getByTestId("mock-new-org-post-dialog")).toBeInTheDocument();
+  });
+
   it("keeps archived team names tucked away until a manager opens the section", async () => {
     const user = userEvent.setup();
 

@@ -59,6 +59,10 @@ describe("TeamPostsSection action hierarchy", () => {
 
     expect(screen.getByTestId("btn-create-highlight")).toBeInTheDocument();
     expect(screen.getByTestId("btn-season-recap")).toBeInTheDocument();
+    expect(screen.getByTestId("link-historical-recap-team")).toHaveAttribute(
+      "href", "/historical-recap?teamId=team-1",
+    );
+    expect(screen.getByTestId("link-historical-drafts-team")).toHaveAttribute("href", "/drafts");
     expect(screen.getByTestId("btn-create-practice-plan")).toBeInTheDocument();
     expect(screen.getByTestId("btn-add-news")).toBeInTheDocument();
 
@@ -87,6 +91,7 @@ describe("TeamPostsSection action hierarchy", () => {
     expect(
       within(actions).queryByTestId("btn-open-post-options"),
     ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("link-historical-recap-team")).not.toBeInTheDocument();
   });
 
   it("submits an optional game-played date with a news link", async () => {

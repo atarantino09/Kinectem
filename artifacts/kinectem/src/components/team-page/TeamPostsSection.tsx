@@ -39,6 +39,7 @@ import { useInfiniteScrollSentinel } from "@/hooks/useInfiniteScrollSentinel";
 import { EmptyState } from "@/components/EmptyState";
 import {
   Newspaper,
+  History,
   FileText,
   ClipboardList,
   Clapperboard,
@@ -294,12 +295,31 @@ export function TeamPostsSection({
                     </DropdownMenuItem>
                   )}
                   {canPostRecap && (
+                    <DropdownMenuItem asChild>
+                      <Link
+                        href={`/historical-recap?teamId=${teamId}`}
+                        data-testid="link-historical-recap-team"
+                      >
+                        <History className="w-4 h-4 mr-2" />
+                        Historical Recap
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
+                  {canPostRecap && (
                     <DropdownMenuItem
                       onSelect={() => setSeasonRecapOpen(true)}
                       data-testid="btn-season-recap"
                     >
                       <Trophy className="w-4 h-4 mr-2" />
                       Combined Recap
+                    </DropdownMenuItem>
+                  )}
+                  {canPostRecap && (
+                    <DropdownMenuItem asChild>
+                      <Link href="/drafts" data-testid="link-historical-drafts-team">
+                        <Pencil className="w-4 h-4 mr-2" />
+                        Drafts
+                      </Link>
                     </DropdownMenuItem>
                   )}
                   {canManage && (

@@ -548,24 +548,6 @@ export default function TeamPage() {
 
         {expanded === "posts" && (
           <>
-            {canPostRecap && (
-              <div className="flex flex-wrap gap-3">
-                <Link
-                  href={`/historical-recap?teamId=${teamId}`}
-                  className="inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-bold hover:bg-muted"
-                  data-testid="link-historical-recap-team"
-                >
-                  Historical Recap
-                </Link>
-                <Link
-                  href="/drafts"
-                  className="inline-flex items-center gap-1.5 px-1 py-2 text-sm font-semibold underline"
-                  data-testid="link-historical-drafts-team"
-                >
-                  Drafts
-                </Link>
-              </div>
-            )}
             <TournamentScheduleCard
               teamId={teamId}
               canPostRecap={canPostRecap}
