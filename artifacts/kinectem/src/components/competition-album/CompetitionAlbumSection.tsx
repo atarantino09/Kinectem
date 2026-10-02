@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearch } from "wouter";
-import { Camera, ImagePlus, Lock } from "lucide-react";
+import { Camera, ChevronDown, ImagePlus, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import {
   errText,
@@ -31,6 +32,9 @@ export function CompetitionAlbumSection({
   const { toast } = useToast();
   const search = useSearch();
   const wantsPending = new URLSearchParams(search).get("album") === "pending";
+  const [expanded, setExpanded] = useState(
+    () => wantsPending || window.location.hash === "#photos",
+  );
   const [view, setView] = useState<AlbumView>(wantsPending ? "pending" : "approved");
   const [teamFilter, setTeamFilter] = useState("all");
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -55,8 +59,16 @@ export function CompetitionAlbumSection({
   const del = useDeleteAlbumPhoto(competition.id);
 
   useEffect(() => {
+    if (wantsPending) {
+      setExpanded(true);
+      setView("pending");
+    }
+  }, [wantsPending]);
+
+  useEffect(() => {
     if (scrolled.current || !album) return;
     if (wantsPending || window.location.hash === "#photos") {
+      setExpanded(true);
       scrolled.current = true;
       sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
@@ -93,6 +105,7 @@ export function CompetitionAlbumSection({
     effectiveView === "approved" ? filteredApproved : (otherQ.data?.photos ?? []);
 
   return (
+    <Collapsible open={expanded} onOpenChange={setExpanded} asChild>
     <section
       id="photos"
       ref={sectionRef}
@@ -101,25 +114,45 @@ export function CompetitionAlbumSection({
       data-testid="section-competition-album"
     >
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="flex items-center gap-2 text-xl font-black tracking-tight">
-            <Camera className="h-5 w-5" style={{ color: brand }} />
-            Photo Album
-            {album && <Badge variant="secondary" data-testid="badge-approved-count">{album.approvedCount}</Badge>}
+        <div className="min-w-0 flex-1">
+          <h2>
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className="flex w-full items-center justify-between gap-3 rounded-md text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4"
+                data-testid="button-toggle-competition-album"
+              >
+                <span className="min-w-0">
+                  <span className="flex items-center gap-2 text-xl font-black tracking-tight">
+                    <Camera className="h-5 w-5 shrink-0" style={{ color: brand }} />
+                    Photo Album
+                    {album && <Badge variant="secondary" data-testid="badge-approved-count">{album.approvedCount}</Badge>}
+                  </span>
+                  <span className="mt-0.5 block text-sm font-normal text-muted-foreground">
+                    {expanded
+                      ? `Moments from ${competition.name}, tagged to the teams that played.`
+                      : canManage
+                        ? "Expand to browse photos, upload, and review team submissions."
+                        : "Expand to browse competition photos."}
+                  </span>
+                </span>
+                <ChevronDown
+                  aria-hidden="true"
+                  className={`h-5 w-5 shrink-0 text-muted-foreground transition-transform ${expanded ? "rotate-180" : ""}`}
+                />
+              </button>
+            </CollapsibleTrigger>
           </h2>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            Moments from {competition.name}, tagged to the teams that played.
-          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {canManage && (album?.pendingCount ?? 0) > 0 && effectiveView !== "pending" && (
-            <Button size="sm" variant="outline" className="font-bold" onClick={() => setView("pending")} data-testid="button-review-pending">
+            <Button size="sm" variant="outline" className="font-bold" onClick={() => { setExpanded(true); setView("pending"); }} data-testid="button-review-pending">
               <span className="mr-1.5 rounded-full bg-amber-400 px-1.5 text-xs text-amber-950">{album?.pendingCount}</span>
               Review pending
             </Button>
           )}
           {album?.canUpload && (
-            <Button size="sm" variant="brand" className="gap-1.5 font-bold" onClick={() => setUploadOpen(true)} data-testid="button-add-album-photos">
+            <Button size="sm" variant="brand" className="gap-1.5 font-bold" onClick={() => { setExpanded(true); setUploadOpen(true); }} data-testid="button-add-album-photos">
               <ImagePlus className="h-4 w-4" />
               Add photos
             </Button>
@@ -127,6 +160,7 @@ export function CompetitionAlbumSection({
         </div>
       </div>
 
+      <CollapsibleContent className="space-y-4" data-testid="content-competition-album">
       {album && signedIn && !album.canUpload && !album.contributionsOpen && !canManage && (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="text-contributions-closed">
           <Lock className="h-3 w-3" /> Photo contributions are closed for this competition.
@@ -248,6 +282,7 @@ export function CompetitionAlbumSection({
         </Button>
       )}
       {active.isFetching && !active.isLoading && <span className="sr-only" role="status">Refreshing album</span>}
+      </CollapsibleContent>
 
       <AlbumViewer
         photos={viewer?.list ?? []}
@@ -282,5 +317,6 @@ export function CompetitionAlbumSection({
         />
       )}
     </section>
+    </Collapsible>
   );
 }

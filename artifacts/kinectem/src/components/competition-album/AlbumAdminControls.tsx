@@ -2,6 +2,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { errText, useSetContributions } from "@/lib/competitionAlbum";
+import { AlbumAdminGuide } from "./AlbumAdminGuide";
 
 export function AlbumAdminControls({
   competitionId,
@@ -13,6 +14,8 @@ export function AlbumAdminControls({
   const { toast } = useToast();
   const m = useSetContributions(competitionId);
   return (
+    <div className="space-y-4">
+    <AlbumAdminGuide />
     <div className="flex items-start gap-3 rounded-xl border bg-muted/30 p-3">
       <Switch
         id={`album-contrib-${competitionId}`}
@@ -33,6 +36,7 @@ export function AlbumAdminControls({
           blocks new uploads but keeps existing photos.
         </span>
       </Label>
+    </div>
     </div>
   );
 }

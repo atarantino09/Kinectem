@@ -1,0 +1,112 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { renderWithProviders } from "@/test/renderWithProviders";
+import { CompetitionAlbumSection } from "./CompetitionAlbumSection";
+
+const state = vi.hoisted(() => ({
+  search: "",
+  canManage: true,
+  isCompetitionAdmin: true,
+  canUpload: true,
+}));
+const competition = {
+  id: "competition-1", name: "City Cup", slug: "city-cup", logoUrl: null, brandColor: "#3457d5",
+};
+
+vi.mock("wouter", async (importOriginal) => ({
+  ...await importOriginal<typeof import("wouter")>(),
+  useSearch: () => state.search,
+}));
+vi.mock("@/lib/competitionAlbum", () => ({
+  useAlbumSessionId: () => "signed-in-user",
+  useAlbumAuthReset: vi.fn(),
+  useCompetitionAlbum: () => ({
+    data: {
+      competition, photos: [], teams: [], contributionsOpen: false,
+      approvedCount: 0, pendingCount: 1,
+      canManage: state.canManage, isCompetitionAdmin: state.isCompetitionAdmin, canUpload: state.canUpload,
+    },
+    isLoading: false, isError: false, isFetching: false, refetch: vi.fn(),
+  }),
+  useDeleteAlbumPhoto: () => ({ mutate: vi.fn(), isPending: false }),
+  useSetContributions: () => ({ mutate: vi.fn(), isPending: false }),
+  errText: () => "Please try again.",
+}));
+vi.mock("./AlbumUploadDialog", () => ({ AlbumUploadDialog: () => null }));
+vi.mock("./AlbumViewer", () => ({ AlbumViewer: () => null }));
+vi.mock("./AlbumReviewPanel", () => ({
+  AlbumReviewPanel: ({ status }: { status: string }) => <div data-testid="review-status">{status}</div>,
+}));
+
+describe("competition album collapse and admin explanation", () => {
+  beforeEach(() => {
+    state.search = "";
+    state.canManage = true;
+    state.isCompetitionAdmin = true;
+    state.canUpload = true;
+    window.history.replaceState(null, "", "/");
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+  });
+
+  it("starts collapsed and shows the thorough admin guide only after expansion", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<CompetitionAlbumSection competition={competition} />);
+    const toggle = screen.getByTestId("button-toggle-competition-album");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByTestId("guide-competition-photos")).not.toBeInTheDocument();
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByTestId("guide-competition-photos")).toBeVisible();
+    for (const title of [
+      "Add your own competition photos", "Choose whether teams can contribute",
+      "Receive a submission alert", "Review and approve in bulk",
+      "Share approved photos with the right teams", "Stay in control after publication",
+    ]) expect(screen.getByRole("heading", { name: title })).toBeVisible();
+    expect(screen.getByTestId("guide-competition-photos")).toHaveTextContent("approved immediately");
+    expect(screen.getByTestId("guide-competition-photos")).toHaveTextContent("not one per photo");
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByTestId("guide-competition-photos")).not.toBeInTheDocument();
+  });
+
+  it("expands directly into the pending queue from the review shortcut", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<CompetitionAlbumSection competition={competition} />);
+    await user.click(screen.getByTestId("button-review-pending"));
+    expect(screen.getByTestId("button-toggle-competition-album")).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByTestId("review-status")).toHaveTextContent("pending");
+  });
+
+  it("opens automatically for a pending-review notification link", () => {
+    state.search = "?album=pending";
+    renderWithProviders(<CompetitionAlbumSection competition={competition} />);
+    expect(screen.getByTestId("button-toggle-competition-album")).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByTestId("tab-album-pending")).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("opens automatically for a direct photo-section link", () => {
+    window.history.replaceState(null, "", "/#photos");
+    renderWithProviders(<CompetitionAlbumSection competition={competition} />);
+    expect(screen.getByTestId("button-toggle-competition-album")).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("opens a notification link even when the same mounted album was collapsed", async () => {
+    const { rerender } = renderWithProviders(<CompetitionAlbumSection competition={competition} />);
+    state.search = "?album=pending";
+    rerender(<CompetitionAlbumSection competition={competition} />);
+    await waitFor(() => expect(screen.getByTestId("tab-album-pending")).toHaveAttribute("aria-selected", "true"));
+    expect(screen.getByTestId("button-toggle-competition-album")).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it.each([false, true])("does not show the admin guide to non-admins (support review access: %s)", async (canManage) => {
+    state.canManage = canManage;
+    state.isCompetitionAdmin = false;
+    state.canUpload = false;
+    const user = userEvent.setup();
+    renderWithProviders(<CompetitionAlbumSection competition={competition} />);
+    await user.click(screen.getByTestId("button-toggle-competition-album"));
+    expect(screen.queryByTestId("guide-competition-photos")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("switch-album-contributions")).not.toBeInTheDocument();
+  });
+});
