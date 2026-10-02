@@ -1,4 +1,5 @@
 import { useRoute, Link } from "wouter";
+import { CompetitionAlbumSection } from "@/components/competition-album/CompetitionAlbumSection";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   customFetch,
@@ -2014,6 +2015,8 @@ export default function CompetitionPage() {
             onOpenChange={closeRecapImageExporter}
           />
         ) : null}
+
+        <CompetitionAlbumSection competition={c} />
 
         {(q.data.featuredRecaps?.length ?? 0) === 0 ? (
           <Card

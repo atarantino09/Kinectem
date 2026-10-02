@@ -1377,6 +1377,74 @@ CREATE INDEX IF NOT EXISTS roster_invites_coach_invite_group_id_idx
 `;
 
 // hint: Logic changed on both sides. Requires understanding intent of each change.
+const COMPETITION_PHOTO_ALBUMS_MIGRATION = {
+    name: "2026-10-02-competition-photo-albums",
+    sql: `
+      ALTER TABLE tournaments
+        ADD COLUMN IF NOT EXISTS contributions_open boolean NOT NULL DEFAULT false;
+
+      CREATE TABLE IF NOT EXISTS competition_photo_batches (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        competition_id uuid NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+        uploader_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+        client_batch_id text NOT NULL,
+        finalized_at timestamp,
+        created_at timestamp NOT NULL DEFAULT now()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS competition_photo_batches_actor_client_uniq
+        ON competition_photo_batches (uploader_user_id, client_batch_id);
+      CREATE INDEX IF NOT EXISTS competition_photo_batches_competition_created_idx
+        ON competition_photo_batches (competition_id, created_at);
+
+      CREATE TABLE IF NOT EXISTS competition_photos (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        batch_id uuid NOT NULL REFERENCES competition_photo_batches(id) ON DELETE CASCADE,
+        competition_id uuid NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+        uploader_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
+        client_photo_id text NOT NULL,
+        file_name text NOT NULL,
+        file_type text NOT NULL,
+        declared_file_size integer NOT NULL,
+        file_size integer,
+        object_path text,
+        status text NOT NULL DEFAULT 'pending',
+        confirmed_at timestamp,
+        created_at timestamp NOT NULL DEFAULT now()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS competition_photos_batch_client_uniq
+        ON competition_photos (batch_id, client_photo_id);
+      CREATE INDEX IF NOT EXISTS competition_photos_competition_status_idx
+        ON competition_photos (competition_id, status, created_at);
+      CREATE INDEX IF NOT EXISTS competition_photos_uploader_idx
+        ON competition_photos (uploader_user_id, created_at);
+
+      CREATE TABLE IF NOT EXISTS competition_photo_teams (
+        photo_id uuid NOT NULL REFERENCES competition_photos(id) ON DELETE CASCADE,
+        team_id uuid NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+        created_at timestamp NOT NULL DEFAULT now(),
+        PRIMARY KEY (photo_id, team_id)
+      );
+      CREATE INDEX IF NOT EXISTS competition_photo_teams_team_idx
+        ON competition_photo_teams (team_id, photo_id);
+
+      CREATE TABLE IF NOT EXISTS competition_photo_notification_outbox (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        batch_id uuid NOT NULL REFERENCES competition_photo_batches(id) ON DELETE CASCADE,
+        recipient_user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        photo_count integer NOT NULL,
+        bell_created_at timestamp,
+        email_claimed_at timestamp,
+        email_attempted_at timestamp,
+        created_at timestamp NOT NULL DEFAULT now()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS competition_photo_outbox_batch_recipient_uniq
+        ON competition_photo_notification_outbox (batch_id, recipient_user_id);
+      CREATE INDEX IF NOT EXISTS competition_photo_outbox_email_claim_idx
+        ON competition_photo_notification_outbox (email_attempted_at, email_claimed_at);
+    `,
+};
+
+// Run after the historical migrations that create tournaments/users/teams.
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
     name: "2026-09-26-promo-usage-history",
@@ -2935,6 +3003,7 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
       END$migration$;
     `,
   },
+  COMPETITION_PHOTO_ALBUMS_MIGRATION,
 ];
 
 export async function runStartupMigrations(): Promise<void> {

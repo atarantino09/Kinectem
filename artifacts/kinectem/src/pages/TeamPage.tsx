@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { TeamCompetitionPhotos } from "@/components/competition-album/TeamCompetitionPhotos";
 import { useParams, useSearch, useLocation } from "wouter";
 import { useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import {
@@ -569,6 +570,7 @@ export default function TeamPage() {
                 setPracticePlanCreateRequest((request) => request + 1);
               }}
             />
+            <TeamCompetitionPhotos teamId={teamId} />
           </>
         )}
 

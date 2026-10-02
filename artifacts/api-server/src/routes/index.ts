@@ -41,6 +41,9 @@ import broadcastsRouter from "./broadcasts";
 import dailyAdminDigestRouter from "./daily-admin-digest";
 import partnerLandingRouter from "./partner-landing";
 import marketingPartnersRouter from "./marketing-partners";
+import competitionPhotosRouter from "./competition-photos";
+import competitionPhotoUploadRouter from "./competition-photo-upload";
+import competitionPhotoModerationRouter from "./competition-photo-moderation";
 
 const router: Router = Router();
 
@@ -95,5 +98,8 @@ router.use(broadcastsRouter);
 router.use(dailyAdminDigestRouter);
 router.use(partnerLandingRouter);
 router.use(marketingPartnersRouter);
+router.use(competitionPhotosRouter);
+router.use(competitionPhotoUploadRouter);
+router.use(competitionPhotoModerationRouter);
 
 export default router;

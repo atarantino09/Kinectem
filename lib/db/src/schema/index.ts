@@ -2073,6 +2073,8 @@ export const tournaments = pgTable("tournaments", {
   // Task #723 — optional parent-company hub this competition belongs to.
   // Detaching/deleting the organizer never deletes the competition.
   organizerId: uuid("organizer_id").references(() => competitionOrganizers.id, { onDelete: "set null" }),
+  // Team photo contributions are opt-in and disabled by default.
+  contributionsOpen: boolean("contributions_open").notNull().default(false),
   // When false, slot claims land as pending and the operator approves each
   // one in the console before the team links to its games.
   autoApproveClaims: boolean("auto_approve_claims").notNull().default(true),
@@ -2169,6 +2171,65 @@ export const tournamentParticipants = pgTable("tournament_participants", {
     t.nameKey,
     sql`LOWER(BTRIM(COALESCE(${t.gender}, '')))`,
   ),
+}));
+
+// Competition photo bytes are held only in private object storage. These
+// tables persist metadata and immutable object paths, never data URLs/assets.
+export const competitionPhotoBatches = pgTable("competition_photo_batches", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  competitionId: uuid("competition_id").references(() => tournaments.id, { onDelete: "cascade" }).notNull(),
+  uploaderUserId: uuid("uploader_user_id").references(() => users.id, { onDelete: "set null" }),
+  clientBatchId: text("client_batch_id").notNull(),
+  finalizedAt: timestamp("finalized_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  actorClientUnique: uniqueIndex("competition_photo_batches_actor_client_uniq").on(t.uploaderUserId, t.clientBatchId),
+  competitionCreatedIdx: index("competition_photo_batches_competition_created_idx").on(t.competitionId, t.createdAt),
+}));
+
+export const competitionPhotos = pgTable("competition_photos", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  batchId: uuid("batch_id").references(() => competitionPhotoBatches.id, { onDelete: "cascade" }).notNull(),
+  competitionId: uuid("competition_id").references(() => tournaments.id, { onDelete: "cascade" }).notNull(),
+  uploaderUserId: uuid("uploader_user_id").references(() => users.id, { onDelete: "set null" }),
+  clientPhotoId: text("client_photo_id").notNull(),
+  fileName: text("file_name").notNull(),
+  fileType: text("file_type").notNull(),
+  declaredFileSize: integer("declared_file_size").notNull(),
+  fileSize: integer("file_size"),
+  objectPath: text("object_path"),
+  status: text("status").notNull().default("pending"),
+  confirmedAt: timestamp("confirmed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  batchClientUnique: uniqueIndex("competition_photos_batch_client_uniq").on(t.batchId, t.clientPhotoId),
+  competitionStatusIdx: index("competition_photos_competition_status_idx").on(t.competitionId, t.status, t.createdAt),
+  uploaderIdx: index("competition_photos_uploader_idx").on(t.uploaderUserId, t.createdAt),
+}));
+
+export const competitionPhotoTeams = pgTable("competition_photo_teams", {
+  photoId: uuid("photo_id").references(() => competitionPhotos.id, { onDelete: "cascade" }).notNull(),
+  teamId: uuid("team_id").references(() => teams.id, { onDelete: "cascade" }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.photoId, t.teamId] }),
+  teamPhotoIdx: index("competition_photo_teams_team_idx").on(t.teamId, t.photoId),
+}));
+
+// Durable per-recipient dispatch claims make completion retries safe while
+// preserving bell notifications independently from best-effort email.
+export const competitionPhotoNotificationOutbox = pgTable("competition_photo_notification_outbox", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  batchId: uuid("batch_id").references(() => competitionPhotoBatches.id, { onDelete: "cascade" }).notNull(),
+  recipientUserId: uuid("recipient_user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  photoCount: integer("photo_count").notNull(),
+  bellCreatedAt: timestamp("bell_created_at"),
+  emailClaimedAt: timestamp("email_claimed_at"),
+  emailAttemptedAt: timestamp("email_attempted_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  batchRecipientUnique: uniqueIndex("competition_photo_outbox_batch_recipient_uniq").on(t.batchId, t.recipientUserId),
+  pendingEmailIdx: index("competition_photo_outbox_email_claim_idx").on(t.emailAttemptedAt, t.emailClaimedAt),
 }));
 
 // One row per CSV match-slot row. Idempotent on re-upload via the unique

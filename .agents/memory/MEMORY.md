@@ -44,6 +44,7 @@
 - [Email links need /app prefix](email-app-link-prefix.md) — web-app deep-links in emails must be `${appBaseUrl()}/app/...` or the path-based proxy serves the marketing homepage instead; `/api/...` links stay unprefixed.
 - [Pinned-teams per-org cap](pinned-teams-per-org-cap.md) — team pins are 5 PER org (not 5 total); bucket key `orgId ?? "__independent__"` must match client & server; FeedPage orphan group must bucket by real orgId.
 - [Photo album permissions](album-permissions.md) — album upload is team-community only (never followers); view follows post visibility; server returns canUpload/canDelete flags beyond locked spec.
+- [Competition photo albums](competition-photo-albums.md) — optional team contributions require approval; subtle competition attribution remains on tagged team-page photos.
 - [Competition CSV import header aliasing](csv-import-header-aliasing.md) — schedule import must accept scheduling-tool exports as-is; only 4 required columns, never re-tighten.
 - [Competition branding on posts](post-competition-branding.md) — recap PostResponse carries a `competition` brand block (extra beyond locked spec); in-app page at /competitions/c/:slug must precede console route.
 - [Independent teams & org joins](independent-team-org-joins.md) — org-less teams: innerJoin organizations silently drops all their posts; always leftJoin + nullable org.

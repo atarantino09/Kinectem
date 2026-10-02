@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { CompetitionAlbumConsolePanel } from "@/components/competition-album/CompetitionAlbumConsolePanel";
 import { Link, useLocation, useRoute } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -4210,6 +4211,7 @@ function ConsoleWithTour({
             collapsible
           />
           <CompetitionPartnerPagesPanel competitionId={row.id} />
+          <CompetitionAlbumConsolePanel competitionId={row.id} slug={row.slug} />
         </>
       ) : null}
       {detail ? (
