@@ -12,7 +12,7 @@ import {
   notifications,
   competitionBrackets,
 } from "@workspace/db";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
@@ -44,6 +44,7 @@ import {
   TRUSTED_MINOR_NAME_CONTEXT,
 } from "../lib/spec-helpers";
 import { loadHighlightTagViews } from "../lib/highlight-tagging";
+import { authorizeHistoricalScope } from "../lib/historical-recaps";
 import {
   loadPostStats,
   statsFor,
@@ -83,18 +84,18 @@ router.get(
       .select({ a: articles, team: teams, org: organizations, author: users })
       .from(articles)
       .innerJoin(teams, eq(articles.teamId, teams.id))
-      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .leftJoin(organizations, eq(teams.organizationId, organizations.id))
       .leftJoin(users, eq(articles.authorId, users.id))
-      .where(and(eq(articles.status, "draft"), eq(articles.authorId, me.id)))
+      .where(and(eq(articles.status, "draft"), eq(articles.authorId, me.id), isNull(articles.hiddenAt)))
       .orderBy(desc(articles.createdAt));
     const coRows = await db
       .select({ a: articles, team: teams, org: organizations, author: users })
       .from(articleAuthors)
       .innerJoin(articles, eq(articleAuthors.articleId, articles.id))
       .innerJoin(teams, eq(articles.teamId, teams.id))
-      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+      .leftJoin(organizations, eq(teams.organizationId, organizations.id))
       .leftJoin(users, eq(articles.authorId, users.id))
-      .where(and(eq(articles.status, "draft"), eq(articleAuthors.userId, me.id)));
+      .where(and(eq(articles.status, "draft"), eq(articleAuthors.userId, me.id), isNull(articles.hiddenAt)));
     const seen = new Set<string>();
     const candidateDrafts = [...owned, ...coRows].filter((r) => {
       if (seen.has(r.a.id)) return false;
@@ -106,7 +107,10 @@ router.get(
     // stale-author case when a coach is removed from the team.
     const all = (
       await Promise.all(
-        candidateDrafts.map(async (r) =>
+         candidateDrafts.map(async (r) =>
+           r.a.recapKind === "historical"
+             ? (await authorizeHistoricalScope(me.id, { teamId: r.team.id })) ? r : null
+             :
           r.a.articleKind !== "practice_plan" ||
           (await canManageTeam(me.id, r.team))
             ? r
@@ -119,7 +123,7 @@ router.get(
         articleId: r.a.id,
         authorId: r.a.authorId,
         teamId: r.team.id,
-        orgId: r.org.id,
+        orgId: r.org?.id ?? null,
       })),
     );
     // Task #414 — drafts list is restricted to the author + co-authors
@@ -127,15 +131,31 @@ router.get(
     // Opt out of masking explicitly to document intent and to satisfy
     // the now fail-safe `displayNameForViewer` default.
     const data = all.map((r) =>
-      articleToPost(r.a, {
+      ({ ...articleToPost(r.a, {
         team: r.team,
         org: r.org,
         author: r.author,
         authorRole: authorRoleMap.get(r.a.id) ?? null,
         minorNameCtx: TRUSTED_MINOR_NAME_CONTEXT,
-      }),
+      }), teamId: r.team.id, team: { id: r.team.id, name: r.team.name },
+        organizationId: r.org?.id ?? null }),
     );
-    res.json(paginate(data));
+    const orgDrafts = await db.select({ p: orgPosts, org: organizations, author: users })
+      .from(orgPosts).innerJoin(organizations, eq(orgPosts.organizationId, organizations.id))
+      .leftJoin(users, eq(orgPosts.authorId, users.id))
+      .where(and(eq(orgPosts.status, "draft"), eq(orgPosts.recapKind, "historical"),
+        eq(orgPosts.authorId, me.id), isNull(orgPosts.hiddenAt)));
+    const historicalOrgDrafts = [];
+    for (const r of orgDrafts) {
+      if (await authorizeHistoricalScope(me.id, { organizationId: r.org.id })) {
+        historicalOrgDrafts.push({
+          ...orgPostToPost(r.p, { org: r.org, author: r.author, canEdit: true, minorNameCtx: TRUSTED_MINOR_NAME_CONTEXT }),
+          organizationId: r.org.id, organization: { id: r.org.id, name: r.org.name },
+          team: null, teamId: null,
+        });
+      }
+    }
+    res.json(paginate([...data, ...historicalOrgDrafts].sort((a, b) => b.createdAt.localeCompare(a.createdAt))));
   }),
 );
 

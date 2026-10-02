@@ -11,26 +11,33 @@ type DraftItem = {
   title?: string | null;
   description?: string | null;
   team?: { id: string; name: string };
+  organization?: { id: string; name: string } | null;
+  organizationId?: string | null;
+  teamId?: string | null;
+  recapKind?: string | null;
   createdAt: string;
 };
 
 export default function DraftsPage() {
   const [drafts, setDrafts] = useState<DraftItem[] | null>(null);
+  const [error, setError] = useState(false);
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
     let mounted = true;
-    customFetch<{ data: DraftItem[] }>("/drafts", { method: "GET" }).then(
+    setError(false);
+    customFetch<{ data: DraftItem[] }>("/api/v1/drafts", { method: "GET" }).then(
       (res) => {
         if (mounted) setDrafts(res.data ?? []);
       },
       () => {
-        if (mounted) setDrafts([]);
+        if (mounted) setError(true);
       },
     );
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [retry]);
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -48,7 +55,12 @@ export default function DraftsPage() {
         </Link>
       </div>
 
-      {drafts === null ? (
+      {error ? (
+        <div role="alert" className="space-y-3">
+          <p>We couldn't load your drafts. Your saved posts have not been removed.</p>
+          <Button variant="outline" onClick={() => setRetry((value) => value + 1)}>Try again</Button>
+        </div>
+      ) : drafts === null ? (
         <>
           <Skeleton className="h-24 rounded-xl" />
           <Skeleton className="h-24 rounded-xl" />
@@ -66,7 +78,18 @@ export default function DraftsPage() {
       ) : (
         <div className="space-y-3">
           {drafts.map((d) => (
-            <Link key={d.id} href={`/posts/new?draftId=${d.id}`}>
+            <Link
+              key={d.id}
+              href={
+                d.recapKind === "historical"
+                  ? `/historical-recap?${
+                      d.organizationId && !d.team
+                        ? `organizationId=${d.organizationId}`
+                        : `teamId=${d.team?.id ?? d.teamId ?? ""}`
+                    }&postId=${d.id}`
+                  : `/posts/new?draftId=${d.id}`
+              }
+            >
               <Card
                 className="rounded-xl border border-border shadow-sm hover:border-primary/50 cursor-pointer transition-colors"
                 data-testid={`card-draft-${d.id}`}
@@ -90,7 +113,8 @@ export default function DraftsPage() {
                       </p>
                     )}
                     <div className="text-[11px] text-muted-foreground mt-2 font-semibold">
-                      {d.team?.name ?? ""} •{" "}
+                      {d.recapKind === "historical" ? "Historical Recap · " : ""}
+                      {d.team?.name ?? d.organization?.name ?? ""} •{" "}
                       {new Date(d.createdAt).toLocaleDateString()}
                     </div>
                   </div>

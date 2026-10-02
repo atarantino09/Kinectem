@@ -122,12 +122,17 @@ export async function applyArticleTagFanout(args: {
   gameDate: Date | null;
   recapKind?: string | null;
 }): Promise<string[]> {
+  // Trust the persisted subtype, not the caller's date or subtype. This guard
+  // covers create, edit, publish and approval, including future call sites.
+  const [article] = await db.select({ recapKind: articles.recapKind })
+    .from(articles).where(eq(articles.id, args.articleId)).limit(1);
+  const historical = article?.recapKind === "historical";
   type Entry = { status: "approved" | "pending"; source: "manual" | "auto" };
   const tagMap = new Map<string, Entry>();
   for (const uid of args.explicitUserIds) {
     tagMap.set(uid, { status: "approved", source: "manual" });
   }
-  if (args.gameDate || args.recapKind === "combined") {
+  if (!historical && (args.gameDate || args.recapKind === "combined")) {
     const players = await db
       .select({
         userId: rosterEntries.userId,

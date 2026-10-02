@@ -53,6 +53,13 @@ import { ShareConfirmDialog } from "@/components/ShareConfirmDialog";
 import { TaggedPlayers } from "@/components/TaggedPlayers";
 import { useToast } from "@/hooks/use-toast";
 import { NewsGameDateDialog } from "@/components/NewsGameDateDialog";
+import { ClippingViewer } from "@/components/historical/ClippingViewer";
+import {
+  getHistorical,
+  historicalDateLabel,
+  historicalEditHref,
+  historicalSourceLine,
+} from "@/lib/historical";
 
 function getContextHref(context: {
   type: "team" | "organization" | "user";
@@ -241,7 +248,11 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
   // competition's public rail (extra field beyond the locked spec).
   const competitionFeatured =
     (post as { competitionFeatured?: boolean }).competitionFeatured === true;
-  const label = isNews
+  const historical = getHistorical(post);
+  const isHistorical = !!historical && !isNews && !isShort;
+  const label = isHistorical
+    ? "Historical Recap"
+    : isNews
     ? "In the News"
     : reportTarget.contentType === "highlight"
       ? "Highlight"
@@ -250,7 +261,7 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
         : isCombinedRecap
           ? "Combined Recap"
           : "Game Recap";
-  const badgeClass = "brand-pill";
+  const badgeClass = isHistorical ? "historical-badge" : "brand-pill";
 
   const firstImage = post.assets?.find((a) => a.fileType?.startsWith("image/"));
   const allImages = (post.assets ?? []).filter((a) =>
@@ -279,7 +290,8 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
       predicate: (q) =>
         Array.isArray(q.queryKey) &&
         typeof q.queryKey[0] === "string" &&
-        q.queryKey[0].startsWith("/api/v1/users/") &&
+        (q.queryKey[0].startsWith("/api/v1/users/") ||
+          (isHistorical && /^\/api\/v1\/(teams|organizations)\//.test(q.queryKey[0]))) &&
         q.queryKey[0].endsWith("/posts"),
     });
     qc.invalidateQueries({ queryKey: getGetPostQueryKey(post.id) });
@@ -356,14 +368,13 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
     }
   };
 
-  // Task #190 — Shareable kinds are game-recap articles (long-form
-  // article + gameDate) and any highlight. Org posts and free-form
-  // long-form articles without a gameDate stay un-shareable to mirror
-  // the server gating.
+  // Historical recaps in either scope do not need a current gameDate.
+  // Ordinary organization Updates and free-form articles remain unshareable.
   const isShareable =
     (post.id.startsWith("article-") &&
       post.postType === "long" &&
-      !!post.gameDate) ||
+      (!!post.gameDate || isHistorical)) ||
+    (post.id.startsWith("orgpost-") && isHistorical) ||
     post.id.startsWith("highlight-") ||
     // Task #867 — news posts are shareable too.
     post.id.startsWith("news-");
@@ -415,6 +426,7 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
     <Card
       className={cn(
         "app-surface app-surface-interactive overflow-hidden",
+        isHistorical && "historical-card",
         isCombinedRecap &&
           "bg-gradient-to-br from-purple-50 to-violet-100/60 dark:from-purple-950/30 dark:to-violet-900/20",
         // News cards get a light brand-blue tint (matches --brand-blue /
@@ -561,6 +573,28 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
                 {" • "}
                 {timeAgo(post.createdAt)}
               </p>
+              {isHistorical && historical && (
+                <div
+                  className="mt-1 text-[11px] font-semibold"
+                  data-testid={`historical-dates-${post.id}`}
+                >
+                  <span data-testid={`text-historical-date-${post.id}`}>
+                    {historical.gameDate ? "Game played: " : "Year: "}
+                    {historicalDateLabel(historical)}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {" · "}Uploaded {formatDate(post.createdAt)}
+                  </span>
+                  {historicalSourceLine(historical) && (
+                    <div
+                      className="text-muted-foreground italic"
+                      data-testid={`text-historical-source-${post.id}`}
+                    >
+                      {historicalSourceLine(historical)}
+                    </div>
+                  )}
+                </div>
+              )}
               {isNews && (
                 <div
                   className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground"
@@ -639,7 +673,9 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
                   <DropdownMenuItem
                     onSelect={() =>
                       setLocation(
-                        `/posts/new?editId=${encodeURIComponent(post.id)}&from=${encodeURIComponent(currentPath + (typeof window !== "undefined" ? window.location.search : ""))}`,
+                        isHistorical
+                          ? historicalEditHref(post)
+                          : `/posts/new?editId=${encodeURIComponent(post.id)}&from=${encodeURIComponent(currentPath + (typeof window !== "undefined" ? window.location.search : ""))}`,
                       )
                     }
                     data-testid={`menuitem-edit-${post.id}`}
@@ -859,6 +895,7 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
                   <h3
                     className={cn(
                       "font-black tracking-tight leading-tight hover:underline cursor-pointer",
+                      isHistorical && "historical-title",
                       isGameRecap ? "text-xl" : "text-lg",
                     )}
                   >
@@ -878,9 +915,12 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
             {!isNews &&
               post.title &&
               !isShort &&
-              reportTarget.contentType === "article" && (
+              (reportTarget.contentType === "article" || isHistorical) && (
                 <hr
-                  className="border-t border-border mb-2"
+                  className={cn(
+                    "border-t border-border mb-2",
+                    isHistorical && "historical-rule",
+                  )}
                   data-testid={`divider-post-title-card-${post.id}`}
                 />
               )}
@@ -892,7 +932,16 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
             {!isNews && !isShort && post.body && (
               <RecapExcerpt body={post.body} postId={post.id} />
             )}
-            {!isNews && !isShort && allImages.length > 0 && (
+            {isHistorical && firstImage?.url && (
+              <div className="mb-2">
+                <ClippingViewer
+                  src={firstImage.url}
+                  alt={`Original clipping: ${post.title ?? "historical recap"}`}
+                  postId={post.id}
+                />
+              </div>
+            )}
+            {!isNews && !isShort && !isHistorical && allImages.length > 0 && (
               <PhotoAlbum
                 images={allImages
                   .map((a) => a.url)
@@ -987,7 +1036,7 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
             </Button>
           )}
           {/* Task #867 — news posts have no media albums; the action stays hidden. */}
-          {!isShort && !isNews && (
+          {!isShort && !isNews && !(isHistorical && reportTarget.contentType === "org_post") && (
             <Link href={`/posts/${post.id}?album=1`}>
               <Button
                 variant="outline"

@@ -44,8 +44,11 @@ import marketingPartnersRouter from "./marketing-partners";
 import competitionPhotosRouter from "./competition-photos";
 import competitionPhotoUploadRouter from "./competition-photo-upload";
 import competitionPhotoModerationRouter from "./competition-photo-moderation";
+import historicalRecapsRouter from "./historical-recaps";
+import { guardHistoricalClippingAttachments } from "../middlewares/historical-clipping-attachments";
 
 const router: Router = Router();
+router.use(guardHistoricalClippingAttachments);
 
 // /admin/* — admin-only operations (gated inside the router by requireAdmin)
 router.use("/admin", adminRouter);
@@ -65,6 +68,7 @@ router.use(followRequestsRouter);
 router.use(teamsRouter);
 router.use(scheduleRouter);
 router.use(parentInboxRouter);
+router.use(historicalRecapsRouter);
 router.use(postsRouter);
 router.use(draftsRouter);
 router.use(notificationsRouter);

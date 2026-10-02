@@ -73,6 +73,13 @@ import { TakedownDialog } from "@/components/TakedownDialog";
 import { ShareRecapImageDialog } from "@/components/share-image/ShareRecapImageDialog";
 import { FitText } from "@/components/FitText";
 import { apiErrorMessage } from "@/lib/api-errors";
+import { ClippingViewer } from "@/components/historical/ClippingViewer";
+import {
+  getHistorical,
+  historicalDateLabel,
+  historicalEditHref,
+  historicalSourceLine,
+} from "@/lib/historical";
 
 export default function PostPage() {
   const params = useParams<{ postId: string }>();
@@ -320,7 +327,15 @@ export default function PostPage() {
   ).newsLink;
   const isNews = post.id.startsWith("news-") && !!newsLink;
   const Icon = isShort ? Play : FileText;
-  const label = isNews ? "In the News" : isShort ? "Highlight" : "Game Recap";
+  const historical = getHistorical(post);
+  const isHistorical = !!historical && !isNews && !isShort;
+  const label = isHistorical
+    ? "Historical Recap"
+    : isNews
+      ? "In the News"
+      : isShort
+        ? "Highlight"
+        : "Game Recap";
   const isGameRecap = !isNews && !isShort;
   // Task #739 — the detail response carries the viewer-visible tag
   // list for recaps; @-mention tokens only render as live profile
@@ -464,6 +479,53 @@ export default function PostPage() {
       data-testid="post-detail-layout"
     >
       {authorIsMinor ? <NoIndex /> : null}
+      {isHistorical && historical && (
+        <header
+          className="historical-card rounded-md border p-4 space-y-2"
+          data-testid="header-historical"
+        >
+          <span className="historical-badge inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest">
+            Historical Recap
+          </span>
+          {post.title && (
+            <h1 className="historical-title text-3xl leading-tight">
+              {post.title}
+            </h1>
+          )}
+          <hr className="historical-rule" />
+          <p className="text-sm font-semibold" data-testid="text-historical-date">
+            {historical.gameDate ? "Game played: " : "Year: "}
+            {historicalDateLabel(historical)}
+            <span className="text-muted-foreground">
+              {" · "}Uploaded {formatDate(post.createdAt)}
+            </span>
+          </p>
+          {historicalSourceLine(historical) && (
+            <p
+              className="text-sm italic text-muted-foreground"
+              data-testid="text-historical-source"
+            >
+              {historicalSourceLine(historical)}
+            </p>
+          )}
+          {images[0]?.url && (
+            <ClippingViewer
+              src={images[0].url}
+              alt={`Original clipping: ${post.title ?? "historical recap"}`}
+              postId={post.id}
+            />
+          )}
+          {post.canEdit && (
+            <Link
+              href={historicalEditHref(post)}
+              className="inline-flex items-center gap-1 text-sm font-bold underline"
+              data-testid="link-edit-historical"
+            >
+              <Pencil className="w-3 h-3" /> Edit historical recap
+            </Link>
+          )}
+        </header>
+      )}
       {asChildId && childPlausiblyLinked && (
         <div className="flex justify-end">
           <Button
@@ -672,7 +734,7 @@ export default function PostPage() {
           />
         </div>
       ) : (
-        post.title && (
+        !isHistorical && post.title && (
           <div className="space-y-1">
             <FitText
               as="h1"
@@ -694,7 +756,7 @@ export default function PostPage() {
           </div>
         )
       )}
-      {((editing && isAdminOnPending) || post.title) && !isShort && (
+      {((editing && isAdminOnPending) || post.title) && !isShort && !isHistorical && (
         <hr
           className="border-t border-border"
           data-testid="divider-post-title"
@@ -739,7 +801,13 @@ export default function PostPage() {
             {post.isEdited && " • edited"}
           </p>
         </div>
-        {isAdminOnPending ? (
+        {isHistorical && post.canEdit ? (
+          <Link href={historicalEditHref(post)}>
+            <Button variant="outline" size="sm" data-testid="button-edit-post">
+              <Pencil className="w-3.5 h-3.5 mr-1.5" /> Edit
+            </Button>
+          </Link>
+        ) : isAdminOnPending ? (
           editing ? (
             <div
               className="inline-flex gap-2"
@@ -1049,7 +1117,7 @@ export default function PostPage() {
 
       {/* Photos render after the body in the order the API returns them,
           which mirrors the upload order chosen in the new-post form. */}
-      {images.length > 0 && (
+      {!isHistorical && images.length > 0 && (
         <div className="grid grid-cols-1 gap-3">
           {images.map((img) => (
             <div
@@ -1114,7 +1182,7 @@ export default function PostPage() {
       )}
 
       {/* Task #867 — news posts have no photo albums. */}
-      {!isShort && !isNews && <GamePhotoAlbum postId={postId} />}
+      {!isShort && !isNews && !(isHistorical && post.id.startsWith("orgpost-")) && <GamePhotoAlbum postId={postId} />}
     </article>
   );
 }

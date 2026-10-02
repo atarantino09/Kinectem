@@ -98,3 +98,4 @@
 - [Promo usage accounting](promo-usage-accounting.md) — pre-tracking dates may use qualified subscription-creation estimates; redemption is not proof of a paid invoice discount.
 - [Kinectem standalone build environment](kinectem-build-env.md) — a shell build does not inherit web-workflow PORT/BASE_PATH; supply both explicitly.
 - [Admin user organization association](admin-user-org-association.md) — admin Users orgs include direct, accepted-roster, and active guardian-child ties; follows are not membership.
+- [Historical recap intent](historical-recap-intent.md) — original newspaper transcription, not rewriting; school history must not imply current-roster or schedule activity.

@@ -24,6 +24,7 @@ const NewPostPage = lazy(() => import("@/pages/NewPostPage"));
 const SearchPage = lazy(() => import("@/pages/SearchPage"));
 const MessagesPage = lazy(() => import("@/pages/MessagesPage"));
 const PendingTagsPage = lazy(() => import("@/pages/PendingTagsPage"));
+const HistoricalRecapPage = lazy(() => import("@/pages/HistoricalRecapPage"));
 const DraftsPage = lazy(() => import("@/pages/DraftsPage"));
 const MyTagsPage = lazy(() => import("@/pages/MyTagsPage"));
 const GuardianPage = lazy(() => import("@/pages/GuardianPage"));
@@ -167,6 +168,7 @@ function Router() {
           {(p) => <Redirect to={`/c/${p.slug}`} replace />}
         </Route>
         <Route path="/posts/new" component={NewPostPage} />
+        <Route path="/historical-recap" component={HistoricalRecapPage} />
 
         {/* Layout routes */}
         <Route>

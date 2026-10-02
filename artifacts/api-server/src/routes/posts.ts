@@ -111,6 +111,7 @@ import {
   type MinorNameViewerContext,
 } from "../lib/spec-helpers";
 import { loadCompetitionBrandMap } from "../lib/competition-brand";
+import { loadHistoricalOrgShares } from "../lib/historical-sharing";
 import { loadPostStats, statsFor, loadPostOwnerId, loadPostShareStats, shareStatsFor } from "../lib/post-stats";
 import {
   deriveCompetitionLink,
@@ -1045,8 +1046,8 @@ router.get(
       ...sharedNewsRows.map((r) => ({ kind: "news" as const, refId: r.n.id })),
     ];
     const shareStatKeys = statKeys.filter(
-      (k): k is { kind: "article" | "highlight" | "news"; refId: string } =>
-        k.kind === "article" || k.kind === "highlight" || k.kind === "news",
+      (k): k is { kind: "article" | "highlight" | "news" | "org_post"; refId: string } =>
+        k.kind === "article" || k.kind === "highlight" || k.kind === "news" || k.kind === "org_post",
     );
     const articleEditRows = [
       ...arts.map((r) => ({
@@ -1240,6 +1241,7 @@ router.get(
           canEdit: isAuthor || isOrgAdmin,
           canDelete: isAuthor,
           ...statsFor(stats, "org_post", r.p.id),
+          ...shareStatsFor(shareStats, "org_post", r.p.id),
           minorNameCtx: minorCtx,
         });
       }),
@@ -1254,6 +1256,12 @@ router.get(
       ),
     ];
 
+    const historicalOrgShares = await loadHistoricalOrgShares({
+      viewerId: me.id, viewerRole: req.realUser?.role ?? null, sharerIds,
+      limit: shareFetchCap, before: pageCursor?.ts,
+    });
+    const originIds = new Set(items.map((p) => p.id));
+    items.push(...historicalOrgShares.filter((p) => !originIds.has(p.id)));
     for (const sr of shareRows) {
       // Task #367 — also drop shares whose target is under takedown.
       if (sr.s.postKind === "article" && feedPendingArtIds.has(sr.s.postRefId)) continue;
@@ -1984,6 +1992,7 @@ router.get(
       const stats = await loadPostStats(me?.id ?? null, [
         { kind: "org_post", refId: row.p.id },
       ]);
+      const shareStats = await loadPostShareStats(me?.id ?? null, [{ kind: "org_post", refId: row.p.id }]);
       // Task #414 — org_post author chip masking.
       const orgPostMinorCtx = await buildMinorNameContext(
         { id: me?.id ?? null, role: req.realUser?.role ?? null },
@@ -1997,6 +2006,7 @@ router.get(
           canEdit,
           canDelete,
           ...statsFor(stats, "org_post", row.p.id),
+          ...shareStatsFor(shareStats, "org_post", row.p.id),
           minorNameCtx: orgPostMinorCtx,
         }),
         ...(isAdmin && row.p.hiddenAt ? { hidden: true as const } : {}),
@@ -2540,17 +2550,23 @@ router.delete(
 // Re-shares are stored polymorphically in `post_shares (postKind,
 // postRefId, sharerUserId)` and are scoped to the viewer-facing
 // post kinds: game-recap articles, highlights, and (task #867)
-// "In the News" posts. Org posts are
-// rejected with 400. Visibility mirrors GET /posts/:postId — drafts,
+// "In the News" posts, plus historical recaps in either scope.
+// Ordinary org Updates remain rejected. Visibility mirrors GET /posts/:postId — drafts,
 // hidden, and non-recap articles return 404 to non-authors. Any
 // viewer of the post (including team-follower fans who are not on
 // the roster) may share it.
 
 async function loadShareableTarget(
-  parsed: { kind: "article" | "highlight" | "news"; id: string },
+  parsed: { kind: "article" | "highlight" | "news" | "org_post"; id: string },
   meId: string | null,
   isAdmin: boolean,
 ): Promise<{ ok: true; ownerId: string | null; title: string; kindLabel: "recap" | "highlight" | "news article" } | { ok: false }> {
+  if (parsed.kind === "org_post") {
+    const [p] = await db.select().from(orgPosts).where(eq(orgPosts.id, parsed.id)).limit(1);
+    if (!p || p.recapKind !== "historical" || p.status !== "published" || p.hiddenAt ||
+      await isPendingTakedown("org_post", p.id, meId)) return { ok: false };
+    return { ok: true, ownerId: p.authorId, title: p.title, kindLabel: "recap" };
+  }
   // Task #867 — news posts are shareable. They have no draft/hidden
   // state, so existence is sufficient; owner is whoever added the link
   // (nullable → bell simply skipped for orphaned links).
@@ -2583,9 +2599,9 @@ async function loadShareableTarget(
     if (row.a.status !== "published" && !isAuthor && !isOrgAdmin) {
       return { ok: false };
     }
-    // Recap-only: a long-form article without a gameDate is not a
-    // game recap and is not shareable per task #162 (kept under #190).
-    if (!row.a.gameDate) return { ok: false };
+    // Historical dates are independent metadata, never current gameDate.
+    // Other long-form articles still need gameDate to qualify as a recap.
+    if (!row.a.gameDate && row.a.recapKind !== "historical") return { ok: false };
     return { ok: true, ownerId: row.a.authorId, title: row.a.title, kindLabel: "recap" };
   }
   const [row] = await db
@@ -2608,9 +2624,10 @@ router.post(
     const parsed = parsePostId(req.params.postId);
     if (!parsed) return notFound(res);
     if (parsed.kind === "org_post") {
-      return apiError(res, 400, "Org posts cannot be re-shared");
+      const [p] = await db.select({ recapKind: orgPosts.recapKind }).from(orgPosts).where(eq(orgPosts.id, parsed.id)).limit(1);
+      if (p?.recapKind !== "historical") return apiError(res, 400, "Org posts cannot be re-shared");
     }
-    const shareableParsed = parsed as { kind: "article" | "highlight" | "news"; id: string };
+    const shareableParsed = parsed;
     const isAdmin = req.realUser?.role === "admin" && !req.isMasquerading;
     const target = await loadShareableTarget(shareableParsed, me.id, isAdmin);
     if (!target.ok) return notFound(res);
@@ -2660,7 +2677,8 @@ router.delete(
     const parsed = parsePostId(req.params.postId);
     if (!parsed) return notFound(res);
     if (parsed.kind === "org_post") {
-      return apiError(res, 400, "Org posts cannot be re-shared");
+      const [p] = await db.select({ recapKind: orgPosts.recapKind }).from(orgPosts).where(eq(orgPosts.id, parsed.id)).limit(1);
+      if (p?.recapKind !== "historical") return apiError(res, 400, "Org posts cannot be re-shared");
     }
     await db
       .delete(postShares)
@@ -2833,6 +2851,9 @@ router.post(
     if (!me) return apiError(res, 401, "Not authenticated");
     const body = req.body ?? {};
     // Task #692 — recaps attach photos inline as base64 `data:` URLs. Reject an
+    if (body.recapKind === "historical" || body.historical !== undefined) {
+      return apiError(res, 400, "Use the Historical Recap workflow to create a reviewed draft.");
+    }
     // over-cap payload with a friendly 413 before any DB write, so an oversized
     // recap surfaces "image too large" instead of an opaque body-parser failure
     // (and never persists a photoless recap while the client thinks it failed).

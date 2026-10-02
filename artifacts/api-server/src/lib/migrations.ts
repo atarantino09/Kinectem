@@ -1447,6 +1447,14 @@ const COMPETITION_PHOTO_ALBUMS_MIGRATION = {
 // Run after the historical migrations that create tournaments/users/teams.
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
   {
+    name: "historical-recap-metadata",
+    sql: `
+      ALTER TABLE articles ADD COLUMN IF NOT EXISTS historical jsonb;
+      ALTER TABLE org_posts ADD COLUMN IF NOT EXISTS recap_kind text;
+      ALTER TABLE org_posts ADD COLUMN IF NOT EXISTS historical jsonb;
+    `,
+  },
+  {
     name: "2026-09-26-promo-usage-history",
     sql: `
       CREATE TABLE IF NOT EXISTS promo_usage (

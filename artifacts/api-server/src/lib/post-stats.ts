@@ -3,6 +3,8 @@ import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { logger } from "./logger.js";
 
 export interface PostStats {
+  shareCount?: number;
+  hasShared?: boolean;
   reactionCount: number;
   hasReacted: boolean;
   commentCount: number;
@@ -160,6 +162,11 @@ export async function loadPostStats(
     );
   }
   await Promise.all(tasks);
+  const orgIds = idsByKind.get("org_post") ?? [];
+  if (orgIds.length) {
+    const shares = await loadPostShareStats(meId, orgIds.map((refId) => ({ kind: "org_post" as const, refId })));
+    for (const refId of orgIds) Object.assign(map.get(statsKey("org_post", refId))!, shareStatsFor(shares, "org_post", refId));
+  }
   return map;
 }
 
@@ -179,9 +186,9 @@ export function statsFor(
   );
 }
 
-// Share stats — `article`, `highlight`, and `news` (#867) are valid share
-// targets; org_post is rejected at the share API layer (#190).
-export type ShareStatsKind = "article" | "highlight" | "news";
+// Share stats include historical org posts. The share API still rejects
+// ordinary organization Updates.
+export type ShareStatsKind = "article" | "highlight" | "news" | "org_post";
 
 export async function loadPostShareStats(
   meId: string | null,
@@ -195,12 +202,14 @@ export async function loadPostShareStats(
   const articleIds = capBatch(items.filter((i) => i.kind === "article").map((i) => i.refId));
   const highlightIds = capBatch(items.filter((i) => i.kind === "highlight").map((i) => i.refId));
   const newsIds = capBatch(items.filter((i) => i.kind === "news").map((i) => i.refId));
+  const orgIds = capBatch(items.filter((i) => i.kind === "org_post").map((i) => i.refId));
 
   const tasks: Promise<unknown>[] = [];
   for (const [kind, refIds] of [
     ["article", articleIds] as const,
     ["highlight", highlightIds] as const,
     ["news", newsIds] as const,
+    ["org_post", orgIds] as const,
   ]) {
     if (refIds.length === 0) continue;
     tasks.push(

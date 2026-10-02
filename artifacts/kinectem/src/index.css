@@ -953,3 +953,27 @@
     background-color: hsl(var(--muted-foreground) / 0.6);
   }
 }
+
+/* Historical Recap vintage treatment (historical posts only) */
+.historical-card {
+  background-color: #f6efdc;
+  background-image: repeating-linear-gradient(0deg, rgba(120,90,40,.035) 0 1px, transparent 1px 3px);
+  color: #2a2118;
+  border-color: #cdbd98;
+}
+.historical-card .historical-title { font-family: Georgia, "Times New Roman", serif; font-weight: 800; color: #1f1710; }
+.historical-card .text-muted-foreground { color: #5d4d36; }
+.historical-rule { border-top: 3px double #8a7550; }
+.historical-badge { background: #e6d3a6; color: #5a3d14; border: 1px solid #b89a5c; }
+.historical-clipping { background: rgba(255,255,255,.4); border: 1px solid #cdbd98; }
+.dark .historical-card {
+  background-color: #2a2520;
+  background-image: repeating-linear-gradient(0deg, rgba(255,220,160,.03) 0 1px, transparent 1px 3px);
+  color: #eadfc8;
+  border-color: #5a4d3a;
+}
+.dark .historical-card .historical-title { color: #f3e8d0; }
+.dark .historical-card .text-muted-foreground { color: #b9a98c; }
+.dark .historical-rule { border-color: #7a6a4c; }
+.dark .historical-badge { background: #4a3d28; color: #ecd9a8; border-color: #7a6a4c; }
+.dark .historical-clipping { background: rgba(0,0,0,.25); border-color: #5a4d3a; }

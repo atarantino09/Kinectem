@@ -39,7 +39,7 @@ vi.mock("@/components/PostInteractions", () => ({
   PostInteractions: () => null,
 }));
 vi.mock("@/components/GamePhotoAlbum", () => ({
-  GamePhotoAlbum: () => null,
+  GamePhotoAlbum: () => <div data-testid="game-photo-album" />,
 }));
 vi.mock("@/components/AvatarLightbox", () => ({
   AvatarLightbox: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -89,6 +89,28 @@ const postFixture = (
   }) as never;
 
 describe("PostPage delete permissions", () => {
+  it("does not imply a team album on a direct school historical recap", async () => {
+    customFetchMock.mockResolvedValue({
+      ...(postFixture({ canEdit: true, canDelete: true }, "orgpost-history") as object),
+      recapKind: "historical",
+      historical: { gameDate: null, year: 1974, newspaper: "Gazette", byline: null, publicationDate: null,
+        rightsConfirmed: true, reviewed: true },
+      context: { type: "organization", id: "school-1", name: "School" },
+    });
+    renderWithProviders(<PostPage />);
+    expect(await screen.findByText("Match recap")).toBeTruthy();
+    expect(screen.queryByTestId("game-photo-album")).toBeNull();
+    expect(screen.getByText(/1974/)).toBeTruthy();
+  });
+
+  it("leaves ordinary organization Update albums unchanged", async () => {
+    customFetchMock.mockResolvedValue({
+      ...(postFixture({ canEdit: true, canDelete: true }, "orgpost-update") as object),
+      context: { type: "organization", id: "school-1", name: "School" },
+    });
+    renderWithProviders(<PostPage />);
+    expect(await screen.findByTestId("game-photo-album")).toBeTruthy();
+  });
   beforeEach(() => {
     customFetchMock.mockReset();
     deleteMutateAsyncMock.mockReset().mockResolvedValue(undefined);

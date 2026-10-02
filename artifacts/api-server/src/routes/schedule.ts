@@ -647,7 +647,7 @@ router.post(
     // Soft-deleted recaps must never be (re-)linked — post-delete cleanup
     // clears game_recap_id, and this guard keeps the "schedule never points
     // at a hidden recap" invariant from being reintroduced here.
-    if (article.hiddenAt) {
+    if (article.hiddenAt || article.recapKind === "historical") {
       return apiError(res, 404, "Recap not found for this team", {
         code: "RECAP_NOT_FOUND",
       });

@@ -97,6 +97,11 @@ app.patch("/api/v1/admin/competition-claim-links/:id/logo", imageUploadJson);
 // express.json() so this parser wins for these routes; every other route keeps
 // the tight 1 MB limit (S7).
 const postImageUploadJson = express.json({ limit: "25mb" });
+// A 5 MiB clipping uses at most ~7 MiB base64. Only image-bearing history
+// endpoints receive this parser; the global request limit remains unchanged.
+const historicalImageJson = express.json({ limit: "8mb" });
+app.post("/api/v1/ai/transcribe", historicalImageJson);
+app.post("/api/v1/historical-recaps/clipping", historicalImageJson);
 app.post("/api/v1/posts", postImageUploadJson);
 app.patch("/api/v1/posts/:postId", postImageUploadJson);
 app.post("/api/v1/teams/:teamId/practice-plans", postImageUploadJson);

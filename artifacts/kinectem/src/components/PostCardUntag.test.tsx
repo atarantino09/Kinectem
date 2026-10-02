@@ -20,6 +20,7 @@ const customFetchMock =
     async () => null as unknown,
   );
 const toastMock = vi.fn();
+const shareSuccess = vi.hoisted(() => ({ current: (() => {}) as () => void }));
 
 vi.mock("@workspace/api-client-react", async () => {
   const actual = await vi.importActual<
@@ -33,7 +34,10 @@ vi.mock("@workspace/api-client-react", async () => {
     // destructuring without performing any real mutations.
     useAddPostReaction: () => ({ mutate: vi.fn() }),
     useRemovePostReaction: () => ({ mutate: vi.fn() }),
-    useSharePost: () => ({ mutate: vi.fn() }),
+    useSharePost: (options: { mutation: { onSuccess: () => void } }) => {
+      shareSuccess.current = options.mutation.onSuccess;
+      return { mutate: vi.fn() };
+    },
     useUnsharePost: () => ({ mutate: vi.fn() }),
   };
 });
@@ -111,6 +115,27 @@ const userPostsPredicate = (q: { queryKey: unknown }) =>
   typeof q.queryKey[0] === "string" &&
   q.queryKey[0].startsWith("/api/v1/users/") &&
   q.queryKey[0].endsWith("/posts");
+
+it("refreshes both destination lists after sharing direct school history and omits the team Media control", async () => {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const teamKey = ["/api/v1/teams/team-1/posts"];
+  const orgKey = ["/api/v1/organizations/school-1/posts"];
+  qc.setQueryData(teamKey, { data: [] });
+  qc.setQueryData(orgKey, { data: [] });
+  const post = {
+    ...basePost({ id: "orgpost-history" }),
+    recapKind: "historical",
+    historical: { gameDate: null, year: 1974, newspaper: null, byline: null, publicationDate: null,
+      rightsConfirmed: true, reviewed: true },
+    context: { type: "organization", id: "school-1", name: "School" },
+  } as unknown as PostResponse;
+  render(<QueryClientProvider client={qc}><PostCard post={post} /></QueryClientProvider>);
+  expect(screen.getByTestId("button-share-orgpost-history")).toBeTruthy();
+  expect(screen.queryByTestId("button-album-orgpost-history")).toBeNull();
+  shareSuccess.current();
+  await waitFor(() => expect(qc.getQueryCache().find({ queryKey: orgKey })?.state.isInvalidated).toBe(true));
+  expect(qc.getQueryCache().find({ queryKey: teamKey })?.state.isInvalidated).toBe(true);
+});
 
 function renderWithClient(ui: React.ReactElement) {
   const qc = new QueryClient({

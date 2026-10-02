@@ -1470,6 +1470,24 @@ export default function OrganizationPage() {
           {/* Teams + archived: inline on mobile, in rail on lg+. The
               hook ensures only one instance mounts at a time so testids
               stay unique. */}
+          {isOrgManager && (
+            <div className="flex flex-wrap gap-3" data-testid="historical-recap-actions">
+              <Link
+                href={`/historical-recap?organizationId=${orgId}`}
+                className="inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-bold hover:bg-muted"
+                data-testid="link-historical-recap-org"
+              >
+                Historical Recap
+              </Link>
+              <Link
+                href="/drafts"
+                className="inline-flex items-center px-1 py-2 text-sm font-semibold underline"
+                data-testid="link-historical-drafts-org"
+              >
+                Drafts
+              </Link>
+            </div>
+          )}
           {!isLg && (
             <div className="space-y-4">
               <TeamsRail

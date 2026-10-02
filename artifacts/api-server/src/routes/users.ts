@@ -80,6 +80,7 @@ import {
   pagePosts,
 } from "../lib/spec-helpers";
 import { loadCompetitionBrandMap } from "../lib/competition-brand";
+import { loadHistoricalOrgShares } from "../lib/historical-sharing";
 import { loadHighlightTagViews } from "../lib/highlight-tagging";
 import { loadCurrentUserTags } from "../lib/current-user-tag";
 import {
@@ -1390,13 +1391,18 @@ router.get(
       }
       return { ...post, ...hiddenExtra };
     });
+    const historicalOrgShares = await loadHistoricalOrgShares({
+      viewerId: me?.id ?? null, viewerRole: req.realUser?.role ?? null,
+      sharerIds: [u.id], limit: pageLimit + 1, before: pageCursor?.ts,
+    });
     res.json(
-      pagePosts(posts, {
-        // The strict cursor filter already ran on the merged rows
-        // above, so `posts` is exactly the page — pass no cursor here.
-        cursor: null,
+      pagePosts([...posts, ...historicalOrgShares].sort((a, b) =>
+        (b.sharedAt ?? b.createdAt).localeCompare(a.sharedAt ?? a.createdAt) || b.id.localeCompare(a.id)), {
+        // Ordinary rows were already cursor-filtered; apply the same
+        // strict boundary to the newly merged historical org shares.
+        cursor: pageCursor,
         limit: pageLimit,
-        sourcesMayHaveMore: pageHasMore,
+        sourcesMayHaveMore: pageHasMore || historicalOrgShares.length > pageLimit,
       }),
     );
     return;

@@ -969,6 +969,16 @@ export const stagedCoachInvites = pgTable("staged_coach_invites", {
   orgIdx: index("staged_coach_invites_org_idx").on(t.organizationId),
 }));
 
+export interface HistoricalRecapMetadata {
+  gameDate: string | null;
+  year: number | null;
+  newspaper: string | null;
+  byline: string | null;
+  publicationDate: string | null;
+  rightsConfirmed: boolean;
+  reviewed: boolean;
+}
+
 export const articles = pgTable("articles", {
   id: uuid("id").primaryKey().defaultRandom(),
   teamId: uuid("team_id").references(() => teams.id, { onDelete: "cascade" }).notNull(),
@@ -987,6 +997,7 @@ export const articles = pgTable("articles", {
   // game recaps) from a normal single-game recap. NULL = single game;
   // "combined" = multi-game recap. Drives a distinct post card pill.
   recapKind: text("recap_kind"),
+  historical: jsonb("historical").$type<HistoricalRecapMetadata>(),
   articleKind: articleKindEnum("article_kind").notNull().default("recap"),
   practiceDates: date("practice_dates").array(),
   // Competitions (§7) — set when this game recap belongs to a claimed
@@ -1069,6 +1080,8 @@ export const orgPosts = pgTable("org_posts", {
   authorId: uuid("author_id").references(() => users.id, { onDelete: "set null" }),
   title: text("title").notNull(),
   body: text("body").notNull().default(""),
+  recapKind: text("recap_kind"),
+  historical: jsonb("historical").$type<HistoricalRecapMetadata>(),
   coverImageUrl: text("cover_image_url"),
   videoUrl: text("video_url"),
   photoUrls: text("photo_urls").array(),

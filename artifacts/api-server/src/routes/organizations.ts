@@ -127,6 +127,7 @@ import {
   ensureTeamFollowedAsGuardian,
 } from "../lib/team-follow";
 import { getOrCreateTeamJoinLink } from "../lib/team-join-link";
+import { validateHistoricalPublication, HistoricalValidationError } from "../lib/historical-recaps";
 import {
   blockMinorAction,
   gateFollowOfMinor,
@@ -2779,6 +2780,9 @@ router.post(
     if (!org) return notFound(res);
     const body = req.body ?? {};
     const title = String(body.title ?? "").trim();
+    if (body.recapKind === "historical" || body.historical !== undefined) {
+      return apiError(res, 400, "Use the Historical Recap workflow to create a reviewed draft.");
+    }
     if (!title) return apiError(res, 400, "title required");
     if (title.length > 200) return apiError(res, 400, "title too long");
     const bodyText = typeof body.body === "string" ? body.body : "";
@@ -3376,13 +3380,26 @@ async function transitionApproval(
   // Confirm the article belongs to a team in this org.
   const [t] = await db.select().from(teams).where(eq(teams.id, a.teamId)).limit(1);
   if (!t || t.organizationId !== req.params.orgId) return notFound(res);
-  await db
+  if (next === "published" && a.recapKind === "historical") {
+    try { validateHistoricalPublication(a, a.historical?.reviewed); }
+    catch (err) {
+      if (err instanceof HistoricalValidationError) return apiError(res, err.status, err.message);
+      throw err;
+    }
+  }
+  const transitioned = await db
     .update(articles)
     .set({
       status: next,
       publishedAt: next === "published" ? new Date() : null,
     })
-    .where(eq(articles.id, a.id));
+    .where(a.recapKind === "historical"
+      ? and(eq(articles.id, a.id), eq(articles.status, "pending_approval"),
+          eq(articles.body, a.body), eq(articles.title, a.title), eq(articles.historical, a.historical!))
+      : eq(articles.id, a.id)).returning({ id: articles.id });
+  if (a.recapKind === "historical" && !transitioned.length) {
+    return apiError(res, 409, "The historical recap changed. Reopen it before approving.");
+  }
   // When an admin approves a recap, run the auto-tag fan-out so every
   // accepted player on the team's roster gets tagged. The publish path
   // (drafts.ts) only runs the fan-out for status="published" transitions,
