@@ -2073,8 +2073,8 @@ export const tournaments = pgTable("tournaments", {
   // Task #723 — optional parent-company hub this competition belongs to.
   // Detaching/deleting the organizer never deletes the competition.
   organizerId: uuid("organizer_id").references(() => competitionOrganizers.id, { onDelete: "set null" }),
-  // Team photo contributions are opt-in and disabled by default.
-  contributionsOpen: boolean("contributions_open").notNull().default(false),
+  // Teams may submit by default; their photos still require admin approval.
+  contributionsOpen: boolean("contributions_open").notNull().default(true),
   // When false, slot claims land as pending and the operator approves each
   // one in the console before the team links to its games.
   autoApproveClaims: boolean("auto_approve_claims").notNull().default(true),

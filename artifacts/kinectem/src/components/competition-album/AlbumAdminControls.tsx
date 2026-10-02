@@ -32,7 +32,7 @@ export function AlbumAdminControls({
       <Label htmlFor={`album-contrib-${competitionId}`} className="space-y-0.5">
         <span className="block text-sm font-bold">Let participating teams contribute photos</span>
         <span className="block text-xs font-normal text-muted-foreground">
-          Off by default. Team submissions stay pending until you approve them. Turning this off
+          On by default. Team submissions stay private and pending until you approve them. Turning this off
           blocks new uploads but keeps existing photos.
         </span>
       </Label>

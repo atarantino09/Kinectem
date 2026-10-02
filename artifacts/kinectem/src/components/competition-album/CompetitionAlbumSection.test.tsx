@@ -64,6 +64,8 @@ describe("competition album collapse and admin explanation", () => {
       "Share approved photos with the right teams", "Stay in control after publication",
     ]) expect(screen.getByRole("heading", { name: title })).toBeVisible();
     expect(screen.getByTestId("guide-competition-photos")).toHaveTextContent("approved immediately");
+    expect(screen.getByTestId("guide-competition-photos")).toHaveTextContent("on by default");
+    expect(screen.getByTestId("guide-competition-photos")).toHaveTextContent("Every team submission still requires your approval");
     expect(screen.getByTestId("guide-competition-photos")).toHaveTextContent("not one per photo");
     await user.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "false");

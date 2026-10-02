@@ -3,9 +3,9 @@ name: Competition photo album scope
 description: Product rules for competition contributions, moderation, and subtle branding across team pages
 ---
 
-Competition photos are one gallery per competition in this version, not separately named albums. Competition admins upload directly; participating-team community contributions are optional and require approval. Keep contribution settings off initially. A contributor must clearly see that submission does not mean publication.
+Competition photos are one gallery per competition in this version, not separately named albums. Competition admins upload directly; participating-team community contributions default ON but still require approval. Administrators may turn contributions off. A contributor must clearly see that submission does not mean publication.
 
-**Why:** The user requested bulk organizer uploads, optional team submissions, easy bulk review, and approved photos shared across multiple participating team pages.
+**Why:** The user requested bulk organizer uploads, easy bulk review, and approved photos shared across multiple participating team pages. They subsequently changed the contribution policy to default ON: approval already prevents unreviewed photos from appearing publicly. They explicitly chose to enable existing competitions as well, including formerly disabled ones, once; later admin opt-outs must remain respected.
 
 **How to apply:** Preserve the distinction between actual competition administrative membership and invisible platform-support review access. Support access alone must not grant uploading or make support users recipients of contribution alerts. Keep competition moderation separate from existing recap-album behavior.
 

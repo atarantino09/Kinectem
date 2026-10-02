@@ -5,7 +5,7 @@ const steps = [
   },
   {
     title: "Choose whether teams can contribute",
-    text: "Team contributions are off by default. Turn on Let participating teams contribute photos to allow eligible members, active guardians, team staff, and organization admins of linked participating teams to submit. Followers, spectators, pending invitees, and unrelated teams cannot upload. Team contributors can suggest tags for eligible teams they belong to.",
+    text: "Team contributions are on by default, so eligible members, active guardians, team staff, and organization admins of linked participating teams can submit without waiting for you to enable uploads. Every team submission still requires your approval before it appears in the album or on team pages. Followers, spectators, pending invitees, and unrelated teams cannot upload. Contributors can suggest tags for eligible teams they belong to. You can turn off Let participating teams contribute photos at any time to stop new team submissions.",
   },
   {
     title: "Receive a submission alert",

@@ -1381,7 +1381,7 @@ const COMPETITION_PHOTO_ALBUMS_MIGRATION = {
     name: "2026-10-02-competition-photo-albums",
     sql: `
       ALTER TABLE tournaments
-        ADD COLUMN IF NOT EXISTS contributions_open boolean NOT NULL DEFAULT false;
+        ADD COLUMN IF NOT EXISTS contributions_open boolean NOT NULL DEFAULT true;
 
       CREATE TABLE IF NOT EXISTS competition_photo_batches (
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -3004,6 +3004,30 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
     `,
   },
   COMPETITION_PHOTO_ALBUMS_MIGRATION,
+  {
+    name: "2026-10-02-competition-photo-contributions-default-on",
+    sql: `
+      ALTER TABLE tournaments ALTER COLUMN contributions_open SET DEFAULT true;
+      CREATE TABLE IF NOT EXISTS one_time_migration_markers (
+        name text PRIMARY KEY,
+        applied_at timestamp NOT NULL DEFAULT now()
+      );
+      DO $migration$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM one_time_migration_markers
+          WHERE name = '2026-10-02-competition-photo-contributions-default-on'
+        ) THEN
+          -- User-approved policy change for all existing competitions.
+          -- Never repeat this backfill: later administrator opt-outs must stick.
+          UPDATE tournaments SET contributions_open = true
+          WHERE contributions_open = false;
+          INSERT INTO one_time_migration_markers (name)
+          VALUES ('2026-10-02-competition-photo-contributions-default-on');
+        END IF;
+      END$migration$;
+    `,
+  },
 ];
 
 export async function runStartupMigrations(): Promise<void> {

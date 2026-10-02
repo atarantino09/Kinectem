@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import {
   competitionAdmins,
   competitionOrganizers,
@@ -16,6 +16,7 @@ import {
 } from "@workspace/db";
 import { app, loginAs, request } from "./helpers";
 import type { Agent } from "supertest";
+import { runStartupMigrations } from "../src/lib/migrations";
 
 const storageMocks = vi.hoisted(() => {
   class MockCompetitionPhotoValidationError extends Error {}
@@ -199,6 +200,32 @@ afterEach(async () => {
 });
 
 describe("competition photo album regression coverage", () => {
+  it("enables existing competitions once, defaults new ones on, and preserves subsequent opt-outs across startup", async () => {
+    const f = await createFixture({ contributionsOpen: false });
+    await db.execute(sql`
+      DELETE FROM one_time_migration_markers
+      WHERE name = '2026-10-02-competition-photo-contributions-default-on'
+    `);
+    await runStartupMigrations();
+    const existingAlbum = await f.member.agent.get(`/api/v1/competitions/${f.competitionId}/album`);
+    expect(existingAlbum.body).toMatchObject({ contributionsOpen: true, canUpload: true });
+    const [newCompetition] = await db.insert(tournaments).values({
+      name: unique("Default-on competition"),
+      slug: unique("default-on-competition"),
+      startDate: "2026-10-02",
+      endDate: "2026-10-04",
+      ownerUserId: f.owner.user.id,
+      createdById: f.owner.user.id,
+    }).returning({ id: tournaments.id, contributionsOpen: tournaments.contributionsOpen });
+    competitionIds.push(newCompetition.id);
+    expect(newCompetition.contributionsOpen).toBe(true);
+    await db.update(tournaments).set({ contributionsOpen: false })
+      .where(eq(tournaments.id, f.competitionId));
+    await runStartupMigrations();
+    const disabledAlbum = await f.member.agent.get(`/api/v1/competitions/${f.competitionId}/album`);
+    expect(disabledAlbum.body).toMatchObject({ contributionsOpen: false, canUpload: false });
+  });
+
   it("keeps contributor submissions private before and after finalization", async () => {
     const f = await createFixture();
     const batchId = await startBatch(f.member.agent, f.competitionId);
