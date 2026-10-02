@@ -13,7 +13,7 @@ Platform admins (users.role === "admin") are treated as managers of EVERY org an
 
 **How to apply:** any new manager-gated feature gets platform-admin access for free via the permission helpers; if you add a NEW capability gate (like canAuthorRecapAnywhere was), decide explicitly whether platform admins pass and keep client gates mirrored.
 
-## Platform admins are never auto-listed as creators
-Creating an org or team as a platform admin does NOT insert the owner/follower or roster rows other users get — the org is born UNCLAIMED and teams start with an empty roster (hand-off model; real staff claim/join later).
-**Why:** operators setting up pages for customers must not appear as org owner or team admin anywhere.
-**How to apply:** never "fix" a missing creator-membership row for a role-admin user; tests exercising owner/roster-creator flows must log in as a NON-admin seed user (e.g. parent or coach@kinectem.demo), not sam@/andrew@ (both role admin).
+## Organization ownership follows creation intent, not platform role
+Regular in-app organization creation grants its authenticated creator ownership and follow state, including platform admins. Dedicated admin quick setup, claim-link creation, and bulk import remain ownerless handoff flows. Platform-admin team creation still leaves the roster empty.
+**Why:** the app promises personal creators ownership; customer handoff setup must not list the operator as owner or follower. Platform role alone cannot distinguish these intents.
+**How to apply:** keep creation flows explicit and separate. Never broadly backfill platform-admin-created organizations; repair an existing page only after identifying it, verifying its creator and personal-creation intent, and confirming no owner exists.

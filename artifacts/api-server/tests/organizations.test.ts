@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { db, organizations, organizationAdmins, organizationFollowers } from "@workspace/db";
+import { eq, sql } from "drizzle-orm";
 import { app, loginAs, request } from "./helpers";
 
 describe("organizations", () => {
@@ -151,27 +153,84 @@ describe("organizations", () => {
     expect(status.body.allComplete).toBe(false);
   });
 
-  it("creates an UNCLAIMED org (no owner/member rows) when a platform admin creates it", async () => {
-    // Platform admins set orgs up to hand off; they must not be listed as
-    // owner, admin, or follower anywhere. The org stays unclaimed until
-    // the real admin claims it.
-    const { agent, user } = await loginAs((u) => u.role === "admin");
+  it.each(["parent", "admin"] as const)("persists app creator ownership and follow state for a %s", async (role) => {
+    const { agent, user } = await loginAs((u) => u.role === role);
     const created = await agent.post("/api/v1/organizations").send({
-      name: "Handoff Org",
+      name: "Personal App Org",
       city: "Westfield",
       state: "NJ",
       zipCode: "07090",
     });
     expect(created.status).toBe(201);
-    expect(created.body.isMember).toBe(false);
-    expect(created.body.role ?? null).toBeNull();
+    expect(created.body).toMatchObject({
+      isMember: true, role: "owner", isFollowing: true, hasOwner: true,
+      followerCount: 1,
+    });
+    const [persisted] = await db.select().from(organizations).where(eq(organizations.id, created.body.id));
+    expect(persisted.createdById).toBe(user.id);
+    expect(await db.select().from(organizationAdmins).where(eq(organizationAdmins.organizationId, created.body.id)))
+      .toMatchObject([{ userId: user.id, role: "owner" }]);
+    expect(await db.select().from(organizationFollowers).where(eq(organizationFollowers.organizationId, created.body.id)))
+      .toMatchObject([{ userId: user.id }]);
     const members = await agent.get(
       `/api/v1/organizations/${created.body.id}/members`,
     );
     expect(members.status).toBe(200);
-    const rows = members.body.data as Array<{ userId?: string; id?: string }>;
-    expect(rows.length).toBe(0);
+    expect(members.body.data).toMatchObject([{ userId: user.id, role: "owner" }]);
+    const detail = await agent.get(`/api/v1/organizations/${created.body.id}`);
+    expect(detail.body).toMatchObject({ isMember: true, role: "owner", isFollowing: true, hasOwner: true });
+    const mine = await agent.get(`/api/v1/users/${user.id}/organizations`);
+    expect(mine.body.data.find((o: { id: string }) => o.id === created.body.id))
+      .toMatchObject({ role: "owner" });
+    const discover = await agent.get("/api/v1/organizations");
+    expect(discover.body.data.find((o: { id: string }) => o.id === created.body.id))
+      .toMatchObject({ role: "owner", isMember: true, isFollowing: true });
   });
+
+  it.each(["organization_admins", "organization_followers"] as const)(
+    "rolls back app creation if the %s insert fails",
+    async (table) => {
+      const { agent } = await loginAs((u) => u.role === "admin");
+      // Real database failure, not a transaction mock: proves the org and
+      // any preceding owner row actually roll back.
+      await db.execute(sql.raw(`
+        CREATE FUNCTION reject_app_creation() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN RAISE EXCEPTION 'injected creation failure'; END $$;
+        CREATE TRIGGER reject_app_creation BEFORE INSERT ON ${table}
+        FOR EACH ROW EXECUTE FUNCTION reject_app_creation();
+      `));
+      try {
+        const created = await agent.post("/api/v1/organizations").send({
+          name: "Rollback Personal Org", city: "Westfield", state: "NJ", zipCode: "07090",
+        });
+        expect(created.status).toBe(500);
+        expect(await db.select().from(organizations).where(eq(organizations.name, "Rollback Personal Org")))
+          .toHaveLength(0);
+      } finally {
+        await db.execute(sql.raw(`DROP TRIGGER reject_app_creation ON ${table}; DROP FUNCTION reject_app_creation();`));
+      }
+    },
+  );
+
+  it.each(["org-quick-setup", "org-claim-links"] as const)(
+    "keeps dedicated admin %s creation ownerless and unfollowed",
+    async (path) => {
+      const { agent, user } = await loginAs((u) => u.role === "admin");
+      const created = await agent.post(`/api/v1/admin/${path}`).send({
+        name: "Explicit Handoff Org", teams: [],
+      });
+      expect(created.status).toBe(201);
+      const id = created.body.data.id;
+      const detail = await agent.get(`/api/v1/organizations/${id}`);
+      expect(detail.body).toMatchObject({ hasOwner: false, isMember: false, role: null, isFollowing: false });
+      expect(await db.select().from(organizationAdmins).where(eq(organizationAdmins.organizationId, id))).toHaveLength(0);
+      expect(await db.select().from(organizationFollowers).where(eq(organizationFollowers.organizationId, id))).toHaveLength(0);
+      const members = await agent.get(`/api/v1/organizations/${id}/members`);
+      expect(members.body.data).toHaveLength(0);
+      const mine = await agent.get(`/api/v1/users/${user.id}/organizations`);
+      expect(mine.body.data.find((o: { id: string }) => o.id === id)).toBeUndefined();
+    },
+  );
 
   it("rejects creating an organization with an empty name", async () => {
     const { agent } = await loginAs((u) => u.role === "parent");

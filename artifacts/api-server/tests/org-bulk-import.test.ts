@@ -4,6 +4,7 @@ import {
   contentReports,
   db,
   organizationAdmins,
+  organizationFollowers,
   organizationClaimRequests,
   organizations,
   orgAdminLists,
@@ -116,6 +117,11 @@ describe("POST /api/v1/admin/org-bulk-import", () => {
         .from(organizationAdmins)
         .where(eq(organizationAdmins.organizationId, orgId));
       expect(owners).toHaveLength(0);
+      const followers = await db
+        .select()
+        .from(organizationFollowers)
+        .where(eq(organizationFollowers.organizationId, orgId));
+      expect(followers).toHaveLength(0);
       const orgTeams = await db
         .select()
         .from(teams)

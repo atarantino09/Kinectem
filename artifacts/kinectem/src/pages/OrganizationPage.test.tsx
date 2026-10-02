@@ -115,6 +115,7 @@ interface OrgFixture {
   zipCode: string | null;
   brandPrimaryColor?: string | null;
   brandSecondaryColor?: string | null;
+  hasOwner?: boolean;
 }
 
 const useGetLoggedInUserMock = vi.fn();
@@ -246,6 +247,33 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("OrganizationPage — admin control gating", () => {
+  it("shows a platform admin's self-created page as owned after navigation and remount", async () => {
+    useGetLoggedInUserMock.mockReturnValue({
+      data: { id: "user-owner", role: "admin" },
+      isLoading: false,
+    });
+    installHandlers({
+      role: "owner",
+      organization: { hasOwner: true, isFollowing: true, followerCount: 1 },
+    });
+    localStorage.setItem(ORG_TOUR_STORAGE_KEY, "1");
+    const first = renderWithProviders(<OrganizationPage />);
+    expect(screen.queryByText("Unclaimed")).not.toBeInTheDocument();
+    expect(screen.getByTestId("btn-org-manage-menu")).toBeInTheDocument();
+    first.unmount();
+    renderWithProviders(<OrganizationPage />);
+    expect(screen.queryByText("Unclaimed")).not.toBeInTheDocument();
+    expect(screen.getByTestId("btn-org-manage-menu")).toBeInTheDocument();
+  });
+
+  it("still labels an ownerless handoff page Unclaimed", () => {
+    installHandlers({ role: null, organization: { hasOwner: false } });
+    useListMembersMock.mockReturnValue({ data: { data: [] } });
+    renderWithProviders(<OrganizationPage />);
+    expect(screen.getByText("Unclaimed")).toBeInTheDocument();
+    expect(screen.queryByText("Owen Owner")).not.toBeInTheDocument();
+  });
+
   it("puts historical recaps and drafts in New post instead of standalone page links", async () => {
     installHandlers({ role: "admin" });
     const user = userEvent.setup();

@@ -6,6 +6,7 @@ import {
   useGetLoggedInUser,
   getListOrganizationsQueryKey,
   getListUserOrganizationsQueryKey,
+  getGetOrganizationByIdQueryKey,
   type CreateOrganizationRequestState,
 } from "@workspace/api-client-react";
 import {
@@ -241,6 +242,9 @@ export function CreateOrgDialog({
             : {}),
         } as Parameters<typeof createOrg.mutateAsync>[0]["data"],
       });
+      // Use the committed ownership response immediately on navigation;
+      // list invalidations below refresh the creator's organization lists.
+      qc.setQueryData(getGetOrganizationByIdQueryKey(org.id), org);
       toast({
         title: "Organization created!",
         description:

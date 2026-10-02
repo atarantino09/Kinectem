@@ -327,54 +327,42 @@ router.post(
     // this the request would 500 via the global error handler with no
     // route-specific context, making mobile bug reports hard to triage.
     try {
-      const [org] = await db
-        .insert(organizations)
-        .values({
-          name,
-           sport,
-          description: req.body?.description ?? undefined,
-          city,
-          state: stateRaw,
-          zipCode,
-          website: websiteValue,
-          logoUrl: req.body?.logoUrl ?? undefined,
-          ...brandColors,
-          createdById: me.id,
-        })
-        .returning();
-      // The creator becomes the org's sole owner. The role column was
-      // added in task #208; before that the table held only admins and
-      // "owner" was implicit (first row in the admins table).
-      //
-      // EXCEPTION — platform admins setting up an org to hand off: they
-      // must not be listed as owner/admin/follower anywhere. The org is
-      // created UNCLAIMED (no owner row) and the real admin takes it over
-      // via a claim link/request. Platform admins keep full management
-      // powers through the canManageOrganization bypass, so no membership
-      // row is needed.
-      const creatorIsPlatformAdmin = await isPlatformAdmin(me.id);
-      if (!creatorIsPlatformAdmin) {
-        await db
+      // This is personal app creation, including for platform admins.
+      // Ownerless handoff creation belongs to the dedicated admin endpoints.
+      // Commit all three rows together: a failed membership/follow insert
+      // must not leave a successful-looking, unclaimed page behind.
+      const org = await db.transaction(async (tx) => {
+        const [created] = await tx
+          .insert(organizations)
+          .values({
+            name,
+            sport,
+            description: req.body?.description ?? undefined,
+            city,
+            state: stateRaw,
+            zipCode,
+            website: websiteValue,
+            logoUrl: req.body?.logoUrl ?? undefined,
+            ...brandColors,
+            createdById: me.id,
+          })
+          .returning();
+        await tx
           .insert(organizationAdmins)
-          .values({ organizationId: org.id, userId: me.id, role: "owner" })
-          .onConflictDoNothing();
-        await db
+          .values({ organizationId: created.id, userId: me.id, role: "owner" });
+        await tx
           .insert(organizationFollowers)
-          .values({ organizationId: org.id, userId: me.id })
-          .onConflictDoNothing();
-      }
+          .values({ organizationId: created.id, userId: me.id });
+        return created;
+      });
       return res.status(201).json(
-        creatorIsPlatformAdmin
-          ? toOrganization(org, {
-              isMember: false,
-              role: null,
-              isFollowing: false,
-            })
-          : toOrganization(org, {
-              isMember: true,
-              role: "owner",
-              isFollowing: true,
-            }),
+        toOrganization(org, {
+          isMember: true,
+          role: "owner",
+          isFollowing: true,
+          hasOwner: true,
+          followerCount: 1,
+        }),
       );
     } catch (err) {
       req.log.error(
