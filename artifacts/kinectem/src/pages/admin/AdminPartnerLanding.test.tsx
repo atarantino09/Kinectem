@@ -65,6 +65,15 @@ beforeEach(() => {
   mockedExtractColors.mockResolvedValue(null);
   detailMembers = [];
   mockedFetch.mockImplementation(async (path, options) => {
+    if (path === "/api/v1/organizations/org-1/teams" && options?.method === "POST") {
+      const team = { id: "new-team-1", name: JSON.parse(String(options.body)).name };
+      detailMembers = detailMembers.map((member) =>
+        (member.organization as { id: string }).id === "org-1"
+          ? { ...member, teamCount: Number(member.teamCount) + 1, teams: [...((member.teams ?? []) as unknown[]), team] }
+          : member,
+      );
+      return team as never;
+    }
     if (path === "/api/v1/admin/partner-pages" && options?.method === "GET") {
       return { data: [pageSummary] } as never;
     }
@@ -109,6 +118,31 @@ beforeEach(() => {
       return { data: { ...requestRow, status: "approved" } } as never;
     }
     return { data: [] } as never;
+  });
+});
+
+describe("AdminPartnerLanding quick team creation", () => {
+  it("adds a team to an imported organization and refreshes its directory list", async () => {
+    detailMembers = [{
+      id: "membership-1", visible: true, sourceColumn: "A", importOperationId: "import-1",
+      hasOwner: false, teamCount: 0, contentCount: 0, duplicateName: false,
+      canDeleteStaleImport: true, teams: [],
+      organization: {
+        id: "org-1", name: "North Stars Club", location: null, city: null, state: null,
+        logoUrl: null, brandPrimaryColor: null, brandSecondaryColor: null,
+      },
+    }];
+    const user = userEvent.setup();
+    renderWithProviders(<AdminPartnerLanding />);
+    await user.click(await screen.findByRole("button", { name: "Edit North Stars" }));
+    await user.click(await screen.findByRole("button", { name: "Add team to North Stars Club" }));
+    await user.type(screen.getByRole("textbox", { name: "Team name" }), "U14 Girls");
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(screen.getByTestId("member-teams-membership-1")).toHaveTextContent("U14 Girls"));
+    expect(screen.getByText(/1 teams · 0 posts/)).toBeInTheDocument();
+    expect(mockedFetch).toHaveBeenCalledWith("/api/v1/organizations/org-1/teams", expect.objectContaining({
+      method: "POST", body: JSON.stringify({ name: "U14 Girls" }),
+    }));
   });
 });
 

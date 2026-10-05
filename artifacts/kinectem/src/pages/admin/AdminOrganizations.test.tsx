@@ -79,6 +79,10 @@ beforeEach(() => {
       if (method === "GET" && path === "/api/v1/admin/organizations") {
         return jsonResponse({ data: [] });
       }
+      if (method === "POST" && path === "/api/v1/organizations/org-1/teams") {
+        const { name } = JSON.parse(String(init?.body));
+        return jsonResponse({ id: "team-extra", name }, 201);
+      }
       if (method === "GET" && path === "/api/v1/admin/promo-codes") {
         return jsonResponse({
           data: [
@@ -497,6 +501,12 @@ describe("AdminOrganizations bulk import", () => {
     );
     expect(importedBody).toEqual(validatedBody);
     expect(screen.getByText(/\/claim\/token-north/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add team to North League" }));
+    await user.type(screen.getByRole("textbox", { name: "Team name" }), "North U16");
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(screen.getByTestId("bulk-import-success")).toHaveTextContent("4 teams were created"));
+    expect(screen.getByTestId("bulk-import-success")).toHaveTextContent("North U16");
+    expect(screen.getByRole("textbox", { name: "Team name" })).toHaveValue("");
   });
 
   it("sends the explicit duplicate-name override to validation and import", async () => {
@@ -999,7 +1009,7 @@ describe("AdminOrganizations bulk import", () => {
       }),
     );
     expect(
-      screen.getByTestId("featured-competition-current"),
+      await screen.findByTestId("featured-competition-current-competition-1"),
     ).toHaveTextContent("Fall Classic");
     expect(
       screen.getByRole("button", { name: "Open console" }).closest("a"),

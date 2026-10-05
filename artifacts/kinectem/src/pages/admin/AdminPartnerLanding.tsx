@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
+import { AdminAddTeam } from "./AdminAddTeam";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { BrandImageField } from "@/components/BrandImageField";
@@ -1794,6 +1795,11 @@ export function AdminPartnerLanding({
                     </>
                   )}
                 </div>
+                <AdminAddTeam
+                  key={member.organization.id}
+                  organizationId={member.organization.id}
+                  organizationName={member.organization.name}
+                />
                 {member.protected === true && (
                   <div className="mt-1 text-xs font-semibold text-amber-700">
                     Protected: {protectionLabel(member.protection)}

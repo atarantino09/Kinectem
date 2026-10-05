@@ -5,6 +5,7 @@ import { customFetch } from "@workspace/api-client-react";
 import { AdminLayout } from "@/components/AdminLayout";
 import { OrgClaimLinksContent } from "./AdminOrgClaimLinks";
 import { AdminPartnerLanding } from "./AdminPartnerLanding";
+import { AdminAddTeam } from "./AdminAddTeam";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -787,7 +788,25 @@ export default function AdminOrganizations() {
                               <TableCell className="font-medium whitespace-nowrap">
                                 {organization.name}
                               </TableCell>
-                              <TableCell>{organization.teams.length}</TableCell>
+                               <TableCell>
+                                 <div className="text-sm">{organization.teams.length} teams</div>
+                                 <div className="text-xs text-muted-foreground">
+                                   {organization.teams.map((team) => team.name).join(", ")}
+                                 </div>
+                                 <AdminAddTeam
+                                   organizationId={organization.id}
+                                   organizationName={organization.name}
+                                   onCreated={(team) => setImportResult((current) => current ? ({
+                                     ...current,
+                                     teamCount: current.teamCount + 1,
+                                     organizations: current.organizations.map((org) =>
+                                       org.id === organization.id
+                                         ? { ...org, teams: [...org.teams, team] }
+                                         : org,
+                                     ),
+                                   }) : current)}
+                                 />
+                               </TableCell>
                               <TableCell className="font-mono text-xs whitespace-nowrap">
                                 {claimUrl(organization.token)}
                               </TableCell>
@@ -870,6 +889,10 @@ export default function AdminOrganizations() {
                       >
                         <TableCell className="font-medium">
                           {formatOrgName(row.organizationName)}
+                           <AdminAddTeam
+                             organizationId={row.organizationId}
+                             organizationName={row.organizationName}
+                           />
                         </TableCell>
                         <TableCell>
                           {row.plan ? PLAN_LABELS[row.plan] : "None"}

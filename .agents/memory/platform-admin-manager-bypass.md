@@ -17,3 +17,10 @@ Platform admins (users.role === "admin") are treated as managers of EVERY org an
 Regular in-app organization creation grants its authenticated creator ownership and follow state, including platform admins. Dedicated admin quick setup, claim-link creation, and bulk import remain ownerless handoff flows. Platform-admin team creation still leaves the roster empty.
 **Why:** the app promises personal creators ownership; customer handoff setup must not list the operator as owner or follower. Platform role alone cannot distinguish these intents.
 **How to apply:** keep creation flows explicit and separate. Never broadly backfill platform-admin-created organizations; repair an existing page only after identifying it, verifying its creator and personal-creation intent, and confirming no owner exists.
+
+## Post-import setup stays in the admin panel
+Operators must be able to add missing team names after a mass spreadsheet upload and confirmation without visiting each organization's page.
+
+**Why:** The user prepares organizations and teams in bulk and needs fast follow-up additions from the admin panel, not repeated navigation into customer-facing organization pages.
+
+**How to apply:** Keep quick team entry available in admin import results and organization directories. Preserve the ownerless handoff model, existing organization sport inheritance, and server-side creation permissions and limits.
