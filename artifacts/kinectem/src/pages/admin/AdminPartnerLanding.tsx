@@ -260,6 +260,18 @@ function candidateList(row: ImportPreviewRow): OrganizationCandidate[] {
   return (row.candidates ?? row.possibleMatches ?? []) as OrganizationCandidate[];
 }
 
+function importRowNeedsDecision(row: ImportPreviewRow): boolean {
+  return row.requiresDecision === true || row.decisionRequired === true || candidateList(row).length > 0;
+}
+
+function importRowMissingDecision(row: ImportPreviewRow, action?: ImportAction): boolean {
+  return importRowNeedsDecision(row) && (
+    !action ||
+    !["create", "keep_distinct", "attach", "skip"].includes(action.action) ||
+    (action.action === "attach" && !action.existingOrganizationId && !action.candidateId)
+  );
+}
+
 function candidateLocation(candidate: SearchResult): string {
   return [candidate.city, candidate.state, candidate.location]
     .filter(Boolean)
@@ -394,6 +406,10 @@ export function AdminPartnerLanding({
   const [rowActions, setRowActions] = useState<Record<number, ImportAction>>({});
   const [importKey, setImportKey] = useState("");
   const [importSummary, setImportSummary] = useState<Record<string, unknown> | null>(null);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importValidating, setImportValidating] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const unresolvedImportRows = previewRows.filter((row) => importRowMissingDecision(row, rowActions[row.index]));
   const [replacement, setReplacement] = useState<{
     member: PartnerMember;
     candidate: OrganizationCandidate;
@@ -473,6 +489,12 @@ export function AdminPartnerLanding({
   });
 
   const loadDetail = (id: string) => {
+    setImportRows([]);
+    setPreviewRows([]);
+    setRowActions({});
+    setImportKey("");
+    setImportSummary(null);
+    setImportError(null);
     setSelectedId(id);
     setSelectedOrgListId("");
     const page = pages.data?.data.find((item) => item.id === id);
@@ -787,18 +809,19 @@ export function AdminPartnerLanding({
   };
 
   const parseImport = async (file: File) => {
+    if (!selectedId || importLoading || importValidating) return;
+    setImportValidating(true);
+    setImportError(null);
+    try {
     const parsed = await parseOrganizationImportFile(file);
     if (parsed.errors.length) {
-      toast({ title: "Import file needs attention", description: parsed.errors[0], variant: "destructive" });
-      return;
+      throw new Error(parsed.errors[0]);
     }
     const rows = parsed.groups.map((group, index) => ({
       name: group.name,
       teams: group.teams,
       sourceColumn: group.column || `Column ${index + 1}`,
     }));
-    setImportRows(rows);
-    setImportKey(`${file.name}:${file.size}:${file.lastModified}`);
     const response = await customFetch<{ data: { rows: ImportPreviewRow[] } }>(
       `/api/v1/admin/partner-pages/${selectedId}/import/validate`,
       {
@@ -807,6 +830,8 @@ export function AdminPartnerLanding({
         body: JSON.stringify({ organizations: rows }),
       },
     );
+    setImportRows(rows);
+    setImportKey(`${file.name}:${file.size}:${file.lastModified}`);
     setPreviewRows(
       response.data.rows.map((row) => ({
         ...row,
@@ -816,9 +841,24 @@ export function AdminPartnerLanding({
     );
     setRowActions({});
     setImportSummary(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Couldn't read or validate the import file.";
+      setImportError(message);
+      toast({ title: "Import file needs attention", description: message, variant: "destructive" });
+    } finally {
+      setImportValidating(false);
+    }
   };
 
   const runImport = async () => {
+    if (!selectedId || !importRows.length || importLoading || importValidating) return;
+    if (unresolvedImportRows.length) {
+      setImportError("Choose an explicit decision for every possible duplicate before importing.");
+      return;
+    }
+    setImportLoading(true);
+    setImportError(null);
+    try {
     const response = await customFetch<{ data?: Record<string, unknown> }>(
       `/api/v1/admin/partner-pages/${selectedId}/import`,
       {
@@ -826,10 +866,16 @@ export function AdminPartnerLanding({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         idempotencyKey: importKey,
-        organizations: importRows.map((row, index) => ({
-          ...row,
-          ...(rowActions[index] ?? { action: "create" }),
-        })),
+        organizations: importRows.map((row, index) => {
+          const choice = rowActions[index];
+          const preview = previewRows.find((item) => item.index === index);
+          // Creating despite a match is an explicit keep-distinct decision,
+          // not the automatic creation reserved for rows without collisions.
+          const action = choice?.action === "create" && preview && importRowNeedsDecision(preview)
+            ? "keep_distinct"
+            : choice?.action ?? "create";
+          return { ...row, ...choice, action };
+        }),
       }),
       },
     );
@@ -849,6 +895,13 @@ export function AdminPartnerLanding({
           ? `${created ?? 0} created · ${attached ?? 0} attached · ${skipped ?? 0} skipped`
           : undefined,
     });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "The import failed. Please try again.";
+      setImportError(message);
+      toast({ title: "Couldn't import organizations", description: message, variant: "destructive" });
+    } finally {
+      setImportLoading(false);
+    }
   };
 
   const updateMember = async (member: PartnerMember, action: "visibility" | "remove" | "delete") => {
@@ -1205,7 +1258,7 @@ export function AdminPartnerLanding({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <Button variant="ghost" size="sm" onClick={() => setSelectedId("")}>← All partner pages</Button>
+        <Button variant="ghost" size="sm" disabled={importLoading || importValidating} onClick={() => setSelectedId("")}>← All partner pages</Button>
         <Link
           href={`/partners/${encodeURIComponent(canonicalSlug)}`}
           className="text-lg font-black text-primary underline-offset-4 hover:underline"
@@ -1328,16 +1381,14 @@ export function AdminPartnerLanding({
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="space-y-3 rounded-lg border p-3">
             <div className="font-bold">Mass upload</div>
-            <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" data-testid="input-partner-import-file" onChange={(e) => e.target.files?.[0] && void parseImport(e.target.files[0])} />
-            <Button variant="outline" onClick={() => fileRef.current?.click()}><Upload className="mr-2 h-4 w-4" /> Choose spreadsheet</Button>
+            <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" disabled={importLoading || importValidating} className="hidden" data-testid="input-partner-import-file" onChange={(e) => { const file = e.currentTarget.files?.[0]; e.currentTarget.value = ""; if (file) void parseImport(file); }} />
+            <Button variant="outline" disabled={importLoading || importValidating} onClick={() => fileRef.current?.click()}><Upload className="mr-2 h-4 w-4" />{importValidating ? "Checking spreadsheet…" : "Choose spreadsheet"}</Button>
+            {importError && previewRows.length === 0 && <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive [overflow-wrap:anywhere]" data-testid="partner-import-error">{importError}</p>}
             {previewRows.map((row) => (
               (() => {
                 const candidates = candidateList(row);
                 const action = rowActions[row.index];
-                const needsDecision =
-                  row.requiresDecision === true ||
-                  row.decisionRequired === true ||
-                  candidates.length > 0;
+                const needsDecision = importRowNeedsDecision(row);
                 const teams = importRows[row.index]?.teams ?? [];
                 return (
               <div key={row.index} className="rounded-md border p-3 text-sm" data-testid={`import-review-row-${row.index}`}>
@@ -1348,7 +1399,7 @@ export function AdminPartnerLanding({
                       Remembered: {rememberedDecisionLabel(row)}
                     </span>
                   )}
-                  {needsDecision && !action && (
+                  {importRowMissingDecision(row, action) && (
                     <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
                       Decision required
                     </span>
@@ -1399,28 +1450,36 @@ export function AdminPartnerLanding({
                   <select
                     className="mt-1 w-full rounded border bg-background p-2 font-normal"
                     aria-label={`Decision for ${row.name}`}
+                    id={`partner-import-decision-${row.index}`}
+                    disabled={importLoading || importValidating}
                     data-testid={`select-import-decision-${row.index}`}
                     value={action
-                      ? `${action.action}:${action.candidateId ?? action.existingOrganizationId ?? ""}`
+                      ? `${needsDecision && action.action === "create" ? "keep_distinct" : action.action}:${action.candidateId ?? action.existingOrganizationId ?? ""}`
                       : needsDecision
                         ? ""
                         : "create:"}
                     onChange={(e) => {
                       const [nextAction, id] = e.target.value.split(":");
-                      setRowActions((current) => ({
-                        ...current,
-                        [row.index]: {
+                      setImportError(null);
+                      setRowActions((current) => {
+                        const next = { ...current };
+                        if (!nextAction) {
+                          delete next[row.index];
+                        } else {
+                          next[row.index] = {
                           action: nextAction as ImportAction["action"],
                           candidateId: id || undefined,
                           existingOrganizationId: id || undefined,
-                        },
-                      }));
+                          };
+                        }
+                        return next;
+                      });
                     }}
                   >
                     {needsDecision && <option value="">Select an explicit decision…</option>}
-                    {!needsDecision && <option value="create:">Create a separate organization</option>}
-                    <option value="create:">Create a new organization</option>
-                    <option value="keep_distinct:">Keep distinct from the matches (create new)</option>
+                    {needsDecision
+                      ? <option value="keep_distinct:">Create a new organization (keep distinct from matches)</option>
+                      : <option value="create:">Create a new organization</option>}
                     {candidates.map((match) => <option key={match.id} value={`attach:${match.id}`} disabled={candidateAlreadyIncluded(match)}>Attach {match.name} · {candidateLocation(match)}{candidateAlreadyIncluded(match) ? " · already included" : ""}</option>)}
                     <option value="skip:">Skip this row</option>
                   </select>
@@ -1432,12 +1491,22 @@ export function AdminPartnerLanding({
             {previewRows.length > 0 && (
               <div className="space-y-2">
                 <p className="text-xs text-muted-foreground">Every credible collision must have an explicit choice. Remembered decisions are shown for context and do not silently import a row.</p>
+                {importError && <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive [overflow-wrap:anywhere]" data-testid="partner-import-error">{importError} Your rows and choices have been kept.</p>}
+                {unresolvedImportRows.length > 0 && (
+                  <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900" role="status">
+                    <p>Choose a decision for {unresolvedImportRows.length} more {unresolvedImportRows.length === 1 ? "row" : "rows"} before importing.</p>
+                    <Button variant="link" className="h-auto p-0 text-amber-900" onClick={() => document.getElementById(`partner-import-decision-${unresolvedImportRows[0].index}`)?.focus()}>
+                      Review {unresolvedImportRows[0].name}
+                    </Button>
+                  </div>
+                )}
                 <Button
                   onClick={runImport}
-                  disabled={previewRows.some((row) => (row.requiresDecision === true || row.decisionRequired === true || candidateList(row).length > 0) && !rowActions[row.index])}
+                  disabled={importLoading || importValidating || unresolvedImportRows.length > 0}
+                  aria-busy={importLoading}
                   data-testid="btn-run-partner-import"
                 >
-                  Import {previewRows.length} rows
+                  {importLoading ? "Importing" : "Import"} {previewRows.length} rows{importLoading ? "…" : ""}
                 </Button>
               </div>
             )}

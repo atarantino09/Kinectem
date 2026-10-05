@@ -15,6 +15,12 @@ Partner landing preparation may intentionally create a separate staging organiza
 
 **How to apply:** Keep intentional duplicate creation behind the explicit “create separate organizations” bulk-import override, never implicit. Changing the option requires revalidation. In partner-directory review, platform admins search claimed organizations by name and explicitly preview a directory-only replacement. A later public swap request changes no membership immediately; approval revalidates requester authority and import provenance under locks, then swaps only the partner membership. Competition schedule claiming remains separate.
 
+In partner imports, choosing to create a new organization despite a possible match is a `keep_distinct` decision, not the automatic `create` default.
+
+**Why:** The importer rechecks collisions transactionally and rejects ambiguous `create` requests. A human's explicit choice must survive serialization, or a valid-looking selection becomes a conflict at submission.
+
+**How to apply:** Require an explicit choice for every credible match and send `keep_distinct` only for deliberate separate creation. Preserve the preview and choices on rejection and show the error next to the import action.
+
 Moving teams between imported organizations requires immutable provenance on each team itself. Matching organization or directory-membership provenance is not enough because teams can be created later. Revalidate team, source, and target provenance under locks; update denormalized organization-scoped workflow rows, but leave team-scoped records attached through their team ID.
 
 **Why:** Treating every team inside an imported organization as imported can move later user-created data. Blindly rewriting organization IDs on team-scoped records can also violate one-scope-only invariants.
