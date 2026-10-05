@@ -239,6 +239,7 @@ type CompetitionMetadata = {
   startDate: string;
   endDate: string;
   location: string | null;
+  logoUrl: string | null;
 };
 
 function competitionMetadata(
@@ -252,6 +253,7 @@ function competitionMetadata(
     startDate: row.startDate,
     endDate: row.endDate,
     location: row.location,
+    logoUrl: row.logoUrl,
   };
 }
 

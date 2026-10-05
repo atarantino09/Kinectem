@@ -73,6 +73,7 @@ type PartnerResponse = {
       startDate: string;
       endDate: string;
       location: string | null;
+      logoUrl?: string | null;
     } | null;
     competitions?: Array<NonNullable<PartnerResponse["data"]["competition"]>>;
     organizations: PartnerOrganization[];
@@ -176,6 +177,48 @@ function normalizedOrganizationName(value: string): string {
     .replace(/[^a-z0-9]+/g, " ")
     .trim()
     .replace(/\s+/g, " ");
+}
+
+function FeaturedCompetitionLogo({
+  name,
+  logoUrl,
+  primaryColor,
+  secondaryColor,
+}: {
+  name: string;
+  logoUrl?: string | null;
+  primaryColor: string;
+  secondaryColor: string;
+}) {
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const showLogo = Boolean(logoUrl && logoUrl !== failedUrl);
+  return (
+    <div
+      className="relative grid h-20 w-20 shrink-0 place-items-center rounded-[1.5rem] text-white shadow-lg sm:h-24 sm:w-24"
+      style={{
+        background: showLogo ? "#fff" : `linear-gradient(145deg, ${primaryColor}, ${secondaryColor})`,
+        color: readableText(primaryColor),
+        boxShadow: `0 14px 28px -12px ${primaryColor}`,
+      }}
+      aria-hidden={showLogo ? undefined : true}
+    >
+      {showLogo ? (
+        <img
+          key={logoUrl}
+          src={logoUrl!}
+          alt={`${name} logo`}
+          className="h-full w-full rounded-[1.5rem] object-contain p-2.5"
+          onError={() => setFailedUrl(logoUrl ?? null)}
+        />
+      ) : (
+        <>
+          <div className="absolute inset-2 rounded-[1rem] border border-current/20" />
+          <Trophy className="relative h-9 w-9 sm:h-11 sm:w-11" strokeWidth={2.2} data-testid="featured-competition-fallback" />
+          <Sparkles className="absolute right-2.5 top-2.5 h-3.5 w-3.5 opacity-80" />
+        </>
+      )}
+    </div>
+  );
 }
 
 export default function PartnerLandingPage() {
@@ -549,19 +592,12 @@ export default function PartnerLandingPage() {
               />
               <div className="relative flex min-w-0 flex-col gap-6 md:flex-row md:items-center md:justify-between">
                 <div className="flex min-w-0 items-start gap-4 sm:gap-5">
-                  <div
-                    className="relative grid h-20 w-20 shrink-0 place-items-center rounded-[1.5rem] text-white shadow-lg sm:h-24 sm:w-24"
-                    style={{
-                      background: `linear-gradient(145deg, ${page.primaryColor}, ${page.secondaryColor})`,
-                      color: readableText(page.primaryColor),
-                      boxShadow: `0 14px 28px -12px ${page.primaryColor}`,
-                    }}
-                    aria-hidden="true"
-                  >
-                    <div className="absolute inset-2 rounded-[1rem] border border-current/20" />
-                    <Trophy className="relative h-9 w-9 sm:h-11 sm:w-11" strokeWidth={2.2} />
-                    <Sparkles className="absolute right-2.5 top-2.5 h-3.5 w-3.5 opacity-80" />
-                  </div>
+                  <FeaturedCompetitionLogo
+                    name={featuredCompetition.name}
+                    logoUrl={featuredCompetition.logoUrl}
+                    primaryColor={page.primaryColor}
+                    secondaryColor={page.secondaryColor}
+                  />
                   <div className="min-w-0 pt-1">
                     <div
                       className="flex flex-wrap items-center gap-2 text-xs font-black uppercase tracking-[0.18em]"

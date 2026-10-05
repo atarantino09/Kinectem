@@ -46,6 +46,10 @@ describe("partner featured competition", () => {
     });
     expect(firstCreate.status, JSON.stringify(firstCreate.body)).toBe(201);
     createdCompetitionIds.push(firstCreate.body.id);
+    const competitionLogoUrl = "https://example.com/competition-logo.png";
+    await db.update(tournaments)
+      .set({ logoUrl: competitionLogoUrl })
+      .where(eq(tournaments.id, firstCreate.body.id));
 
     const anonymousAttach = await request(app)
       .put(`/api/v1/admin/partner-pages/${pageId}/competition`)
@@ -154,7 +158,9 @@ describe("partner featured competition", () => {
       startDate: "2026-11-01",
       endDate: "2026-11-30",
       location: "North Fields",
+      logoUrl: null,
     });
+    expect(publicPage.body.data.competitions[1].logoUrl).toBe(competitionLogoUrl);
     expect(
       publicPage.body.data.competitions.map((item: { id: string }) => item.id),
     ).toEqual([secondCreate.body.id, firstCreate.body.id]);

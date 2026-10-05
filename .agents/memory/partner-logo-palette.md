@@ -17,3 +17,9 @@ logo, while manual adjustments remain necessary for edge cases and contrast.
 **How to apply:** Reuse the established client-side logo color extractor for
 partner branding flows. Trigger it for uploaded inline images, and treat any
 non-default saved palette as authoritative.
+
+Featured competitions on partner pages should show the competition's own logo when available, not a generic competition icon.
+
+**Why:** The user wants visitors to recognize the linked competition by its branding.
+
+**How to apply:** Preserve the competition logo's full proportions on featured cards. Keep the existing icon as a fallback when no usable logo is available.

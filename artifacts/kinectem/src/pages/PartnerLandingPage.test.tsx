@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { customFetch } from "@workspace/api-client-react";
 import { renderWithProviders } from "@/test/renderWithProviders";
@@ -55,6 +55,29 @@ function partnerResponse(
 }
 
 describe("PartnerLandingPage featured competition", () => {
+  it("shows the competition logo without cropping and falls back if it fails to load", async () => {
+    mockedFetch.mockResolvedValue(partnerResponse({
+      id: "competition-logo",
+      slug: "logo-cup",
+      name: "Logo Cup",
+      type: "tournament",
+      startDate: "2026-10-03",
+      endDate: "2026-10-04",
+      location: null,
+      logoUrl: "https://example.com/cup-logo.png",
+    }) as never);
+    renderWithProviders(<PartnerLandingPage />);
+
+    const logo = await screen.findByRole("img", { name: "Logo Cup logo" });
+    expect(logo).toHaveAttribute("src", "https://example.com/cup-logo.png");
+    expect(logo).toHaveClass("object-contain");
+    expect(screen.queryByTestId("featured-competition-fallback")).not.toBeInTheDocument();
+
+    fireEvent.error(logo);
+    expect(screen.queryByRole("img", { name: "Logo Cup logo" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("featured-competition-fallback")).toBeInTheDocument();
+  });
+
   beforeEach(() => {
     window.history.pushState({}, "", "/partners/north-stars");
     localStorage.clear();
@@ -94,6 +117,7 @@ describe("PartnerLandingPage featured competition", () => {
     expect(card).toHaveTextContent("Fall Classic");
     expect(card).toHaveTextContent("Riverside Sports Complex");
     expect(screen.getByText("Featured competition")).toBeInTheDocument();
+    expect(screen.getByTestId("featured-competition-fallback")).toBeInTheDocument();
     expect(screen.getByText("Event spotlight")).toBeInTheDocument();
     expect(screen.getByTestId("featured-competition-type")).toHaveTextContent("tournament");
     expect(screen.getByTestId("featured-competition-dates")).toHaveTextContent("Oct 3, 2026 – Oct 4, 2026");
