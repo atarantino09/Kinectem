@@ -32,7 +32,14 @@ gate: `dispatchNotificationEmail({ userId, category, build })`. Transactional/es
   resolve first, key a map by resolved recipient id, then send once. Deduping raw user ids before
   routing still double-sends to the guardian.
 
+New recaps & posts notifications must be enabled by default; preserve a recipient's explicit opt-out.
+
+**Why:** The user explicitly confirmed that default-on behavior is required for team recap announcements.
+
+**How to apply:** Keep this default for new accounts and lazy preference creation. Do not mass-enable existing disabled preferences when adding email previews or notification features.
+
 ## Test pitfall (cost >2 attempts) — lazy-create defeats "set flag false" suppression tests
+
 `getOrCreatePreferences()` lazily mints an **all-on** row on first read. In suppression tests you
 must seed the row with `getOrCreatePreferences(id)` and *then* `UPDATE ... set({ flag: false })`.
 

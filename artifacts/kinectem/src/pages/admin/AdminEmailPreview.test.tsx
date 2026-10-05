@@ -10,6 +10,27 @@ vi.mock("@/components/AdminLayout", () => ({
 }));
 
 describe("AdminEmailPreview", () => {
+  it("previews a published game recap with its reading link and default-on preference", () => {
+    renderWithProviders(<AdminEmailPreview />);
+    fireEvent.click(screen.getByTestId("button-template-game_recap"));
+    const html = screen.getByTitle("Game recap preview").getAttribute("srcdoc") ?? "";
+    expect(html).toContain("Coach Mike Davis");
+    expect(html).toContain("posted a new recap");
+    expect(html).toContain("Wolves rally for a 28–21 win");
+    expect(html).toContain("/posts/article-preview-game-recap");
+    expect(html).toContain("See it");
+    expect(html).toContain("photo-and-video album");
+    expect(html).toContain("Unsubscribe");
+    expect(screen.getByText("New recaps & posts — enabled by default")).toBeInTheDocument();
+    expect(screen.getByText("After publication or approval")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /send/i })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("button-preview-mobile"));
+    expect(screen.getByTestId("email-preview-stage")).toHaveAttribute("data-viewport", "mobile");
+    fireEvent.click(screen.getByTestId("button-preview-dark"));
+    expect(screen.getByTestId("email-preview-stage")).toHaveAttribute("data-theme", "dark");
+  });
+
   it("renders the default coach invite preview without a send action", () => {
     renderWithProviders(<AdminEmailPreview />);
 

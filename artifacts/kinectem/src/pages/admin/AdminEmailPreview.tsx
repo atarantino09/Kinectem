@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   CreditCard,
   Eye,
+  FileText,
   Bell,
   Mail,
   Monitor,
@@ -53,6 +54,7 @@ type TemplateId =
   | "guardian_consent"
   | "billing_trial"
   | "weekly_digest"
+  | "game_recap"
   | "activity_notification";
 
 const TEMPLATES: Record<
@@ -268,6 +270,37 @@ ${emailButton({ href: `${baseUrl}/team/preview`, label: "Open team activity" })}
       return renderBrandedEmailHtml({
         subject: "Your U14 Lightning weekly digest",
         contextLabel: "U14 Lightning",
+        bodyHtml,
+        baseUrl,
+      });
+    },
+  },
+  game_recap: {
+    label: "Game recap",
+    description: "A newly published recap for the team.",
+    icon: FileText,
+    details: [
+      { label: "Team", value: "Varsity Football" },
+      { label: "Posted by", value: "Coach Mike Davis" },
+      { label: "Recap", value: "Wolves rally for a 28–21 win" },
+      { label: "Audience", value: "Team followers and active family contacts" },
+      { label: "Sent", value: "After publication or approval" },
+      { label: "Email preference", value: "New recaps & posts — enabled by default" },
+    ],
+    getHtml: (baseUrl) => {
+      // Representative copy matches the team-recap delivery email, including
+      // its media invitation and recipient-owned preference controls.
+      const bodyHtml = `
+<p><strong>Coach Mike Davis</strong> posted a new recap for <strong>Varsity Football</strong> on Kinectem.</p>
+<p><strong>Wolves rally for a 28–21 win</strong></p>
+${emailButton({ href: `${baseUrl}/posts/article-preview-game-recap`, label: "See it" })}
+<p>Have photos or videos from the game? You can add them to the recap's photo-and-video album on the same page.</p>
+<hr style="margin-top:24px;border:none;border-top:1px solid #eee"/>
+<p style="font-size:12px;color:#888;">Manage your email preferences in <a href="${baseUrl}/settings">Settings</a> &middot; <a href="#preview-unsubscribe">Unsubscribe</a></p>
+`;
+      return renderBrandedEmailHtml({
+        subject: 'New recap for Varsity Football: "Wolves rally for a 28–21 win"',
+        contextLabel: "Varsity Football",
         bodyHtml,
         baseUrl,
       });
