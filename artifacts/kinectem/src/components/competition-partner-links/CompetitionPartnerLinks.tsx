@@ -55,7 +55,7 @@ function Tool(props: Props) {
           onInteractOutside={(e) => submitting && e.preventDefault()}
         >
           {open && (
-            <PartnerWizard {...props} onSubmitting={setSubmitting} onDone={() => setOpen(false)} />
+            <PartnerWizard {...props} onSubmitting={setSubmitting} />
           )}
         </DialogContent>
       </Dialog>

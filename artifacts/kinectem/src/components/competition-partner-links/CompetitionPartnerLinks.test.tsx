@@ -1,10 +1,19 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/renderWithProviders";
 import { CompetitionPartnerLinks } from "./CompetitionPartnerLinks";
 
 const m = vi.hoisted(() => ({ fetch: vi.fn(), who: vi.fn() }));
+type Watch = { callback: IntersectionObserverCallback; target: Element | null; root: Element | Document | null; disconnected: boolean; observer: IntersectionObserver };
+const watches: Watch[] = [];
+async function scrollToMore() {
+  const watch = [...watches].reverse().find((w) => !w.disconnected && w.target?.isConnected);
+  expect(watch?.root).toBe(screen.getByTestId("partner-links-panel"));
+  await act(async () => watch?.callback(
+    [{ isIntersecting: true, target: watch.target! } as IntersectionObserverEntry], watch.observer,
+  ));
+}
 vi.mock("@workspace/api-client-react", () => ({ customFetch: m.fetch }));
 vi.mock("@/hooks/useWhoami", () => ({ useWhoami: () => ({ data: m.who() }) }));
 
@@ -40,6 +49,7 @@ function impl(over: Over) {
       data: over.teams ?? [team("t1", "Rapids"), team("t2", "Other Name"), team("t3", "Old", { archived: true }),
         team("t4", "Linked", { slotStatus: "linked" }), team("t5", "Wait", { slotStatus: "pending" })],
       hasMore: !!over.hasMore,
+      nextCursor: over.hasMore ? "continuation" : null,
     };
   };
 }
@@ -78,7 +88,20 @@ describe("formatGender", () => {
 });
 
 describe("CompetitionPartnerLinks", () => {
-  beforeEach(() => { m.fetch.mockReset(); m.who.mockReset(); m.who.mockReturnValue(admin); });
+  beforeEach(() => {
+    m.fetch.mockReset(); m.who.mockReset(); m.who.mockReturnValue(admin);
+    watches.length = 0;
+    vi.stubGlobal("IntersectionObserver", class {
+      watch: Watch;
+      constructor(callback: IntersectionObserverCallback, options: IntersectionObserverInit) {
+        this.watch = { callback, root: options.root ?? null, target: null, disconnected: false, observer: this as unknown as IntersectionObserver };
+        watches.push(this.watch);
+      }
+      observe(target: Element) { this.watch.target = target; }
+      disconnect() { this.watch.disconnected = true; }
+    });
+  });
+  afterEach(() => vi.unstubAllGlobals());
 
   it("hides for non-admin, signed-out and masquerade, no requests", () => {
     m.who.mockReturnValue({ authenticated: true, realUser: { id: "u", role: "coach" } });
@@ -159,18 +182,141 @@ describe("CompetitionPartnerLinks", () => {
     expect(screen.getByTestId("assignment-p1")).toBeTruthy();
   });
 
-  it("pages long lists without nested scrolling and shows the selected team beside the use action", async () => {
+  it("loads and deduplicates more teams without disabling the pinned selected choice", async () => {
+    setup();
+    const fallback = impl({});
+    let finish!: (value: unknown) => void;
+    m.fetch.mockImplementation((url: string, opts?: { method?: string }) => {
+      if (!url.includes("partner-team-options")) return fallback(url, opts);
+      if (new URL(url, "https://test.invalid").searchParams.has("cursor")) {
+        return new Promise((resolve) => { finish = resolve; });
+      }
+      return Promise.resolve({ data: [team("t1", "Rapids"), team("t2", "Comets")], hasMore: true, nextCursor: "page2" });
+    });
+    const u = await open();
+    await u.click(screen.getByTestId("button-choose-team-p1"));
+    await u.click(await screen.findByTestId("option-team-t1"));
+    await scrollToMore();
+    expect(await screen.findByTestId("status-more-loading")).toBeTruthy();
+    expect(screen.getByTestId("button-use-team")).toBeEnabled();
+    await act(async () => finish({ data: [team("t2", "Comets"), team("t9", "Later team")], hasMore: false, nextCursor: null }));
+    expect(await screen.findByTestId("option-team-t9")).toBeTruthy();
+    expect(screen.getAllByTestId("option-team-t2")).toHaveLength(1);
+    expect(screen.getByTestId("selected-destination")).toHaveTextContent("Club / Rapids");
+    await u.click(screen.getByTestId("button-use-team"));
+    expect(screen.getByTestId("assignment-p1")).toHaveTextContent("Club / Rapids");
+  });
+
+  it("keeps the draft while a new club stream replaces a delayed old continuation", async () => {
+    setup();
+    const fallback = impl({});
+    let finishOld!: (value: unknown) => void;
+    m.fetch.mockImplementation((url: string, opts?: { method?: string }) => {
+      if (!url.includes("partner-team-options")) return fallback(url, opts);
+      const params = new URL(url, "https://test.invalid").searchParams;
+      if (params.get("organizationId") === "ob") {
+        expect(params.has("cursor")).toBe(false);
+        return Promise.resolve({ data: [team("fresh", "Comets", { organizationId: "ob" })], hasMore: false, nextCursor: null });
+      }
+      if (params.has("cursor")) return new Promise((resolve) => { finishOld = resolve; });
+      return Promise.resolve({ data: [team("t1", "Rapids"), team("t2", "Comets")], hasMore: true, nextCursor: "old-cursor" });
+    });
+    const u = await open();
+    await pick(u, "p1", "t1");
+    await u.click(screen.getByTestId("button-choose-team-p2"));
+    await waitFor(() => expect(watches.some((w) => !w.disconnected)).toBe(true));
+    await scrollToMore();
+    await u.selectOptions(screen.getByTestId("select-club"), "ob");
+    expect(await screen.findByTestId("option-team-fresh")).toBeTruthy();
+    await act(async () => finishOld({ data: [team("stale", "Old club team")], hasMore: false, nextCursor: null }));
+    expect(screen.queryByTestId("option-team-stale")).toBeNull();
+    expect(screen.queryByTestId("option-team-t1")).toBeNull();
+    expect(screen.getByTestId("assignment-p1")).toHaveTextContent("Club / Rapids");
+  });
+
+  it("retains loaded rows and the selected page if loading more fails, and retries that page", async () => {
+    setup();
+    const fallback = impl({});
+    let tries = 0;
+    m.fetch.mockImplementation((url: string, opts?: { method?: string }) => {
+      if (!url.includes("partner-team-options")) return fallback(url, opts);
+      if (new URL(url, "https://test.invalid").searchParams.has("cursor")) {
+        if (++tries === 1) return Promise.reject(new Error("Offline"));
+        return Promise.resolve({ data: [team("t9", "Later")], hasMore: false, nextCursor: null });
+      }
+      return Promise.resolve({ data: [team("t1", "Rapids")], hasMore: true, nextCursor: "page2" });
+    });
+    const u = await open();
+    await u.click(screen.getByTestId("button-choose-team-p1"));
+    await u.click(await screen.findByTestId("option-team-t1"));
+    await scrollToMore();
+    expect(await screen.findByTestId("error-more-options")).toHaveTextContent("Your choices are unchanged");
+    expect(screen.getByTestId("option-team-t1")).toBeTruthy();
+    expect(screen.getByTestId("button-use-team")).toBeEnabled();
+    await u.click(screen.getByRole("button", { name: "Retry loading more" }));
+    expect(await screen.findByTestId("option-team-t9")).toBeTruthy();
+    expect(screen.getByTestId("selected-destination")).toHaveTextContent("Club / Rapids");
+  });
+
+  it("returns all structured failures to Match teams even when the source filter hides the team", async () => {
+    setup({ post: { ok: false, succeeded: 0, failed: 1, results: [
+      { participantId: "p1", teamId: "t1", ok: false, code: "PENDING_CLAIM", message: "Slot changed." },
+    ] } });
+    const u = await open();
+    await u.click(screen.getByTestId("button-choose-team-p1"));
+    await u.type(await screen.findByTestId("input-club-search"), "Twin");
+    await u.selectOptions(screen.getByTestId("select-club"), "oa");
+    await u.click(await screen.findByTestId("option-team-t1"));
+    await u.click(screen.getByTestId("button-use-team"));
+    await u.type(screen.getByTestId("input-slot-search"), "Comets");
+    await review(u);
+    await u.click(screen.getByTestId("checkbox-confirm-link"));
+    await u.click(screen.getByTestId("button-submit-links"));
+    expect(await screen.findByTestId("outcome-error-p1")).toHaveTextContent("Slot changed.");
+    expect(screen.getByTestId("step-2")).toHaveAttribute("aria-current", "step");
+    expect(screen.queryByTestId("slot-p1")).toBeNull();
+    expect(screen.getByTestId("input-slot-search")).toHaveValue("Comets");
+    await u.click(screen.getByRole("button", { name: "Change team page" }));
+    expect(await screen.findByTestId("input-club-search")).toHaveValue("Twin");
+    expect(screen.getByTestId("select-club")).toHaveValue("oa");
+    await review(u);
+    expect(screen.getByTestId("review-p1")).toBeTruthy();
+    expect(screen.getByTestId("checkbox-confirm-link")).not.toBeChecked();
+  });
+
+  it("reports a cached refresh failure without losing the draft or silently using stale options", async () => {
+    setup();
+    const fallback = impl({});
+    let fail = false;
+    m.fetch.mockImplementation((url: string, opts?: { method?: string }) => {
+      if (url.includes("partner-team-options") && fail) return Promise.reject(new Error("Offline"));
+      return fallback(url, opts);
+    });
+    const u = await open();
+    await pick(u, "p1", "t1");
+    fail = true;
+    await u.click(screen.getByTestId("button-choose-team-p2"));
+    expect(await screen.findByTestId("error-refresh-options")).toHaveTextContent("Your choices are unchanged");
+    await u.click(screen.getByTestId("option-team-t2"));
+    expect(screen.getByTestId("button-use-team")).toBeDisabled();
+    expect(screen.getByTestId("assignment-p1")).toBeTruthy();
+    fail = false;
+    await u.click(screen.getByRole("button", { name: "Retry refresh" }));
+    await waitFor(() => expect(screen.getByTestId("button-use-team")).toBeEnabled());
+  });
+
+  it("renders continuous long lists with no page controls and a sticky use action", async () => {
     const view = setup({ teams: Array.from({ length: 12 }, (_, i) => team(`t${i + 1}`, `Team ${i + 1}`)) });
     view.rerender(el([...participants, ...Array.from({ length: 10 }, (_, i) => part(`extra${i}`, `Extra ${i}`))]));
     const u = await open();
-    expect(screen.queryByTestId("slot-extra6")).toBeNull();
-    await u.click(screen.getByRole("button", { name: "Next competition teams" }));
+    expect(screen.getByTestId("slot-extra9")).toBeTruthy();
     expect(screen.getByTestId("slot-extra6")).toBeTruthy();
-    await u.click(screen.getByRole("button", { name: "Previous competition teams" }));
+    expect(screen.queryByRole("button", { name: "Next competition teams" })).toBeNull();
     await u.click(screen.getByTestId("button-choose-team-p1"));
     await screen.findByTestId("option-team-t1");
-    expect(screen.queryByTestId("option-team-t9")).toBeNull();
-    await u.click(screen.getByRole("button", { name: "Next team pages" }));
+    expect(screen.getByTestId("option-team-t12")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Next team pages" })).toBeNull();
+    expect(screen.getByTestId("matching-action-bar")).toHaveClass("sticky", "top-0", "bg-background");
     await u.click(screen.getByTestId("option-team-t9"));
     expect(screen.getByTestId("selected-destination")).toHaveTextContent("Club / Team 9");
     await u.click(screen.getByTestId("button-use-team"));
@@ -210,15 +356,17 @@ describe("CompetitionPartnerLinks", () => {
     await u.click(screen.getByTestId("checkbox-mismatch-p2"));
     await u.click(screen.getByTestId("checkbox-confirm-link"));
     await u.click(screen.getByTestId("button-submit-links"));
-    expect((await screen.findByTestId("review-error-p2")).textContent).toContain("Slot taken");
+    expect((await screen.findByTestId("outcome-error-p2")).textContent).toContain("Slot taken");
+    expect(screen.getByTestId("step-2")).toHaveAttribute("aria-current", "step");
     expect(screen.getByTestId("assigned-p1").textContent).toContain("Assigned");
-    expect(screen.queryByTestId("review-p1")).toBeNull();
-    expect(screen.getByTestId("review-p2")).toBeTruthy();
+    expect(screen.getByTestId("assignment-p2")).toBeTruthy();
     // parent refresh marks p1 as claimed: must still show Assigned, not Unavailable
     m.fetch.mockImplementation(impl({ post: { ok: true, succeeded: 1, failed: 0, results: [{ participantId: "p2", teamId: "t2", ok: true }] } }));
+    await review(u);
     await u.click(screen.getByTestId("checkbox-confirm-link"));
     await u.click(screen.getByTestId("button-submit-links"));
-    await waitFor(() => expect(screen.getByTestId("button-done")).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId("step-2")).toHaveAttribute("aria-current", "step"));
+    expect(screen.queryByTestId("button-done")).toBeNull();
     expect(posts()).toHaveLength(2);
     expect(JSON.parse(posts()[1][1].body).assignments).toEqual([
       { participantId: "p2", teamId: "t2", nameMismatchAcknowledged: true },
@@ -235,7 +383,7 @@ describe("CompetitionPartnerLinks", () => {
     await review(u);
     await u.click(screen.getByTestId("checkbox-confirm-link"));
     await u.click(screen.getByTestId("button-submit-links"));
-    await screen.findByTestId("button-done");
+    await screen.findByTestId("assignment-outcomes");
     view.rerender(el([part("p1", "Rapids", { claimed: true, teamId: "t1" }), ...participants.slice(1)]));
     await u.click(screen.getByTestId("step-2"));
     await u.click(screen.getByTestId("filter-all"));
@@ -300,6 +448,9 @@ describe("CompetitionPartnerLinks", () => {
     await u.keyboard("{Escape}");
     expect(screen.getByTestId("dialog-partner-links")).toBeTruthy();
     release({ ok: true, succeeded: 1, failed: 0, results: [{ participantId: "p1", teamId: "t1", ok: true }] });
-    await screen.findByTestId("button-done");
+    await screen.findByTestId("assignment-outcomes");
+    expect(screen.getByTestId("step-2")).toHaveAttribute("aria-current", "step");
+    await u.click(screen.getByRole("button", { name: /^Close$/ }));
+    expect(screen.queryByTestId("dialog-partner-links")).toBeNull();
   });
 });

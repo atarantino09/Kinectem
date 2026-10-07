@@ -8,6 +8,9 @@ import type { CompetitionParticipant } from "@/pages/CompetitionPage";
 import { SourceList } from "./SourceList";
 import { DestinationPicker } from "./DestinationPicker";
 import { ReviewStep } from "./ReviewStep";
+import { MatchingActionBar } from "./MatchingActionBar";
+import { AssignmentOutcomes } from "./AssignmentOutcomes";
+import { usePartnerTeamOptions } from "./usePartnerTeamOptions";
 import {
   MAX_PARTNER_ASSIGNMENTS,
   slotUnavailable,
@@ -28,13 +31,11 @@ export function PartnerWizard({
   slug,
   participants,
   onSubmitting,
-  onDone,
 }: {
   competitionId: string;
   slug: string;
   participants: CompetitionParticipant[];
   onSubmitting: (v: boolean) => void;
-  onDone: () => void;
 }) {
   const qc = useQueryClient();
   const base = `/api/v1/admin/competitions/${encodeURIComponent(competitionId)}`;
@@ -44,6 +45,7 @@ export function PartnerWizard({
   const [filter, setFilter] = useState<"unassigned" | "all">("unassigned");
   const [activeId, setActiveId] = useState<string | null>(null);
   const [clubId, setClubId] = useState("");
+  const [clubQ, setClubQ] = useState("");
   const [teamQ, setTeamQ] = useState("");
   const [debQ, setDebQ] = useState("");
   const [selected, setSelected] = useState<TeamOption | null>(null);
@@ -53,10 +55,19 @@ export function PartnerWizard({
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const destinationRef = useRef<HTMLDivElement>(null);
+  const scrollRoot = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (activeId && step === 2) {
-      destinationRef.current?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+    if (activeId && step === 2 && window.matchMedia("(max-width: 767px)").matches) {
+      const root = scrollRoot.current;
+      const destination = destinationRef.current;
+      if (root && destination) {
+        const height = Number.parseFloat(root.style.getPropertyValue("--matching-action-height")) || 0;
+        root.scrollTo({
+          top: Math.max(0, root.scrollTop + destination.getBoundingClientRect().top - root.getBoundingClientRect().top - height - 8),
+          behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        });
+      }
     }
   }, [activeId, step]);
 
@@ -76,17 +87,9 @@ export function PartnerWizard({
     enabled: !!pageId && step === 2,
     retry: false,
   });
-  const options = useQuery<{ data: TeamOption[]; hasMore: boolean }>({
-    queryKey: ["competition-partner-team-options", competitionId, pageId, clubId, debQ],
-    queryFn: () =>
-      customFetch(
-        `${base}/partner-team-options?pageId=${encodeURIComponent(pageId)}${
-          clubId ? `&organizationId=${encodeURIComponent(clubId)}` : ""
-        }${debQ ? `&q=${encodeURIComponent(debQ)}` : ""}`,
-        { method: "GET" },
-      ),
+  const options = usePartnerTeamOptions({
+    competitionId, pageId, clubId, search: debQ,
     enabled: !!pageId && !!activeId && step === 2,
-    retry: false,
   });
 
   const byId = useMemo(() => new Map(participants.map((p) => [p.id, p])), [participants]);
@@ -107,7 +110,7 @@ export function PartnerWizard({
 
   function changePage(id: string) {
     setPageId(id);
-    setTeamQ(""); setDebQ(""); setClubId(""); setSelected(null);
+    setTeamQ(""); setDebQ(""); setClubId(""); setClubQ(""); setSelected(null);
     setAssignments({}); setActiveId(null); setConfirmed(false);
     setResults({}); setSubmitError(null);
   }
@@ -117,12 +120,14 @@ export function PartnerWizard({
     setStep(2);
   }
   function useSelected() {
-    if (!activeId || !selected) return;
+    if (!activeId || !currentSelected || !canUse) return;
+    const selected = currentSelected;
     const participant = byId.get(activeId);
     if (!participant || slotUnavailable(participant) || optionUnavailable(selected) ||
         doneTeams.has(selected.id) || (usedTeams.has(selected.id) && usedTeams.get(selected.id) !== activeId) ||
         (!assignments[activeId] && entries.length >= MAX_PARTNER_ASSIGNMENTS)) return;
     setAssignments((p) => ({ ...p, [activeId]: { team: selected, ack: false } }));
+    clearFailedResult(activeId);
     setConfirmed(false);
     setActiveId(null);
     setSelected(null);
@@ -133,7 +138,16 @@ export function PartnerWizard({
       delete n[pid];
       return n;
     });
+    clearFailedResult(pid);
     setConfirmed(false);
+  }
+  function clearFailedResult(pid: string) {
+    setResults((p) => {
+      if (!p[pid] || p[pid].ok) return p;
+      const next = { ...p };
+      delete next[pid];
+      return next;
+    });
   }
 
   async function submit() {
@@ -171,6 +185,10 @@ export function PartnerWizard({
         return n;
       });
       setConfirmed(false);
+      setActiveId(null);
+      setSelected(null);
+      setStep(2);
+      if (scrollRoot.current) scrollRoot.current.scrollTop = 0;
       void qc.invalidateQueries({ queryKey: ["competition", slug] });
       void qc.invalidateQueries({ queryKey: ["competition-partner-pages", competitionId] });
       void qc.invalidateQueries({ queryKey: ["competition-partner-team-options", competitionId] });
@@ -187,7 +205,13 @@ export function PartnerWizard({
   }
 
   const active = activeId ? byId.get(activeId) ?? null : null;
-  const finished = step === 3 && entries.length === 0 && Object.values(results).some((r) => r.ok);
+  const searchPending = teamQ.trim() !== debQ;
+  const currentSelected = selected ? options.data.data.find((t) => t.id === selected.id) : null;
+  const canUse = !!active && !!currentSelected && !slotUnavailable(active) &&
+    !optionUnavailable(currentSelected) && !doneTeams.has(currentSelected.id) &&
+    (!usedTeams.has(currentSelected.id) || usedTeams.get(currentSelected.id) === active.id) &&
+    (!!assignments[active.id] || entries.length < MAX_PARTNER_ASSIGNMENTS) &&
+    !searchPending && !options.isRefetching && !options.isRefetchError && !submitting;
 
   return (
     <>
@@ -215,9 +239,10 @@ export function PartnerWizard({
         </ol>
       </DialogHeader>
 
-      <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 text-sm" data-testid="partner-links-panel">
+      <div ref={scrollRoot} className="flex-1 min-h-0 overflow-y-auto px-5 pb-4 text-sm"
+        style={{ scrollPaddingTop: "calc(var(--matching-action-height, 0px) + 12px)" }} data-testid="partner-links-panel">
         {step === 1 && (
-          <div className="space-y-1 max-w-md">
+          <div className="space-y-1 max-w-md pt-4">
             <label htmlFor="partner-page-select" className="font-bold text-xs">Partner directory</label>
             {pages.isLoading ? (
               <p className="text-muted-foreground" data-testid="status-pages-loading">Loading directories...</p>
@@ -248,6 +273,9 @@ export function PartnerWizard({
           </div>
         )}
         {step === 2 && (
+          <>
+          <MatchingActionBar active={active} selected={selected} canUse={canUse} onUse={useSelected} scrollRoot={scrollRoot} />
+          <AssignmentOutcomes results={results} assignments={assignments} byId={byId} onChange={activate} onRemove={remove} />
           <div className="grid gap-6 md:grid-cols-2">
             <SourceList
               participants={participants}
@@ -267,7 +295,11 @@ export function PartnerWizard({
               active={active}
               clubs={clubs}
               options={options}
+              scrollRoot={scrollRoot}
+              searchPending={searchPending}
               clubId={clubId}
+              clubQ={clubQ}
+              onClubQ={setClubQ}
               onClub={(id) => { setClubId(id); setTeamQ(""); setDebQ(""); setSelected(null); }}
               teamQ={teamQ}
               onTeamQ={(v) => { setTeamQ(v); setSelected(null); }}
@@ -275,13 +307,13 @@ export function PartnerWizard({
               doneTeams={doneTeams}
               selected={selected}
               onSelect={setSelected}
-              onUse={useSelected}
             />
             </div>
           </div>
+          </>
         )}
         {step === 3 && (
-          <ReviewStep
+          <div className="pt-4"><ReviewStep
             byId={byId}
             assignments={assignments}
             results={results}
@@ -295,7 +327,7 @@ export function PartnerWizard({
             onRemove={remove}
             submitError={submitError}
             disabled={submitting}
-          />
+          /></div>
         )}
       </div>
 
@@ -314,9 +346,7 @@ export function PartnerWizard({
             Review {entries.length} choice{entries.length === 1 ? "" : "s"}
           </Button>
         )}
-        {step === 3 && finished ? (
-          <Button onClick={onDone} data-testid="button-done">Done</Button>
-        ) : step === 3 ? (
+        {step === 3 ? (
           <Button className="font-bold" disabled={!canSubmit} onClick={submit} data-testid="button-submit-links">
             {submitting ? "Assigning..." : `Assign schedules to ${entries.length} team${entries.length === 1 ? "" : "s"}`}
           </Button>

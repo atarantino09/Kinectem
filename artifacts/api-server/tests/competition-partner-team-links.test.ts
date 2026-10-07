@@ -239,6 +239,7 @@ describe("platform-admin partner team schedule linking", () => {
     expect(initial.status).toBe(200);
     expect(initial.body.data).toHaveLength(200);
     expect(initial.body.hasMore).toBe(true);
+    expect(initial.body.nextCursor).toEqual(expect.any(String));
     expect(initial.body.data.every((team: { organizationId: string }) => team.organizationId === f.orgs[0].id)).toBe(true);
     const clubs = await f.admin.agent.get(`${f.base}/partner-team-clubs?pageId=${f.page.id}`);
     expect(clubs.status, clubs.text).toBe(200);
@@ -255,6 +256,55 @@ describe("platform-admin partner team schedule linking", () => {
     const narrow = await f.admin.agent.get(`${f.base}/partner-team-options?pageId=${f.page.id}&q=Search%20team%200200`);
     expect(narrow.body.data).toEqual([expect.objectContaining({ name: "Search team 0200" })]);
     expect(narrow.body.hasMore).toBe(false);
+    expect(narrow.body.nextCursor).toBeNull();
+    const continuation = await f.admin.agent.get(
+      `${f.base}/partner-team-options?pageId=${f.page.id}&cursor=${initial.body.nextCursor}`,
+    );
+    expect(continuation.status, continuation.text).toBe(200);
+    expect(continuation.body.data).toHaveLength(4);
+    expect(continuation.body.hasMore).toBe(false);
+    expect(continuation.body.nextCursor).toBeNull();
+    const ids = [...initial.body.data, ...continuation.body.data].map((team: { id: string }) => team.id);
+    expect(new Set(ids).size).toBe(204);
+    expect(continuation.body.data).toContainEqual(expect.objectContaining({ id: f.clubTeams[1].id }));
+    for (const scopeChange of [
+      `&organizationId=${f.orgs[0].id}`,
+      "&q=Search",
+      `&pageId=${crypto.randomUUID()}`,
+    ]) {
+      const result = await f.admin.agent.get(
+        `${f.base}/partner-team-options?pageId=${f.page.id}&cursor=${initial.body.nextCursor}${scopeChange}`,
+      );
+      expect([400, 404]).toContain(result.status);
+    }
+    const filtered = await f.admin.agent.get(
+      `${f.base}/partner-team-options?pageId=${f.page.id}&organizationId=${f.orgs[0].id}&q=Search`,
+    );
+    const filteredTail = await f.admin.agent.get(
+      `${f.base}/partner-team-options?pageId=${f.page.id}&organizationId=${f.orgs[0].id}&q=Search&cursor=${filtered.body.nextCursor}`,
+    );
+    expect(filteredTail.status, filteredTail.text).toBe(200);
+    expect(filteredTail.body.data).toEqual([expect.objectContaining({ name: "Search team 0200", organizationId: f.orgs[0].id })]);
+    expect(filteredTail.body.hasMore).toBe(false);
+  });
+
+  it("rejects malformed continuation without bypassing directory or filter validation", async () => {
+    const f = await fixture();
+    const base = `${f.base}/partner-team-options?pageId=${f.page.id}&cursor=`;
+    const malformed = [
+      "", "not-json", "!", "a".repeat(8193),
+      Buffer.from(JSON.stringify({ id: f.clubTeams[0].id })).toString("base64url"),
+      Buffer.from(JSON.stringify({
+        scope: JSON.stringify([f.competition.id, f.page.id, "", ""]),
+        organizationName: f.orgs[0].name, organizationId: "invalid", name: "Rovers", id: f.clubTeams[0].id,
+      })).toString("base64url"),
+    ];
+    for (const cursor of malformed) {
+      expect((await f.admin.agent.get(`${base}${cursor}`)).status).toBe(400);
+    }
+    expect((await f.admin.agent.get(`${base}abc&cursor=def`)).status).toBe(400);
+    expect((await request(app).get(`${base}abc`)).status).toBe(401);
+    expect((await f.coach.agent.get(`${base}abc`)).status).toBe(403);
   });
 
   it("discovers duplicate-named ownerless/claimed clubs separately, excluding empty or archived-only clubs", async () => {

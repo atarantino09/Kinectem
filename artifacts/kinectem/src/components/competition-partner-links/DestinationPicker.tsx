@@ -1,25 +1,27 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 import { Loader2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { CompetitionParticipant } from "@/pages/CompetitionPage";
 import {
   optionUnavailable,
-  slotUnavailable,
-  sourceMeta,
   teamMeta,
   type ClubRow,
   type TeamOption,
 } from "./model";
-import { ListPages, LIST_PAGE_SIZE } from "./ListPages";
+import type { usePartnerTeamOptions } from "./usePartnerTeamOptions";
 
 type Q<T> = { isLoading: boolean; isFetching: boolean; isError: boolean; data?: T; refetch: () => unknown };
 
 export function DestinationPicker(props: {
   active: CompetitionParticipant | null;
   clubs: Q<{ data: ClubRow[] }>;
-  options: Q<{ data: TeamOption[]; hasMore: boolean }>;
+  options: ReturnType<typeof usePartnerTeamOptions>;
+  scrollRoot: RefObject<HTMLDivElement | null>;
+  searchPending: boolean;
   clubId: string;
+  clubQ: string;
+  onClubQ: (value: string) => void;
   onClub: (id: string) => void;
   teamQ: string;
   onTeamQ: (v: string) => void;
@@ -27,16 +29,23 @@ export function DestinationPicker(props: {
   doneTeams: Set<string>;
   selected: TeamOption | null;
   onSelect: (t: TeamOption) => void;
-  onUse: () => void;
 }) {
   const { active, options, clubs, usedTeams } = props;
-  const [clubQ, setClubQ] = useState("");
-  const [page, setPage] = useState(1);
-  useEffect(() => setPage(1), [props.clubId, props.teamQ]);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
   const allOptions = options.data?.data ?? [];
-  const currentPage = Math.min(page, Math.max(1, Math.ceil(allOptions.length / LIST_PAGE_SIZE)));
-  const pageRows = allOptions.slice((currentPage - 1) * LIST_PAGE_SIZE, currentPage * LIST_PAGE_SIZE);
-  const cq = clubQ.trim().toLowerCase();
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    const root = props.scrollRoot.current;
+    if (!target || !root || !active || !options.hasNextPage || options.isFetching ||
+        options.isFetchNextPageError || props.searchPending || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) void options.fetchNextPage({ cancelRefetch: false });
+    }, { root, rootMargin: "160px 0px", threshold: 0 });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [active?.id, props.scrollRoot, props.searchPending, options.hasNextPage, options.isFetching,
+    options.isFetchNextPageError, options.fetchNextPage, allOptions.length]);
+  const cq = props.clubQ.trim().toLowerCase();
   const clubRows = (clubs.data?.data ?? []).filter(
     (c) => c.id === props.clubId || !cq || `${c.name} ${c.city ?? ""} ${c.state ?? ""}`.toLowerCase().includes(cq),
   );
@@ -49,11 +58,6 @@ export function DestinationPicker(props: {
         </p>
       ) : (
         <>
-          <div className="rounded-lg border border-primary/40 bg-primary/5 p-2.5" data-testid="active-source">
-            <p className="text-xs text-muted-foreground">Assigning games for</p>
-            <p className="font-bold break-words">{active.name}</p>
-            <p className="text-xs text-muted-foreground">{sourceMeta(active)}</p>
-          </div>
           <div className="space-y-1">
             <label htmlFor="club-find" className="text-xs font-bold">Club</label>
             {clubs.isError ? (
@@ -65,8 +69,8 @@ export function DestinationPicker(props: {
               <>
                 <Input
                   id="club-find"
-                  value={clubQ}
-                  onChange={(e) => setClubQ(e.target.value)}
+                  value={props.clubQ}
+                  onChange={(e) => props.onClubQ(e.target.value)}
                   placeholder="Find a club"
                   data-testid="input-club-search"
                 />
@@ -99,44 +103,33 @@ export function DestinationPicker(props: {
               data-testid="input-team-search"
             />
           </div>
-           <div className="rounded-lg border bg-muted/30 p-2.5 space-y-2">
-             {props.selected && (
-               <p className="text-xs" data-testid="selected-destination">
-                 Team page: <strong>{props.selected.organizationName} / {props.selected.name}</strong>
-               </p>
-             )}
-             {slotUnavailable(active) && (
-               <p role="alert" className="text-xs text-destructive">
-                 This competition team is no longer available. Select another team.
-               </p>
-             )}
-             <Button className="font-bold w-full"
-               disabled={!props.selected || !!slotUnavailable(active) || options.isFetching}
-               onClick={props.onUse} data-testid="button-use-team">
-               Use this team page
-             </Button>
-           </div>
-          {options.isLoading || options.isFetching ? (
+          {options.isRefetchError && allOptions.length > 0 && (
+            <p role="alert" className="text-xs text-destructive" data-testid="error-refresh-options">
+              Could not refresh team pages. Your choices are unchanged. Refresh before using a team.{" "}
+              <Button variant="link" className="h-auto p-0" onClick={() => options.refetch()}>Retry refresh</Button>
+            </p>
+          )}
+          {options.isLoading ? (
             <p className="text-muted-foreground flex items-center gap-2" data-testid="status-options-loading">
               <Loader2 className="w-4 h-4 animate-spin" /> Searching team pages...
             </p>
-          ) : options.isError ? (
+          ) : options.isError && allOptions.length === 0 ? (
             <p role="alert" className="text-destructive" data-testid="error-options">
               Could not load team pages.{" "}
               <Button variant="link" className="p-0 h-auto" onClick={() => options.refetch()}>Retry</Button>
             </p>
           ) : (
             <>
-              {options.data?.hasMore && (
+              {options.hasNextPage && (
                 <p role="status" className="text-xs text-primary" data-testid="text-has-more">
-                  More team pages exist than are shown. Pick a club or narrow your search.
+                  More team pages load as you scroll.
                 </p>
               )}
               {(options.data?.data.length ?? 0) === 0 && (
                 <p className="text-muted-foreground" data-testid="empty-options">No team pages found.</p>
               )}
               <ul className="space-y-1" data-testid="list-options">
-                 {pageRows.map((t) => {
+                 {allOptions.map((t) => {
                   const why =
                     optionUnavailable(t) ??
                     (props.doneTeams.has(t.id)
@@ -149,7 +142,7 @@ export function DestinationPicker(props: {
                     <li key={t.id}>
                       <button
                         type="button"
-                        disabled={!!why}
+                        disabled={!!why || props.searchPending}
                         aria-pressed={sel}
                         onClick={() => props.onSelect(t)}
                         className={`w-full text-left rounded-md border px-2 py-1.5 enabled:hover:border-primary disabled:opacity-60 ${sel ? "border-primary bg-primary/10" : ""}`}
@@ -169,7 +162,24 @@ export function DestinationPicker(props: {
                   );
                 })}
               </ul>
-               <ListPages total={allOptions.length} page={currentPage} onPage={setPage} label="team pages" />
+              <div ref={loadMoreRef} className="min-h-4" data-testid="team-options-sentinel">
+                {options.isFetchingNextPage ? (
+                  <p role="status" className="text-xs text-muted-foreground" data-testid="status-more-loading">
+                    Loading more team pages...
+                  </p>
+                ) : options.isFetchNextPageError ? (
+                  <p role="alert" className="text-xs text-destructive" data-testid="error-more-options">
+                    Could not load more teams. Your choices are unchanged.{" "}
+                    <Button variant="link" className="p-0 h-auto" onClick={() => options.fetchNextPage({ cancelRefetch: false })}>
+                      Retry loading more
+                    </Button>
+                  </p>
+                ) : options.hasNextPage && typeof IntersectionObserver === "undefined" ? (
+                  <Button variant="outline" onClick={() => options.fetchNextPage({ cancelRefetch: false })}>Load more teams</Button>
+                ) : <p className="text-xs text-muted-foreground">
+                  {allOptions.length} team pages loaded{options.hasNextPage ? "" : " · End of list"}
+                </p>}
+              </div>
             </>
           )}
         </>

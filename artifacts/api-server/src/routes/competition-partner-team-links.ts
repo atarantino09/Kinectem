@@ -12,6 +12,13 @@ import { rateLimit, ipKey } from "../middlewares/rate-limit";
 
 const router: IRouter = Router();
 const uuid = z.string().uuid();
+const optionsCursorSchema = z.object({
+  scope: z.string().max(1024),
+  organizationName: z.string().max(2000),
+  organizationId: uuid,
+  name: z.string().max(2000),
+  id: uuid,
+});
 const bodySchema = z.object({
   pageId: uuid,
   assignments: z.array(z.object({
@@ -102,6 +109,23 @@ router.get(
       if (!membership) return apiError(res, 404, "Club is not in this partner directory.");
     }
     const search = typeof req.query.q === "string" ? req.query.q.trim().slice(0, 120) : "";
+    const scope = JSON.stringify([competitionId, pageId, organizationId ?? "", search]);
+    let cursor: z.infer<typeof optionsCursorSchema> | undefined;
+    if (req.query.cursor !== undefined) {
+      const token = req.query.cursor;
+      if (typeof token !== "string" || token.length > 8192 || !/^[A-Za-z0-9_-]+$/.test(token)) {
+        return apiError(res, 400, "Invalid team list continuation.");
+      }
+      try {
+        const parsed = optionsCursorSchema.safeParse(JSON.parse(Buffer.from(token, "base64url").toString("utf8")));
+        if (!parsed.success || parsed.data.scope !== scope) {
+          return apiError(res, 400, "Team list continuation does not match these filters.");
+        }
+        cursor = parsed.data;
+      } catch {
+        return apiError(res, 400, "Invalid team list continuation.");
+      }
+    }
     const escapedSearch = search.replace(/[\\%_]/g, "\\$&");
     const rows = await db.select({
       id: teams.id, name: teams.name, gender: teams.gender,
@@ -123,6 +147,8 @@ router.get(
       ))
       .where(and(
         typeof organizationId === "string" ? eq(teams.organizationId, organizationId) : undefined,
+        cursor ? sql`(organizations.name, organizations.id, teams.name, teams.id) >
+          (${cursor.organizationName}, ${cursor.organizationId}::uuid, ${cursor.name}, ${cursor.id}::uuid)` : undefined,
         search ? or(
           ilike(teams.name, `%${escapedSearch}%`),
           ilike(organizations.name, `%${escapedSearch}%`),
@@ -130,11 +156,18 @@ router.get(
       ))
       .orderBy(asc(organizations.name), asc(organizations.id), asc(teams.name), asc(teams.id))
       .limit(201);
+    const data = rows.slice(0, 200);
+    const last = data.at(-1);
+    const hasMore = rows.length > 200;
     return res.json({
-      data: rows.slice(0, 200).map(({ archivedAt, ...team }) => ({
+      data: data.map(({ archivedAt, ...team }) => ({
         ...team, ageGroup: null, archived: archivedAt != null,
       })),
-      hasMore: rows.length > 200,
+      hasMore,
+      nextCursor: hasMore && last ? Buffer.from(JSON.stringify({
+        scope, organizationName: last.organizationName,
+        organizationId: last.organizationId, name: last.name, id: last.id,
+      })).toString("base64url") : null,
     });
   }),
 );

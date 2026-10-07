@@ -32,3 +32,9 @@ Bulk schedule preparation is a multi-club operation. Changing club filters withi
 **Why:** Operators prepare many clubs' schedules before their owners arrive; the user asked for clearer list-based matching rather than repeatedly visiting individual organization pages.
 
 **How to apply:** Preserve queued matches while browsing other clubs. Compare readable competition-team and club/team-page identities, and use technical IDs only for deliberate disambiguation.
+
+Admin schedule matching is a continuous workflow: scroll through team lists, keep the current assignment action visible, and return to matching after each confirmed batch instead of closing the dialog.
+
+**Why:** The user explicitly corrected the paged-list approach, asked for “Use this team page” anchored at the top while scrolling, and wants to continue from Match teams after assigning schedules.
+
+**How to apply:** Preserve the directory, filters and remaining choices across submissions. Keep unsuccessful assignments visible even when search filters hide their source rows. Allow X/outside dismissal once assignment is no longer in flight.

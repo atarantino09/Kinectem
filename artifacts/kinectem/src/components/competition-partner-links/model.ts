@@ -29,6 +29,11 @@ export type TeamOption = {
   archived?: boolean;
   slotStatus: null | "linked" | "pending";
 };
+export type TeamOptionsPage = {
+  data: TeamOption[];
+  hasMore: boolean;
+  nextCursor: string | null;
+};
 export type LinkResult = {
   participantId: string;
   teamId: string;

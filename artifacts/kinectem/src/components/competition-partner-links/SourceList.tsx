@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { Search, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,7 +12,6 @@ import {
   type Assignment,
   type StoredResult,
 } from "./model";
-import { ListPages, LIST_PAGE_SIZE } from "./ListPages";
 
 export function SourceList(props: {
   participants: CompetitionParticipant[];
@@ -29,8 +27,6 @@ export function SourceList(props: {
   disabled: boolean;
 }) {
   const { participants, assignments, results, activeId, disabled } = props;
-  const [page, setPage] = useState(1);
-  useEffect(() => setPage(1), [props.search, props.filter]);
   const q = props.search.trim().toLowerCase();
   const shown = participants.filter((p) => {
     if (q && ![p.name, sourceMeta(p), p.gender].join(" ").toLowerCase().includes(q)) return false;
@@ -43,8 +39,6 @@ export function SourceList(props: {
   const assignedIds = new Set(participants.filter((p) => p.claimed || p.teamId).map((p) => p.id));
   Object.values(results).filter((r) => r.ok).forEach((r) => assignedIds.add(r.participantId));
   const done = assignedIds.size;
-  const currentPage = Math.min(page, Math.max(1, Math.ceil(shown.length / LIST_PAGE_SIZE)));
-  const pageRows = shown.slice((currentPage - 1) * LIST_PAGE_SIZE, currentPage * LIST_PAGE_SIZE);
   return (
     <section aria-labelledby="src-h" className="space-y-2" data-testid="source-column">
       <h3 id="src-h" className="font-bold">Competition team</h3>
@@ -84,7 +78,7 @@ export function SourceList(props: {
                ? "Nothing left to assign here. Switch to All to see everything." : "No competition teams match."}
           </li>
         )}
-        {pageRows.map((p) => {
+        {shown.map((p) => {
           const why = slotUnavailable(p);
           const a = assignments[p.id];
           const res = results[p.id];
@@ -154,7 +148,7 @@ export function SourceList(props: {
           );
         })}
       </ul>
-      <ListPages total={shown.length} page={currentPage} onPage={setPage} label="competition teams" />
+      <p className="text-xs text-muted-foreground">{shown.length} competition teams shown</p>
     </section>
   );
 }
