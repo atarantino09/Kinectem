@@ -40,7 +40,7 @@ function namesMatch(a: string, b: string) {
 }
 
 router.get(
-  "/admin/competitions/:competitionId/partner-team-options",
+  "/admin/competitions/:competitionId/partner-team-clubs",
   requireAdmin,
   asyncHandler(async (req, res) => {
     res.setHeader("Cache-Control", "private, no-store");
@@ -55,6 +55,52 @@ router.get(
       .where(eq(partnerLandingPages.id, pageId)).limit(1);
     if (!competition) return apiError(res, 404, "Competition not found");
     if (!page) return apiError(res, 404, "Partner directory not found");
+    // This lightweight club list is independent of the capped team search.
+    // Return all clubs with active team pages, including ownerless clubs.
+    const clubs = await db.select({
+      id: organizations.id, name: organizations.name,
+      city: organizations.city, state: organizations.state,
+      teamCount: sql<number>`count(*)::int`,
+    }).from(organizations)
+      .innerJoin(partnerOrganizationMemberships, and(
+        eq(partnerOrganizationMemberships.organizationId, organizations.id),
+        eq(partnerOrganizationMemberships.partnerPageId, pageId),
+      ))
+      .innerJoin(teams, and(eq(teams.organizationId, organizations.id), isNull(teams.archivedAt)))
+      .groupBy(organizations.id, organizations.name, organizations.city, organizations.state)
+      .orderBy(asc(organizations.name), asc(organizations.id));
+    return res.json({ data: clubs });
+  }),
+);
+
+router.get(
+  "/admin/competitions/:competitionId/partner-team-options",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    res.setHeader("Cache-Control", "private, no-store");
+    const competitionId = String(req.params.competitionId);
+    const pageId = String(req.query.pageId ?? "");
+    const organizationId = req.query.organizationId;
+    if (!uuid.safeParse(competitionId).success || !uuid.safeParse(pageId).success) {
+      return apiError(res, 400, "Select a valid competition and partner directory.");
+    }
+    if (organizationId !== undefined && !uuid.safeParse(organizationId).success) {
+      return apiError(res, 400, "Select a valid club.");
+    }
+    const [competition] = await db.select({ id: tournaments.id }).from(tournaments)
+      .where(eq(tournaments.id, competitionId)).limit(1);
+    const [page] = await db.select({ id: partnerLandingPages.id }).from(partnerLandingPages)
+      .where(eq(partnerLandingPages.id, pageId)).limit(1);
+    if (!competition) return apiError(res, 404, "Competition not found");
+    if (!page) return apiError(res, 404, "Partner directory not found");
+    if (typeof organizationId === "string") {
+      const [membership] = await db.select({ id: partnerOrganizationMemberships.id })
+        .from(partnerOrganizationMemberships).where(and(
+          eq(partnerOrganizationMemberships.partnerPageId, pageId),
+          eq(partnerOrganizationMemberships.organizationId, organizationId),
+        )).limit(1);
+      if (!membership) return apiError(res, 404, "Club is not in this partner directory.");
+    }
     const search = typeof req.query.q === "string" ? req.query.q.trim().slice(0, 120) : "";
     const escapedSearch = search.replace(/[\\%_]/g, "\\$&");
     const rows = await db.select({
@@ -75,10 +121,13 @@ router.get(
         eq(partnerOrganizationMemberships.organizationId, organizations.id),
         eq(partnerOrganizationMemberships.partnerPageId, pageId),
       ))
-      .where(search ? or(
-        ilike(teams.name, `%${escapedSearch}%`),
-        ilike(organizations.name, `%${escapedSearch}%`),
-      ) : undefined)
+      .where(and(
+        typeof organizationId === "string" ? eq(teams.organizationId, organizationId) : undefined,
+        search ? or(
+          ilike(teams.name, `%${escapedSearch}%`),
+          ilike(organizations.name, `%${escapedSearch}%`),
+        ) : undefined,
+      ))
       .orderBy(asc(organizations.name), asc(organizations.id), asc(teams.name), asc(teams.id))
       .limit(201);
     return res.json({

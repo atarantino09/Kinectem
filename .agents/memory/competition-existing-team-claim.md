@@ -26,3 +26,9 @@ Support-driven partner linking should put schedules on team pages immediately, w
 **Why:** This is preparation for future club owners, not an entry request or a personal follow. Using ordinary claims unchanged would leave review-gated schedules pending and subscribe admins to competitions they are only helping set up.
 
 **How to apply:** Treat this as a distinct privileged operation; retain ordinary coach/org-admin approval behavior and keep operator access unavailable while masquerading.
+
+Bulk schedule preparation is a multi-club operation. Changing club filters within a partner directory is navigation, not a new assignment batch.
+
+**Why:** Operators prepare many clubs' schedules before their owners arrive; the user asked for clearer list-based matching rather than repeatedly visiting individual organization pages.
+
+**How to apply:** Preserve queued matches while browsing other clubs. Compare readable competition-team and club/team-page identities, and use technical IDs only for deliberate disambiguation.

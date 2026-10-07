@@ -26,6 +26,10 @@ async function create() {
       { organizationId: orgs[0].id, name: "United U12", sport: "Soccer", gender: "Boys" },
       { organizationId: orgs[1].id, name: "City U12", sport: "Soccer", gender: "Girls" },
     ]).returning();
+    // Long-list layout coverage, scoped to the same disposable clubs.
+    await tx.insert(teams).values(Array.from({ length: 9 }, (_, i) => ({
+      organizationId: orgs[0].id, name: `Practice Team ${i + 1}`, sport: "Soccer", gender: "Boys",
+    })));
     const [page] = await tx.insert(partnerLandingPages).values({
       officialName: `Prelink Test League ${suffix}`, slug: `prelink-test-league-${suffix}`,
       associationLabel: "League", published: false,
@@ -42,6 +46,10 @@ async function create() {
       tournamentId: competition.id, name: team.name, nameKey: team.name.toLowerCase(),
       gender: team.gender, age: "U12", division: "Premier",
     }))).returning();
+    await tx.insert(tournamentParticipants).values(Array.from({ length: 9 }, (_, i) => ({
+      tournamentId: competition.id, name: `Extra Verification Team ${i + 1}`,
+      nameKey: `extra verification team ${i + 1}`, age: "U12", gender: "Boys", division: "Premier",
+    })));
     await tx.insert(tournamentMatches).values({
       tournamentId: competition.id, matchNumber: "1", matchDate: "2026-10-10", startTime: "10:00",
       homeParticipantId: slots[0].id, awayParticipantId: slots[1].id, venue: "Verification Park",

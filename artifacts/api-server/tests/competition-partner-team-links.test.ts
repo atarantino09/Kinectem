@@ -193,15 +193,19 @@ describe("platform-admin partner team schedule linking", () => {
   it("rejects anonymous, non-admin, and masqueraded access to both operations", async () => {
     const f = await fixture();
     const optionsUrl = `${f.base}/partner-team-options?pageId=${f.page.id}`;
+    const clubsUrl = `${f.base}/partner-team-clubs?pageId=${f.page.id}`;
     const postUrl = `${f.base}/partner-team-links`;
     const body = { pageId: f.page.id, assignments: f.assignments };
     expect((await request(app).get(optionsUrl)).status).toBe(401);
+    expect((await request(app).get(clubsUrl)).status).toBe(401);
     expect((await request(app).post(postUrl).send(body)).status).toBe(401);
     expect((await f.coach.agent.get(optionsUrl)).status).toBe(403);
+    expect((await f.coach.agent.get(clubsUrl)).status).toBe(403);
     expect((await f.coach.agent.post(postUrl).send(body)).status).toBe(403);
     const start = await f.admin.agent.post(`/api/v1/admin/masquerade/${f.coach.user.id}/start`);
     expect(start.status, start.text).toBe(200);
     expect((await f.admin.agent.get(optionsUrl)).status).toBe(403);
+    expect((await f.admin.agent.get(clubsUrl)).status).toBe(403);
     expect((await f.admin.agent.post(postUrl).send(body)).status).toBe(403);
     expect((await f.admin.agent.post("/api/v1/admin/masquerade/stop")).status).toBe(200);
   });
@@ -225,6 +229,8 @@ describe("platform-admin partner team schedule linking", () => {
 
   it("bounds directory options and lets admins find teams beyond the initial result limit", async () => {
     const f = await fixture();
+    await db.update(organizations).set({ name: "A Busy Club" }).where(eq(organizations.id, f.orgs[0].id));
+    await db.update(organizations).set({ name: "Z Later Club" }).where(eq(organizations.id, f.orgs[1].id));
     await db.insert(teams).values(Array.from({ length: 201 }, (_, index) => ({
       organizationId: f.orgs[0].id,
       name: `Search team ${String(index).padStart(4, "0")}`,
@@ -233,9 +239,58 @@ describe("platform-admin partner team schedule linking", () => {
     expect(initial.status).toBe(200);
     expect(initial.body.data).toHaveLength(200);
     expect(initial.body.hasMore).toBe(true);
+    expect(initial.body.data.every((team: { organizationId: string }) => team.organizationId === f.orgs[0].id)).toBe(true);
+    const clubs = await f.admin.agent.get(`${f.base}/partner-team-clubs?pageId=${f.page.id}`);
+    expect(clubs.status, clubs.text).toBe(200);
+    expect(clubs.body.data).toEqual([
+      expect.objectContaining({ id: f.orgs[0].id, name: "A Busy Club", teamCount: 202 }),
+      expect.objectContaining({ id: f.orgs[1].id, name: "Z Later Club", teamCount: 1 }),
+    ]);
+    const laterClub = await f.admin.agent.get(
+      `${f.base}/partner-team-options?pageId=${f.page.id}&organizationId=${f.orgs[1].id}`,
+    );
+    expect(laterClub.status, laterClub.text).toBe(200);
+    expect(laterClub.body.data.map((team: { id: string }) => team.id)).toEqual([f.clubTeams[1].id]);
+    expect(laterClub.body.hasMore).toBe(false);
     const narrow = await f.admin.agent.get(`${f.base}/partner-team-options?pageId=${f.page.id}&q=Search%20team%200200`);
     expect(narrow.body.data).toEqual([expect.objectContaining({ name: "Search team 0200" })]);
     expect(narrow.body.hasMore).toBe(false);
+  });
+
+  it("discovers duplicate-named ownerless/claimed clubs separately, excluding empty or archived-only clubs", async () => {
+    const f = await fixture();
+    await db.insert(organizationAdmins).values({
+      organizationId: f.orgs[1].id, userId: f.coach.user.id, role: "owner",
+    });
+    const [empty] = await db.insert(organizations).values({ name: "Empty directory club" }).returning();
+    orgIds.push(empty.id);
+    await db.insert(partnerOrganizationMemberships).values([
+      { partnerPageId: f.page.id, organizationId: empty.id },
+      { partnerPageId: f.page.id, organizationId: f.orgs[2].id },
+    ]);
+    await db.update(teams).set({ archivedAt: new Date() }).where(eq(teams.id, f.clubTeams[2].id));
+    const response = await f.admin.agent.get(`${f.base}/partner-team-clubs?pageId=${f.page.id}`);
+    expect(response.status, response.text).toBe(200);
+    expect(response.headers["cache-control"]).toContain("no-store");
+    expect(response.body.data).toHaveLength(2);
+    expect(new Set(response.body.data.map((club: { id: string }) => club.id)))
+      .toEqual(new Set(f.orgs.slice(0, 2).map((org) => org.id)));
+    expect(response.body.data.every((club: { name: string; teamCount: number }) =>
+      club.name === f.orgs[0].name && club.teamCount === 1)).toBe(true);
+  });
+
+  it("validates club filters and refuses clubs outside the selected directory", async () => {
+    const f = await fixture();
+    const base = `${f.base}/partner-team-options?pageId=${f.page.id}`;
+    for (const filter of ["invalid", "", `${f.orgs[0].id}&organizationId=${f.orgs[1].id}`]) {
+      expect((await f.admin.agent.get(`${base}&organizationId=${filter}`)).status).toBe(400);
+    }
+    expect((await f.admin.agent.get(`${base}&organizationId=${f.orgs[2].id}`)).status).toBe(404);
+    const narrowed = await f.admin.agent.get(`${base}&organizationId=${f.orgs[0].id}&q=Rovers`);
+    expect(narrowed.body.data.map((team: { id: string }) => team.id)).toEqual([f.clubTeams[0].id]);
+    const absent = await f.admin.agent.get(`${base}&organizationId=${f.orgs[0].id}&q=Outside`);
+    expect(absent.body.data).toEqual([]);
+    expect((await f.admin.agent.get(`${f.base}/partner-team-clubs?pageId=invalid`)).status).toBe(400);
   });
 
   it("only one admin can claim the same slot, or separate slots for the same destination team", async () => {
