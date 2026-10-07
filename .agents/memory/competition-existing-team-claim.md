@@ -14,3 +14,9 @@ description: Claim branch to an existing team — advisory-lock atomicity + coac
 - Claimed slots remain in the competition Teams directory; replace Claim with a Claimed status and retain the team-page link.
 - **Why:** claiming locks ownership of a slot, but must not remove a participant from the public competition directory.
 - **How to apply:** never filter participants by claim state; only explicit organizer hiding and viewer filters may remove rows.
+
+Platform admins must be able to prelink competition teams to existing team pages in a partner directory before the clubs or coaches claim their organizations or teams.
+
+**Why:** The user wants those team pages to already contain their competition schedules when real owners arrive. Administrative schedule linking is not an ownership claim.
+
+**How to apply:** Keep support-driven linking ownership-neutral and distinct from ordinary coach claim approval. Do not require the platform admin to acquire roster or organization memberships merely to find and connect these teams.
