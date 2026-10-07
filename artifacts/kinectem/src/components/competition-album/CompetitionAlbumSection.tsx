@@ -191,6 +191,20 @@ function SignedInCompetitionAlbumSection({
       </div>
 
       <CollapsibleContent className="space-y-4" data-testid="content-competition-album">
+      {album && (
+        <aside className="space-y-2 rounded-xl border bg-muted/20 p-4 text-sm" data-testid="guide-competition-photos-members">
+          <h3 className="font-bold">About this photo album</h3>
+          <p className="text-muted-foreground">
+            Browse approved photos from this competition. Photos tagged to a team also appear on that team’s page.
+            Open a photo and choose <strong>Download photo</strong> to save it. Only signed-in users can view or download photos.
+          </p>
+          <p className="text-muted-foreground">
+            Eligible members, guardians and staff of participating teams can use <strong>Add photos</strong> when contributions are open.
+            Team submissions need competition-admin approval before appearing in the album. Check <strong>My submissions</strong> for their status;
+            pending and rejected submissions stay private to the uploader and authorized reviewers.
+          </p>
+        </aside>
+      )}
       {album && signedIn && !album.canUpload && !album.contributionsOpen && !canManage && (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="text-contributions-closed">
           <Lock className="h-3 w-3" /> Photo contributions are closed for this competition.

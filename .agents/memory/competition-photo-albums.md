@@ -26,3 +26,9 @@ Competition albums, including approved photos, are signed-in-only. Visitors must
 **Why:** The user explicitly requires visitors to sign in before seeing competition photo albums. Approval permits viewing by signed-in users; it does not make photo files publicly accessible.
 
 **How to apply:** Enforce authentication on album lists, direct photo streams, and tagged-team appearances, not only the competition-page UI. Keep private/no-store responses and remove gallery/viewer state on sign-out. Do not change ordinary post-album permissions.
+
+Ordinary signed-in viewers should receive a short album explanation and be able to download approved photos, without needing upload, review, or administrative permissions.
+
+**Why:** The user explicitly requested instructions explaining the album and contribution/approval process to non-admins, and a clearly advertised way for signed-in viewers to save photos.
+
+**How to apply:** Keep brief member-facing guidance inside the expanded album alongside the separate thorough organizer guide. Explain contribution eligibility, approval, private submission status, and how to download an opened photo. Download through the authenticated photo stream; do not make pending/rejected submissions public or create public storage links.

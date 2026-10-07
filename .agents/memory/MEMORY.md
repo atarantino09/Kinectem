@@ -101,3 +101,4 @@
 - [Historical recap intent](historical-recap-intent.md) — original newspaper transcription, not rewriting; school history must not imply current-roster or schedule activity.
 - [Long-picker browser verification](long-picker-browser-verification.md) — distinguish automation-session stalls from app freezes using isolated contexts and lightweight DOM checks.
 - [Partner suggestion identity](partner-suggestion-identity.md) — name suggestions are advisory; duplicate clubs/teams and gender metadata never authorize an assumed assignment.
+- [Browser download fixtures](browser-download-fixtures.md) — native downloads may bypass page-level mocks; verify saved bytes and HTTP status, not just a download event.

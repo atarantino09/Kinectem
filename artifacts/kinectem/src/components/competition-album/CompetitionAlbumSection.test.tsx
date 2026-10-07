@@ -67,6 +67,7 @@ describe("competition album collapse and admin explanation", () => {
     );
     expect(state.albumCalls).not.toHaveBeenCalled();
     expect(screen.queryByTestId("content-competition-album")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("guide-competition-photos-members")).not.toBeInTheDocument();
     expect(screen.queryByTestId("badge-approved-count")).not.toBeInTheDocument();
     expect(screen.queryByTestId("button-add-album-photos")).not.toBeInTheDocument();
   });
@@ -144,6 +145,9 @@ describe("competition album collapse and admin explanation", () => {
     const user = userEvent.setup();
     renderWithProviders(<CompetitionAlbumSection competition={competition} />);
     await user.click(screen.getByTestId("button-toggle-competition-album"));
+    expect(screen.getByTestId("guide-competition-photos-members")).toHaveTextContent("Download photo");
+    expect(screen.getByTestId("guide-competition-photos-members")).toHaveTextContent("competition-admin approval");
+    expect(screen.getByTestId("guide-competition-photos-members")).toHaveTextContent("Only signed-in users");
     expect(screen.queryByTestId("guide-competition-photos")).not.toBeInTheDocument();
     expect(screen.queryByTestId("switch-album-contributions")).not.toBeInTheDocument();
   });

@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -21,6 +21,8 @@ import { Badge } from "@/components/ui/badge";
 import { timeAgo } from "@/lib/format";
 import type { AlbumCompetition, AlbumPhoto } from "@/lib/competitionAlbum";
 import { PhotoBrand } from "./PhotoBrand";
+import { useToast } from "@/hooks/use-toast";
+import { downloadAlbumPhoto } from "./downloadAlbumPhoto";
 
 export type ViewerPhoto = AlbumPhoto & { competition?: AlbumCompetition };
 
@@ -43,6 +45,8 @@ export function AlbumViewer({
 }) {
   const touchX = useRef<number | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const { toast } = useToast();
   const open = index !== null && !!photos[index];
   const photo = open ? photos[index as number] : null;
   const go = (d: number) => {
@@ -132,6 +136,32 @@ export function AlbumViewer({
                     {` · ${(index ?? 0) + 1} of ${photos.length}`}
                   </p>
                 </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1 border-white/30 bg-transparent font-bold text-white hover:bg-white/10 hover:text-white"
+                    disabled={downloading}
+                    data-testid="button-download-album-photo"
+                    onClick={async () => {
+                      if (downloading) return;
+                      setDownloading(true);
+                      try {
+                        await downloadAlbumPhoto(photo);
+                      } catch (error) {
+                        toast({
+                          title: "Couldn’t download photo",
+                          description: error instanceof Error ? error.message : "Please try again.",
+                          variant: "destructive",
+                        });
+                      } finally {
+                        setDownloading(false);
+                      }
+                    }}
+                  >
+                      <Download className="h-3.5 w-3.5" />
+                      {downloading ? "Downloading…" : "Download photo"}
+                  </Button>
                 {photo.canDelete && onDelete && (
                   <Button
                     size="sm"
@@ -144,6 +174,7 @@ export function AlbumViewer({
                     Delete
                   </Button>
                 )}
+                </div>
               </div>
             </div>
           )}
