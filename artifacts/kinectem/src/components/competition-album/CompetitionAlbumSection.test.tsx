@@ -9,6 +9,8 @@ const state = vi.hoisted(() => ({
   canManage: true,
   isCompetitionAdmin: true,
   canUpload: true,
+  sessionId: "signed-in-user",
+  albumCalls: vi.fn(),
 }));
 const competition = {
   id: "competition-1", name: "City Cup", slug: "city-cup", logoUrl: null, brandColor: "#3457d5",
@@ -19,16 +21,19 @@ vi.mock("wouter", async (importOriginal) => ({
   useSearch: () => state.search,
 }));
 vi.mock("@/lib/competitionAlbum", () => ({
-  useAlbumSessionId: () => "signed-in-user",
+  useAlbumSessionId: () => state.sessionId,
   useAlbumAuthReset: vi.fn(),
-  useCompetitionAlbum: () => ({
+  useCompetitionAlbum: (...args: unknown[]) => {
+    state.albumCalls(...args);
+    return ({
     data: {
       competition, photos: [], teams: [], contributionsOpen: false,
       approvedCount: 0, pendingCount: 1,
       canManage: state.canManage, isCompetitionAdmin: state.isCompetitionAdmin, canUpload: state.canUpload,
     },
     isLoading: false, isError: false, isFetching: false, refetch: vi.fn(),
-  }),
+    });
+  },
   useDeleteAlbumPhoto: () => ({ mutate: vi.fn(), isPending: false }),
   useSetContributions: () => ({ mutate: vi.fn(), isPending: false }),
   errText: () => "Please try again.",
@@ -45,8 +50,39 @@ describe("competition album collapse and admin explanation", () => {
     state.canManage = true;
     state.isCompetitionAdmin = true;
     state.canUpload = true;
+    state.sessionId = "signed-in-user";
+    state.albumCalls.mockClear();
     window.history.replaceState(null, "", "/");
     HTMLElement.prototype.scrollIntoView = vi.fn();
+  });
+
+  it("shows visitors a clear sign-in link without requesting or rendering album content", () => {
+    state.sessionId = "anon";
+    state.search = "?album=pending";
+    window.history.replaceState(null, "", "/#photos");
+    renderWithProviders(<CompetitionAlbumSection competition={competition} />);
+    expect(screen.getByText("Sign in to see photo albums.")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute(
+      "href", `/login?returnTo=${encodeURIComponent("/c/city-cup#photos")}`,
+    );
+    expect(state.albumCalls).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("content-competition-album")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("badge-approved-count")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("button-add-album-photos")).not.toBeInTheDocument();
+  });
+
+  it("removes the signed-in gallery and controls when the user signs out", async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderWithProviders(<CompetitionAlbumSection competition={competition} />);
+    await user.click(screen.getByTestId("button-toggle-competition-album"));
+    expect(screen.getByTestId("guide-competition-photos")).toBeVisible();
+    state.sessionId = "anon";
+    state.albumCalls.mockClear();
+    rerender(<CompetitionAlbumSection competition={competition} />);
+    expect(screen.getByText("Sign in to see photo albums.")).toBeVisible();
+    expect(state.albumCalls).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("guide-competition-photos")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("content-competition-album")).not.toBeInTheDocument();
   });
 
   it("starts collapsed and shows the thorough admin guide only after expansion", async () => {

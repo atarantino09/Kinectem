@@ -20,3 +20,9 @@ The competition-page Photo Album section should start collapsed on ordinary visi
 **Why:** The user requested a collapsed initial section and a “better more thorough explaination” for the competition admin about exactly how the feature works. The album should not dominate the initial page, but organizer instructions must remain available where the work happens.
 
 **How to apply:** Preserve the collapsed default when adding controls or guidance. Do not hide the destination when an admin follows a pending-review alert.
+
+Competition albums, including approved photos, are signed-in-only. Visitors must see “Sign in to see photo albums” with a sign-in link rather than photo previews.
+
+**Why:** The user explicitly requires visitors to sign in before seeing competition photo albums. Approval permits viewing by signed-in users; it does not make photo files publicly accessible.
+
+**How to apply:** Enforce authentication on album lists, direct photo streams, and tagged-team appearances, not only the competition-page UI. Keep private/no-store responses and remove gallery/viewer state on sign-out. Do not change ordinary post-album permissions.

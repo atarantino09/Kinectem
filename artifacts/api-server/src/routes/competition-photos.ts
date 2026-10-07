@@ -44,6 +44,8 @@ function notFound(res: Response): void {
 router.get(
   "/competitions/:competitionId/album",
   asyncHandler(async (req, res): Promise<void> => {
+    res.setHeader("Cache-Control", "private, no-store, max-age=0");
+    if (!req.sessionUser) return apiError(res, 401, "Sign in to see photo albums");
     const competition = await loadPhotoCompetition(pathParam(req.params.competitionId));
     if (!competition) return notFound(res);
     const view = String(req.query.view ?? "approved");
@@ -143,6 +145,8 @@ router.get(
 router.get(
   "/teams/:teamId/competition-photos",
   asyncHandler(async (req, res): Promise<void> => {
+    res.setHeader("Cache-Control", "private, no-store, max-age=0");
+    if (!req.sessionUser) return apiError(res, 401, "Sign in to see photo albums");
     const teamId = pathParam(req.params.teamId);
     if (!uuid.safeParse(teamId).success) return notFound(res);
     const [team] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
@@ -199,6 +203,8 @@ router.get(
 router.get(
   "/competitions/:competitionId/album/photos/:photoId/data",
   asyncHandler(async (req, res): Promise<void> => {
+    res.setHeader("Cache-Control", "private, no-store, max-age=0");
+    if (!req.sessionUser) return apiError(res, 401, "Sign in to see photo albums");
     const photoId = pathParam(req.params.photoId);
     if (!uuid.safeParse(photoId).success) return notFound(res);
     const competition = await loadPhotoCompetition(pathParam(req.params.competitionId));
@@ -216,10 +222,10 @@ router.get(
       return notFound(res);
     }
     const me = req.sessionUser;
-    const publicApproved = row.photo.status === "approved";
+    const approved = row.photo.status === "approved";
     const uploader = Boolean(me && row.photo.uploaderUserId === me.id);
     const reviewer = Boolean(me && await canReviewCompetitionPhotos(me, competition));
-    if (!publicApproved && !uploader && !reviewer) return notFound(res);
+    if (!approved && !uploader && !reviewer) return notFound(res);
     res.setHeader("Cache-Control", "private, no-store, max-age=0");
     res.setHeader("Pragma", "no-cache");
     res.setHeader("X-Content-Type-Options", "nosniff");

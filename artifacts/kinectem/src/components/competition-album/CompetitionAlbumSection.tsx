@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearch } from "wouter";
+import { Link, useSearch } from "wouter";
 import { Camera, ChevronDown, ImagePlus, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +28,36 @@ export function CompetitionAlbumSection({
 }) {
   const sid = useAlbumSessionId();
   useAlbumAuthReset(sid);
+  if (sid === "anon") {
+    const returnTo = `/c/${encodeURIComponent(competition.slug)}#photos`;
+    return (
+      <section
+        id="photos"
+        className="competition-section-surface scroll-mt-20 space-y-3 rounded-xl border p-4 shadow-sm sm:p-5"
+        style={{ borderTop: `4px solid ${competition.brandColor || "#1e293b"}` }}
+        data-testid="section-competition-album"
+      >
+        <h2 className="flex items-center gap-2 text-xl font-black tracking-tight">
+          <Camera className="h-5 w-5" /> Photo Album
+        </h2>
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Lock className="h-4 w-4 shrink-0" /> Sign in to see photo albums.
+        </p>
+        <Button asChild size="sm" data-testid="button-sign-in-competition-album">
+          <Link href={`/login?returnTo=${encodeURIComponent(returnTo)}`}>Sign in</Link>
+        </Button>
+      </section>
+    );
+  }
+  return <SignedInCompetitionAlbumSection key={`${competition.id}:${sid}`} competition={competition} />;
+}
+
+function SignedInCompetitionAlbumSection({
+  competition,
+}: {
+  competition: Pick<AlbumCompetition, "id" | "name" | "slug" | "logoUrl" | "brandColor">;
+}) {
+  const sid = useAlbumSessionId();
   const signedIn = sid !== "anon";
   const { toast } = useToast();
   const search = useSearch();

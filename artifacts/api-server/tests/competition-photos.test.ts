@@ -234,11 +234,11 @@ describe("competition photo album regression coverage", () => {
     });
     const photoUrl = `/api/v1/competitions/${f.competitionId}/album/photos/${photoId}/data`;
 
-    expect((await request(app).get(`/api/v1/competitions/${f.competitionId}/album`)).body.photos)
+    expect((await f.outsider.agent.get(`/api/v1/competitions/${f.competitionId}/album`)).body.photos)
       .toHaveLength(0);
     expect((await f.outsider.agent.get(`/api/v1/competitions/${f.competitionId}/album?view=mine`)).body.photos)
       .toHaveLength(0);
-    expect((await request(app).get(photoUrl)).status).toBe(404);
+    expect((await request(app).get(photoUrl)).status).toBe(401);
     expect((await f.outsider.agent.get(photoUrl)).status).toBe(404);
 
     const ownerPendingBeforeFinalize = await f.owner.agent
@@ -247,8 +247,8 @@ describe("competition photo album regression coverage", () => {
     expect(ownerPendingBeforeFinalize.body.photos).toHaveLength(0);
 
     expect((await finalize(f.member.agent, f.competitionId, batchId)).body.submittedCount).toBe(1);
-    const publicAfterFinalize = await request(app).get(`/api/v1/competitions/${f.competitionId}/album`);
-    expect(publicAfterFinalize.body.photos).toHaveLength(0);
+    const approvedAfterFinalize = await f.outsider.agent.get(`/api/v1/competitions/${f.competitionId}/album`);
+    expect(approvedAfterFinalize.body.photos).toHaveLength(0);
     expect((await f.outsider.agent.get(photoUrl)).status).toBe(404);
     expect((await f.outsider.agent.get(`/api/v1/competitions/${f.competitionId}/album?view=mine`)).body.photos)
       .toHaveLength(0);
@@ -276,10 +276,41 @@ describe("competition photo album regression coverage", () => {
 
     const done = await finalize(f.owner.agent, f.competitionId, batchId);
     expect(done.body.submittedCount).toBe(1);
-    const after = await request(app).get(`/api/v1/competitions/${f.competitionId}/album`);
+    const after = await f.outsider.agent.get(`/api/v1/competitions/${f.competitionId}/album`);
     expect(after.body.photos).toEqual([
       expect.objectContaining({ id: photoId, status: "approved" }),
     ]);
+  });
+
+  it("requires sign-in for approved albums, team appearances, and direct photo files", async () => {
+    const f = await createFixture();
+    const batchId = await startBatch(f.owner.agent, f.competitionId);
+    const photoId = await uploadAndConfirm(f.owner.agent, f.competitionId, batchId, { teamIds: [f.teamId] });
+    await finalize(f.owner.agent, f.competitionId, batchId);
+    const albumUrl = `/api/v1/competitions/${f.competitionId}/album`;
+    const teamUrl = `/api/v1/teams/${f.teamId}/competition-photos`;
+    const photoUrl = `${albumUrl}/photos/${photoId}/data`;
+    for (const url of [
+      albumUrl, `${albumUrl}?view=mine`, `${albumUrl}?view=pending`,
+      `${albumUrl}?view=rejected`, teamUrl, photoUrl,
+    ]) {
+      const response = await request(app).get(url);
+      expect(response.status).toBe(401);
+      expect(JSON.stringify(response.body)).toContain("Sign in to see photo albums");
+      expect(response.headers["cache-control"]).toContain("no-store");
+      expect(response.body.photos).toBeUndefined();
+    }
+    expect(storageMocks.streamCompetitionPhoto).not.toHaveBeenCalled();
+    const signedInAlbum = await f.outsider.agent.get(albumUrl);
+    expect(signedInAlbum.status).toBe(200);
+    expect(signedInAlbum.body.photos).toEqual([expect.objectContaining({ id: photoId })]);
+    const signedInTeam = await f.outsider.agent.get(teamUrl);
+    expect(signedInTeam.status).toBe(200);
+    expect(signedInTeam.body.photos).toEqual([expect.objectContaining({ id: photoId })]);
+    const signedInPhoto = await f.outsider.agent.get(photoUrl);
+    expect(signedInPhoto.status).toBe(200);
+    expect(signedInPhoto.headers["cache-control"]).toContain("no-store");
+    expect(storageMocks.streamCompetitionPhoto).toHaveBeenCalledTimes(1);
   });
 
   it("allows accepted members and active guardians, but not followers or unrelated users", async () => {
@@ -369,7 +400,7 @@ describe("competition photo album regression coverage", () => {
       .patch(`/api/v1/competitions/${f.competitionId}/album/photos/tags`)
       .send({ photoIds: [first, second], teamIds: [f.teamId] });
     expect(tags.status).toBe(200);
-    const teamPhotos = await request(app).get(`/api/v1/teams/${f.teamId}/competition-photos`);
+    const teamPhotos = await f.outsider.agent.get(`/api/v1/teams/${f.teamId}/competition-photos`);
     expect(teamPhotos.body.photos.map((photo: { id: string }) => photo.id))
       .toEqual(expect.arrayContaining([first, second]));
 
@@ -380,7 +411,7 @@ describe("competition photo album regression coverage", () => {
     const deletePhoto = await f.owner.agent
       .delete(`/api/v1/competitions/${f.competitionId}/album/photos/${second}`);
     expect(deletePhoto.status).toBe(204);
-    const after = await request(app).get(`/api/v1/teams/${f.teamId}/competition-photos`);
+    const after = await f.outsider.agent.get(`/api/v1/teams/${f.teamId}/competition-photos`);
     expect(after.body.photos).toHaveLength(0);
   });
 
