@@ -9,6 +9,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { AvatarLightbox } from "@/components/AvatarLightbox";
+import { CompetitionPartnerLinks } from "@/components/competition-partner-links/CompetitionPartnerLinks";
 import { CompetitionBrandStrip } from "@/components/CompetitionBrandStrip";
 import { CompetitionHowItWorks } from "@/components/CompetitionHowItWorks";
 import {
@@ -2053,6 +2054,11 @@ export default function CompetitionPage() {
 
         {/* Teams / claim list and Schedule as full-width reading sections */}
         <div className="flex w-full min-w-0 flex-col gap-6">
+          <CompetitionPartnerLinks
+            competitionId={c.id}
+            slug={slug}
+            participants={participants}
+          />
           {/* Teams */}
           <Card
            className="competition-section-surface w-full min-w-0 rounded-xl border-t-[3px] border-border bg-card shadow-sm flex flex-col"
