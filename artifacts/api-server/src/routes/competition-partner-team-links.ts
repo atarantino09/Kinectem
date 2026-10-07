@@ -3,13 +3,14 @@ import {
   db, tournaments, tournamentParticipants, teams, organizations,
   partnerLandingPages, partnerOrganizationMemberships,
 } from "@workspace/db";
-import { and, asc, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { requireAdmin } from "../lib/auth";
 import { asyncHandler } from "../lib/async-handler";
 import { apiError } from "../lib/spec-helpers";
 import { rateLimit, ipKey } from "../middlewares/rate-limit";
 import { partnerTeamSuggestionScore } from "../lib/partner-team-suggestion-score";
+import { rankTeamSuggestions } from "../lib/partner-team-suggestions";
 
 const router: IRouter = Router();
 const uuid = z.string().uuid();
@@ -89,6 +90,12 @@ router.get(
     const competitionId = String(req.params.competitionId);
     const pageId = String(req.query.pageId ?? "");
     const organizationId = req.query.organizationId;
+    const suggestedFor = req.query.suggestedFor;
+    if (suggestedFor !== undefined && (!uuid.safeParse(suggestedFor).success ||
+        organizationId !== undefined || req.query.q !== undefined || req.query.cursor !== undefined ||
+        req.query.suggestFor !== undefined)) {
+      return apiError(res, 400, "Suggestions require a valid competition team and the whole partner directory.");
+    }
     if (!uuid.safeParse(competitionId).success || !uuid.safeParse(pageId).success) {
       return apiError(res, 400, "Select a valid competition and partner directory.");
     }
@@ -101,6 +108,22 @@ router.get(
       .where(eq(partnerLandingPages.id, pageId)).limit(1);
     if (!competition) return apiError(res, 404, "Competition not found");
     if (!page) return apiError(res, 404, "Partner directory not found");
+    let suggestedIds: string[] | undefined;
+    if (typeof suggestedFor === "string") {
+      const [participant] = await db.select({ name: tournamentParticipants.name }).from(tournamentParticipants)
+        .where(and(eq(tournamentParticipants.id, suggestedFor),
+          eq(tournamentParticipants.tournamentId, competitionId))).limit(1);
+      if (!participant) return apiError(res, 404, "Competition team not found.");
+      // The directory-wide UI ranks all names before hydrating its shortlist.
+      // Keep the existing suggestFor/club-filter API below compatible with its callers.
+      const candidates = await db.select({ id: teams.id, name: teams.name }).from(teams)
+        .innerJoin(partnerOrganizationMemberships, and(
+          eq(partnerOrganizationMemberships.organizationId, teams.organizationId),
+          eq(partnerOrganizationMemberships.partnerPageId, pageId),
+        ));
+      suggestedIds = rankTeamSuggestions(participant.name, candidates).map((team) => team.id);
+      if (!suggestedIds.length) return res.json({ data: [], hasMore: false, nextCursor: null });
+    }
     if (typeof organizationId === "string") {
       const [membership] = await db.select({ id: partnerOrganizationMemberships.id })
         .from(partnerOrganizationMemberships).where(and(
@@ -163,6 +186,7 @@ router.get(
         eq(partnerOrganizationMemberships.partnerPageId, pageId),
       ))
       .where(and(
+        suggestedIds ? inArray(teams.id, suggestedIds) : undefined,
         score ? sql`${score} >= 40` : undefined,
         typeof organizationId === "string" ? eq(teams.organizationId, organizationId) : undefined,
         cursor ? sql`(organizations.name, organizations.id, teams.name, teams.id) >
@@ -182,7 +206,9 @@ router.get(
         hasMoreMatches: rows.length > 5,
       });
     }
-    const data = rows.slice(0, 200);
+    const data = suggestedIds
+      ? rows.sort((a, b) => suggestedIds.indexOf(a.id) - suggestedIds.indexOf(b.id))
+      : rows.slice(0, 200);
     const last = data.at(-1);
     const hasMore = rows.length > 200;
     return res.json({

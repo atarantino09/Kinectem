@@ -65,7 +65,7 @@ export function sourceMeta(p: CompetitionParticipant) {
     .join(" · ");
 }
 export function teamMeta(t: TeamOption) {
-  return [[formatGender(t.gender), t.level ?? t.ageGroup].filter(Boolean).join(" "), [t.city, t.state].filter(Boolean).join(", ")]
+  return [[formatGender(t.gender), ...new Set([t.level, t.ageGroup].filter(Boolean))].filter(Boolean).join(" "), [t.city, t.state].filter(Boolean).join(", ")]
     .filter(Boolean)
     .join(" · ");
 }

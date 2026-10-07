@@ -10,8 +10,7 @@ import { DestinationPicker } from "./DestinationPicker";
 import { ReviewStep } from "./ReviewStep";
 import { MatchingActionBar } from "./MatchingActionBar";
 import { AssignmentOutcomes } from "./AssignmentOutcomes";
-import { usePartnerTeamOptions } from "./usePartnerTeamOptions";
-import { usePartnerTeamSuggestions } from "./usePartnerTeamSuggestions";
+import { usePartnerTeamOptions, usePartnerTeamSuggestions } from "./usePartnerTeamOptions";
 import {
   MAX_PARTNER_ASSIGNMENTS,
   slotUnavailable,
@@ -50,7 +49,7 @@ export function PartnerWizard({
   const [teamQ, setTeamQ] = useState("");
   const [debQ, setDebQ] = useState("");
   const [selected, setSelected] = useState<TeamOption | null>(null);
-  const [selectedFromSuggestion, setSelectedFromSuggestion] = useState(false);
+  const [selectionOrigin, setSelectionOrigin] = useState<"search" | "suggestion">("search");
   const [assignments, setAssignments] = useState<Record<string, Assignment>>({});
   const [results, setResults] = useState<Record<string, StoredResult>>({});
   const [confirmed, setConfirmed] = useState(false);
@@ -93,13 +92,12 @@ export function PartnerWizard({
     competitionId, pageId, clubId, search: debQ,
     enabled: !!pageId && !!activeId && step === 2,
   });
+  const suggestions = usePartnerTeamSuggestions({
+    competitionId, pageId, participantId: activeId,
+    enabled: !!pageId && step === 2,
+  });
 
   const byId = useMemo(() => new Map(participants.map((p) => [p.id, p])), [participants]);
-  const active = activeId ? byId.get(activeId) ?? null : null;
-  const suggestions = usePartnerTeamSuggestions({
-    competitionId, pageId, clubId, participantId: activeId, sourceName: active?.name ?? "",
-    enabled: !!active && !slotUnavailable(active) && step === 2,
-  });
   const entries = Object.entries(assignments);
   const usedTeams = new Map(entries.map(([pid, a]) => [a.team.id, pid]));
   const doneTeams = new Set(Object.values(results).filter((r) => r.ok).map((r) => r.teamId));
@@ -200,7 +198,6 @@ export function PartnerWizard({
       void qc.invalidateQueries({ queryKey: ["competition-partner-pages", competitionId] });
       void qc.invalidateQueries({ queryKey: ["competition-partner-team-options", competitionId] });
       void qc.invalidateQueries({ queryKey: ["competition-partner-team-clubs", competitionId] });
-      void qc.invalidateQueries({ queryKey: ["competition-partner-team-suggestions", competitionId] });
       res.results.filter((r) => r.ok).forEach((r) =>
         void qc.invalidateQueries({ queryKey: ["team", r.teamId, "tournament-schedule"] }),
       );
@@ -212,17 +209,18 @@ export function PartnerWizard({
     }
   }
 
+  const active = activeId ? byId.get(activeId) ?? null : null;
   const searchPending = teamQ.trim() !== debQ;
+  const selectionRefreshing = selectionOrigin === "suggestion" ? suggestions.isFetching : options.isRefetching;
+  const selectionFailed = selectionOrigin === "suggestion" ? suggestions.isError : options.isRefetchError;
   const currentSelected = selected
-    ? (selectedFromSuggestion ? suggestions.data?.data : options.data.data)?.find((t) => t.id === selected.id)
+    ? (selectionOrigin === "suggestion" ? suggestions.data?.data : options.data.data)?.find((t) => t.id === selected.id)
     : null;
   const canUse = !!active && !!currentSelected && !slotUnavailable(active) &&
     !optionUnavailable(currentSelected) && !doneTeams.has(currentSelected.id) &&
     (!usedTeams.has(currentSelected.id) || usedTeams.get(currentSelected.id) === active.id) &&
     (!!assignments[active.id] || entries.length < MAX_PARTNER_ASSIGNMENTS) &&
-    !searchPending &&
-    (selectedFromSuggestion ? !suggestions.isFetching && !suggestions.isError : !options.isRefetching && !options.isRefetchError) &&
-    !submitting;
+    !searchPending && !selectionRefreshing && !selectionFailed && !submitting;
 
   return (
     <>
@@ -285,7 +283,7 @@ export function PartnerWizard({
         )}
         {step === 2 && (
           <>
-          <MatchingActionBar active={active} selected={currentSelected ?? selected} canUse={canUse} onUse={useSelected} scrollRoot={scrollRoot} />
+          <MatchingActionBar active={active} selected={selected} canUse={canUse} onUse={useSelected} scrollRoot={scrollRoot} />
           <AssignmentOutcomes results={results} assignments={assignments} byId={byId} onChange={activate} onRemove={remove} />
           <div className="grid gap-6 md:grid-cols-2">
             <SourceList
@@ -306,6 +304,7 @@ export function PartnerWizard({
               active={active}
               clubs={clubs}
               options={options}
+              suggestions={suggestions}
               scrollRoot={scrollRoot}
               searchPending={searchPending}
               clubId={clubId}
@@ -317,9 +316,8 @@ export function PartnerWizard({
               usedTeams={usedTeams}
               doneTeams={doneTeams}
               selected={selected}
-              onSelect={(team) => { setSelected(team); setSelectedFromSuggestion(false); }}
-              suggestions={suggestions}
-              onSelectSuggestion={(team) => { setSelected(team); setSelectedFromSuggestion(true); }}
+              onSelect={(team) => { setSelected(team); setSelectionOrigin("search"); }}
+              onSuggest={(team) => { setSelected(team); setSelectionOrigin("suggestion"); }}
             />
             </div>
           </div>

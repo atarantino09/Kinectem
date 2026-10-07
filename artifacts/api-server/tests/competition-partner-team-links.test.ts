@@ -6,6 +6,7 @@ import {
   rosterEntries, competitionFollowers, teamFollowers, scheduleEvents,
 } from "@workspace/db";
 import { app, loginAs, request } from "./helpers";
+import { rankTeamSuggestions, teamNameScore } from "../src/lib/partner-team-suggestions";
 
 const orgIds: string[] = [];
 const competitionIds: string[] = [];
@@ -128,6 +129,66 @@ describe("platform-admin partner team schedule linking", () => {
     expect(ids).not.toContain(candidates[2].id);
     expect(result.body.data.every((t: { score?: number }) => t.score === undefined)).toBe(true);
   });
+  it("ranks readable names without merging duplicate identities or inferring gender", () => {
+    const ranked = rankTeamSuggestions("Róvers FC", [
+      { id: "partial", name: "Rovers Academy FC", gender: "Boys" },
+      { id: "exact-b", name: "Rovers-FC", gender: "Girls" },
+      { id: "unrelated", name: "Comets FC", gender: "Boys" },
+      { id: "exact-a", name: "Rovers FC", gender: "Boys" },
+    ]);
+    expect(ranked.slice(0, 2).map((team) => team.id).sort()).toEqual(["exact-a", "exact-b"]);
+    expect(ranked.at(-1)?.id).toBe("partial");
+    expect(teamNameScore("Rovers U14 Boys", "Comets U14 Boys")).toBe(0);
+    expect(teamNameScore("", "Rovers")).toBe(0);
+  });
+
+  it("suggests matches beyond the first options page, keeps duplicate clubs distinct, and never crosses the directory boundary", async () => {
+    const f = await fixture();
+    await db.insert(teams).values(Array.from({ length: 205 }, (_, i) => ({
+      name: `A filler ${String(i).padStart(3, "0")}`, organizationId: f.orgs[0].id, sport: "Soccer",
+    })));
+    await db.update(teams).set({ name: "Rovers" }).where(eq(teams.id, f.clubTeams[2].id));
+    const first = await f.admin.agent.get(`${f.base}/partner-team-options?pageId=${f.page.id}`);
+    expect(first.body.hasMore).toBe(true);
+    expect(first.body.data.some((team: { id: string }) => team.id === f.clubTeams[0].id)).toBe(false);
+    const url = `${f.base}/partner-team-options?pageId=${f.page.id}&suggestedFor=${f.slots[0].id}`;
+    const response = await f.admin.agent.get(url);
+    expect(response.status, response.text).toBe(200);
+    expect(response.body.hasMore).toBe(false);
+    expect(response.body.data.map((team: { id: string }) => team.id).sort())
+      .toEqual(f.clubTeams.slice(0, 2).map((team) => team.id).sort());
+    expect(response.body.data.map((team: { organizationId: string }) => team.organizationId).sort())
+      .toEqual(f.orgs.slice(0, 2).map((org) => org.id).sort());
+    const unchanged = await db.select().from(tournamentParticipants).where(eq(tournamentParticipants.id, f.slots[0].id));
+    expect(unchanged[0].teamId).toBeNull();
+    for (const extra of ["&q=Rovers", `&organizationId=${f.orgs[0].id}`, "&cursor=abc", "&suggestedFor=invalid"]) {
+      expect((await f.admin.agent.get(url + extra)).status).toBe(400);
+    }
+    const [other] = await db.insert(tournaments).values({
+      name: "Other cup", slug: `other-${f.competition.id}`, type: "league",
+      startDate: "2026-10-01", endDate: "2026-10-31",
+    }).returning();
+    competitionIds.push(other.id);
+    expect((await f.admin.agent.get(url.replace(f.competition.id, other.id))).status).toBe(404);
+    expect((await f.coach.agent.get(url)).status).toBe(403);
+    expect((await request(app).get(url)).status).toBe(401);
+  });
+
+  it("returns unavailable status on suggestions without loosening write restrictions", async () => {
+    const f = await fixture();
+    await db.update(teams).set({ name: "Rovers" }).where(eq(teams.id, f.clubTeams[3].id));
+    await db.update(tournamentParticipants).set({ teamId: f.clubTeams[0].id })
+      .where(eq(tournamentParticipants.id, f.slots[0].id));
+    await db.update(tournamentParticipants).set({ pendingTeamId: f.clubTeams[1].id })
+      .where(eq(tournamentParticipants.id, f.slots[1].id));
+    const response = await f.admin.agent.get(
+      `${f.base}/partner-team-options?pageId=${f.page.id}&suggestedFor=${f.slots[0].id}`,
+    );
+    expect(response.body.data).toContainEqual(expect.objectContaining({ id: f.clubTeams[0].id, slotStatus: "linked" }));
+    expect(response.body.data).toContainEqual(expect.objectContaining({ id: f.clubTeams[1].id, slotStatus: "pending" }));
+    expect(response.body.data).toContainEqual(expect.objectContaining({ id: f.clubTeams[3].id, archived: true }));
+  });
+
   it("finds ownerless and claimed clubs, with distinct identities and unavailable-team status", async () => {
     const f = await fixture();
     await db.insert(organizationAdmins).values({
@@ -256,18 +317,22 @@ describe("platform-admin partner team schedule linking", () => {
   it("rejects anonymous, non-admin, and masqueraded access to both operations", async () => {
     const f = await fixture();
     const optionsUrl = `${f.base}/partner-team-options?pageId=${f.page.id}`;
+    const suggestionsUrl = `${optionsUrl}&suggestedFor=${f.slots[0].id}`;
     const clubsUrl = `${f.base}/partner-team-clubs?pageId=${f.page.id}`;
     const postUrl = `${f.base}/partner-team-links`;
     const body = { pageId: f.page.id, assignments: f.assignments };
     expect((await request(app).get(optionsUrl)).status).toBe(401);
+    expect((await request(app).get(suggestionsUrl)).status).toBe(401);
     expect((await request(app).get(clubsUrl)).status).toBe(401);
     expect((await request(app).post(postUrl).send(body)).status).toBe(401);
     expect((await f.coach.agent.get(optionsUrl)).status).toBe(403);
+    expect((await f.coach.agent.get(suggestionsUrl)).status).toBe(403);
     expect((await f.coach.agent.get(clubsUrl)).status).toBe(403);
     expect((await f.coach.agent.post(postUrl).send(body)).status).toBe(403);
     const start = await f.admin.agent.post(`/api/v1/admin/masquerade/${f.coach.user.id}/start`);
     expect(start.status, start.text).toBe(200);
     expect((await f.admin.agent.get(optionsUrl)).status).toBe(403);
+    expect((await f.admin.agent.get(suggestionsUrl)).status).toBe(403);
     expect((await f.admin.agent.get(clubsUrl)).status).toBe(403);
     expect((await f.admin.agent.post(postUrl).send(body)).status).toBe(403);
     expect((await f.admin.agent.post("/api/v1/admin/masquerade/stop")).status).toBe(200);

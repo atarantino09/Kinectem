@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { optionUnavailable, teamMeta, type TeamOption } from "./model";
-import type { usePartnerTeamSuggestions } from "./usePartnerTeamSuggestions";
+import type { usePartnerTeamSuggestions } from "./usePartnerTeamOptions";
 
 export function SuggestedMatches(props: {
   query: ReturnType<typeof usePartnerTeamSuggestions>;
@@ -9,13 +9,14 @@ export function SuggestedMatches(props: {
   doneTeams: Set<string>;
   selected: TeamOption | null;
   onSelect: (team: TeamOption) => void;
+  searchPending: boolean;
 }) {
   const { query } = props;
   return (
     <section className="rounded-lg border bg-primary/5 p-3 space-y-2" aria-label="Suggested matches" data-testid="suggested-matches">
       <h4 className="font-bold text-sm">Suggested matches</h4>
       <p className="text-xs text-muted-foreground">
-        Name matches from this directory, using your club filter. Check the club and team details, then choose a page. Nothing is assigned automatically.
+        Name matches across this directory, not verified identities. Check the club and team details, then choose a page. Nothing is assigned automatically.
       </p>
       {query.isFetching && <p role="status" className="text-xs">Checking the directory for matches...</p>}
       {query.isError ? (
@@ -34,7 +35,7 @@ export function SuggestedMatches(props: {
                     ? "Already chosen for another competition team" : null);
               return (
                 <li key={team.id}>
-                  <button type="button" disabled={!!why}
+                  <button type="button" disabled={!!why || props.searchPending}
                     aria-pressed={props.selected?.id === team.id}
                     onClick={() => props.onSelect(team)}
                     className={`w-full rounded-md border bg-background p-2 text-left enabled:hover:border-primary disabled:opacity-60 ${props.selected?.id === team.id ? "border-primary" : ""}`}
@@ -53,7 +54,6 @@ export function SuggestedMatches(props: {
               );
             })}
           </ul>
-          {query.data?.hasMoreMatches && <p className="text-xs text-muted-foreground">Showing 5 likely matches. More similar pages may exist; use the club filter or search below.</p>}
         </>
       )}
     </section>
