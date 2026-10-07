@@ -3,12 +3,13 @@ import {
   db, tournaments, tournamentParticipants, teams, organizations,
   partnerLandingPages, partnerOrganizationMemberships,
 } from "@workspace/db";
-import { and, asc, eq, ilike, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { requireAdmin } from "../lib/auth";
 import { asyncHandler } from "../lib/async-handler";
 import { apiError } from "../lib/spec-helpers";
 import { rateLimit, ipKey } from "../middlewares/rate-limit";
+import { partnerTeamSuggestionScore } from "../lib/partner-team-suggestion-score";
 
 const router: IRouter = Router();
 const uuid = z.string().uuid();
@@ -109,6 +110,22 @@ router.get(
       if (!membership) return apiError(res, 404, "Club is not in this partner directory.");
     }
     const search = typeof req.query.q === "string" ? req.query.q.trim().slice(0, 120) : "";
+    const suggestFor = req.query.suggestFor;
+    let score: ReturnType<typeof partnerTeamSuggestionScore> | undefined;
+    if (suggestFor !== undefined) {
+      const sourceId = uuid.safeParse(suggestFor);
+      if (!sourceId.success || req.query.cursor !== undefined || search) {
+        return apiError(res, 400, "Select a valid competition team for suggestions without search or continuation.");
+      }
+      const [source] = await db.select().from(tournamentParticipants).where(and(
+        eq(tournamentParticipants.id, sourceId.data),
+        eq(tournamentParticipants.tournamentId, competitionId),
+      )).limit(1);
+      if (!source || source.hiddenAt || source.teamId || source.pendingTeamId) {
+        return apiError(res, 404, "Competition team is no longer available for matching.");
+      }
+      score = partnerTeamSuggestionScore(source.name, sql`teams.name`, sql`organizations.name`);
+    }
     const scope = JSON.stringify([competitionId, pageId, organizationId ?? "", search]);
     let cursor: z.infer<typeof optionsCursorSchema> | undefined;
     if (req.query.cursor !== undefined) {
@@ -146,6 +163,7 @@ router.get(
         eq(partnerOrganizationMemberships.partnerPageId, pageId),
       ))
       .where(and(
+        score ? sql`${score} >= 40` : undefined,
         typeof organizationId === "string" ? eq(teams.organizationId, organizationId) : undefined,
         cursor ? sql`(organizations.name, organizations.id, teams.name, teams.id) >
           (${cursor.organizationName}, ${cursor.organizationId}::uuid, ${cursor.name}, ${cursor.id}::uuid)` : undefined,
@@ -154,8 +172,16 @@ router.get(
           ilike(organizations.name, `%${escapedSearch}%`),
         ) : undefined,
       ))
-      .orderBy(asc(organizations.name), asc(organizations.id), asc(teams.name), asc(teams.id))
-      .limit(201);
+      .orderBy(...(score ? [desc(score)] : []), asc(organizations.name), asc(organizations.id), asc(teams.name), asc(teams.id))
+      .limit(score ? 6 : 201);
+    if (score) {
+      return res.json({
+        data: rows.slice(0, 5).map(({ archivedAt, ...team }) => ({
+          ...team, ageGroup: null, archived: archivedAt != null,
+        })),
+        hasMoreMatches: rows.length > 5,
+      });
+    }
     const data = rows.slice(0, 200);
     const last = data.at(-1);
     const hasMore = rows.length > 200;

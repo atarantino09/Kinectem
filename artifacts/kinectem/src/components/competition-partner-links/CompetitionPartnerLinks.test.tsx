@@ -55,7 +55,9 @@ function impl(over: Over) {
 }
 const el = (p = participants) => <CompetitionPartnerLinks competitionId="c1" slug="slug" participants={p as never} />;
 function setup(over: Over = {}) {
-  m.fetch.mockImplementation(impl(over));
+  const fallback = impl(over);
+  m.fetch.mockImplementation((url: string, opts?: { method?: string }) =>
+    url.includes("suggestFor=") ? Promise.resolve({ data: [], hasMoreMatches: false }) : fallback(url, opts));
   return renderWithProviders(el());
 }
 type U = ReturnType<typeof userEvent.setup>;
@@ -113,6 +115,88 @@ describe("CompetitionPartnerLinks", () => {
     view.rerender(el());
     expect(screen.queryByTestId("partner-links-tool")).toBeNull();
     expect(m.fetch).not.toHaveBeenCalled();
+  });
+
+  it("shows duplicate-name suggestions separately and only queues the explicitly chosen page", async () => {
+    setup();
+    const fallback = impl({ post: { ok: true, succeeded: 1, failed: 0,
+      results: [{ participantId: "p1", teamId: "late-b", ok: true }] } });
+    m.fetch.mockImplementation((url: string, opts?: { method?: string }) =>
+      url.includes("suggestFor=") ? Promise.resolve({
+        data: [team("late-a", "Rapids", { organizationName: "North Club", city: "Boston" }),
+          team("late-b", "Rapids", { organizationName: "South Club", city: "Miami" })],
+        hasMoreMatches: false,
+      }) : fallback(url, opts));
+    const u = await open();
+    await u.click(screen.getByTestId("button-choose-team-p1"));
+    expect(await screen.findByTestId("suggestion-team-late-a")).toHaveTextContent("North Club");
+    expect(screen.getByTestId("suggestion-team-late-b")).toHaveTextContent("South Club");
+    expect(screen.getByTestId("button-use-team")).toBeDisabled();
+    expect(screen.queryByTestId("assignment-p1")).toBeNull();
+    expect(posts()).toHaveLength(0);
+    expect(screen.queryByTestId("option-team-late-b")).toBeNull();
+    await u.click(screen.getByTestId("suggestion-team-late-b"));
+    expect(screen.getByTestId("button-use-team")).toBeEnabled();
+    expect(screen.queryByTestId("assignment-p1")).toBeNull();
+    await u.click(screen.getByTestId("button-use-team"));
+    expect(screen.getByTestId("assignment-p1")).toHaveTextContent("South Club / Rapids");
+    expect(posts()).toHaveLength(0);
+    await review(u);
+    await u.click(screen.getByTestId("checkbox-confirm-link"));
+    await u.click(screen.getByTestId("button-submit-links"));
+    await waitFor(() => expect(posts()).toHaveLength(1));
+    expect(JSON.parse(posts()[0][1].body).assignments).toEqual([
+      { participantId: "p1", teamId: "late-b", nameMismatchAcknowledged: false },
+    ]);
+  });
+
+  it("keeps unavailable and already-queued suggestions disabled without changing name confirmation", async () => {
+    setup();
+    const fallback = impl({});
+    m.fetch.mockImplementation((url: string, opts?: { method?: string }) =>
+      url.includes("suggestFor=") ? Promise.resolve({
+        data: [team("t1", "Rapids"), team("old", "Rapids", { archived: true }),
+          team("linked", "Rapids", { slotStatus: "linked" }),
+          team("pending", "Rapids", { slotStatus: "pending" }), team("mismatch", "Different Name")],
+        hasMoreMatches: false,
+      }) : fallback(url, opts));
+    const u = await open();
+    await pick(u, "p1", "t1");
+    await u.click(screen.getByTestId("button-choose-team-p2"));
+    for (const id of ["t1", "old", "linked", "pending"]) {
+      expect(await screen.findByTestId(`suggestion-team-${id}`)).toBeDisabled();
+    }
+    await u.click(screen.getByTestId("suggestion-team-mismatch"));
+    await u.click(screen.getByTestId("button-use-team"));
+    await review(u);
+    await u.click(screen.getByTestId("checkbox-confirm-link"));
+    expect(screen.getByTestId("button-submit-links")).toBeDisabled();
+    expect(posts()).toHaveLength(0);
+  });
+
+  it("does not mix delayed suggestions when the club changes and preserves manual search after suggestion failure", async () => {
+    setup();
+    const fallback = impl({});
+    let finishOld!: (data: unknown) => void;
+    m.fetch.mockImplementation((url: string, opts?: { method?: string }) => {
+      if (!url.includes("suggestFor=")) return fallback(url, opts);
+      const params = new URL(url, "https://test.invalid").searchParams;
+      expect(params.get("pageId")).toBe("pg");
+      expect(params.get("suggestFor")).toBe("p1");
+      if (params.get("organizationId") === "oa") return Promise.reject(new Error("Suggestions offline"));
+      return new Promise((resolve) => { finishOld = resolve; });
+    });
+    const u = await open();
+    await u.click(screen.getByTestId("button-choose-team-p1"));
+    await waitFor(() => expect(finishOld).toBeTypeOf("function"));
+    await u.selectOptions(screen.getByTestId("select-club"), "oa");
+    expect(await screen.findByRole("button", { name: "Retry suggestions" })).toBeVisible();
+    await act(async () => finishOld({ data: [team("wrong-club", "Rapids")], hasMoreMatches: false }));
+    expect(screen.queryByTestId("suggestion-team-wrong-club")).toBeNull();
+    await u.click(screen.getByTestId("option-team-t1"));
+    expect(screen.getByTestId("button-use-team")).toBeEnabled();
+    await u.click(screen.getByTestId("button-use-team"));
+    expect(screen.getByTestId("assignment-p1")).toHaveTextContent("Club / Rapids");
   });
 
   it("walks the three stages with names, no default UUIDs, Unassigned default", async () => {

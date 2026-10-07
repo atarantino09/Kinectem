@@ -65,6 +65,69 @@ async function fixture() {
 }
 
 describe("platform-admin partner team schedule linking", () => {
+  it("ranks across the entire directory before limiting, retaining duplicate club identities", async () => {
+    const f = await fixture();
+    await db.update(organizations).set({ name: "AAA Suggestion Club" }).where(eq(organizations.id, f.orgs[0].id));
+    await db.update(organizations).set({ name: "ZZZ Suggestion Club" }).where(eq(organizations.id, f.orgs[1].id));
+    await db.insert(teams).values(Array.from({ length: 205 }, (_, i) => ({
+      name: `000 Unrelated ${String(i).padStart(3, "0")}`, sport: "Soccer", organizationId: f.orgs[0].id,
+    })));
+    const base = `${f.base}/partner-team-options?pageId=${f.page.id}`;
+    const first = await f.admin.agent.get(base);
+    expect(first.body.data).toHaveLength(200);
+    expect(first.body.data.some((t: { id: string }) => t.id === f.clubTeams[1].id)).toBe(false);
+    const suggested = await f.admin.agent.get(`${base}&suggestFor=${f.slots[0].id}`);
+    expect(suggested.status).toBe(200);
+    expect(suggested.body.data.map((t: { id: string }) => t.id)).toEqual([f.clubTeams[0].id, f.clubTeams[1].id]);
+    expect(suggested.body.data.map((t: { organizationId: string }) => t.organizationId)).toEqual([f.orgs[0].id, f.orgs[1].id]);
+    expect(suggested.body.data.map((t: { gender: string }) => t.gender)).toEqual(["Boys", "Girls"]);
+    expect(suggested.body.hasMoreMatches).toBe(false);
+    const filtered = await f.admin.agent.get(`${base}&organizationId=${f.orgs[1].id}&suggestFor=${f.slots[0].id}`);
+    expect(filtered.body.data.map((t: { id: string }) => t.id)).toEqual([f.clubTeams[1].id]);
+    const outside = await f.admin.agent.get(`${base}&suggestFor=${f.slots[4].id}`);
+    expect(outside.body.data).toEqual([]);
+    const unchanged = await db.select().from(tournamentParticipants).where(eq(tournamentParticipants.id, f.slots[0].id));
+    expect(unchanged[0].teamId).toBeNull();
+  });
+
+  it("keeps suggestion permissions, source availability, directory scope and destination statuses intact", async () => {
+    const f = await fixture();
+    const base = `${f.base}/partner-team-options?pageId=${f.page.id}`;
+    expect((await f.coach.agent.get(`${base}&suggestFor=${f.slots[0].id}`)).status).toBe(403);
+    expect((await request(app).get(`${base}&suggestFor=${f.slots[0].id}`)).status).toBe(401);
+    for (const suffix of ["suggestFor=bad", `suggestFor=${f.slots[0].id}&cursor=bad`,
+      `suggestFor=${f.slots[0].id}&q=Rovers`, `suggestFor=${f.slots[0].id}&suggestFor=${f.slots[1].id}`]) {
+      expect((await f.admin.agent.get(`${base}&${suffix}`)).status).toBe(400);
+    }
+    expect((await f.admin.agent.get(`${base}&suggestFor=${f.slots[0].id}&organizationId=${f.orgs[2].id}`)).status).toBe(404);
+    await db.update(tournamentParticipants).set({ teamId: f.clubTeams[0].id }).where(eq(tournamentParticipants.id, f.slots[2].id));
+    await db.update(tournamentParticipants).set({ pendingTeamId: f.clubTeams[1].id }).where(eq(tournamentParticipants.id, f.slots[4].id));
+    const statuses = await f.admin.agent.get(`${base}&suggestFor=${f.slots[0].id}`);
+    expect(statuses.body.data.map((t: { slotStatus: string }) => t.slotStatus).sort()).toEqual(["linked", "pending"]);
+    const archived = await f.admin.agent.get(`${base}&suggestFor=${f.slots[3].id}`);
+    expect(archived.body.data[0].archived).toBe(true);
+    expect((await f.admin.agent.get(`${base}&suggestFor=${f.slots[2].id}`)).status).toBe(404);
+    expect((await f.admin.agent.get(`${base}&suggestFor=${f.slots[4].id}`)).status).toBe(404);
+    await db.update(tournamentParticipants).set({ hiddenAt: new Date() }).where(eq(tournamentParticipants.id, f.slots[0].id));
+    expect((await f.admin.agent.get(`${base}&suggestFor=${f.slots[0].id}`)).status).toBe(404);
+  });
+
+  it("ranks exact names above reordered words and excludes unrelated pages without inventing confidence", async () => {
+    const f = await fixture();
+    await db.update(tournamentParticipants).set({ name: "Rovers Gold" }).where(eq(tournamentParticipants.id, f.slots[0].id));
+    const candidates = await db.insert(teams).values([
+      { name: "Rovers Gold", sport: "Soccer", organizationId: f.orgs[0].id },
+      { name: "Gold Rovers", sport: "Soccer", organizationId: f.orgs[0].id },
+      { name: "Totally Unrelated", sport: "Soccer", organizationId: f.orgs[0].id },
+    ]).returning();
+    const result = await f.admin.agent.get(`${f.base}/partner-team-options?pageId=${f.page.id}&suggestFor=${f.slots[0].id}`);
+    expect(result.status).toBe(200);
+    const ids = result.body.data.map((t: { id: string }) => t.id);
+    expect(ids[0]).toBe(candidates[0].id);
+    expect(ids).toContain(candidates[1].id);
+    expect(ids).not.toContain(candidates[2].id);
+    expect(result.body.data.every((t: { score?: number }) => t.score === undefined)).toBe(true);
+  });
   it("finds ownerless and claimed clubs, with distinct identities and unavailable-team status", async () => {
     const f = await fixture();
     await db.insert(organizationAdmins).values({

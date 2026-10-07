@@ -10,6 +10,8 @@ import {
   type TeamOption,
 } from "./model";
 import type { usePartnerTeamOptions } from "./usePartnerTeamOptions";
+import type { usePartnerTeamSuggestions } from "./usePartnerTeamSuggestions";
+import { SuggestedMatches } from "./SuggestedMatches";
 
 type Q<T> = { isLoading: boolean; isFetching: boolean; isError: boolean; data?: T; refetch: () => unknown };
 
@@ -29,6 +31,8 @@ export function DestinationPicker(props: {
   doneTeams: Set<string>;
   selected: TeamOption | null;
   onSelect: (t: TeamOption) => void;
+  suggestions: ReturnType<typeof usePartnerTeamSuggestions>;
+  onSelectSuggestion: (t: TeamOption) => void;
 }) {
   const { active, options, clubs, usedTeams } = props;
   const loadMoreRef = useRef<HTMLDivElement>(null);
@@ -103,6 +107,9 @@ export function DestinationPicker(props: {
               data-testid="input-team-search"
             />
           </div>
+          <SuggestedMatches query={props.suggestions} activeId={active.id}
+            usedTeams={usedTeams} doneTeams={props.doneTeams} selected={props.selected}
+            onSelect={props.onSelectSuggestion} />
           {options.isRefetchError && allOptions.length > 0 && (
             <p role="alert" className="text-xs text-destructive" data-testid="error-refresh-options">
               Could not refresh team pages. Your choices are unchanged. Refresh before using a team.{" "}

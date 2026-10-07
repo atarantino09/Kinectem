@@ -38,3 +38,9 @@ Admin schedule matching is a continuous workflow: scroll through team lists, kee
 **Why:** The user explicitly corrected the paged-list approach, asked for “Use this team page” anchored at the top while scrolling, and wants to continue from Match teams after assigning schedules.
 
 **How to apply:** Preserve the directory, filters and remaining choices across submissions. Keep unsuccessful assignments visible even when search filters hide their source rows. Allow X/outside dismissal once assignment is no longer in flight.
+
+Do not present heuristic team-name ranking as a confidence percentage or proof of team identity.
+
+**Why:** Identical or similar team names can belong to different clubs, age groups, or genders. A name-ranking score is not a calibrated probability that the schedule belongs to a particular page.
+
+**How to apply:** Show distinct club/team identities and metadata, retain explicit selection and review, and keep any numerical ranking internal unless a genuine confidence model is introduced.
