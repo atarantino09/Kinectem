@@ -1,10 +1,11 @@
 import { Link } from "wouter";
-import { Camera } from "lucide-react";
+import { Camera, ChevronDown } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { useCompetitionAlbum } from "@/lib/competitionAlbum";
 import { AlbumAdminControls } from "./AlbumAdminControls";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 export function CompetitionAlbumConsolePanel({
   competitionId,
@@ -16,13 +17,26 @@ export function CompetitionAlbumConsolePanel({
   const q = useCompetitionAlbum(competitionId, "approved");
   const a = q.data;
   return (
+    <Collapsible defaultOpen={false} asChild>
     <Card data-testid="panel-album-console">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Camera className="h-4 w-4" />
-          Photo album
+        <CardTitle className="text-base">
+          <CollapsibleTrigger
+            className="group flex w-full items-center gap-2 text-left"
+            data-testid="toggle-album-console"
+          >
+            <Camera className="h-4 w-4" />
+            <span>Photo album</span>
+            <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+          </CollapsibleTrigger>
         </CardTitle>
+        {a && (
+          <p className="text-sm text-muted-foreground">
+            {a.approvedCount} approved · {a.pendingCount} pending review
+          </p>
+        )}
       </CardHeader>
+      <CollapsibleContent data-testid="content-album-console">
       <CardContent className="space-y-3">
         {q.isLoading ? (
           <Skeleton className="h-16 rounded-lg" />
@@ -33,9 +47,6 @@ export function CompetitionAlbumConsolePanel({
           </div>
         ) : (
           <>
-            <p className="text-sm text-muted-foreground">
-              {a.approvedCount} approved · {a.pendingCount} pending review
-            </p>
             {a.isCompetitionAdmin && (
               <AlbumAdminControls competitionId={competitionId} contributionsOpen={a.contributionsOpen} />
             )}
@@ -49,6 +60,8 @@ export function CompetitionAlbumConsolePanel({
           </>
         )}
       </CardContent>
+      </CollapsibleContent>
     </Card>
+    </Collapsible>
   );
 }

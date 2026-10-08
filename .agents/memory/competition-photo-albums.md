@@ -19,7 +19,7 @@ The competition-page Photo Album section should start collapsed on ordinary visi
 
 **Why:** The user requested a collapsed initial section and a “better more thorough explaination” for the competition admin about exactly how the feature works. The album should not dominate the initial page, but organizer instructions must remain available where the work happens.
 
-**How to apply:** Preserve the collapsed default when adding controls or guidance. Do not hide the destination when an admin follows a pending-review alert.
+**How to apply:** Preserve the collapsed default when adding controls or guidance, including the Photo album panel in the competition editor. Keep its title and photo counts visible while collapsed. Do not hide the destination when an admin follows a pending-review alert.
 
 Competition albums, including approved photos, are signed-in-only. Visitors must see “Sign in to see photo albums” with a sign-in link rather than photo previews.
 
