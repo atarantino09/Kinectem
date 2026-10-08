@@ -60,7 +60,7 @@
 - [Tag consent default](tag-consent-default.md) — recap tags auto-approve for all (COPPA default reversed by owner); any require_tag_consent write MUST stamp tag_consent_set_explicitly or boot backfill reverts it.
 - [Recap approval opt-in toggle](recap-approval-toggle.md) — coach recaps publish directly by default; org `require_recap_approval` restores the queue; pending-flow tests must flip it ON first.
 - [Staged coach persistence](staged-coach-persistence.md) — staged coach drafts survive dialog skip/close; removed only by successful invite or per-row delete; clear-all is explicit-cleanup only.
-- [Competition brackets](competition-brackets.md) — recap-sorting labels; lazy seed in organizer GET; composer pick touch-gated; server nulls bracket only when competition actually changes.
+- [Competition brackets](competition-brackets.md) — full group names are the overall bracket; A/B are subgroups. Preserve linked-game context and touch-gated composer picks.
 - [Competition participant identity](competition-participant-identity.md) — identity is name+gender per competition (same-named boys/girls teams are real); division/bracket informational, read per-game values from matches.
 - [Public recap visitor gate](public-recap-visitor-gate.md) — logged-out viewing is recaps-only (client-side); detect visitors via whoami not users/me 401; returnTo sanitized via safeInternalPath.
 - [Shareable recap image](share-recap-image.md) — client-side 1080×1350 PNG export; published-only gate via extra-spec articleStatus; fonts must be self-hosted for html-to-image; capture waits on fonts+image decode.

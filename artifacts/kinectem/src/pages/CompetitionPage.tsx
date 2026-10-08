@@ -1,4 +1,5 @@
 import { useRoute, Link } from "wouter";
+import { featuredRecapBrackets } from "@/lib/featuredRecapBrackets";
 import { CompetitionAlbumSection } from "@/components/competition-album/CompetitionAlbumSection";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -724,7 +725,7 @@ export default function CompetitionPage() {
   const scheduleWeeksInitializedFilters = useRef<string | null>(null);
   const scheduleWeeksTouched = useRef(false);
   // Task #852 — active bracket filter for the featured-recaps rail
-  // "" = All; "__other__" = unassigned or no-longer-recognized brackets.
+  // "" = All; "__other__" = no known overall group.
   const [bracketFilter, setBracketFilter] = useState("");
   const [teamSearch, setTeamSearch] = useState("");
   const [teamGenderFilter, setTeamGenderFilter] = useState("all");
@@ -1571,15 +1572,8 @@ export default function CompetitionPage() {
         {(q.data.featuredRecaps?.length ?? 0) > 0 && (() => {
           const allRecaps = q.data.featuredRecaps!;
           const brackets = q.data.brackets ?? [];
-          const bracketIds = new Set(brackets.map((b) => b.id));
-          const hasOtherRecaps = allRecaps.some((recap) =>
-            !recap.bracketId || !bracketIds.has(recap.bracketId),
-          );
-          // Only offer named brackets that actually have a featured
-          // recap; "All" always includes unbracketed recaps.
-          const usedBrackets = brackets.filter((b) =>
-            allRecaps.some((r) => r.bracketId === b.id),
-          );
+          const { options: usedBrackets, byRecap: recapBrackets } = featuredRecapBrackets(allRecaps, brackets);
+          const hasOtherRecaps = allRecaps.some((recap) => recapBrackets.get(recap.id)?.key === "__other__");
           const recapDateKey = (recap: FeaturedRecap) =>
             recap.effectiveGameDate ??
             recap.gameDate ??
@@ -1589,9 +1583,7 @@ export default function CompetitionPage() {
           const shownRecaps = allRecaps.filter((recap) => {
             const matchesBracket =
               !bracketFilter ||
-              (bracketFilter === "__other__"
-                ? !recap.bracketId || !bracketIds.has(recap.bracketId)
-                : recap.bracketId === bracketFilter);
+              recapBrackets.get(recap.id)?.key === bracketFilter;
             const matchesTeam =
               recapTeamFilter === "all" || recap.teamId === recapTeamFilter;
             const matchesDate =
@@ -1606,6 +1598,7 @@ export default function CompetitionPage() {
                 recap.summary,
                 recap.groupDivision,
                 recap.groupBracket,
+                recapBrackets.get(recap.id)?.label,
               ]
                 .filter(Boolean)
                 .join(" ")
@@ -1639,14 +1632,14 @@ export default function CompetitionPage() {
           // recaps trail under "Other"; each section is always split by week.
           const groupedSections: { key: string; label: string; recaps: FeaturedRecap[] }[] =
             usedBrackets
-              .filter((b) => shownRecaps.some((r) => r.bracketId === b.id))
+              .filter((b) => shownRecaps.some((r) => recapBrackets.get(r.id)?.key === b.id))
               .map((b) => ({
               key: b.id,
               label: b.label,
-              recaps: shownRecaps.filter((r) => r.bracketId === b.id),
+              recaps: shownRecaps.filter((r) => recapBrackets.get(r.id)?.key === b.id),
             }));
           const otherRecaps = shownRecaps.filter(
-            (r) => !r.bracketId || !bracketIds.has(r.bracketId),
+            (r) => recapBrackets.get(r.id)?.key === "__other__",
           );
           if (otherRecaps.length > 0) {
             groupedSections.push({
@@ -1657,6 +1650,10 @@ export default function CompetitionPage() {
           }
           const renderRecapCard = (r: FeaturedRecap) => {
             const previewText = featuredRecapPreviewText(r);
+            const recapBracket = recapBrackets.get(r.id);
+            const bracketLabel = recapBracket?.label ?? "No bracket assigned";
+            const bracketDetail = recapBracket?.subgroup && recapBracket.subgroup !== recapBracket.label
+              ? `${bracketLabel} · ${recapBracket.subgroup}` : bracketLabel;
             const orgPalette = featuredOrgPalette(r.organization);
             return (
               <Link key={r.id} href={`/posts/${r.id}`} className="block min-w-0">
@@ -1676,6 +1673,13 @@ export default function CompetitionPage() {
                   <FitText as="p" max={18} min={14} lineHeight={1.15} className="font-black tracking-tight" data-testid={`title-featured-recap-${r.id}`}>
                     {r.title}
                   </FitText>
+                  <p
+                    className="mt-1 truncate text-[10px] font-semibold text-muted-foreground"
+                    title={`Bracket: ${bracketDetail}`}
+                    data-testid={`bracket-featured-recap-${r.id}`}
+                  >
+                    {bracketLabel}
+                  </p>
                 </CardContent>
                 {r.coverImageUrl ? (
                   <div className="h-28 w-full overflow-hidden relative">
@@ -1900,7 +1904,7 @@ export default function CompetitionPage() {
                 <Search className="mx-auto h-8 w-8 text-muted-foreground/60" />
                 <h3 className="mt-3 font-black">No recaps match those filters</h3>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Try another team, date, or search term.
+                  Try another bracket, team, date, or search term.
                 </p>
                 <Button
                   type="button"

@@ -223,7 +223,7 @@ describe("competition partnership directory", () => {
     });
     renderWithProviders(<CompetitionPage />);
     const bracket = await screen.findByRole("combobox", { name: "Bracket" });
-    await user.selectOptions(bracket, "gold");
+    await user.selectOptions(bracket, "group:gold");
     expect(screen.getByTestId("card-featured-recap-gold-a")).toBeVisible();
     expect(screen.getByTestId("card-featured-recap-gold-b")).toBeVisible();
     expect(screen.queryByTestId("card-featured-recap-silver-a")).not.toBeInTheDocument();
@@ -239,9 +239,38 @@ describe("competition partnership directory", () => {
     expect(screen.getAllByTestId(/^card-featured-recap-/)).toHaveLength(2);
     expect(screen.getByTestId("card-featured-recap-other")).toBeVisible();
     expect(screen.getByTestId("card-featured-recap-stale")).toBeVisible();
-    await user.click(screen.getByTestId("chip-bracket-silver"));
-    expect(bracket).toHaveValue("silver");
+    await user.click(screen.getByTestId("chip-bracket-group:silver"));
+    expect(bracket).toHaveValue("group:silver");
     expect(screen.getAllByTestId(/^card-featured-recap-/)).toHaveLength(1);
+  });
+  it("shows the overall group on cards and filters both A and B together", async () => {
+    const user = userEvent.setup();
+    const gold = "2016 U10 Boys Gold";
+    mockedFetch.mockResolvedValue({
+      ...competitionResponse(),
+      brackets: [{ id: "a", label: "Bracket A" }, { id: "b", label: "Bracket B" }],
+      featuredRecaps: [
+        ["gold-a", "a", gold, "Bracket A"],
+        ["gold-b", "b", gold, "Bracket B"],
+        ["white", null, "2016 U10 Boys White", "Bracket A"],
+      ].map(([id, bracketId, groupDivision, groupBracket]) => ({
+        id, bracketId, groupDivision, groupBracket, title: `Story ${id}`,
+        body: "A memorable game.", summary: null, coverImageUrl: null,
+        gameDate: "2026-05-04", opponentName: null, teamScore: null, opponentScore: null,
+        teamId: "team-a", teamName: "Alpha", publishedAt: "2026-05-05T12:00:00Z",
+      })),
+    });
+    renderWithProviders(<CompetitionPage />);
+    const bracket = await screen.findByRole("combobox", { name: "Bracket" });
+    expect(screen.queryByRole("option", { name: "Bracket A" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Bracket B" })).not.toBeInTheDocument();
+    await user.selectOptions(bracket, screen.getByRole("option", { name: gold }));
+    expect(screen.getAllByTestId(/^card-featured-recap-/)).toHaveLength(2);
+    expect(screen.getByTestId("bracket-featured-recap-gold-a")).toHaveTextContent(gold);
+    expect(screen.getByTestId("bracket-featured-recap-gold-b")).toHaveTextContent(gold);
+    expect(screen.getByTestId("bracket-featured-recap-gold-a")).toHaveAttribute("title", `Bracket: ${gold} · Bracket A`);
+    expect(screen.getByTestId("bracket-featured-recap-gold-b")).toHaveAttribute("title", `Bracket: ${gold} · Bracket B`);
+    expect(screen.queryByTestId("card-featured-recap-white")).not.toBeInTheDocument();
   });
   it.each([true, false])("keeps the removed results entry hidden (canManage=%s)", async (canManage) => {
     mockedFetch.mockResolvedValue(competitionResponse({ canManage }));

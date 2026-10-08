@@ -14,3 +14,10 @@ Brackets are organizer-defined labels for SORTING recaps only — no standings/s
 - Composer bracket pick is touch-gated exactly like competitionId (absent = unchanged; null = clear). Server also nulls `bracket_id` when a draft PATCH switches to a *different* competition — but NOT when autosave re-sends the same one, or every autosave would wipe it.
 - Reorder endpoint requires the full exact id set (409 BRACKETS_STALE) — client sends the whole reordered list.
 - All routes are extra-spec hand-written (openapi locked), pattern per competition-admins.ts; public competition read carries `brackets[]` + `bracketId` per featured recap for the filter chips (chips only shown for brackets actually used).
+
+## Overall bracket versus subgroups
+The user defines the full group, such as “2016 U10 Boys Gold,” as the overall bracket. “Bracket A” and “Bracket B” inside it are subgroups, not separate overall brackets for featured recap browsing.
+
+**Why:** the user explicitly clarified that “Gold” or “Bracket A” alone is not the intended overall name; preserve the year, age, gender, and tier in the group name.
+
+**How to apply:** use the linked game's division when available, with the saved overall bracket name as a fallback. Keep subgroup detail separate, combine A/B under the overall recap filter and heading, and show the overall name as a small card label. Do not guess a missing full name from team names or rewrite persisted bracket assignments.
