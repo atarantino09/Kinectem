@@ -190,6 +190,9 @@ describe("competition partnership directory", () => {
     expect(within(card).getByText("Authoring Club")).toBeVisible();
     expect(within(card).getByTestId("strip-competition-brand")).toHaveTextContent("Rolling Cup");
     expect(within(card).getByTestId("featured-recap-organization").getAttribute("style")).toContain("#abcdef");
+    expect(within(card).getByTestId("featured-recap-team-name")).toHaveTextContent("Club U12");
+    expect(within(card).queryByRole("button", { name: /share.*image/i })).not.toBeInTheDocument();
+    expect(card.closest("a")).toHaveAttribute("href", "/posts/club-recap");
   });
   it.each([true, false])("keeps the removed results entry hidden (canManage=%s)", async (canManage) => {
     mockedFetch.mockResolvedValue(competitionResponse({ canManage }));

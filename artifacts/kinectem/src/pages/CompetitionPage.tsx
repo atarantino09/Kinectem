@@ -16,7 +16,6 @@ import {
   CompetitionPartnerDirectory,
   type CompetitionPartnerPage,
 } from "@/components/CompetitionPartnerDirectory";
-import { ShareRecapImageDialog } from "@/components/share-image/ShareRecapImageDialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -31,8 +30,6 @@ import {
   ChevronDown,
   EyeOff,
   ExternalLink,
-  ImageDown,
-  Loader2,
   MapPin,
   Pencil,
   Search,
@@ -740,14 +737,6 @@ export default function CompetitionPage() {
   const [recapSearch, setRecapSearch] = useState("");
   const [recapTeamFilter, setRecapTeamFilter] = useState("all");
   const [recapDateFilter, setRecapDateFilter] = useState("all");
-  // Competition rail cards contain summary data only. Load the canonical
-  // public post detail on demand before opening the reusable image exporter.
-  const [shareImagePost, setShareImagePost] = useState<PostResponse | null>(null);
-  const [shareImageOpen, setShareImageOpen] = useState(false);
-  const [shareImageLoadingId, setShareImageLoadingId] = useState<string | null>(
-    null,
-  );
-  const [shareImageErrorId, setShareImageErrorId] = useState<string | null>(null);
   // Task #854 — optional grouped layout: recaps under bracket headings in
   // the organizer's saved order, unbracketed last under "Other". Grouping
   // supersedes the chip filter, so chips hide while grouped.
@@ -1293,47 +1282,6 @@ export default function CompetitionPage() {
     }
   };
 
-  const openRecapImageExporter = async (
-    event: React.MouseEvent<HTMLButtonElement>,
-    recap: FeaturedRecap,
-  ) => {
-    event.preventDefault();
-    event.stopPropagation();
-    if (shareImageLoadingId) return;
-
-    setShareImageErrorId(null);
-    setShareImageLoadingId(recap.id);
-    try {
-      const post = await customFetch<PostResponse>(`/api/v1/posts/${recap.id}`, {
-        method: "GET",
-      });
-      if (!isPublicFeaturedCompetitionRecap(post, c.id)) {
-        throw new Error(
-          "This recap is no longer available as a public competition feature.",
-        );
-      }
-      setShareImagePost(post);
-      setShareImageOpen(true);
-    } catch (error) {
-      setShareImageErrorId(recap.id);
-      toast({
-        title: "Couldn't load this recap image",
-        description:
-          error instanceof Error
-            ? error.message
-            : "Please try again while you continue browsing.",
-        variant: "destructive",
-      });
-    } finally {
-      setShareImageLoadingId(null);
-    }
-  };
-
-  const closeRecapImageExporter = (open: boolean) => {
-    setShareImageOpen(open);
-    if (!open) setShareImagePost(null);
-  };
-
   const signupHref = me
     ? `/c/${encodeURIComponent(slug)}/signup`
     : `/login?signup=1&returnTo=${encodeURIComponent(`/c/${slug}/signup`)}`;
@@ -1719,22 +1667,21 @@ export default function CompetitionPage() {
                   brandColor={c.brandColor}
                   secondaryColor={c.secondaryColor}
                 />
-                <FeaturedRecapOrganization org={r.organization} />
-                <CardContent className="min-w-0 p-5 pb-4 space-y-2 bg-card">
+                <FeaturedRecapOrganization org={r.organization} teamName={r.teamName} />
+                <CardContent className="min-w-0 px-4 py-3 space-y-1.5 bg-card">
                   <p className="text-lg font-black tracking-tight line-clamp-2 leading-snug">
                     {r.title}
                   </p>
-                  <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest truncate">
-                    {r.teamName}
-                    {r.opponentName ? <span className="lowercase"> vs </span> : ""}
+                  {r.opponentName || (r.teamScore != null && r.opponentScore != null) ? <p className="text-[11px] font-bold text-muted-foreground">
+                    {r.opponentName ? <span>vs </span> : ""}
                     {r.opponentName}
                     {r.teamScore != null && r.opponentScore != null
                       ? ` · ${r.teamScore}-${r.opponentScore}`
                       : ""}
-                  </p>
+                  </p> : null}
                 </CardContent>
                 {r.coverImageUrl ? (
-                  <div className="h-36 w-full overflow-hidden relative">
+                  <div className="h-28 w-full overflow-hidden relative">
                     <img
                       src={r.coverImageUrl}
                       alt=""
@@ -1744,7 +1691,7 @@ export default function CompetitionPage() {
                   </div>
                 ) : previewText ? (
                   <div
-                    className="relative flex h-36 w-full items-center overflow-hidden bg-muted/40 px-5 py-4"
+                    className="relative flex h-28 w-full items-center overflow-hidden bg-muted/40 px-4 py-3"
                     data-testid={`preview-featured-recap-${r.id}`}
                   >
                     <div
@@ -1761,7 +1708,7 @@ export default function CompetitionPage() {
                       >
                         From the recap
                       </p>
-                      <p className="line-clamp-3 text-sm font-semibold leading-relaxed text-foreground/85">
+                      <p className="line-clamp-2 text-sm font-semibold leading-relaxed text-foreground/85">
                         {previewText}
                       </p>
                     </div>
@@ -1774,39 +1721,10 @@ export default function CompetitionPage() {
                     </span>
                   </div>
                 ) : (
-                  <div className="h-36 w-full bg-muted/40 flex items-center justify-center relative overflow-hidden">
+                  <div className="h-28 w-full bg-muted/40 flex items-center justify-center relative overflow-hidden">
                     <Star className="w-12 h-12 text-muted-foreground/20 transition-transform duration-500 group-hover:scale-110 group-hover:rotate-12" />
                   </div>
                 )}
-                <div className="mt-auto border-t border-border/50 bg-card px-5 pb-4 pt-3">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="w-full font-bold rounded-lg text-xs hover:bg-muted/60"
-                    aria-label={`Share ${r.title} as image`}
-                    data-testid={`btn-share-featured-recap-image-${r.id}`}
-                    disabled={shareImageLoadingId === r.id}
-                    onClick={(event) => openRecapImageExporter(event, r)}
-                  >
-                    {shareImageLoadingId === r.id ? (
-                      <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                    ) : (
-                      <ImageDown className="w-3.5 h-3.5 mr-1.5 opacity-70" />
-                    )}
-                    {shareImageLoadingId === r.id
-                      ? "Loading image…"
-                      : "Share as image"}
-                  </Button>
-                  {shareImageErrorId === r.id ? (
-                    <p
-                      className="mt-1.5 text-[11px] font-semibold text-destructive text-center"
-                      role="alert"
-                    >
-                      Couldn’t load this image. Try again.
-                    </p>
-                  ) : null}
-                </div>
                 </Card>
               </Link>
             );
@@ -2028,14 +1946,6 @@ export default function CompetitionPage() {
           </section>
           );
         })()}
-
-        {shareImagePost ? (
-          <ShareRecapImageDialog
-            post={shareImagePost}
-            open={shareImageOpen}
-            onOpenChange={closeRecapImageExporter}
-          />
-        ) : null}
 
         <CompetitionAlbumSection competition={c} />
 

@@ -14,3 +14,9 @@ Featured game-recap cards on competition pages must prominently identify the aut
 **Why:** The user explicitly requested organization logos and branding on these cards. Event branding alone does not identify the club that wrote the story.
 
 **How to apply:** Keep the two identities distinct. Use the actual parent organization's saved brand, not the competition's logo or colors as an organization substitute. Teams without an organization must remain visible.
+
+Keep featured competition cards compact: the team name belongs prominently beside the organization identity, and image sharing belongs inside the full recap, not on these cards.
+
+**Why:** The user could not identify the team on the card and explicitly asked to remove its image-share footer to save space.
+
+**How to apply:** Preserve the card's link to the full story and its existing image-sharing process there; do not restore a card-level image-sharing button.
