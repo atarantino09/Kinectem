@@ -26,3 +26,9 @@ Post-competition results entry must be a visible, separate section for operators
 **Why:** The user could not find the URL/upload controls behind the results-management link and explicitly requested a separate field for after a tournament or league. They also requested that the CSV Results action immediately open file selection, not merely switch to a CSV text box.
 
 **How to apply:** Keep results URL and upload inputs discoverable without navigating first. Open the CSV file picker directly from the user's click so browser user-gesture requirements are respected. Preserve explicit review and publication; importing results alone must never publish a recap.
+
+Organizers must not be required to confirm individual matches, fill missing scores, or manually resolve every team before creating bracket recaps from a whole results source.
+
+**Why:** The user described the process as “way too difficult” and explicitly said they cannot confirm each match and will not do extra work when scores are missing.
+
+**How to apply:** Make automated source validation and safe identity resolution support a simple upload, batch-generation, and explicit-publication flow. Missing scores stay unknown and produce partial coverage without invented outcomes. Detailed corrections may be optional, but must not become a required checklist; uncertain team identities remain unlinked rather than guessed.
