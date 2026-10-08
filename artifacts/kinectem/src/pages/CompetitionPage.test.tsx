@@ -176,7 +176,7 @@ describe("competition partnership directory", () => {
     mockedFetch.mockResolvedValue({
       ...competitionResponse(),
       featuredRecaps: [{
-        id: "club-recap", title: "Club recap", body: "A hard-fought win.", summary: null,
+        id: "club-recap", title: "A hard-fought victory in the final match of a very busy competition", body: "A hard-fought win.", summary: null,
         coverImageUrl: null, gameDate: "2026-05-04", opponentName: "Rivals",
         teamScore: 3, opponentScore: 1, teamId: "club-team", teamName: "Club U12",
         publishedAt: "2026-05-05T12:00:00Z",
@@ -193,6 +193,13 @@ describe("competition partnership directory", () => {
     expect(within(card).getByTestId("featured-recap-team-name")).toHaveTextContent("Club U12");
     expect(within(card).queryByRole("button", { name: /share.*image/i })).not.toBeInTheDocument();
     expect(card.closest("a")).toHaveAttribute("href", "/posts/club-recap");
+    expect(within(card).queryByText("Rivals")).not.toBeInTheDocument();
+    const title = within(card).getByText("A hard-fought victory in the final match of a very busy competition");
+    expect(title).toHaveClass("truncate");
+    expect(title).not.toHaveClass("line-clamp-2");
+    expect(title).toHaveAttribute("title", title.textContent);
+    expect(within(card).getByTestId("preview-featured-recap-club-recap")).toHaveClass("h-36");
+    expect(within(card).getByText("A hard-fought win.")).toHaveClass("line-clamp-4");
   });
   it.each([true, false])("keeps the removed results entry hidden (canManage=%s)", async (canManage) => {
     mockedFetch.mockResolvedValue(competitionResponse({ canManage }));

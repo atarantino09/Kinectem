@@ -1669,16 +1669,9 @@ export default function CompetitionPage() {
                 />
                 <FeaturedRecapOrganization org={r.organization} teamName={r.teamName} />
                 <CardContent className="min-w-0 px-4 py-3 space-y-1.5 bg-card">
-                  <p className="text-lg font-black tracking-tight line-clamp-2 leading-snug">
+                  <p className="truncate text-lg font-black tracking-tight leading-snug" title={r.title}>
                     {r.title}
                   </p>
-                  {r.opponentName || (r.teamScore != null && r.opponentScore != null) ? <p className="text-[11px] font-bold text-muted-foreground">
-                    {r.opponentName ? <span>vs </span> : ""}
-                    {r.opponentName}
-                    {r.teamScore != null && r.opponentScore != null
-                      ? ` · ${r.teamScore}-${r.opponentScore}`
-                      : ""}
-                  </p> : null}
                 </CardContent>
                 {r.coverImageUrl ? (
                   <div className="h-28 w-full overflow-hidden relative">
@@ -1691,7 +1684,7 @@ export default function CompetitionPage() {
                   </div>
                 ) : previewText ? (
                   <div
-                    className="relative flex h-28 w-full items-center overflow-hidden bg-muted/40 px-4 py-3"
+                    className="relative flex h-36 w-full items-start overflow-hidden bg-muted/40 px-4 py-3"
                     data-testid={`preview-featured-recap-${r.id}`}
                   >
                     <div
@@ -1708,7 +1701,7 @@ export default function CompetitionPage() {
                       >
                         From the recap
                       </p>
-                      <p className="line-clamp-2 text-sm font-semibold leading-relaxed text-foreground/85">
+                      <p className="line-clamp-4 text-sm font-semibold leading-snug text-foreground/85">
                         {previewText}
                       </p>
                     </div>

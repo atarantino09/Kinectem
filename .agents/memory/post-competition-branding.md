@@ -20,3 +20,9 @@ Keep featured competition cards compact: the team name belongs prominently besid
 **Why:** The user could not identify the team on the card and explicitly asked to remove its image-share footer to save space.
 
 **How to apply:** Preserve the card's link to the full story and its existing image-sharing process there; do not restore a card-level image-sharing button.
+
+Favor the recap preview over matchup metadata on featured competition cards: no separate opponent line, and the headline stays on one line.
+
+**Why:** The user explicitly requested these constraints so the game-recap preview can take up more space.
+
+**How to apply:** Truncate long card headlines with the full title still accessible; keep opponent details in the full recap and give the card preview more visible lines.
