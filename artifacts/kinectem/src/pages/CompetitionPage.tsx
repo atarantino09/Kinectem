@@ -724,7 +724,7 @@ export default function CompetitionPage() {
   const scheduleWeeksInitializedFilters = useRef<string | null>(null);
   const scheduleWeeksTouched = useRef(false);
   // Task #852 — active bracket filter for the featured-recaps rail
-  // ("" = All; unbracketed recaps only ever show under All).
+  // "" = All; "__other__" = unassigned or no-longer-recognized brackets.
   const [bracketFilter, setBracketFilter] = useState("");
   const [teamSearch, setTeamSearch] = useState("");
   const [teamGenderFilter, setTeamGenderFilter] = useState("all");
@@ -1571,7 +1571,11 @@ export default function CompetitionPage() {
         {(q.data.featuredRecaps?.length ?? 0) > 0 && (() => {
           const allRecaps = q.data.featuredRecaps!;
           const brackets = q.data.brackets ?? [];
-          // Only offer chips for brackets that actually have a featured
+          const bracketIds = new Set(brackets.map((b) => b.id));
+          const hasOtherRecaps = allRecaps.some((recap) =>
+            !recap.bracketId || !bracketIds.has(recap.bracketId),
+          );
+          // Only offer named brackets that actually have a featured
           // recap; "All" always includes unbracketed recaps.
           const usedBrackets = brackets.filter((b) =>
             allRecaps.some((r) => r.bracketId === b.id),
@@ -1584,7 +1588,10 @@ export default function CompetitionPage() {
           const recapSearchText = recapSearch.trim().toLowerCase();
           const shownRecaps = allRecaps.filter((recap) => {
             const matchesBracket =
-              !bracketFilter || recap.bracketId === bracketFilter;
+              !bracketFilter ||
+              (bracketFilter === "__other__"
+                ? !recap.bracketId || !bracketIds.has(recap.bracketId)
+                : recap.bracketId === bracketFilter);
             const matchesTeam =
               recapTeamFilter === "all" || recap.teamId === recapTeamFilter;
             const matchesDate =
@@ -1630,7 +1637,6 @@ export default function CompetitionPage() {
           };
           // Brackets stay in the organizer's saved order, then unbracketed
           // recaps trail under "Other"; each section is always split by week.
-          const bracketIds = new Set(brackets.map((b) => b.id));
           const groupedSections: { key: string; label: string; recaps: FeaturedRecap[] }[] =
             usedBrackets
               .filter((b) => shownRecaps.some((r) => r.bracketId === b.id))
@@ -1798,7 +1804,7 @@ export default function CompetitionPage() {
                   </Button>
                 ) : null}
               </div>
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="grid gap-2 sm:grid-cols-3">
                 <label className="space-y-1">
                   <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                     Team
@@ -1815,6 +1821,25 @@ export default function CompetitionPage() {
                         {option.label}
                       </option>
                     ))}
+                  </select>
+                </label>
+                <label className="min-w-0 space-y-1">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                    Bracket
+                  </span>
+                  <select
+                    value={bracketFilter}
+                    onChange={(event) => setBracketFilter(event.target.value)}
+                    className="h-9 w-full min-w-0 rounded-lg border border-input bg-background px-3 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    data-testid="select-recap-bracket"
+                  >
+                    <option value="">All brackets</option>
+                    {usedBrackets.map((bracket) => (
+                      <option key={bracket.id} value={bracket.id}>
+                        {bracket.label}
+                      </option>
+                    ))}
+                    {hasOtherRecaps ? <option value="__other__">Other / no bracket</option> : null}
                   </select>
                 </label>
                 <label className="space-y-1">
