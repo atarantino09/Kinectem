@@ -78,6 +78,41 @@ afterEach(() => {
 });
 
 describe("TournamentScheduleCard", () => {
+  it("shows competition removal only inside that competition's expanded section", async () => {
+    customFetchMock.mockResolvedValue({ data: competitions.map((competition) => ({
+      ...competition,
+      assignmentSnapshot: [{ participantId: `participant-${competition.tournamentId}`, name: "Falcons", claimedAt: "2026-06-01T12:00:00Z" }],
+    })) });
+    const user = userEvent.setup();
+    await renderCard(false, true);
+    expect(screen.queryByTestId("btn-remove-competition-competition-1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("btn-remove-competition-competition-2")).not.toBeInTheDocument();
+    await user.click(screen.getByTestId("toggle-tournament-competition-1"));
+    expect(screen.getByTestId("btn-remove-competition-competition-1")).toBeVisible();
+    expect(screen.queryByTestId("btn-remove-competition-competition-2")).not.toBeInTheDocument();
+    expect(screen.getByTestId("btn-remove-game-match-1")).toBeVisible();
+    await user.click(screen.getByTestId("toggle-tournament-competition-1"));
+    expect(screen.queryByTestId("btn-remove-competition-competition-1")).not.toBeInTheDocument();
+    await user.click(screen.getByTestId("toggle-tournament-competition-2"));
+    expect(screen.getByTestId("btn-remove-competition-competition-2")).toBeVisible();
+    expect(screen.queryByTestId("btn-remove-competition-competition-1")).not.toBeInTheDocument();
+  });
+
+  it("groups recap and management actions into a compact wrapping row", async () => {
+    customFetchMock.mockResolvedValue({ data: [{
+      ...competitions[0],
+      assignmentSnapshot: [{ participantId: "participant-1", name: "Falcons", claimedAt: "2026-06-01T12:00:00Z" }],
+    }] });
+    const user = userEvent.setup();
+    await renderCard(true, true);
+    await user.click(screen.getByTestId("toggle-tournament-competition-1"));
+    const actions = screen.getByTestId("tournament-match-actions-match-1");
+    expect(actions).toHaveClass("flex-wrap", "col-span-2");
+    expect(screen.getByTestId("btn-write-recap-match-1").closest("a")?.parentElement).toBe(actions);
+    expect(screen.getByTestId("btn-hide-game-match-1").parentElement).toBe(actions);
+    expect(screen.getByTestId("btn-remove-game-match-1").parentElement).toBe(actions);
+  });
+
   it.each([true, false])("shows only opponent, date, and bracket as game details (home: %s)", async (isHome) => {
     customFetchMock.mockResolvedValue({ data: [{
       ...competitions[0],

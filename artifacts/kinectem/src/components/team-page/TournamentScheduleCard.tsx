@@ -439,7 +439,7 @@ export function TournamentScheduleCard({
           </CollapsibleTrigger>
         </CardHeader>
         <CollapsibleContent data-testid="content-competitions-panel">
-          <CardContent className="space-y-5">
+          <CardContent className="space-y-3">
             <FreeRecapNotice groups={groups} />
             {visible.map((g) => (
               <Collapsible key={g.tournamentId} className="space-y-2">
@@ -486,33 +486,34 @@ export function TournamentScheduleCard({
                     <ExternalLink className="h-3.5 w-3.5 text-white/80" />
                   </Link>
                 </div>
-                {/* The server emits snapshots only for canManageTeam actors,
-                    including coaches with custom position labels. */}
-                {!!g.assignmentSnapshot?.length && (
-                  <div className="flex justify-end">
-                    <button type="button" className="inline-flex items-center gap-1 rounded-md border border-destructive/30 px-2 py-1 text-xs font-semibold text-destructive hover:bg-destructive/5"
-                      data-testid={`btn-remove-competition-${g.tournamentId}`}
-                      onClick={() => setRemovalTarget({
-                        competitionId: g.tournamentId, competitionSlug: g.tournamentSlug, competitionName: g.tournamentName,
-                        teamName, assignments: g.assignmentSnapshot!,
-                      })}>
-                      <Unlink className="h-3 w-3" /> Remove competition from team page
-                    </button>
-                  </div>
-                )}
                 <CollapsibleContent className="space-y-2">
+                  {/* Keep management actions inside the expanded schedule.
+                      Snapshots are emitted only for authorized team managers. */}
+                  {!!g.assignmentSnapshot?.length && (
+                    <div className="flex justify-end">
+                      <button type="button" className="inline-flex items-center gap-1 rounded-md border border-destructive/30 px-2 py-1 text-xs font-semibold text-destructive hover:bg-destructive/5"
+                        data-testid={`btn-remove-competition-${g.tournamentId}`}
+                        onClick={() => setRemovalTarget({
+                          competitionId: g.tournamentId, competitionSlug: g.tournamentSlug, competitionName: g.tournamentName,
+                          teamName, assignments: g.assignmentSnapshot!,
+                        })}>
+                        <Unlink className="h-3 w-3" /> Remove competition from team page
+                      </button>
+                    </div>
+                  )}
                   {g.matches.length === 0 && <p className="text-xs text-muted-foreground">No games are currently shown on this team page.</p>}
                   <ul className="space-y-1.5">
                     {g.matches.map((m) => (
                       <li
                         key={m.id}
-                        className={`rounded-lg border border-border px-3 py-2 flex items-start justify-between gap-3 ${
+                        className={`rounded-lg border border-border px-3 py-2 grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 ${
                           m.hidden ? "opacity-60 bg-muted/40" : ""
                         }`}
                         data-testid={`tournament-match-${m.id}`}
                       >
                         <div className="min-w-0">
                           <p
+                            title={m.opponentName ?? "TBD"}
                             className={`text-sm font-bold truncate ${
                               m.status === "canceled"
                                 ? "line-through text-muted-foreground"
@@ -557,12 +558,14 @@ export function TournamentScheduleCard({
                             </p>
                           )}
                         </div>
-                        <div className="shrink-0 flex flex-col items-end gap-1">
-                          {m.bracket && (
-                            <Badge variant="outline" className="text-[10px]">
+                        <div className="contents">
+                          {m.bracket ? (
+                            <Badge variant="outline" className="max-w-40 self-start justify-self-end whitespace-normal [overflow-wrap:anywhere] text-[10px]">
                               {m.bracket}
                             </Badge>
-                          )}
+                          ) : <span aria-hidden="true" />}
+                          {(m.recapPostId || (canPostRecap && isRecappable(m)) || canManage || !!g.assignmentSnapshot?.length) && (
+                          <div className="col-span-2 flex flex-wrap items-center justify-end gap-1.5" data-testid={`tournament-match-actions-${m.id}`}>
                           {/* Task #746 — published recap linked to this game.
                               Takes the place of "Write recap" (the game already
                               has one). */}
@@ -636,6 +639,8 @@ export function TournamentScheduleCard({
                               })}>
                               <Unlink className="h-3 w-3" /> Remove game
                             </button>
+                          )}
+                          </div>
                           )}
                         </div>
                       </li>
