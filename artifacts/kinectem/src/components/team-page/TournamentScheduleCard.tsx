@@ -24,7 +24,6 @@ import { useToast } from "@/hooks/use-toast";
 import { CompetitionScheduleRemovalDialog, type AssignmentSnapshot, type ScheduleRemovalTarget } from "./CompetitionScheduleRemovalDialog";
 import {
   Trophy,
-  MapPin,
   ExternalLink,
   Sparkles,
   Clock,
@@ -106,10 +105,6 @@ function fmtTime(t: string | null): string {
   const d = new Date();
   d.setHours(h, min, 0, 0);
   return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-}
-
-function venueLine(m: TournamentMatch): string {
-  return [m.venue, m.field, m.venueState].filter(Boolean).join(" · ");
 }
 
 // Today's local calendar date as YYYY-MM-DD so we can compare against a
@@ -524,9 +519,6 @@ export function TournamentScheduleCard({
                                 : ""
                             }`}
                           >
-                            <span className="text-muted-foreground font-semibold">
-                              {m.isHome ? "vs" : "@"}
-                            </span>{" "}
                             {m.opponentName ?? "TBD"}
                           </p>
                           {/* Task #765 — organizer-set postponed/canceled
@@ -552,14 +544,7 @@ export function TournamentScheduleCard({
                           )}
                           <p className="text-xs text-muted-foreground">
                             {fmtDate(m.matchDate)}
-                            {m.startTime ? ` · ${fmtTime(m.startTime)}` : ""}
                           </p>
-                          {venueLine(m) && (
-                            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                              <MapPin className="w-3 h-3 shrink-0" />
-                              <span className="truncate">{venueLine(m)}</span>
-                            </p>
-                          )}
                           {/* Task #746 — admin-only notice on hidden games
                               (public viewers never receive them). */}
                           {m.hidden && (
@@ -573,9 +558,9 @@ export function TournamentScheduleCard({
                           )}
                         </div>
                         <div className="shrink-0 flex flex-col items-end gap-1">
-                          {(m.division || m.bracket) && (
+                          {m.bracket && (
                             <Badge variant="outline" className="text-[10px]">
-                              {[m.division, m.bracket].filter(Boolean).join(" · ")}
+                              {m.bracket}
                             </Badge>
                           )}
                           {/* Task #746 — published recap linked to this game.

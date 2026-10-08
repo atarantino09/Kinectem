@@ -67,6 +67,7 @@
 - [In the News team links](team-news-links.md) — `news-` posts link OUT to the paper but are full like/comment/share targets (news post_kind); SSRF-safe OG fetch; add-button gates on canManage; stale lib/db dist gotcha.
 - [Participant bracket links](participant-bracket-links.md) — team slots attach to brackets by id (renames mirror, delete→Other); lazy seed only when zero brackets or it resurrects deletions; import now requires a group per row.
 - [Team game hiding & recap-game links](team-game-hide-and-recap-link.md) — hide scoped to team schedule only (admins see hidden:true); competitionGameId is extra-spec & must be touch-gated on drafts or autosave clears it.
+- [Team competition schedule display](team-competition-schedule-display.md) — team-page competition game details are opponent, date, and bracket only; keep richer source data elsewhere.
 - [Shared team join-link security](shared-team-join-link-security.md) — team-wide roster links are long-lived bearer capabilities: cryptographic tokens + one-pending-link-per-team invariant are mandatory.
 - [Team invitation priority](team-invite-priority.md) — ready-to-copy messages are the primary coach/org-admin invite method; bare links and email forms are secondary.
 - [Tour dropdown portal testing](tour-dropdown-portal-testing.md) — SpotlightTour + Radix menu content needs real-browser coverage; JSDOM reliably verifies controlled trigger state, not the portaled item.

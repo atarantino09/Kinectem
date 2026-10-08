@@ -78,6 +78,34 @@ afterEach(() => {
 });
 
 describe("TournamentScheduleCard", () => {
+  it.each([true, false])("shows only opponent, date, and bracket as game details (home: %s)", async (isHome) => {
+    customFetchMock.mockResolvedValue({ data: [{
+      ...competitions[0],
+      matches: [{ ...competitions[0].matches[0], isHome }],
+    }] });
+    const user = userEvent.setup();
+    await renderCard(false, true);
+    await user.click(screen.getByTestId("toggle-tournament-competition-1"));
+    const game = screen.getByTestId("tournament-match-match-1");
+    expect(game).toHaveTextContent("Rovers");
+    expect(game).toHaveTextContent("Fri, Jun 12");
+    expect(game).toHaveTextContent("Gold");
+    expect(game).not.toHaveTextContent(/vs |@|10:00|U12|Columbus Fields|Field 3|OH/);
+    expect(screen.getByTestId("btn-hide-game-match-1")).toBeVisible();
+  });
+
+  it("keeps TBD opponents and dates without falling back to division when there is no bracket", async () => {
+    customFetchMock.mockResolvedValue({ data: [{
+      ...competitions[0],
+      matches: [{ ...competitions[0].matches[0], opponentName: null, matchDate: null, bracket: "" }],
+    }] });
+    const user = userEvent.setup();
+    await renderCard();
+    await user.click(screen.getByTestId("toggle-tournament-competition-1"));
+    expect(screen.getByTestId("tournament-match-match-1")).toHaveTextContent("TBD");
+    expect(screen.getByTestId("tournament-match-match-1")).not.toHaveTextContent("U12");
+  });
+
   it("offers one contextual competition recap per expanded schedule, including empty schedules", async () => {
     const user = userEvent.setup();
     await renderCard(true, true);
