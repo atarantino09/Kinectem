@@ -1188,7 +1188,6 @@ export default function CompetitionPage() {
     q.data.brackets ?? [],
   );
   const brand = c.brandColor ?? DEFAULT_BRAND;
-  const shortTournament = isShortTournament(c);
   const heroText = contrastText(brand);
   // Secondary tints the hero as a subtle gradient; tertiary accents the
   // status badge. Both degrade to primary-only when unset.
@@ -1679,7 +1678,7 @@ export default function CompetitionPage() {
                     {r.title}
                   </FitText>
                   <p
-                    className="mt-1 truncate text-[10px] font-semibold text-black dark:text-white"
+                    className="mt-1 truncate text-[10px] font-semibold text-muted-foreground"
                     title={`Bracket: ${bracketDetail}`}
                     data-testid={`bracket-featured-recap-${r.id}`}
                   >
@@ -1715,7 +1714,7 @@ export default function CompetitionPage() {
                       >
                         From the recap
                       </p>
-                      <p className="line-clamp-5 text-sm font-semibold leading-snug text-foreground/85">
+                      <p className="line-clamp-5 text-sm font-semibold leading-snug text-black dark:text-white">
                         {previewText}
                       </p>
                     </div>
@@ -1934,7 +1933,7 @@ export default function CompetitionPage() {
                   className={`min-w-0 space-y-1.5 ${s.recaps.length > 1 ? "md:col-span-2 lg:col-span-3" : ""}`}
                   data-testid={`section-bracket-${s.key}`}
                 >
-                  <h3 className="text-sm font-black uppercase tracking-widest text-black dark:text-white flex items-center gap-1.5">
+                  <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
                       {s.label}
                       <span className="font-bold normal-case tracking-normal text-black dark:text-white">
                         ({s.recaps.length})
@@ -1953,17 +1952,6 @@ export default function CompetitionPage() {
                         className="space-y-1"
                         data-testid={`section-recap-week-${s.key}-${weekGroup.key}`}
                       >
-                        <h4 className="text-xs font-black uppercase tracking-widest text-black dark:text-white">
-                          {shortTournament &&
-                          weekGroup.key === SHORT_TOURNAMENT_GROUP_KEY
-                            ? formatCompetitionDateRange(
-                                c.startDate,
-                                c.endDate,
-                              )
-                            : weekGroup.week
-                            ? formatCompetitionWeek(weekGroup.week)
-                            : "Undated"}
-                        </h4>
                         <div className={`grid min-w-0 gap-2.5 ${s.recaps.length > 1 ? "sm:grid-cols-2 lg:grid-cols-3" : ""}`}>
                           {weekGroup.items.map(renderRecapCard)}
                         </div>

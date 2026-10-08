@@ -203,12 +203,14 @@ describe("competition partnership directory", () => {
     expect(title).toHaveAttribute("title", title.textContent);
     expect(within(card).getByTestId("preview-featured-recap-club-recap")).toHaveClass("h-40");
     expect(within(card).getByText("A hard-fought win.")).toHaveClass("line-clamp-5");
+    expect(within(card).getByText("A hard-fought win.")).toHaveClass("text-black");
+    expect(within(card).getByTestId("bracket-featured-recap-club-recap")).toHaveClass("text-muted-foreground");
     const rail = screen.getByTestId("rail-featured-recaps");
     expect(rail).toHaveClass("space-y-2.5", "text-black");
     expect(screen.getByTestId("rail-grouped-sections")).toHaveClass("grid", "gap-y-4", "md:grid-cols-2");
-    for (const heading of within(rail).getAllByRole("heading").filter((heading) => ["H3", "H4"].includes(heading.tagName))) {
-      expect(heading).toHaveClass("text-black");
-      expect(heading.className).not.toContain("text-muted");
+    expect(within(rail).queryByRole("heading", { level: 4 })).not.toBeInTheDocument();
+    for (const heading of within(rail).getAllByRole("heading", { level: 3 })) {
+      expect(heading).toHaveClass("text-muted-foreground");
     }
   });
   it("filters featured recaps by bracket together with team, date, and search, then clears every filter", async () => {
