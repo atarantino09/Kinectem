@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CompetitionAlbumConsolePanel } from "@/components/competition-album/CompetitionAlbumConsolePanel";
+import { ResultsEntryPanel } from "@/components/competition-results/ResultsEntryPanel";
 import { Link, useLocation, useRoute } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
@@ -4212,19 +4213,7 @@ function ConsoleWithTour({
           />
           <CompetitionPartnerPagesPanel competitionId={row.id} />
           <CompetitionAlbumConsolePanel competitionId={row.id} slug={row.slug} />
-          <Card>
-            <CardContent className="flex flex-col gap-3 pt-6 sm:flex-row sm:items-center">
-              <p className="flex-1 text-sm text-muted-foreground">
-                Import results, confirm team mappings, and publish bracket recaps.
-              </p>
-              <Link href={`/competitions/${row.id}/results`}>
-                <Button variant="brand" className="font-bold" data-testid="link-results-recaps">
-                  <Newspaper className="mr-1.5 h-4 w-4" />
-                  Results &amp; Tournament Recaps
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
+          <ResultsEntryPanel competitionId={row.id} />
         </>
       ) : null}
       {detail ? (

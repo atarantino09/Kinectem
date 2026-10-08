@@ -13,12 +13,28 @@ export function ImportCard({ cid, onImported }: { cid: string; onImported: (s: S
   const [text, setText] = useState("");
   const clientId = useRef(uuid());
   const [fileError, setFileError] = useState<string | null>(null);
+  const [readingFile, setReadingFile] = useState(false);
   const onFile = async (f: File | undefined) => {
     if (!f) return;
+    setKind("csv");
+    setText("");
     const problem = csvFileProblem(f);
     setFileError(problem);
     if (problem) return;
-    setText(await f.text());
+    setReadingFile(true);
+    try {
+      const contents = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result ?? ""));
+        reader.onerror = () => reject(new Error("Couldn't read this file. Please choose it again."));
+        reader.readAsText(f);
+      });
+      setText(contents);
+    } catch {
+      setFileError("Couldn't read this file. Please choose it again.");
+    } finally {
+      setReadingFile(false);
+    }
   };
   const invalidate = useInvalidateResults(cid);
   const { toast } = useToast();
@@ -40,10 +56,10 @@ export function ImportCard({ cid, onImported }: { cid: string; onImported: (s: S
   return (
     <Card data-testid="card-results-import">
       <CardHeader>
-        <CardTitle className="text-base">1. Import results</CardTitle>
+        <CardTitle className="text-base">1. Add tournament or league results</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="flex gap-2" role="tablist">
+        <div className="flex flex-wrap gap-2" role="tablist" aria-label="Results source">
           {(["url", "csv", "paste"] as const).map((k) => (
             <Button
               key={k}
@@ -51,25 +67,33 @@ export function ImportCard({ cid, onImported }: { cid: string; onImported: (s: S
               size="sm"
               role="tab"
               aria-selected={kind === k}
+              disabled={m.isPending || readingFile}
               variant={kind === k ? "brand" : "outline"}
               className="rounded-full font-bold capitalize"
               onClick={() => setKind(k)}
               data-testid={`tab-import-${k}`}
             >
-              {k === "url" ? "Results URL" : k === "csv" ? "CSV text" : "Paste"}
+              {k === "url" ? "Results URL" : k === "csv" ? "CSV results" : "Paste results"}
             </Button>
           ))}
         </div>
         {kind === "url" ? (
-          <Input
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://results.example.com/tournament"
-            data-testid="input-import-url"
-          />
+          <div className="space-y-1.5">
+            <label htmlFor={`results-url-${cid}`} className="text-sm font-bold">Results page URL</label>
+            <Input
+              id={`results-url-${cid}`}
+              value={url}
+              disabled={m.isPending || readingFile}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="Paste the tournament or league results URL"
+              data-testid="input-import-url"
+            />
+          </div>
         ) : (
           <textarea
             value={text}
+            aria-label={kind === "csv" ? "Results CSV text" : "Pasted results"}
+            disabled={m.isPending || readingFile}
             onChange={(e) => setText(e.target.value)}
             rows={6}
             placeholder={kind === "csv" ? CSV_EXAMPLE : "Paste results from any page"}
@@ -77,14 +101,17 @@ export function ImportCard({ cid, onImported }: { cid: string; onImported: (s: S
             data-testid="input-import-text"
           />
         )}
-        {kind === "csv" ? (
-          <div className="space-y-1 text-xs">
+          <div className="space-y-1.5 rounded-lg border border-border p-3 text-xs">
+            <label htmlFor={`results-file-${cid}`} className="block text-sm font-bold">Or upload results (.csv)</label>
             <p className="text-muted-foreground" data-testid="text-csv-example">
               Header: <code>Bracket,Home Team,Away Team,Home Score,Away Score</code>. Upload a .csv (500 KB max) or
-              paste the text above.
+              use the CSV results tab to paste CSV text.
             </p>
             <input
               type="file"
+              id={`results-file-${cid}`}
+              disabled={m.isPending || readingFile}
+              className="block w-full min-w-0"
               accept=".csv,text/csv"
               onChange={(e) => onFile(e.target.files?.[0])}
               data-testid="input-import-file"
@@ -95,10 +122,9 @@ export function ImportCard({ cid, onImported }: { cid: string; onImported: (s: S
               </p>
             ) : null}
           </div>
-        ) : null}
         <Button
           variant="brand"
-          disabled={!ok || m.isPending}
+          disabled={!ok || m.isPending || readingFile}
           onClick={() => m.mutate()}
           data-testid="btn-run-import"
         >

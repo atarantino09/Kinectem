@@ -6,6 +6,8 @@ import { PublishedRecaps } from "./PublishedRecaps";
 import { BracketStoryLink } from "./BracketStoryLink";
 import { TeamRecapCards } from "./TeamRecapCards";
 import { RecapEditor, ResultsConsole } from "./ResultsConsole";
+import { ImportCard } from "./ImportCard";
+import { ResultsEntryPanel } from "./ResultsEntryPanel";
 import type { ManagedRecap } from "@/lib/competition-results";
 
 const fetchMock = vi.hoisted(() => vi.fn());
@@ -24,6 +26,59 @@ const story = (o: Record<string, unknown>) => ({
 });
 
 beforeEach(() => fetchMock.mockReset());
+
+describe("visible post-competition results entry", () => {
+  it("shows separate URL and upload fields immediately, with a route to bracket recaps", () => {
+    renderWithProviders(<ResultsEntryPanel competitionId="c1" />);
+    expect(screen.getByTestId("section-post-competition-results")).toHaveTextContent("After your tournament or league");
+    expect(screen.getByLabelText("Results page URL")).toBeVisible();
+    expect(screen.getByLabelText("Or upload results (.csv)")).toBeVisible();
+    expect(screen.getByTestId("btn-review-results-recaps").closest("a")).toHaveAttribute("href", "/competitions/c1/results");
+    expect(screen.getByTestId("btn-run-import")).toBeDisabled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("imports the pasted URL without publishing a recap", async () => {
+    const imported = vi.fn();
+    fetchMock.mockResolvedValue({ id: "import-1" });
+    renderWithProviders(<ImportCard cid="c1" onImported={imported} />);
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Results page URL"), "https://results.example/finals");
+    await user.click(screen.getByTestId("btn-run-import"));
+    await waitFor(() => expect(imported).toHaveBeenCalledWith({ id: "import-1" }));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/competitions/c1/results-import");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({ kind: "url", url: "https://results.example/finals" });
+  });
+
+  it("reads an uploaded CSV and imports its contents as results", async () => {
+    const imported = vi.fn();
+    const csv = "Bracket,Home Team,Away Team,Home Score,Away Score\nGold,Comets,Hawks,3,1";
+    fetchMock.mockResolvedValue({ id: "import-2" });
+    renderWithProviders(<ImportCard cid="c1" onImported={imported} />);
+    const user = userEvent.setup();
+    await user.upload(screen.getByLabelText("Or upload results (.csv)"), new File([csv], "final-results.csv", { type: "text/csv" }));
+    await waitFor(() => expect(screen.getByTestId("input-import-text")).toHaveValue(csv));
+    expect(screen.getByTestId("tab-import-csv")).toHaveAttribute("aria-selected", "true");
+    await user.click(screen.getByTestId("btn-run-import"));
+    await waitFor(() => expect(imported).toHaveBeenCalledWith({ id: "import-2" }));
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({ kind: "csv", text: csv });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects an oversized results CSV and clears earlier file contents", async () => {
+    renderWithProviders(<ImportCard cid="c1" onImported={vi.fn()} />);
+    const user = userEvent.setup();
+    const field = screen.getByLabelText("Or upload results (.csv)");
+    await user.upload(field, new File(["Gold,Comets,Hawks,3,1"], "valid.csv", { type: "text/csv" }));
+    await waitFor(() => expect(screen.getByTestId("btn-run-import")).toBeEnabled());
+    await user.upload(field, new File(["x".repeat(600_000)], "oversized.csv", { type: "text/csv" }));
+    expect(screen.getByTestId("text-file-error")).toHaveTextContent("500 KB");
+    expect(screen.getByTestId("input-import-text")).toHaveValue("");
+    expect(screen.getByTestId("btn-run-import")).toBeDisabled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
 
 it("keeps unsaved edits when another operator saves a newer revision", async () => {
   const recap: ManagedRecap = {

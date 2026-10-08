@@ -20,3 +20,9 @@ The supplied GotSport event page redirected to a JavaScript/reCAPTCHA verificati
 **Why:** A verification document is not tournament evidence, and challenge solving or login bypass is explicitly outside the product scope.
 
 **How to apply:** Treat verification responses as blocked before AI, give a truthful import status, and retain CSV/pasted-table fallback. Do not claim official GotSport parsing or use the schedule-import feature as proof of results support.
+
+Post-competition results entry must be a visible, separate section for operators, distinct from schedule import, on both the competition page and its editor.
+
+**Why:** The user could not find the URL/upload controls behind the results-management link and explicitly requested a separate field for after a tournament or league.
+
+**How to apply:** Keep results URL and upload inputs discoverable without navigating first. Preserve explicit review and publication; importing results alone must never publish a recap.

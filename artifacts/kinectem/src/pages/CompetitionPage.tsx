@@ -65,6 +65,7 @@ import {
   type CompetitionWeek,
 } from "@/lib/competition-weeks";
 import { PublishedRecaps } from "@/components/competition-results/PublishedRecaps";
+import { ResultsEntryPanel } from "@/components/competition-results/ResultsEntryPanel";
 import { featuredRecapPreviewText } from "@/lib/featuredRecapPreview";
 
 // Competitions §9a — PUBLIC branded competition page (`/c/<slug>`). Distinct
@@ -1613,6 +1614,8 @@ export default function CompetitionPage() {
             defaultOpen={isClaimVisitor}
           />
         ) : null}
+
+        {c.canManage ? <ResultsEntryPanel competitionId={c.id} /> : null}
 
         <PublishedRecaps competitionId={q.data.competition.id} brand={c.brandColor ?? DEFAULT_BRAND} />
 

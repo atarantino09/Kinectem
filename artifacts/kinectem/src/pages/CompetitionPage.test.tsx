@@ -172,6 +172,19 @@ describe("schedule grouping model", () => {
 });
 
 describe("competition partnership directory", () => {
+  it.each([true, false])("shows direct results entry only for competition managers (canManage=%s)", async (canManage) => {
+    mockedFetch.mockResolvedValue(competitionResponse({ canManage }));
+    renderWithProviders(<CompetitionPage />);
+    await screen.findByRole("heading", { name: "Rolling Cup" });
+    if (canManage) {
+      expect(screen.getByTestId("section-post-competition-results")).toBeVisible();
+      expect(screen.getByLabelText("Results page URL")).toBeVisible();
+      expect(screen.getByLabelText("Or upload results (.csv)")).toBeVisible();
+    } else {
+      expect(screen.queryByTestId("section-post-competition-results")).not.toBeInTheDocument();
+    }
+  });
+
   beforeEach(() => {
     window.history.pushState({}, "", "/c/rolling-cup");
     mockedFetch.mockReset();
