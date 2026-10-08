@@ -128,9 +128,8 @@ interface UseNewPostFormParams {
   initialGameDate?: string | null;
   initialOpponent?: string | null;
   initialScheduleEventId?: string | null;
-  // Task #746 — team-page Competitions "Write recap" deep-link. When both
-  // are present the composer pre-selects the competition AND the specific
-  // game (marked as touched so the link persists through draft PATCHes).
+  // Competition deep-links select the competition; a match is optional.
+  // Competition-only entries leave the date and game blank.
   initialCompetitionId?: string | null;
   initialMatchId?: string | null;
 }
@@ -270,14 +269,14 @@ export function useNewPostForm({
   const [photos, setPhotos] = useState<string[]>([]);
   const [videoUrl, setVideoUrl] = useState("");
   const [videoAssetId, setVideoAssetId] = useState("");
-  // YYYY-MM-DD value bound to the date input. Pre-filled with today
-  // so coaches who don't touch the picker still publish a recap
-  // dated today (the backend uses this date to drive the auto-tag
-  // fan-out, gated by the `tagRoster` checkbox below).
+  // Ordinary recaps default to today. Competition-only entries require
+  // the coach to enter their unlisted game's date instead of guessing.
   const [gameDate, setGameDate] = useState<string>(
     initialGameDate && initialGameDate.length >= 10
       ? initialGameDate.slice(0, 10)
-      : todayLocalIso(),
+      : initialCompetitionId && !initialMatchId
+        ? ""
+        : todayLocalIso(),
   );
   // Defaults to true so a recap published without touching the form
   // still tags every rostered player. Unchecking sends `gameDate:
@@ -298,14 +297,14 @@ export function useNewPostForm({
   const [competitionTouched, setCompetitionTouched] = useState(
     !!initialCompetitionId,
   );
-  // Task #746 — the SPECIFIC game the recap covers (empty = none /
-  // let the server auto-derive from the game date). Same touch-gating
-  // pattern as the competition pick above.
+  // The specific game is optional. A competition-only deep-link counts
+  // as an explicit no-game choice; otherwise untouched fields retain
+  // existing date-derived links.
   const [competitionGameId, setCompetitionGameId] = useState<string>(
     initialCompetitionId && initialMatchId ? initialMatchId : "",
   );
   const [gameTouched, setGameTouched] = useState(
-    !!(initialCompetitionId && initialMatchId),
+    !!initialCompetitionId,
   );
   // Task #852 — optional bracket pick for the recap (empty = none).
   // Same touch-gating pattern as the competition pick above: an
@@ -504,7 +503,9 @@ export function useNewPostForm({
   const initialSnapshot = buildSnapshot({
     title: "",
     body: "",
-    gameDate: todayLocalIso(),
+    gameDate:
+      initialGameDate?.slice(0, 10) ??
+      (initialCompetitionId && !initialMatchId ? "" : todayLocalIso()),
     tagRoster: true,
     photos: [],
     videoUrl: "",
@@ -602,11 +603,11 @@ export function useNewPostForm({
   }, []);
 
   // Build the ISO datetime sent to the API. Noon UTC keeps the
-  // calendar date stable across timezones. Returning null when the
-  // tag-roster checkbox is off skips the auto-tag fan-out.
+  // calendar date stable across timezones. A blank date or unchecked
+  // tag-roster checkbox skips the auto-tag fan-out.
   const gameDateForApi = (): string | null => {
-    if (!tagRoster) return null;
-    const value = gameDate || todayLocalIso();
+    if (!tagRoster || !gameDate) return null;
+    const value = gameDate;
     const iso = `${value}T12:00:00.000Z`;
     const d = new Date(iso);
     return Number.isNaN(d.getTime()) ? null : d.toISOString();
@@ -651,11 +652,10 @@ export function useNewPostForm({
         : {}),
       // Task #746 — the explicit game pick rides along only once
       // touched AND while a competition is picked (the server nests
-      // game handling inside the competitionId branch). An empty pick
-      // is simply omitted — the server then keeps its auto-derived
-      // game for the (re-sent) competition.
-      ...(gameTouched && competitionId && competitionGameId
-        ? ({ competitionGameId } as object)
+      // game handling inside the competitionId branch). Explicit null
+      // means an unlisted game, not a date-based match guess.
+      ...(gameTouched && competitionId
+        ? ({ competitionGameId: competitionGameId || null } as object)
         : {}),
       // Task #852 — the optional bracket pick, touch-gated exactly like
       // the competition pick: untouched saves omit it entirely so an
@@ -770,7 +770,10 @@ export function useNewPostForm({
         // (and the auto-tag fan-out fires).
         const hasDate =
           typeof d.gameDate === "string" && d.gameDate.length >= 10;
-        setGameDate(hasDate ? d.gameDate!.slice(0, 10) : todayLocalIso());
+        const loadedGameDate = hasDate
+          ? d.gameDate!.slice(0, 10)
+          : d.competition?.id ? "" : todayLocalIso();
+        setGameDate(loadedGameDate);
         // Reflect the post's actual tagging state. A published recap
         // with no game date should leave the checkbox UNchecked so
         // the coach has to explicitly opt back in (otherwise auto-
@@ -853,9 +856,7 @@ export function useNewPostForm({
             kind === "highlight"
               ? (d.description ?? "")
               : (d.body ?? ""),
-          gameDate: hasDate
-            ? d.gameDate!.slice(0, 10)
-            : todayLocalIso(),
+          gameDate: loadedGameDate,
           tagRoster: hasDate,
           photos:
             Array.isArray(d.photoUrls) && d.photoUrls.length > 0
@@ -927,7 +928,11 @@ export function useNewPostForm({
     gameDate,
     tagRoster,
     competitionId,
+    competitionGameId,
+    competitionTouched,
+    gameTouched,
     bracketId,
+    bracketTouched,
     draftId,
     isEditingPublished,
   ]);
@@ -979,8 +984,8 @@ export function useNewPostForm({
         : {}),
       // Task #746 — the specific game the recap covers. Only
       // meaningful alongside an explicit competition pick.
-      ...(!isShort && competitionId && competitionGameId
-        ? ({ competitionGameId } as object)
+      ...(!isShort && competitionId && gameTouched
+        ? ({ competitionGameId: competitionGameId || null } as object)
         : {}),
       // Task #852 — optional bracket pick; only meaningful alongside an
       // explicit competition pick.
@@ -1170,7 +1175,8 @@ export function useNewPostForm({
         toast({ title: "Published!" });
         setBaseline(sentSnapshot);
         setLocation(
-          initialTeamId ? `/teams/${initialTeamId}` : `/posts/${draftId}`,
+          safeInternalPath(initialFrom) ??
+          (initialTeamId ? `/teams/${initialTeamId}` : `/posts/${draftId}`),
         );
       } else {
         const result = await createPost.mutateAsync({ data: buildPayload() });
@@ -1367,6 +1373,17 @@ export function useNewPostForm({
     }
   };
 
+  // Loading an undated post intentionally leaves roster tagging off.
+  // Entering the first date on a competition draft is an explicit opt-in,
+  // so that date is submitted instead of silently discarded. Published
+  // edits and already-dated drafts retain the checkbox's existing state.
+  const setEnteredGameDate = (value: string) => {
+    if (value && !gameDate && competitionId && draftId && !isEditingPublished) {
+      setTagRoster(true);
+    }
+    setGameDate(value);
+  };
+
   return {
     // state values
     postType,
@@ -1491,7 +1508,7 @@ export function useNewPostForm({
       setGameTouched(true);
       setCompetitionTouched(true);
       if (v && game) {
-        if (game.matchDate) setGameDate(game.matchDate.slice(0, 10));
+        if (game.matchDate) setEnteredGameDate(game.matchDate.slice(0, 10));
         setPickedOpponent(game.opponentName ?? null);
       } else {
         setPickedOpponent(null);
@@ -1510,7 +1527,7 @@ export function useNewPostForm({
     setVideoUrl,
     videoAssetId,
     setVideoAssetId,
-    setGameDate,
+    setGameDate: setEnteredGameDate,
     setTagRoster,
     // Task #447 — pending-approval confirmation dialog state. The
     // page renders an AlertDialog bound to `pendingApprovalOpen`;

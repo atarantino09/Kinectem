@@ -334,7 +334,9 @@ export function PostFormFields({
             id="game-date-help"
             className="mt-1.5 text-[11px] text-muted-foreground font-semibold"
           >
-            Defaults to today. Change it if the game was on a different day.
+            {competitionId && !gameDate
+              ? "Enter the date of your playoff or extra game."
+              : "Defaults to today. Change it if the game was on a different day."}
           </p>
         </div>
       )}
@@ -559,8 +561,7 @@ export function PostFormFields({
                   picked and lists its already-played games so the recap
                   can link to the specific game (the team page then shows
                   a "Game recap" pill on that game's card). Optional —
-                  "No specific game" keeps the server's date-based
-                  auto-derive behavior. */}
+                  "No specific game" supports unlisted games. */}
               {competitionId && (
                 <div className="mt-3" data-testid="section-game-picker">
                   <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
@@ -619,6 +620,7 @@ export function PostFormFields({
                         </SelectContent>
                       </Select>
                       <p className="mt-2 text-[12px] text-muted-foreground font-semibold">
+                        Leave "No specific game" for a playoff or extra game.
                         Linking a specific game shows a "Game recap" tag on
                         that game in the team's competition schedule. Picking
                         one also fills in the game date and opponent for you.
@@ -629,9 +631,10 @@ export function PostFormFields({
                       className="mt-2 text-xs text-muted-foreground font-medium"
                       data-testid="empty-state-no-competition-games"
                     >
-                      No played games in this competition's schedule yet. You
-                      can still publish the recap without linking a specific
-                      game.
+                      No played games in this competition's schedule yet.
+                      Enter your playoff or extra game details above; this recap
+                      will keep the selected competition's branding without
+                      linking a listed game.
                     </p>
                   )}
                 </div>

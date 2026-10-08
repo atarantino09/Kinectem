@@ -47,8 +47,8 @@ export default function NewPostPage() {
   const initialScheduleEventId = params.get("scheduleEventId");
   const initialGameDate = params.get("gameDate");
   const initialOpponent = params.get("opponent");
-  // Task #746 — team-page Competitions "Write recap" deep-link params.
-  // Pre-select the competition and the specific game in the composer.
+  // Team-page competition recap context. The competition may be selected
+  // without a match for playoff or extra games not in the schedule.
   const initialCompetitionId = params.get("competitionId");
   const initialMatchId = params.get("matchId");
 

@@ -62,8 +62,8 @@ const competitions = [
   },
 ];
 
-async function renderCard() {
-  renderWithProviders(<TournamentScheduleCard teamId="team-1" />);
+async function renderCard(canPostRecap = false, canManage = false) {
+  renderWithProviders(<TournamentScheduleCard teamId="team-1" canPostRecap={canPostRecap} canManage={canManage} />);
   await screen.findByTestId("content-competitions-panel");
 }
 
@@ -78,6 +78,75 @@ afterEach(() => {
 });
 
 describe("TournamentScheduleCard", () => {
+  it("offers one contextual competition recap per expanded schedule, including empty schedules", async () => {
+    const user = userEvent.setup();
+    await renderCard(true, true);
+    expect(screen.queryByText("Competition Game Recap")).not.toBeInTheDocument();
+    for (const competition of competitions) {
+      const toggle = screen.getByTestId(`toggle-tournament-${competition.tournamentId}`);
+      toggle.focus();
+      await user.keyboard("{Enter}");
+      const action = screen.getByTestId(`button-competition-recap-${competition.tournamentId}`);
+      expect(action.tagName).toBe("A");
+      expect(action.closest("button")).toBeNull();
+      const url = new URL(action.getAttribute("href")!, "https://example.test");
+      expect(url.pathname).toBe("/posts/new");
+      expect(Object.fromEntries(url.searchParams)).toEqual({
+        type: "long", teamId: "team-1", competitionId: competition.tournamentId, from: "/teams/team-1",
+      });
+      expect(action).toHaveAccessibleDescription(
+        "Playoff or extra game? Add a branded recap to this competition.",
+      );
+      action.focus();
+      expect(action).toHaveFocus();
+    }
+    expect(screen.getAllByText("Competition Game Recap")).toHaveLength(2);
+    const perGame = screen.getByTestId("btn-write-recap-match-1").closest("a")!;
+    const matchUrl = new URL(perGame.getAttribute("href")!, "https://example.test");
+    expect(matchUrl.searchParams.get("matchId")).toBe("match-1");
+    expect(matchUrl.searchParams.get("opponent")).toBe("Rovers");
+    expect(matchUrl.searchParams.get("gameDate")).toBe("2026-06-12");
+    expect(screen.getByTestId("btn-hide-game-match-1")).toBeVisible();
+    await user.click(screen.getByTestId("toggle-tournament-competition-1"));
+    expect(screen.queryByTestId("button-competition-recap-competition-1")).not.toBeInTheDocument();
+  });
+
+  it("hides both competition authoring and its helper from non-authors even when they manage games", async () => {
+    const user = userEvent.setup();
+    await renderCard(false, true);
+    for (const competition of competitions) {
+      await user.click(screen.getByTestId(`toggle-tournament-${competition.tournamentId}`));
+    }
+    expect(screen.queryByText("Competition Game Recap")).not.toBeInTheDocument();
+    expect(screen.queryByText("Playoff or extra game? Add a branded recap to this competition.")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("btn-write-recap-match-1")).not.toBeInTheDocument();
+    expect(screen.getByTestId("btn-hide-game-match-1")).toBeVisible();
+  });
+
+  it("offers the empty competition action to recap authors without management controls", async () => {
+    const user = userEvent.setup();
+    await renderCard(true, false);
+    await user.click(screen.getByTestId("toggle-tournament-competition-2"));
+    expect(screen.getByTestId("button-competition-recap-competition-2")).toBeVisible();
+    expect(screen.getByText("Playoff or extra game? Add a branded recap to this competition.")).toBeVisible();
+    expect(screen.queryByTestId("btn-hide-game-match-1")).not.toBeInTheDocument();
+  });
+
+  it("retains published recap links and unhide controls beside the competition action", async () => {
+    customFetchMock.mockResolvedValue({ data: [{
+      ...competitions[0],
+      matches: [{ ...competitions[0].matches[0], recapPostId: "article-recap-1", hidden: true }],
+    }] });
+    const user = userEvent.setup();
+    await renderCard(true, true);
+    await user.click(screen.getByTestId("toggle-tournament-competition-1"));
+    expect(screen.getByTestId("pill-game-recap-match-1").closest("a")).toHaveAttribute("href", "/posts/article-recap-1");
+    expect(screen.getByTestId("btn-unhide-game-match-1")).toBeVisible();
+    expect(screen.getByTestId("notice-hidden-game-match-1")).toBeVisible();
+    expect(screen.getByTestId("button-competition-recap-competition-1")).toBeVisible();
+    expect(screen.queryByTestId("btn-write-recap-match-1")).not.toBeInTheDocument();
+  });
+
   it("keeps the full competitions panel open by default and collapses it from the header", async () => {
     const user = userEvent.setup();
     await renderCard();

@@ -462,12 +462,16 @@ router.patch(
         }
         // Combined recaps span many games — competition-level link only.
         updates["competitionGameId"] =
-          a.recapKind === "combined" ? null : explicit.competitionGameId;
+          a.recapKind === "combined" || body.competitionGameId === null
+            ? null
+            : explicit.competitionId === a.competitionId
+              ? a.competitionGameId
+              : explicit.competitionGameId;
         // Task #746 — explicit game pick from the composer (extra-spec
         // field, only honored alongside an explicit competition pick and
         // never for combined recaps). Validated to belong to the chosen
-        // competition and this team's claimed slot. Absent/empty keeps
-        // the auto-derived game above.
+        // competition and this team's claimed slot. Absent preserves an
+        // existing same-competition link; null explicitly clears it.
         if (
           a.recapKind !== "combined" &&
           typeof body.competitionGameId === "string" &&

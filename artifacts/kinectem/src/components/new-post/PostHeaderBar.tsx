@@ -57,7 +57,7 @@ export function PostHeaderBar({
     isEditingPublished && canDelete && !!onRequestDelete;
   return (
     <header className="border-b border-border bg-card">
-      <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between gap-2">
+      <div className="max-w-3xl mx-auto px-4 min-h-14 py-2 flex flex-wrap items-center justify-between gap-2 sm:h-14 sm:flex-nowrap sm:py-0">
         <Button
           variant="ghost"
           size="sm"
@@ -65,9 +65,9 @@ export function PostHeaderBar({
           className="font-bold"
           data-testid="button-cancel-post-editor"
         >
-          <ArrowLeft className="w-4 h-4 mr-2" /> Cancel
+          <ArrowLeft className="hidden w-4 h-4 mr-2 sm:block" /> Cancel
         </Button>
-        <div className="flex items-center gap-2 text-sm font-bold">
+        <div className="order-first flex w-full min-w-0 items-center justify-center gap-2 text-sm font-bold sm:order-none sm:w-auto">
           <Icon className="w-4 h-4" />
           {isEditingPublished
             ? (editingLabel ?? "Editing Recap")
@@ -75,7 +75,7 @@ export function PostHeaderBar({
               ? "Editing Draft"
               : heading}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2">
           {showDelete && (
             // Visually secondary to Save: ghost button with destructive
             // text on the left of the action group so it isn't hit by
@@ -112,6 +112,7 @@ export function PostHeaderBar({
             form="new-post-form"
             variant="brand"
             disabled={publishing || publishDisabled}
+            className="px-3 text-xs sm:px-6 sm:text-sm"
             data-testid="button-publish"
           >
             {publishing

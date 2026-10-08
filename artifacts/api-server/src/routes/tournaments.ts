@@ -58,6 +58,7 @@ import {
 import {
   canManageOrganization,
   canManageTeam,
+  canCreateRecap,
 } from "../lib/permissions";
 import {
   seedBracketsFromSchedule,
@@ -4385,6 +4386,11 @@ router.get(
       req.sessionUser && teamRow
         ? await canManageTeam(req.sessionUser.id, teamRow)
         : false;
+    const viewerCanAuthor =
+      viewerCanManage ||
+      (req.sessionUser && teamRow
+        ? await canCreateRecap(req.sessionUser.id, teamRow)
+        : false);
     const myPartIds = myParts.map((p) => p.id);
     const myPartIdSet = new Set(myPartIds);
     const tournamentIds = Array.from(new Set(myParts.map((p) => p.tournamentId)));
@@ -4506,16 +4512,19 @@ router.get(
       }
     >();
 
-    // Managers must still be able to release a competition after removing its last game.
-    if (viewerCanManage) {
+    // Authors need a competition-level entry even without visible matches.
+    // Management snapshots and hidden games remain manager-only.
+    if (viewerCanAuthor) {
       for (const t of tourneyRows) {
         groups.set(t.id, {
           tournamentId: t.id, tournamentSlug: t.slug, tournamentName: t.name,
           startDate: t.startDate, endDate: t.endDate, recapFreeUntil: isOrgBacked ? null : t.endDate,
           logoUrl: t.logoUrl ?? null, brandColor: t.brandColor ?? null, secondaryColor: t.secondaryColor ?? null,
-          assignmentSnapshot: myParts.filter((p) => p.tournamentId === t.id).map((p) => ({
-            participantId: p.id, name: p.name, claimedAt: p.claimedAt?.toISOString() ?? null,
-          })),
+          ...(viewerCanManage ? {
+            assignmentSnapshot: myParts.filter((p) => p.tournamentId === t.id).map((p) => ({
+              participantId: p.id, name: p.name, claimedAt: p.claimedAt?.toISOString() ?? null,
+            })),
+          } : {}),
           matches: [],
         });
       }

@@ -3141,6 +3141,9 @@ router.post(
           );
         }
         rawLink = explicit;
+        if (body.competitionGameId === null) {
+          rawLink = { ...rawLink, competitionGameId: null };
+        }
         if (requestedGameId) {
           if (!UUID_RE.test(requestedGameId))
             return apiError(res, 400, "Invalid competitionGameId");

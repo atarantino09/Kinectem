@@ -4,6 +4,7 @@ import { customFetch } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 import {
   Collapsible,
   CollapsibleTrigger,
@@ -147,6 +148,16 @@ function recapHrefFor(
   return `/posts/new?type=long&teamId=${teamId}${date}${opponent}&competitionId=${tournamentId}&matchId=${m.id}&from=${encodeURIComponent(
     `/teams/${teamId}`,
   )}`;
+}
+
+function competitionRecapHref(teamId: string, competitionId: string): string {
+  const params = new URLSearchParams({
+    type: "long",
+    teamId,
+    competitionId,
+    from: `/teams/${teamId}`,
+  });
+  return `/posts/new?${params}`;
 }
 
 // The free recap window for a tournament is, in UTC, [startDate 00:00,
@@ -494,7 +505,26 @@ export function TournamentScheduleCard({
                     </button>
                   </div>
                 )}
-                <CollapsibleContent>
+                <CollapsibleContent className="space-y-2">
+                  {canPostRecap && (
+                    <div className="min-w-0 space-y-1.5 rounded-lg border border-border bg-muted/20 px-3 py-2">
+                      <Link
+                        href={competitionRecapHref(teamId, g.tournamentId)}
+                        className={`${buttonVariants({ variant: "outline", size: "sm" })} max-w-full gap-1.5 whitespace-normal text-left`}
+                        aria-describedby={`competition-recap-help-${g.tournamentId}`}
+                        data-testid={`button-competition-recap-${g.tournamentId}`}
+                      >
+                        <FileText className="h-3.5 w-3.5 shrink-0" />
+                        Competition Game Recap
+                      </Link>
+                      <p
+                        id={`competition-recap-help-${g.tournamentId}`}
+                        className="text-[11px] text-muted-foreground"
+                      >
+                        Playoff or extra game? Add a branded recap to this competition.
+                      </p>
+                    </div>
+                  )}
                   {g.matches.length === 0 && <p className="text-xs text-muted-foreground">No games are currently shown on this team page.</p>}
                   <ul className="space-y-1.5">
                     {g.matches.map((m) => (
