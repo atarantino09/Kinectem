@@ -20,8 +20,8 @@ export function FeaturedRecapOrganization({ org, teamName }: { org?: FeaturedRec
       className="flex min-w-0 items-center gap-3 px-4 py-2.5"
       data-testid="featured-recap-organization"
       style={{
-        borderBottom: `2px solid ${primary}`,
-        background: `linear-gradient(120deg, color-mix(in srgb, ${primary} 14%, transparent), color-mix(in srgb, ${secondary} 10%, transparent))`,
+        borderBottom: `3px solid ${primary}`,
+        background: `linear-gradient(120deg, color-mix(in srgb, ${primary} 32%, transparent), color-mix(in srgb, ${secondary} 24%, transparent))`,
       }}
     >
       {org?.logoUrl ? (
@@ -39,7 +39,6 @@ export function FeaturedRecapOrganization({ org, teamName }: { org?: FeaturedRec
       <div className="min-w-0 space-y-1 [overflow-wrap:anywhere]">
         {org?.name ? <p className="text-[11px] font-semibold leading-snug text-muted-foreground">{org.name}</p> : null}
         <p className="text-sm font-black leading-snug text-foreground" data-testid="featured-recap-team-name">
-          <span className="mr-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Team:</span>{" "}
           {teamName}
         </p>
       </div>

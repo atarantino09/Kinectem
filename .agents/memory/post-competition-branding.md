@@ -15,6 +15,12 @@ Featured game-recap cards on competition pages must prominently identify the aut
 
 **How to apply:** Keep the two identities distinct. Use the actual parent organization's saved brand, not the competition's logo or colors as an organization substitute. Teams without an organization must remain visible.
 
+Use clearly visible organization color treatments on these cards, rather than barely visible accents. Show the team name without a redundant "Team" label.
+
+**Why:** The user requested stronger organization branding and said the team name is already clear without that label.
+
+**How to apply:** Carry both organization colors through the identity area and recap preview while keeping text readable; retain the compact layout.
+
 Keep featured competition cards compact: the team name belongs prominently beside the organization identity, and image sharing belongs inside the full recap, not on these cards.
 
 **Why:** The user could not identify the team on the card and explicitly asked to remove its image-share footer to save space.

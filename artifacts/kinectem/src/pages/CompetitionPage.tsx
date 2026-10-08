@@ -1657,9 +1657,9 @@ export default function CompetitionPage() {
             return (
               <Link key={r.id} href={`/posts/${r.id}`} className="block min-w-0">
                 <Card
-                  className="min-w-0 rounded-xl border-border overflow-hidden cursor-pointer transition-all hover:-translate-y-1 hover:shadow-lg h-full flex flex-col group"
+                  className="min-w-0 rounded-xl border-2 border-border overflow-hidden cursor-pointer transition-all hover:-translate-y-1 hover:shadow-lg h-full flex flex-col group"
                   data-testid={`card-featured-recap-${r.id}`}
-                  style={{ borderColor: `color-mix(in srgb, ${orgPalette.primary} 30%, transparent)` }}
+                  style={{ borderColor: `color-mix(in srgb, ${orgPalette.primary} 65%, transparent)` }}
                 >
                 <CompetitionBrandStrip
                   name={c.name}
@@ -1668,7 +1668,7 @@ export default function CompetitionPage() {
                   secondaryColor={c.secondaryColor}
                 />
                 <FeaturedRecapOrganization org={r.organization} teamName={r.teamName} />
-                <CardContent className="min-w-0 px-4 py-3 space-y-1.5 bg-card">
+                <CardContent className="min-w-0 px-4 py-3 space-y-1.5" style={{ backgroundColor: `color-mix(in srgb, ${orgPalette.primary} 8%, hsl(var(--card)))` }}>
                   <p className="truncate text-lg font-black tracking-tight leading-snug" title={r.title}>
                     {r.title}
                   </p>
@@ -1686,10 +1686,11 @@ export default function CompetitionPage() {
                   <div
                     className="relative flex h-36 w-full items-start overflow-hidden bg-muted/40 px-4 py-3"
                     data-testid={`preview-featured-recap-${r.id}`}
+                    style={{ background: `linear-gradient(145deg, color-mix(in srgb, ${orgPalette.primary} 16%, hsl(var(--card))), color-mix(in srgb, ${orgPalette.secondary} 12%, hsl(var(--card))))` }}
                   >
                     <div
                       aria-hidden="true"
-                      className="pointer-events-none absolute -right-12 -top-10 h-28 w-28 opacity-[0.12]"
+                      className="pointer-events-none absolute -right-12 -top-10 h-28 w-28 opacity-[0.24]"
                       style={{
                         background: `radial-gradient(circle at center, ${orgPalette.primary} 0%, transparent 72%)`,
                       }}
@@ -1707,7 +1708,8 @@ export default function CompetitionPage() {
                     </div>
                     <div
                       aria-hidden="true"
-                      className="pointer-events-none absolute inset-x-0 bottom-0 h-9 bg-gradient-to-t from-muted/95 to-transparent"
+                      className="pointer-events-none absolute inset-x-0 bottom-0 h-9"
+                      style={{ background: `linear-gradient(to top, color-mix(in srgb, ${orgPalette.secondary} 12%, hsl(var(--card))), transparent)` }}
                     />
                     <span className="absolute bottom-2.5 right-5 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                       Read full recap

@@ -15,10 +15,12 @@ describe("featured recap organization branding", () => {
     render(<FeaturedRecapOrganization org={org} teamName="Legacy U12 Boys" />);
     expect(screen.getByRole("img", { name: "Legacy Club logo" })).toHaveAttribute("src", org.logoUrl);
     expect(screen.getByText("Legacy Club")).toBeVisible();
-    expect(screen.getByTestId("featured-recap-team-name")).toHaveTextContent("Team: Legacy U12 Boys");
+    expect(screen.getByTestId("featured-recap-team-name").textContent?.trim()).toBe("Legacy U12 Boys");
     const style = screen.getByTestId("featured-recap-organization").getAttribute("style");
     expect(style).toContain("#123456");
     expect(style).toContain("#abcdef");
+    expect(style).toContain("32%");
+    expect(style).toContain("24%");
     expect(featuredOrgPalette(org)).toEqual({ primary: "#123456", secondary: "#abcdef" });
   });
   it("uses organization initials without inventing an event logo when its logo is missing", () => {
