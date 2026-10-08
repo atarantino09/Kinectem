@@ -187,12 +187,20 @@ export const api = {
       includeCoverage: boolean;
       requestId: string;
       expectedRevisions: Record<string, number>;
+      preserveExisting?: boolean;
     },
   ) =>
     customFetch<{
       data: ManagedRecap[];
       errors: { groupKey: string; error: string; code: string }[];
     }>(`${base}/competitions/${cid}/tournament-recaps/generate`, json("POST", b)),
+  prepareImport: (cid: string, importId: string) =>
+    customFetch<Snapshot>(`${base}/competitions/${cid}/results-import/${importId}/prepare`, json("POST", {})),
+  publishBatch: (cid: string, b: { recaps: { id: string; expectedRevision: number }[] }) =>
+    customFetch<{ data: ManagedRecap[]; errors: { id: string; error: string; code: string }[] }>(
+      `${base}/competitions/${cid}/tournament-recaps/publish-batch`,
+      json("POST", b),
+    ),
   createManual: (
     cid: string,
     b: { importId: string; groupKey: string; title: string; body: string },
@@ -376,4 +384,28 @@ export const allScoresPresent = (g: ResultGroup) =>
   g.games.length > 0 && g.games.every((x) => x.homeScore !== null && x.awayScore !== null);
 export function coverageIdsOf(stories: PublicStory[]): Set<string> {
   return new Set(stories.flatMap((s) => s.coverage.map((c) => c.id)));
+}
+
+// ---- simple-flow helpers ----
+
+/** Groups mapped to a bracket that has no draft or published recap yet. */
+export function missingRecapGroups(groups: ResultGroup[], recaps: ManagedRecap[]): ResultGroup[] {
+  return groups.filter((g) => g.bracketId && !recaps.some((r) => r.bracketId === g.bracketId));
+}
+/** Saved drafts that differ from what is live (or were never published). */
+export function publishableRecaps(recaps: ManagedRecap[]): ManagedRecap[] {
+  return recaps.filter(
+    (r) => !r.published || r.published.title !== r.draft.title || r.published.body !== r.draft.body,
+  );
+}
+export function snapshotSummary(snap: Snapshot) {
+  const games = snap.groups.flatMap((g) => g.games);
+  return {
+    groups: snap.groups.length,
+    games: games.length,
+    missingScores: games.filter((x) => x.homeScore === null || x.awayScore === null).length,
+    allScoresMissing: games.length > 0 && games.every((x) => x.homeScore === null && x.awayScore === null),
+    unlinked: games.reduce((n, x) => n + (x.homeParticipantId ? 0 : 1) + (x.awayParticipantId ? 0 : 1), 0),
+    blocked: snap.status === "blocked" || snap.status === "unsupported",
+  };
 }

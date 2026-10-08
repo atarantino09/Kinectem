@@ -20,14 +20,14 @@ export function ResultsEntryPanel({ competitionId }: { competitionId: string }) 
           This is separate from importing the game schedule.
         </p>
         <p className="text-sm text-muted-foreground">
-          Review the imported scores and team matches, then draft and publish recaps for each bracket.
-          Importing results does not publish anything automatically.
+          Add results and press one button: Kinectem matches teams and brackets for you and drafts a recap per bracket.
+          Nothing is published until you choose to.
         </p>
       </div>
       <ImportCard cid={competitionId} onImported={() => navigate(resultsPath)} />
       <Link href={resultsPath}>
         <Button variant="outline" className="h-auto min-h-9 whitespace-normal" data-testid="btn-review-results-recaps">
-          Review saved results &amp; manage bracket recaps
+          Open bracket recaps
         </Button>
       </Link>
     </section>

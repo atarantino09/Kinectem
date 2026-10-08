@@ -100,7 +100,7 @@ export function parseResultsTable(input: string, defaultLabel = ""): ResultsInta
   if (!parsed.length) return { status: "unsupported", groups: [], message: "No usable results were found. Paste a table with team names and scores." };
   return {
     status: missing || skipped ? "partial" : "ready", groups: parsed,
-    message: `${parsed.length} bracket(s) detected.${missing ? " Some scores/standings are missing." : ""}${skipped ? ` ${skipped} incomplete rows were skipped.` : ""} Review identities and confirm whether each bracket is complete; no tournament winner is inferred.`,
+    message: `${parsed.length} bracket(s) detected.${missing ? " Missing scores stay unknown and will not block recaps." : ""}${skipped ? ` ${skipped} unreadable rows were skipped.` : ""} Brackets and teams are prepared automatically; tournament completion is not inferred.`,
   };
 }
 
@@ -142,7 +142,41 @@ export function extractResultsHtml(html: string, finalUrl = ""): ResultsIntake &
   const all = [...merged.values()].slice(0, 40);
   const partial = skipped > 0 || merged.size > 40 || links.length > 0 || all.some(g => g.games.some(x => x.homeScore == null || x.awayScore == null));
   return { groups: all, links, status: all.length ? (partial ? "partial" : "ready") : "unsupported",
-    message: all.length ? "Detected HTML results tables. Review completeness and mappings; linked or unsupported tables may contain additional brackets." : "No supported scored-game or standings tables found. Dynamic/unsupported layouts need CSV or pasted results." };
+    message: all.length ? "Detected results tables. Recaps use the available records; linked or unsupported tables may contain additional brackets." : "No supported game or standings tables found. Dynamic/unsupported layouts need CSV or pasted results." };
+}
+
+/** Accept a copied page containing multiple tables and their source headings. */
+export function parsePastedResults(input: string): ResultsIntake {
+  if (Buffer.byteLength(input) > 500_000) throw new Error("Results text is limited to 500 KB.");
+  if (/<table\b/i.test(input)) return extractResultsHtml(input);
+  const lines = input.replace(/^\uFEFF/, "").split(/\r?\n/);
+  const isHeader = (line: string) => {
+    const cells = line.split(line.includes("\t") ? "\t" : ",").map(c => normalize(c.replace(/^"|"$/g, "")));
+    return (cells.some(c => aliases.home.includes(c)) && cells.some(c => aliases.away.includes(c))) ||
+      (cells.some(c => aliases.team.includes(c)) && cells.some(c => [...aliases.position, ...aliases.points].includes(c)));
+  };
+  const starts = lines.flatMap((line, index) => isHeader(line) ? [index] : []);
+  if (starts.length <= 1 && starts[0] === 0) return parseResultsTable(input);
+  if (!starts.length) return parseResultsTable(input);
+  const groups: ResultGroup[] = [];
+  let partial = false;
+  starts.forEach((start, i) => {
+    const end = starts[i + 1] ?? lines.length;
+    const delimiter = lines[start].includes("\t") ? "\t" : ",";
+    const rows = [lines[start], ...lines.slice(start + 1, end).filter(l => l.includes(delimiter))];
+    const heading = lines.slice(0, start).reverse().find(l => l.trim()) ?? "";
+    const label = heading.includes(",") || heading.includes("\t") ? "" : heading.trim().slice(0, 200);
+    const parsed = parseResultsTable(rows.join("\n"), label);
+    groups.push(...parsed.groups);
+    if (parsed.status !== "ready") partial = true;
+  });
+  if (groups.length > 40 || groups.reduce((n, g) => n + g.games.length + g.standings.length, 0) > 1000) {
+    throw new Error("Import at most 40 brackets and 1,000 result rows.");
+  }
+  return {
+    groups, status: groups.length ? (partial ? "partial" : "ready") : "unsupported",
+    message: groups.length ? "Results tables read from the pasted page. Missing scores stay unknown; no match confirmation is needed." : "No readable games or standings were found in this page.",
+  };
 }
 
 export async function ingestResultsUrl(raw: string): Promise<ResultsIntake & { sourceUrl: string }> {
@@ -191,5 +225,5 @@ export async function ingestResultsUrl(raw: string): Promise<ResultsIntake & { s
     standings: [...new Map(g.standings.map(x => [JSON.stringify(x), x])).values()].slice(0, 500),
   }));
   return { sourceUrl: root.toString(), groups: data, status: data.length ? (partial ? "partial" : "ready") : "unsupported",
-    message: data.length ? `${data.length} bracket(s) discovered.${partial ? " Discovery is partial: linked, blocked, or unsupported pages may contain more results." : ""} Review before drafting; tournament completion is not inferred.` : "No readable results tables found. Use CSV or pasted results; this may be a dynamic or unsupported website." };
+    message: data.length ? `${data.length} bracket(s) discovered.${partial ? " Discovery is partial: linked, blocked, or unsupported pages may contain more results." : ""} Missing scores do not block recaps; tournament completion is not inferred.` : "No readable results tables found. Use CSV or pasted results; this may be a dynamic or unsupported website." };
 }

@@ -12,9 +12,10 @@ import { asyncHandler } from "../lib/async-handler";
 import { apiError } from "../lib/spec-helpers";
 import { canOperateCompetition } from "../lib/competition-permissions";
 import { canManageTeam } from "../lib/permissions";
-import { ingestResultsUrl, parseResultsTable, ResultGroupSchema } from "../lib/competition-results-intake";
+import { ingestResultsUrl, parseResultsTable, parsePastedResults, ResultGroupSchema } from "../lib/competition-results-intake";
 import { AiNotConfiguredError, generateTournamentRecapText } from "../lib/ai";
 import { loadTournamentCoverage, type TournamentCoverage } from "../lib/competition-recap-coverage";
+import { prepareResultsImport, draftableResults } from "../lib/competition-results-preparation";
 
 const router: IRouter = Router();
 const uuid = z.string().uuid();
@@ -47,7 +48,7 @@ async function reviewedGroup(competitionId: string, importId: string, key: strin
     eq(competitionResultImports.id, importId), eq(competitionResultImports.competitionId, competitionId),
   ));
   const group = snapshot?.groups.find(g => g.key === key);
-  if (!snapshot?.confirmed || !group?.bracketId) throw new ResultsError("Confirm reviewed results and bracket mappings before drafting.");
+  if (!snapshot?.confirmed || !group?.bracketId) throw new ResultsError("Prepare these results before drafting.");
   const [bracket] = await db.select().from(competitionBrackets).where(and(eq(competitionBrackets.id, group.bracketId), eq(competitionBrackets.tournamentId, competitionId)));
   if (!bracket) throw new ResultsError("The reviewed bracket was removed. Import and map these results again.", 409, "RESULTS_STALE");
   return { snapshot, group, bracket };
@@ -107,7 +108,7 @@ router.post("/competitions/:id/results-import", requireAuth, limiter, handler(as
   try {
     result = input.kind === "url"
       ? await ingestResultsUrl(z.string().min(1).parse(input.url))
-      : { ...parseResultsTable(z.string().min(1).parse(input.text)), sourceUrl: null };
+      : { ...(input.kind === "paste" ? parsePastedResults : parseResultsTable)(z.string().min(1).parse(input.text)), sourceUrl: null };
   } catch (err) { throw new ResultsError(err instanceof Error ? err.message : "Could not read these results."); }
   const values = {
     competitionId: competition.id, clientId: input.clientId, kind: input.kind,
@@ -117,6 +118,20 @@ router.post("/competitions/:id/results-import", requireAuth, limiter, handler(as
   const [inserted] = await db.insert(competitionResultImports).values(values).onConflictDoNothing().returning();
   const [saved] = inserted ? [inserted] : await db.select().from(competitionResultImports).where(and(eq(competitionResultImports.competitionId, competition.id), eq(competitionResultImports.clientId, input.clientId)));
   res.json(saved);
+}));
+
+router.post("/competitions/:id/results-import/:importId/prepare", requireAuth, handler(async (req, res) => {
+  const competition = await operator(req);
+  const importId = param(req, "importId");
+  const [snapshot] = await db.select().from(competitionResultImports).where(and(
+    eq(competitionResultImports.id, importId), eq(competitionResultImports.competitionId, competition.id),
+  ));
+  if (!snapshot) throw new ResultsError("Results import not found.", 404, "NOT_FOUND");
+  try {
+    res.json(await prepareResultsImport(competition.id, importId));
+  } catch (error) {
+    throw new ResultsError(error instanceof Error ? error.message : "Couldn't prepare results.");
+  }
 }));
 
 const ReviewBody = z.object({ groups: z.array(ResultGroupSchema).min(1).max(40), resultsAsOf: z.string().datetime(), confirmed: z.literal(true) }).strict();
@@ -161,8 +176,9 @@ router.post("/competitions/:id/tournament-recaps", requireAuth, handler(async (r
 }));
 
 const GenerateBody = z.object({
-  importId: uuid, groupKeys: z.array(z.string().max(200)).min(1).max(10),
+  importId: uuid, groupKeys: z.array(z.string().max(200)).min(1).max(40),
   includeCoverage: z.boolean(), requestId: uuid, expectedRevisions: z.record(revision),
+  preserveExisting: z.boolean().optional(),
 }).strict();
 router.post("/competitions/:id/tournament-recaps/generate", requireAuth, aiLimiter, handler(async (req, res) => {
   const competition = await operator(req);
@@ -172,6 +188,8 @@ router.post("/competitions/:id/tournament-recaps/generate", requireAuth, aiLimit
   const under18 = me.dateOfBirth && me.dateOfBirth.getTime() > new Date(new Date().setUTCFullYear(new Date().getUTCFullYear() - 18)).getTime();
   if (me.isMinor || me.role === "athlete" || under18) throw new ResultsError("Tournament AI drafting is restricted to adult competition operators.", 403, "AI_FORBIDDEN");
   const input = GenerateBody.parse(req.body);
+  try { await prepareResultsImport(competition.id, input.importId); }
+  catch (error) { throw new ResultsError(error instanceof Error ? error.message : "Couldn't prepare results."); }
   const abort = new AbortController();
   const cancel = () => { if (!res.writableEnded) abort.abort(); };
   req.on("aborted", cancel); res.on("close", cancel);
@@ -179,26 +197,34 @@ router.post("/competitions/:id/tournament-recaps/generate", requireAuth, aiLimit
   let coverage: TournamentCoverage[] = [];
   if (input.includeCoverage) coverage = await loadTournamentCoverage(competition.id);
   try {
-    for (const groupKey of [...new Set(input.groupKeys)]) {
-      if (abort.signal.aborted) break;
+    const keys = [...new Set(input.groupKeys)];
+    const worker = async () => {
+      for (;;) {
+      const groupKey = keys.shift();
+      if (!groupKey || abort.signal.aborted) return;
       try {
         const { snapshot, group, bracket } = await reviewedGroup(competition.id, input.importId, groupKey);
-        if (group.games.length + group.standings.length > 120) throw new ResultsError("AI drafting is limited to 120 results per bracket. Split the import or write a manual draft.");
         const [old] = await db.select().from(competitionTournamentRecaps).where(and(eq(competitionTournamentRecaps.competitionId, competition.id), eq(competitionTournamentRecaps.bracketId, bracket.id)));
+        if (input.preserveExisting && old) { data.push(old); continue; }
         if (old?.generationRequestId === input.requestId) { data.push(old); continue; }
-        const expected = input.expectedRevisions[bracket.id];
+        const expected = input.expectedRevisions[bracket.id] ?? (input.preserveExisting && !old ? 0 : undefined);
         if (expected === undefined || (old?.revision ?? 0) !== expected) throw new ResultsError("The draft changed. Reload before regenerating.", 409, "RECAP_STALE");
-        const body = await generateTournamentRecapText({
-          competitionName: competition.name, group,
+        const draftingGroup = draftableResults(group);
+        let body = await generateTournamentRecapText({
+          competitionName: competition.name, group: draftingGroup,
           coverage: coverage.filter(c => c.bracketId === bracket.id).slice(0, 12).map(c => ({ title: c.title.slice(0, 200), teamName: c.teamName.slice(0, 200), summary: c.summary?.slice(0, 600) ?? null })),
         }, abort.signal);
-        if (abort.signal.aborted) break;
+        const total = group.games.length + group.standings.length;
+        const included = draftingGroup.games.length + draftingGroup.standings.length;
+        if (included < total) body = `This roundup covers ${included} of the ${total} supplied game and standings records. All imported records remain saved.\n\n${body}`;
+        if (abort.signal.aborted) return;
         if (!body.trim() || body.length > 50_000) throw new ResultsError("Generated draft exceeded the editable text limit. Existing edits were kept.", 502, "AI_REQUEST_FAILED");
-        const draft = content(snapshot, group, `${bracket.label} — ${group.complete ? "Tournament recap" : "Results so far"}`.slice(0, 200), body);
+        const draft = content(snapshot, { ...group, complete: draftingGroup.complete }, `${bracket.label} — ${draftingGroup.complete ? "Tournament recap" : "Results roundup"}`.slice(0, 200), body);
         // Atomically compare revisions AFTER AI returns; concurrent edits win.
         const saved = await db.transaction(async tx => {
           await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${competition.id + ":" + bracket.id}))`);
           const [live] = await tx.select().from(competitionTournamentRecaps).where(and(eq(competitionTournamentRecaps.competitionId, competition.id), eq(competitionTournamentRecaps.bracketId, bracket.id))).for("update");
+          if (input.preserveExisting && live) return live;
           if (live?.generationRequestId === input.requestId) return live;
           if ((live?.revision ?? 0) !== expected) throw new ResultsError("Draft edited during generation. Your changes were kept.", 409, "RECAP_STALE");
           const [result] = live
@@ -208,16 +234,50 @@ router.post("/competitions/:id/tournament-recaps/generate", requireAuth, aiLimit
         });
         data.push(saved);
       } catch (error) {
-        if (abort.signal.aborted) break;
+        if (abort.signal.aborted) return;
         const code = error instanceof AiNotConfiguredError ? "AI_NOT_CONFIGURED" : error instanceof ResultsError ? error.code : "AI_REQUEST_FAILED";
         errors.push({ groupKey, code, error: error instanceof AiNotConfiguredError || error instanceof ResultsError ? error.message : "AI drafting failed or returned an unsupported factual plan. Existing edits and publications were kept." });
         if (!(error instanceof ResultsError) && !(error instanceof AiNotConfiguredError)) req.log.warn({ err: error }, "Tournament draft failed");
       }
-    }
+      }
+    };
+    // Bound provider concurrency while keeping one action for the whole source.
+    await Promise.all(Array.from({ length: Math.min(3, input.groupKeys.length) }, worker));
     if (!abort.signal.aborted) res.json({ data, errors });
   } finally {
     req.off("aborted", cancel); res.off("close", cancel);
   }
+}));
+
+const PublishBatchBody = z.object({
+  recaps: z.array(z.object({ id: uuid, expectedRevision: revision }).strict()).min(1).max(100),
+}).strict();
+router.post("/competitions/:id/tournament-recaps/publish-batch", requireAuth, handler(async (req, res) => {
+  const competition = await operator(req);
+  const input = PublishBatchBody.parse(req.body);
+  if (new Set(input.recaps.map(r => r.id)).size !== input.recaps.length) throw new ResultsError("Duplicate recaps in publication request.");
+  const data: Recap[] = [], errors: Array<{ id: string; error: string; code: string }> = [];
+  for (const item of input.recaps) {
+    try {
+      const saved = await db.transaction(async tx => {
+        const [old] = await tx.select().from(competitionTournamentRecaps).where(recapWhere(competition.id, item.id)).for("update");
+        if (!old) throw new ResultsError("Recap not found.", 404, "NOT_FOUND");
+        // A successful retry is a no-op, including when another session already
+        // published this identical draft. Never silently publish a newer edit.
+        if (old.published && JSON.stringify(old.published) === JSON.stringify(old.draft)) return old;
+        if (old.revision !== item.expectedRevision) throw new ResultsError("This draft changed. Reload before publishing it.", 409, "RECAP_STALE");
+        const [result] = await tx.update(competitionTournamentRecaps).set({
+          published: old.draft, publishedAt: new Date(), updatedAt: new Date(), revision: old.revision + 1,
+        }).where(eq(competitionTournamentRecaps.id, old.id)).returning();
+        return result;
+      });
+      data.push(saved);
+    } catch (error) {
+      if (!(error instanceof ResultsError)) throw error;
+      errors.push({ id: item.id, error: error.message, code: error.code });
+    }
+  }
+  res.json({ data, errors });
 }));
 
 const EditBody = z.object({ title: z.string().trim().min(1).max(200), body: z.string().trim().min(1).max(50000), expectedRevision: revision }).strict();

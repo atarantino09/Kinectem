@@ -25,10 +25,22 @@ Post-competition results entry must be a visible, separate section for operators
 
 **Why:** The user could not find the URL/upload controls behind the results-management link and explicitly requested a separate field for after a tournament or league. They also requested that the CSV Results action immediately open file selection, not merely switch to a CSV text box.
 
-**How to apply:** Keep results URL and upload inputs discoverable without navigating first. Open the CSV file picker directly from the user's click so browser user-gesture requirements are respected. Preserve explicit review and publication; importing results alone must never publish a recap.
+**How to apply:** Keep results URL and upload inputs discoverable without navigating first. Open the CSV file picker directly from the user's click so browser user-gesture requirements are respected. Preserve optional recap previews and explicit publication; importing results alone must never publish a recap.
 
 Organizers must not be required to confirm individual matches, fill missing scores, or manually resolve every team before creating bracket recaps from a whole results source.
 
 **Why:** The user described the process as “way too difficult” and explicitly said they cannot confirm each match and will not do extra work when scores are missing.
 
 **How to apply:** Make automated source validation and safe identity resolution support a simple upload, batch-generation, and explicit-publication flow. Missing scores stay unknown and produce partial coverage without invented outcomes. Detailed corrections may be optional, but must not become a required checklist; uncertain team identities remain unlinked rather than guessed.
+
+Automatic results identity linking must respect known bracket membership, even when a name, age, and gender match.
+
+**Why:** A single same-named team in another bracket does not establish that it is the participant in this source; automatic preparation must not freeze a conflicting identity.
+
+**How to apply:** Prefer an unambiguous team already in the target bracket. An unassigned identity needs unique, sufficient source context; conflicting or ambiguous identities stay unlinked without blocking generation.
+
+Large brackets must not require organizers to split results manually to accommodate AI limits. Retain the complete imported evidence and disclose when a generated roundup covers a bounded selection.
+
+**Why:** Full-record narratives can exceed provider or editable-draft size limits, while the user explicitly rejects extra preparation work.
+
+**How to apply:** Automatically bound generation inputs, keep full source data available, and label the coverage truthfully rather than silently dropping records or implying a complete final result.

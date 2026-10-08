@@ -6,6 +6,7 @@ import { app, loginAs, request } from "./helpers";
 const ai = vi.hoisted(() => ({ generate: vi.fn() }));
 vi.mock("../src/lib/ai", async importOriginal => ({ ...await importOriginal<typeof import("../src/lib/ai")>(), generateTournamentRecapText: ai.generate }));
 import { AiNotConfiguredError } from "../src/lib/ai";
+import { renderTournamentDraft } from "../src/lib/tournament-recap-drafting";
 
 const csv = "Bracket,Gender,Age,Home Team,Away Team,Home Score,Away Score,Date,Group\nGold,Boys,U12,Rovers,United,2,1,2026-10-01,Final";
 async function fixture() {
@@ -42,10 +43,93 @@ async function published(f: Awaited<ReturnType<typeof fixture>>) {
 beforeEach(() => { ai.generate.mockReset().mockResolvedValue("Reviewed partial results: Rovers defeated United, 2–1."); });
 
 describe("competition-owned results drafts, publications and placements", () => {
+  it("prepares incomplete results automatically and idempotently without confirming matches", async () => {
+    const f = await fixture();
+    const csvMissing = "Bracket,Gender,Age,Home Team,Away Team,Home Score,Away Score\nGold,Boys,U12,Rovers,United,,\nGold,Girls,U12,Rovers,United,1,\nSilver,Boys,U13,Unknown A,Unknown B,,";
+    const imported = await f.owner.agent.post(`${f.root}/results-import`).send({ kind: "csv", text: csvMissing, clientId: randomUUID() });
+    const path = `${f.root}/results-import/${imported.body.id}/prepare`;
+    const responses = await Promise.all([f.owner.agent.post(path).send({}), f.owner.agent.post(path).send({})]);
+    for (const prepared of responses) {
+      expect(prepared.status).toBe(200);
+      expect(prepared.body.confirmed).toBe(true);
+      expect(prepared.body.groups).toHaveLength(3);
+      expect(new Set(prepared.body.groups.map((g: any) => g.bracketId)).size).toBe(3);
+      expect(prepared.body.groups[0].games[0].homeParticipantId).toBe(f.slot.id);
+      expect(prepared.body.groups[1].games[0].homeParticipantId).toBe(f.girls.id);
+      expect(prepared.body.groups[2].games[0].homeParticipantId).toBeNull();
+      expect(prepared.body.groups[0].games[0].homeScore).toBeNull();
+      expect(prepared.body.groups.every((g: any) => !g.complete)).toBe(true);
+    }
+    const next = await f.owner.agent.post(`${f.root}/results-import`).send({ kind: "csv", text: csvMissing.replaceAll("Gold", "GOLD"), clientId: randomUUID() });
+    const repeated = await f.owner.agent.post(`${f.root}/results-import/${next.body.id}/prepare`).send({});
+    expect(repeated.body.groups.map((g: any) => g.bracketId)).toEqual(responses[0].body.groups.map((g: any) => g.bracketId));
+    expect((await request(app).get(`${f.root}/tournament-recaps`)).body.data).toEqual([]);
+  });
+  it("generates a whole partial source with no score entry, keeps successes, and retries only missing drafts", async () => {
+    const f = await fixture();
+    const imported = await f.owner.agent.post(`${f.root}/results-import`).send({
+      kind: "paste", clientId: randomUUID(),
+      text: "Results Cup\nGold Boys U12\nHome Team\tAway Team\tScore\nRovers\tUnited\t\n\nSilver Boys U12\nHome Team\tAway Team\tScore\nOther A\tOther B\t",
+    });
+    const prepared = await f.owner.agent.post(`${f.root}/results-import/${imported.body.id}/prepare`).send({});
+    expect(prepared.status).toBe(200);
+    const render = (input: any) => renderTournamentDraft(input.group, {
+      gameIds: input.group.games.map((g: any) => g.id), standingTeams: input.group.standings.map((s: any) => s.team), style: "results_roundup",
+    });
+    ai.generate.mockImplementation(async (input: any) => {
+      if (input.group.label.startsWith("Silver")) throw new Error("Provider temporarily unavailable");
+      return render(input);
+    });
+    const payload = { importId: imported.body.id, groupKeys: prepared.body.groups.map((g: any) => g.key),
+      includeCoverage: false, requestId: randomUUID(), expectedRevisions: {}, preserveExisting: true };
+    const first = await f.owner.agent.post(`${f.root}/tournament-recaps/generate`).send(payload);
+    expect(first.status).toBe(200);
+    expect(first.body.data).toHaveLength(1);
+    expect(first.body.errors).toHaveLength(1);
+    expect(first.body.data[0].draft.body).toContain("complete score was not available");
+    expect(first.body.data[0].draft.body).not.toContain("0–0");
+    expect(first.body.data[0].published).toBeNull();
+    ai.generate.mockImplementation(async (input: any) => render(input));
+    const retry = await f.owner.agent.post(`${f.root}/tournament-recaps/generate`).send(payload);
+    expect(retry.body.errors).toEqual([]);
+    expect(retry.body.data).toHaveLength(2);
+    expect(ai.generate).toHaveBeenCalledTimes(3);
+    expect(retry.body.data.find((r: any) => r.id === first.body.data[0].id).revision).toBe(first.body.data[0].revision);
+    expect((await request(app).get(`${f.root}/tournament-recaps`)).body.data).toEqual([]);
+    const publish = await f.owner.agent.post(`${f.root}/tournament-recaps/publish-batch`).send({
+      recaps: retry.body.data.map((r: any) => ({ id: r.id, expectedRevision: r.revision })),
+    });
+    expect(publish.body.errors).toEqual([]);
+    expect(publish.body.data).toHaveLength(2);
+    expect((await request(app).get(`${f.root}/tournament-recaps`)).body.data).toHaveLength(2);
+  });
+  it("preserves existing live and edited recaps and batch publishing is revision-safe and retry-safe", async () => {
+    const f = await fixture(), recap = await published(f);
+    const edited = await f.owner.agent.patch(`${f.root}/tournament-recaps/${recap.id}`).send({ title: "Edited title", body: "Preserve this edit", expectedRevision: recap.revision });
+    const kept = await f.owner.agent.post(`${f.root}/tournament-recaps/generate`).send({
+      importId: f.imported.id, groupKeys: [f.group.key], includeCoverage: false, requestId: randomUUID(),
+      expectedRevisions: {}, preserveExisting: true,
+    });
+    expect(kept.body.data[0].draft.body).toBe("Preserve this edit");
+    expect(kept.body.data[0].published.body).toBe(recap.published.body);
+    expect(ai.generate).not.toHaveBeenCalled();
+    const stale = await f.owner.agent.post(`${f.root}/tournament-recaps/publish-batch`).send({
+      recaps: [{ id: recap.id, expectedRevision: recap.revision }, { id: randomUUID(), expectedRevision: 0 }],
+    });
+    expect(stale.body.errors.map((e: any) => e.code)).toEqual(["RECAP_STALE", "NOT_FOUND"]);
+    expect((await request(app).get(`/api/v1/competition-stories/${recap.id}`)).body.body).toBe(recap.published.body);
+    const payload = { recaps: [{ id: recap.id, expectedRevision: edited.body.revision }] };
+    const first = await f.owner.agent.post(`${f.root}/tournament-recaps/publish-batch`).send(payload);
+    const retry = await f.owner.agent.post(`${f.root}/tournament-recaps/publish-batch`).send(payload);
+    expect(first.body.errors).toEqual([]);
+    expect(retry.body.errors).toEqual([]);
+    expect(retry.body.data[0].revision).toBe(first.body.data[0].revision);
+  });
   it("authorizes all organizer writes and keeps draft/import data private", async () => {
     const f = await fixture(), recap = await manual(f);
     const paths = [
       ["post", `${f.root}/results-import`], ["patch", `${f.root}/results-import/${f.imported.id}`],
+      ["post", `${f.root}/results-import/${f.imported.id}/prepare`], ["post", `${f.root}/tournament-recaps/publish-batch`],
       ["post", `${f.root}/tournament-recaps`], ["post", `${f.root}/tournament-recaps/generate`],
       ["patch", `${f.root}/tournament-recaps/${recap.id}`], ["post", `${f.root}/tournament-recaps/${recap.id}/publish`],
       ["post", `${f.root}/tournament-recaps/${recap.id}/unpublish`], ["delete", `${f.root}/tournament-recaps/${recap.id}`],

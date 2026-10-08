@@ -14,11 +14,13 @@ export function RecapEditor({
   recap,
   label,
   onDirty,
+  disabled = false,
 }: {
   cid: string;
   recap: ManagedRecap;
   label: string;
   onDirty: (id: string, dirty: boolean) => void;
+  disabled?: boolean;
 }) {
   const [title, setTitle] = useState(recap.draft.title);
   const [body, setBody] = useState(recap.draft.body);
@@ -73,7 +75,7 @@ export function RecapEditor({
     onSuccess: onOk("Recap deleted"),
     onError: onErr,
   });
-  const busy = save.isPending || publish.isPending || unpublish.isPending || del.isPending;
+  const busy = disabled || save.isPending || publish.isPending || unpublish.isPending || del.isPending;
   const isLive = !!recap.published;
   const unpublishedChanges =
     isLive && (recap.published?.title !== recap.draft.title || recap.published?.body !== recap.draft.body);

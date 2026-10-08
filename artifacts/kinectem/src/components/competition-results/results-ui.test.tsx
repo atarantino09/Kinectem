@@ -28,6 +28,15 @@ const story = (o: Record<string, unknown>) => ({
 beforeEach(() => fetchMock.mockReset());
 
 describe("visible post-competition results entry", () => {
+  it("uses the native showPicker API during the CSV button click when available", async () => {
+    renderWithProviders(<ImportCard cid="c1" onImported={vi.fn()} />);
+    const picker = screen.getByTestId("input-import-file") as HTMLInputElement;
+    const showPicker = vi.fn();
+    Object.defineProperty(picker, "showPicker", { value: showPicker, configurable: true });
+    await userEvent.setup().click(screen.getByTestId("tab-import-csv"));
+    expect(showPicker).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("tab-import-csv")).toHaveAttribute("aria-selected", "true");
+  });
   it("opens the file picker directly when CSV Results is clicked, including when already selected", async () => {
     renderWithProviders(<ImportCard cid="c1" onImported={vi.fn()} />);
     const picker = screen.getByTestId("input-import-file");
@@ -207,6 +216,7 @@ describe("ResultsConsole", () => {
       }],
     });
     renderWithProviders(<ResultsConsole competitionId="c1" />);
+    await userEvent.setup().click(await screen.findByText("Advanced: review source results"));
     expect(await screen.findByTestId("badge-snapshot-status")).toHaveTextContent("partial");
     expect(screen.getByTestId("text-provenance")).toHaveTextContent("https://r.example/x");
     expect(screen.getByTestId("badge-incomplete-g1")).toBeInTheDocument();
@@ -240,6 +250,7 @@ describe("ResultsConsole review gaps", () => {
   it("lists every same-name candidate with metadata, toggle disabled until scores present, editable group/standing names", async () => {
     fetchMock.mockResolvedValue(dup(false));
     renderWithProviders(<ResultsConsole competitionId="c1" />);
+    await userEvent.setup().click(await screen.findByText("Advanced: review source results"));
     const cands = await screen.findByTestId("cands-home-x1");
     expect(cands).toHaveTextContent("2 teams share this name");
     expect(cands).toHaveTextContent("gender girls, age U12, division Gold, bracket B");
@@ -253,6 +264,7 @@ describe("ResultsConsole review gaps", () => {
   it("converts ISO as-of to local input and is read-only once confirmed", async () => {
     fetchMock.mockResolvedValue(dup(true));
     renderWithProviders(<ResultsConsole competitionId="c1" />);
+    await userEvent.setup().click(await screen.findByText("Advanced: review source results"));
     expect(await screen.findByTestId("text-readonly-note")).toHaveTextContent("new import");
     expect(screen.getByTestId("fieldset-review")).toBeDisabled();
     expect(screen.queryByTestId("btn-confirm-mappings")).toBeNull();

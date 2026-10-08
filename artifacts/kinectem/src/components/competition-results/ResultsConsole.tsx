@@ -2,12 +2,39 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useGetLoggedInUser } from "@workspace/api-client-react";
-import { useWorkspace } from "@/lib/competition-results";
+import { useWorkspace, snapshotSummary } from "@/lib/competition-results";
+import type { Snapshot } from "@/lib/competition-results";
 import { ImportCard } from "./ImportCard";
 import { ResultsReview } from "./ResultsReview";
 import { RecapsCard } from "./RecapsCard";
 import { errMsg } from "./ResultsUiHelpers";
 export { RecapEditor } from "./RecapEditor";
+function ResultsSummary({ snap }: { snap: Snapshot }) {
+  const m = snapshotSummary(snap);
+  return (
+    <div className="rounded-xl border p-4 text-sm space-y-1" data-testid="summary-results">
+      <p className="font-bold">
+        {m.groups} bracket group{m.groups === 1 ? "" : "s"}, {m.games} game{m.games === 1 ? "" : "s"} read
+      </p>
+      {m.blocked ? (
+        <p className="text-destructive" data-testid="text-summary-blocked">
+          This source could not be read{snap.message ? `: ${snap.message}` : ""}. Try another URL or a CSV.
+        </p>
+      ) : null}
+      {m.allScoresMissing ? (
+        <p className="text-amber-800" data-testid="text-summary-no-scores">Scores are unavailable. You can still generate recaps from the supplied matchups without entering scores.</p>
+      ) : m.missingScores > 0 ? (
+        <p className="text-amber-800">{m.missingScores} game{m.missingScores === 1 ? " has an" : "s have"} unavailable score; recaps will use only the known details. No score entry is required.</p>
+      ) : null}
+      {m.unlinked > 0 ? (
+        <p className="text-muted-foreground">{snap.confirmed
+          ? `${m.unlinked} team name${m.unlinked === 1 ? "" : "s"} will be written as listed without linking to a team page.`
+          : "Team names will be matched automatically. Any uncertain names will stay as listed—no matching checklist."}</p>
+      ) : null}
+    </div>
+  );
+}
+
 // ---------- Console ----------
 export function ResultsConsole({ competitionId }: { competitionId: string }) {
   const { data: me } = useGetLoggedInUser({ query: { retry: false } as never });
@@ -57,8 +84,14 @@ export function ResultsConsole({ competitionId }: { competitionId: string }) {
       ) : null}
       {snap ? (
         <>
-          <ResultsReview cid={competitionId} snap={snap} ws={ws} onConfirmed={(s) => setSelectedId(s.id)} />
-          <RecapsCard cid={competitionId} snap={snap} ws={ws} />
+          <ResultsSummary snap={snap} />
+          <RecapsCard key={snap.id} cid={competitionId} snap={snap} ws={ws} />
+          <details className="rounded-xl border p-4" data-testid="details-source-review">
+            <summary className="cursor-pointer text-sm font-bold">Advanced: review source results</summary>
+            <div className="mt-3">
+              <ResultsReview cid={competitionId} snap={snap} ws={ws} onConfirmed={(s) => setSelectedId(s.id)} />
+            </div>
+          </details>
         </>
       ) : (
         <p className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground" data-testid="text-no-imports">

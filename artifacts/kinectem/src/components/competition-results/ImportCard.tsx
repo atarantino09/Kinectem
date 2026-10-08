@@ -72,8 +72,13 @@ export function ImportCard({ cid, onImported }: { cid: string; onImported: (s: S
               variant={kind === k ? "brand" : "outline"}
               className="rounded-full font-bold capitalize"
               onClick={() => {
+                if (k === "csv" && fileInput.current) {
+                  // Open while the click still has browser user activation,
+                  // before changing the tab can replace surrounding DOM.
+                  if (typeof fileInput.current.showPicker === "function") fileInput.current.showPicker();
+                  else fileInput.current.click();
+                }
                 setKind(k);
-                if (k === "csv") fileInput.current?.click();
               }}
               data-testid={`tab-import-${k}`}
             >
