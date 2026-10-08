@@ -49,6 +49,7 @@ import {
   ExternalLink,
   Megaphone,
   ClipboardList,
+  UserPlus,
 } from "lucide-react";
 
 export type TeamPanel =
@@ -91,6 +92,8 @@ interface TeamHeaderCardProps {
   onToggleFollow: () => void;
   onEdit: () => void;
   onOpenFollowers: () => void;
+  /** Only provided for team managers allowed to invite roster members. */
+  onInvite?: () => void;
   /** When provided (manager), shows the "Claim competition games" pill. */
   onClaimCompetition?: () => void;
   /** When provided (broadcaster), shows the "Message team" pill. */
@@ -112,6 +115,7 @@ export function TeamHeaderCard({
   onToggleFollow,
   onEdit,
   onOpenFollowers,
+  onInvite,
   onClaimCompetition,
   onMessageTeam,
   onReplayTour,
@@ -446,6 +450,18 @@ export function TeamHeaderCard({
               className="flex flex-col items-end gap-3 sm:flex-row sm:items-center sm:justify-end"
               data-testid="team-header-action-group"
             >
+              {onInvite && (
+                <Button
+                  type="button"
+                  variant="brand"
+                  className="w-full gap-2 font-bold shadow-sm sm:mr-auto sm:w-auto"
+                  onClick={onInvite}
+                  data-testid="btn-invite-team"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  Invite people
+                </Button>
+              )}
               <div
                 className="flex items-center"
                 data-testid="team-community-actions"

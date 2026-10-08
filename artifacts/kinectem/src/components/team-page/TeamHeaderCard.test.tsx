@@ -121,6 +121,23 @@ function renderHeader(
 }
 
 describe("TeamHeaderCard action hierarchy", () => {
+  it.each([false, true])("shows a direct invite action for an authorized coach/org admin (admin=%s)", async (isAdmin) => {
+    const user = userEvent.setup();
+    const onInvite = vi.fn();
+    renderHeader({ isAdmin, onInvite });
+    const invite = screen.getByRole("button", { name: "Invite people" });
+    expect(invite).toBeVisible();
+    expect(screen.getByTestId("team-header-action-group").firstElementChild).toBe(invite);
+    expect(invite.closest('[role="menu"]')).toBeNull();
+    await user.click(invite);
+    expect(onInvite).toHaveBeenCalledOnce();
+  });
+
+  it("does not offer inviting to a viewer without management permission", () => {
+    renderHeader();
+    expect(screen.queryByRole("button", { name: "Invite people" })).not.toBeInTheDocument();
+  });
+
   it("keeps a cropped photo edge-to-edge in the fixed banner frame", () => {
     renderHeader({
       team: {

@@ -68,6 +68,7 @@
 - [Participant bracket links](participant-bracket-links.md) — team slots attach to brackets by id (renames mirror, delete→Other); lazy seed only when zero brackets or it resurrects deletions; import now requires a group per row.
 - [Team game hiding & recap-game links](team-game-hide-and-recap-link.md) — hide scoped to team schedule only (admins see hidden:true); competitionGameId is extra-spec & must be touch-gated on drafts or autosave clears it.
 - [Shared team join-link security](shared-team-join-link-security.md) — team-wide roster links are long-lived bearer capabilities: cryptographic tokens + one-pending-link-per-team invariant are mandatory.
+- [Team invitation priority](team-invite-priority.md) — ready-to-copy messages are the primary coach/org-admin invite method; bare links and email forms are secondary.
 - [Tour dropdown portal testing](tour-dropdown-portal-testing.md) — SpotlightTour + Radix menu content needs real-browser coverage; JSDOM reliably verifies controlled trigger state, not the portaled item.
 - [JSDOM file reads](jsdom-file-reads.md) — use FileReader for browser file-upload tests; JSDOM's File does not reliably implement File.text().
 - [Kinectem logo treatment](kinectem-logo-treatment.md) — use the supplied transparent lockups; preserve existing scale/layout and never add an opaque logo panel.

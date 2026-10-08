@@ -504,6 +504,7 @@ export default function TeamPage() {
           onToggleFollow={onToggleFollow}
           onEdit={() => setEditOpen(true)}
           onOpenFollowers={() => setFollowersOpen(true)}
+          onInvite={canManage ? () => setInviteOpen(true) : undefined}
           onClaimCompetition={
             canManage ? () => setClaimCompOpen(true) : undefined
           }

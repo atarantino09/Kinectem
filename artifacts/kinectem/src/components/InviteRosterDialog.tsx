@@ -181,6 +181,7 @@ export function InviteRosterDialog({
   const [copied, setCopied] = useState(false);
   const [messageCopied, setMessageCopied] = useState(false);
   const [showFullMessage, setShowFullMessage] = useState(false);
+  const [otherMethodsOpen, setOtherMethodsOpen] = useState(false);
   const generateLink = useGetOrCreateTeamJoinLink({
     mutation: {
       onSuccess: (resp) => {
@@ -211,6 +212,12 @@ export function InviteRosterDialog({
     }
     if (autoFetchedRef.current === teamId) return;
     autoFetchedRef.current = teamId;
+    // Reopening always starts with the ready-to-share family invitation,
+    // not a secondary method left selected during a previous visit.
+    setActiveTab("search");
+    setPosition("player");
+    setShowFullMessage(false);
+    setOtherMethodsOpen(false);
     setLinkToken(null);
     setLinkErrored(false);
     setCopied(false);
@@ -266,6 +273,10 @@ export function InviteRosterDialog({
           })
         : buildCoachInviteText({ coachName, link: fullLink })
       : null;
+
+  useEffect(() => {
+    setMessageCopied(false);
+  }, [inviteMessage]);
 
   const onCopyMessage = () => {
     if (!inviteMessage) return;
@@ -723,51 +734,14 @@ export function InviteRosterDialog({
             Invite to roster
           </DialogTitle>
           <DialogDescription>
-            Add an existing Kinectem user, send a single email invite, or paste a list of emails to invite the whole team at once.
+            The easiest way to invite your team: copy the invitation message and paste it into your team chat.
           </DialogDescription>
         </DialogHeader>
 
         {(generateLink.isPending || fullLink || linkErrored) && (
-          <div className="mt-2 min-w-0 max-w-full overflow-hidden rounded-xl border border-border p-3 space-y-2">
-            <div className="flex items-center gap-2">
-              <Link2 className="w-3.5 h-3.5 text-primary" />
-              <h3 className="font-black tracking-tight text-sm">
-                Shareable join link
-              </h3>
-            </div>
+          <div className="mt-2 min-w-0 max-w-full overflow-hidden rounded-xl border border-primary/25 bg-primary/5 p-4 space-y-3" data-testid="invite-copy-share-panel">
             {fullLink ? (
               <>
-                <div className="flex flex-col sm:flex-row gap-2 sm:items-center min-w-0">
-                  <code
-                    className="block sm:flex-1 min-w-0 max-w-full text-xs bg-muted px-3 py-2 rounded-lg truncate"
-                    data-testid="text-invite-share-link"
-                  >
-                    {fullLink}
-                  </code>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={onCopyLink}
-                    className="gap-1 font-bold self-start sm:self-auto shrink-0"
-                    data-testid="button-copy-invite-share-link"
-                  >
-                    {copied ? (
-                      <>
-                        <CheckCircle2 className="w-3 h-3" />
-                        Copied
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3 h-3" />
-                        Copy
-                      </>
-                    )}
-                  </Button>
-                </div>
-                <p className="text-[11px] text-muted-foreground">
-                  Anyone with this link can request to join the team.
-                </p>
                 {activeTab === "csv" ? (
                   <p
                     className="mt-3 border-t border-border pt-3 text-[11px] text-muted-foreground"
@@ -778,42 +752,38 @@ export function InviteRosterDialog({
                     for this tab.
                   </p>
                 ) : (
-                  <div className="mt-3 border-t border-border pt-3 space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <h3 className="font-black tracking-tight text-sm">
-                        Message to copy &amp; share
+                  <div className="space-y-3">
+                    <div className="space-y-3">
+                      <h3 className="font-black tracking-tight text-base">
+                        Copy &amp; paste an invitation
                       </h3>
+                      <p className="text-sm text-muted-foreground">
+                        Paste into a group text, GroupMe, TeamSnap, or 360 Player.
+                        Your name and the join link are already included.
+                      </p>
                       <Button
                         type="button"
-                        size="sm"
-                        variant="outline"
+                        variant="brand"
                         onClick={onCopyMessage}
                         disabled={!inviteMessage}
-                        className="gap-1 font-bold shrink-0"
+                        className="w-full gap-2 font-bold"
                         data-testid="button-copy-invite-message"
                       >
                         {messageCopied ? (
                           <>
-                            <CheckCircle2 className="w-3 h-3" />
-                            Copied
+                            <CheckCircle2 className="w-4 h-4" />
+                            Copied! Paste into your team chat
                           </>
                         ) : (
                           <>
-                            <Copy className="w-3 h-3" />
-                            Copy
+                            <Copy className="w-4 h-4" />
+                            Copy message &amp; join link
                           </>
                         )}
                       </Button>
                     </div>
-                    <p className="text-[11px] text-muted-foreground">
-                      Sharing the link somewhere else (a group text, GroupMe,
-                      TeamSnap, or 360 Player)? Paste this message too — it already
-                      has your name and the join link.
-                      {" "}If the destination changes spacing, use “Paste as plain
-                      text” or the Copy button above.
-                    </p>
                     <div
-                      className="flex items-start gap-2 rounded-lg border border-primary/25 bg-primary/5 p-2.5 text-xs text-foreground"
+                      className="flex items-start gap-2 text-[11px] text-muted-foreground"
                       data-testid="invite-message-role-notice"
                     >
                       <Shield className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
@@ -828,10 +798,16 @@ export function InviteRosterDialog({
                             : "parent / player invitation"}
                           ).
                         </span>{" "}
-                        This message updates when you choose a different Position
-                        below. Parent/player invitations use family setup wording;
-                        coach and staff invitations use staff wording. Select the
-                        correct invite type before copying.
+                        {otherMethodsOpen ? (
+                          <>
+                            Choose a different Position below to update this message.
+                            Parent/player invitations use family setup wording;
+                            coach and staff invitations use staff wording. Select the
+                            correct invite type before copying.
+                          </>
+                        ) : (
+                          <>For coach or staff invitations, choose a Position under Other ways to invite below.</>
+                        )}
                       </p>
                     </div>
                     {inviteMessage ? (
@@ -839,8 +815,8 @@ export function InviteRosterDialog({
                         <div className="relative">
                           <pre
                             className={
-                              "whitespace-pre-wrap break-all rounded-lg bg-muted px-3 py-2 text-xs font-sans leading-5" +
-                              (showFullMessage ? "" : " max-h-40 overflow-hidden")
+                              "whitespace-pre-wrap [overflow-wrap:anywhere] rounded-lg border border-border bg-background px-3 py-2 text-xs font-sans leading-5" +
+                              (showFullMessage ? "" : " max-h-44 overflow-y-auto")
                             }
                             onCopy={copySelectionAsPlainText}
                             tabIndex={0}
@@ -849,9 +825,6 @@ export function InviteRosterDialog({
                           >
                             {inviteMessage}
                           </pre>
-                          {!showFullMessage && (
-                            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 rounded-b-lg bg-gradient-to-t from-muted to-transparent" />
-                          )}
                         </div>
                         <button
                           type="button"
@@ -861,6 +834,9 @@ export function InviteRosterDialog({
                         >
                           {showFullMessage ? "Show less" : "Show full message"}
                         </button>
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          The Copy button copies the entire message and link, ready to paste as plain text.
+                        </p>
                       </div>
                     ) : (
                       <p className="text-xs text-muted-foreground flex items-center gap-2">
@@ -870,11 +846,35 @@ export function InviteRosterDialog({
                     )}
                   </div>
                 )}
+                <details className="border-t border-primary/15 pt-2" data-testid="invite-link-only">
+                  <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">
+                    Just need the join link?
+                  </summary>
+                  <div className="mt-2 flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+                    <code className="block min-w-0 max-w-full flex-1 truncate rounded-lg bg-background px-3 py-2 text-xs" data-testid="text-invite-share-link">
+                      {fullLink}
+                    </code>
+                    <Button type="button" size="sm" variant="outline" onClick={onCopyLink}
+                      className="shrink-0 gap-1 font-bold" data-testid="button-copy-invite-share-link">
+                      {copied ? <CheckCircle2 className="h-3 w-3" /> : <Link2 className="h-3 w-3" />}
+                      {copied ? "Copied" : "Copy link only"}
+                    </Button>
+                  </div>
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    Anyone with this link can request to join the team.
+                  </p>
+                </details>
               </>
             ) : linkErrored ? (
-              <p className="text-xs text-muted-foreground">
-                Shareable link isn't available for this team.
-              </p>
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground" role="alert">
+                  We couldn't prepare the invitation message. Try again, or use one of the other invite methods below.
+                </p>
+                <Button type="button" size="sm" variant="outline" disabled={generateLink.isPending}
+                  onClick={() => generateMutate({ teamId })} data-testid="button-retry-invite-link">
+                  {generateLink.isPending ? "Preparing invitation…" : "Try again"}
+                </Button>
+              </div>
             ) : (
               <p className="text-xs text-muted-foreground flex items-center gap-2">
                 <Loader2 className="w-3 h-3 animate-spin" /> Loading join link…
@@ -883,6 +883,12 @@ export function InviteRosterDialog({
           </div>
         )}
 
+        <details className="min-w-0 rounded-xl border border-border p-3" data-testid="other-invite-methods"
+          open={otherMethodsOpen} onToggle={(event) => setOtherMethodsOpen(event.currentTarget.open)}>
+          <summary className="cursor-pointer text-sm font-bold">
+            Other ways to invite
+            <span className="mt-1 block text-xs font-normal text-muted-foreground">Existing users, email, bulk invites, or a spreadsheet</span>
+          </summary>
         <Tabs
           value={activeTab}
           onValueChange={setActiveTab}
@@ -941,7 +947,6 @@ export function InviteRosterDialog({
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search by name or email..."
                   className="pl-9"
-                  autoFocus
                   data-testid="input-roster-search"
                 />
               </div>
@@ -1763,6 +1768,7 @@ export function InviteRosterDialog({
             )}
           </TabsContent>
         </Tabs>
+        </details>
       </DialogContent>
     </Dialog>
   );
