@@ -14,3 +14,9 @@ The default invitation is explicitly for parents and players. Coaches require a 
 **Why:** The user clarified that the distinction must be very clear: the main team-page action says “Invite,” opens parents/player invitations, and provides an explicit “Invite coaches” action inside.
 
 **How to apply:** Keep the reusable family link and family message distinct from role-specific staff invitations. Do not relabel a family join link as a coach invitation when a staff role is chosen.
+
+Make the two audiences visibly distinct with prominent colored headings and emphasized audience labels, not subtle fine print. Retain explicit text so color is never the only cue.
+
+**Why:** The user repeated that each section must clearly represent a different invitation and specifically requested colored important text.
+
+**How to apply:** Preserve the audience distinction when restyling either invitation section, including dark mode and narrow layouts.

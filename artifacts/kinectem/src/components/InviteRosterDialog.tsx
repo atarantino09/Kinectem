@@ -743,13 +743,13 @@ export function InviteRosterDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="font-black tracking-tight">
+          <DialogTitle className={`font-black tracking-tight ${coachInvite ? "text-blue-800 dark:text-blue-300" : "text-violet-900 dark:text-violet-300"}`}>
             {coachInvite ? "Invite coaches" : "Invite parents & players"}
           </DialogTitle>
           <DialogDescription>
             {coachInvite
               ? "Send a coach invitation by email, or use the other options below. Head Coach is selected to get you started."
-              : "For parents and players: copy the invitation message and paste it into your team chat. Coaches have a separate invitation process."}
+              : <><strong className="text-violet-800 dark:text-violet-300">For parents and players:</strong> copy the invitation message and paste it into your team chat. <strong className="text-blue-800 dark:text-blue-300">Coaches use a separate invitation below.</strong></>}
           </DialogDescription>
         </DialogHeader>
 
@@ -758,17 +758,17 @@ export function InviteRosterDialog({
             Back to parents &amp; players
           </Button>
         ) : (
-          <div className="flex min-w-0 flex-col gap-2 rounded-xl border-2 border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-950/30">
-            <p className="text-sm font-bold">Inviting a coach?</p>
-            <Button type="button" variant="outline" className="w-full font-bold" disabled={createInvite.isPending || bulkSending || csvSending} onClick={openCoachInvites} data-testid="button-invite-coaches">
+          <div className="flex min-w-0 flex-col gap-2 rounded-xl border-2 border-blue-300 bg-blue-50 p-3 dark:border-blue-700 dark:bg-blue-950/30">
+            <p className="text-base font-black text-blue-800 dark:text-blue-300">Coach invitations</p>
+            <Button type="button" variant="default" className="w-full border-blue-600 bg-blue-600 font-bold text-white hover:bg-blue-700 active:bg-blue-800" disabled={createInvite.isPending || bulkSending || csvSending} onClick={openCoachInvites} data-testid="button-invite-coaches">
               <UserCheck className="h-4 w-4" /> Invite coaches
             </Button>
-            <p className="text-xs text-muted-foreground">Use this separate process for coaches—not the parent/player message below.</p>
+            <p className="text-sm text-blue-900 dark:text-blue-200"><strong>For coaches only.</strong> Send a separate coach invitation—not the parent/player message below.</p>
           </div>
         )}
 
         {!coachInvite && (generateLink.isPending || fullLink || linkErrored) && (
-          <div className="mt-2 min-w-0 max-w-full overflow-hidden rounded-xl border border-primary/25 bg-primary/5 p-4 space-y-3" data-testid="invite-copy-share-panel">
+          <div className="mt-2 min-w-0 max-w-full overflow-hidden rounded-xl border-2 border-violet-300 bg-violet-50 p-4 space-y-3 dark:border-violet-700 dark:bg-violet-950/30" data-testid="invite-copy-share-panel">
             {fullLink ? (
               <>
                 {activeTab === "csv" ? (
@@ -783,19 +783,19 @@ export function InviteRosterDialog({
                 ) : (
                   <div className="space-y-3">
                     <div className="space-y-3">
-                      <h3 className="font-black tracking-tight text-base">
+                      <h3 className="font-black tracking-tight text-base text-violet-900 dark:text-violet-300">
                         Invite parents &amp; players
                       </h3>
                       <p className="text-sm text-muted-foreground">
-                        Share with parents and players only. Paste into a group text, GroupMe, TeamSnap, or 360 Player.
+                        <strong className="text-violet-800 dark:text-violet-300">Share with parents and players only.</strong> Paste into a group text, GroupMe, TeamSnap, or 360 Player.
                         Your name and the join link are already included.
                       </p>
                       <Button
                         type="button"
-                        variant="brand"
+                        variant="default"
                         onClick={onCopyMessage}
                         disabled={!inviteMessage}
-                        className="h-auto min-h-10 w-full gap-2 whitespace-normal py-2 text-center font-bold"
+                        className="h-auto min-h-10 w-full gap-2 whitespace-normal border-violet-700 bg-violet-700 py-2 text-center font-bold text-white hover:bg-violet-800 active:bg-violet-900"
                         data-testid="button-copy-invite-message"
                       >
                         {messageCopied ? (
@@ -812,10 +812,10 @@ export function InviteRosterDialog({
                       </Button>
                     </div>
                     <div
-                      className="flex items-start gap-2 text-[11px] text-muted-foreground"
+                      className="flex items-start gap-2 rounded-lg border border-violet-200 bg-white/70 p-2 text-sm text-violet-900 dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-200"
                       data-testid="invite-message-role-notice"
                     >
-                      <Shield className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                      <Shield className="mt-0.5 h-4 w-4 shrink-0 text-violet-700 dark:text-violet-300" />
                       <p>
                         <span
                           className="font-bold"
@@ -823,7 +823,7 @@ export function InviteRosterDialog({
                         >
                           For parents &amp; players only — not coaches.
                         </span>{" "}
-                        Use Invite coaches above for coach invitations.
+                        <strong className="text-blue-800 dark:text-blue-300">Use Invite coaches above</strong> for coach invitations.
                       </p>
                     </div>
                     {inviteMessage ? (
@@ -901,7 +901,7 @@ export function InviteRosterDialog({
 
         <details className="min-w-0 rounded-xl border border-border p-3" data-testid="other-invite-methods"
           open={otherMethodsOpen} onToggle={(event) => setOtherMethodsOpen(event.currentTarget.open)}>
-          <summary className="cursor-pointer text-sm font-bold">
+          <summary className={`cursor-pointer text-sm font-bold ${coachInvite ? "text-blue-800 dark:text-blue-300" : ""}`}>
             {coachInvite ? "Coach invitation options" : "Other ways to invite"}
             <span className="mt-1 block text-xs font-normal text-muted-foreground">Existing users, email, bulk invites, or a spreadsheet</span>
           </summary>

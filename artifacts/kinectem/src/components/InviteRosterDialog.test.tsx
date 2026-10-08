@@ -112,6 +112,10 @@ describe("InviteRosterDialog role-specific copy", () => {
     const copy = await screen.findByRole("button", { name: "Copy parent/player message & link" });
     const otherMethods = screen.getByTestId("other-invite-methods");
     expect(copy).toBeVisible();
+    expect(copy).toHaveClass("bg-violet-700", "text-white");
+    expect(screen.getByTestId("button-invite-coaches")).toHaveClass("bg-blue-600", "text-white");
+    expect(screen.getByRole("heading", { name: "Invite parents & players", level: 3 })).toHaveClass("text-violet-900");
+    expect(screen.getByText("Coach invitations")).toHaveClass("text-blue-800");
     expect(otherMethods).not.toHaveAttribute("open");
     expect(screen.getByTestId("input-roster-search")).not.toBeVisible();
     expect(screen.getByTestId("invite-link-only")).not.toHaveAttribute("open");
