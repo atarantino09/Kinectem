@@ -97,6 +97,13 @@ describe("TournamentScheduleCard", () => {
       expect(action).toHaveAccessibleDescription(
         "Playoff or extra game? Add a branded recap to this competition.",
       );
+      const recapBox = screen.getByTestId(`competition-recap-box-${competition.tournamentId}`);
+      expect(recapBox.previousElementSibling?.tagName).toBe("UL");
+      expect(recapBox).toHaveClass("bg-gradient-to-br", "from-purple-50", "to-purple-100/70");
+      for (const match of competition.matches) {
+        expect(screen.getByTestId(`tournament-match-${match.id}`).compareDocumentPosition(recapBox) &
+          Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+      }
       action.focus();
       expect(action).toHaveFocus();
     }

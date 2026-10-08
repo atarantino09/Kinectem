@@ -506,25 +506,6 @@ export function TournamentScheduleCard({
                   </div>
                 )}
                 <CollapsibleContent className="space-y-2">
-                  {canPostRecap && (
-                    <div className="min-w-0 space-y-1.5 rounded-lg border border-border bg-muted/20 px-3 py-2">
-                      <Link
-                        href={competitionRecapHref(teamId, g.tournamentId)}
-                        className={`${buttonVariants({ variant: "outline", size: "sm" })} max-w-full gap-1.5 whitespace-normal text-left`}
-                        aria-describedby={`competition-recap-help-${g.tournamentId}`}
-                        data-testid={`button-competition-recap-${g.tournamentId}`}
-                      >
-                        <FileText className="h-3.5 w-3.5 shrink-0" />
-                        Competition Game Recap
-                      </Link>
-                      <p
-                        id={`competition-recap-help-${g.tournamentId}`}
-                        className="text-[11px] text-muted-foreground"
-                      >
-                        Playoff or extra game? Add a branded recap to this competition.
-                      </p>
-                    </div>
-                  )}
                   {g.matches.length === 0 && <p className="text-xs text-muted-foreground">No games are currently shown on this team page.</p>}
                   <ul className="space-y-1.5">
                     {g.matches.map((m) => (
@@ -675,6 +656,28 @@ export function TournamentScheduleCard({
                       </li>
                     ))}
                   </ul>
+                  {canPostRecap && (
+                    <div
+                      className="min-w-0 space-y-1.5 rounded-lg border border-purple-200/70 bg-gradient-to-br from-purple-50 via-violet-50 to-purple-100/70 px-3 py-2 dark:border-purple-800/50 dark:from-purple-950/30 dark:via-violet-950/20 dark:to-purple-900/30"
+                      data-testid={`competition-recap-box-${g.tournamentId}`}
+                    >
+                      <Link
+                        href={competitionRecapHref(teamId, g.tournamentId)}
+                        className={`${buttonVariants({ variant: "outline", size: "sm" })} max-w-full gap-1.5 whitespace-normal text-left`}
+                        aria-describedby={`competition-recap-help-${g.tournamentId}`}
+                        data-testid={`button-competition-recap-${g.tournamentId}`}
+                      >
+                        <FileText className="h-3.5 w-3.5 shrink-0" />
+                        Competition Game Recap
+                      </Link>
+                      <p
+                        id={`competition-recap-help-${g.tournamentId}`}
+                        className="text-[11px] text-purple-900/70 dark:text-purple-200/80"
+                      >
+                        Playoff or extra game? Add a branded recap to this competition.
+                      </p>
+                    </div>
+                  )}
                 </CollapsibleContent>
               </Collapsible>
             ))}
