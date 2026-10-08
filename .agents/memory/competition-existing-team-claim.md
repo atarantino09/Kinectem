@@ -44,3 +44,9 @@ Do not present heuristic team-name ranking as a confidence percentage or proof o
 **Why:** Identical or similar team names can belong to different clubs, age groups, or genders. A name-ranking score is not a calibrated probability that the schedule belongs to a particular page.
 
 **How to apply:** Show distinct club/team identities and metadata, retain explicit selection and review, and keep any numerical ranking internal unless a genuine confidence model is introduced.
+
+Coaches and organization admins managing a team must be able to release its entire competition schedule back to the original, unclaimed competition entry. Team-page removal must not delete the shared competition or its games, and must require two deliberate confirmation steps.
+
+**Why:** The user explicitly requested coach/org-admin removal, a “double secure system” against accidents, and returning removed competition schedules to their original unclaimed teams.
+
+**How to apply:** Treat whole-competition removal as releasing the team-page assignment, not deleting imported matches, team ownership, roster memberships, or opponents’ schedules. Preserve the original competition team identity and require management permission plus explicit confirmation.
