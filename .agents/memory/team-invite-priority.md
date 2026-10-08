@@ -8,3 +8,9 @@ Team invitations should lead with a complete ready-to-copy message, not an email
 **Why:** The user explicitly wants copy-and-paste messaging presented clearly as the primary way to invite people.
 
 **How to apply:** Keep other methods available but secondary when revising invitation flows. Copy the whole message with its join link and inviter identity, retain role-specific wording, and preserve the existing permission and secure-token boundaries.
+
+The default invitation is explicitly for parents and players. Coaches require a clearly separate entry into the coach invitation process, not fine-print role instructions below a generic Copy button.
+
+**Why:** The user clarified that the distinction must be very clear: the main team-page action says “Invite,” opens parents/player invitations, and provides an explicit “Invite coaches” action inside.
+
+**How to apply:** Keep the reusable family link and family message distinct from role-specific staff invitations. Do not relabel a family join link as a coach invitation when a staff role is chosen.

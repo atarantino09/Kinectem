@@ -16,9 +16,6 @@ import {
 } from "@workspace/api-client-react";
 import {
   buildCoachInviteText,
-  buildStaffInviteText,
-  isStaffInvitePosition,
-  staffInviteRoleLabel,
 } from "@workspace/invite-copy";
 import {
   Dialog,
@@ -135,6 +132,7 @@ export function InviteRosterDialog({
   // Task #837 — which invite tab is active; drives whether the shared
   // copy-to-clipboard message uses the staff or parent wording.
   const [activeTab, setActiveTab] = useState("search");
+  const [coachInvite, setCoachInvite] = useState(false);
 
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
@@ -218,6 +216,7 @@ export function InviteRosterDialog({
     setPosition("player");
     setShowFullMessage(false);
     setOtherMethodsOpen(false);
+    setCoachInvite(false);
     setLinkToken(null);
     setLinkErrored(false);
     setCopied(false);
@@ -251,28 +250,42 @@ export function InviteRosterDialog({
   // staff wording when the currently selected role (on the active tab) is a
   // staff role (coach / assistant coach / manager); parent wording otherwise.
   const coachName = me ? `${me.firstName} ${me.lastName}`.trim() : "";
-  const selectedPosition =
-    activeTab === "email"
-      ? emailPosition
-      : activeTab === "bulk"
-        ? bulkPosition
-        : activeTab === "search"
-          ? position
-          : "player";
-  const selectedPositionLabel =
-    POSITION_LABELS[selectedPosition] ?? "Selected role";
-  const showingStaffInviteMessage = isStaffInvitePosition(selectedPosition);
+  // The team-wide join link is a family invitation, never a coach invitation.
+  // Staff use the existing role-specific email/add-member flow below.
   const inviteMessage =
     fullLink && coachName
-      ? isStaffInvitePosition(selectedPosition)
-        ? buildStaffInviteText({
-            inviterName: coachName,
-            teamName,
-            roleLabel: staffInviteRoleLabel(selectedPosition),
-            link: fullLink,
-          })
-        : buildCoachInviteText({ coachName, link: fullLink })
+      ? buildCoachInviteText({ coachName, link: fullLink })
       : null;
+
+  const openCoachInvites = () => {
+    setMessageCopied(false);
+    setEmail("");
+    setName("");
+    setBulkText("");
+    setBulkResults(null);
+    setCoachInvite(true);
+    setActiveTab("email");
+    setEmailPosition("coach");
+    setPosition("coach");
+    setBulkPosition("coach");
+    setInviteResult(null);
+    setOtherMethodsOpen(true);
+  };
+
+  const backToFamilyInvites = () => {
+    setMessageCopied(false);
+    setEmail("");
+    setName("");
+    setEmailPosition("player");
+    setBulkText("");
+    setBulkResults(null);
+    setBulkPosition("player");
+    setInviteResult(null);
+    setCoachInvite(false);
+    setActiveTab("search");
+    setPosition("player");
+    setOtherMethodsOpen(false);
+  };
 
   useEffect(() => {
     setMessageCopied(false);
@@ -731,14 +744,30 @@ export function InviteRosterDialog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="font-black tracking-tight">
-            Invite to roster
+            {coachInvite ? "Invite coaches" : "Invite parents & players"}
           </DialogTitle>
           <DialogDescription>
-            The easiest way to invite your team: copy the invitation message and paste it into your team chat.
+            {coachInvite
+              ? "Send a coach invitation by email, or use the other options below. Head Coach is selected to get you started."
+              : "For parents and players: copy the invitation message and paste it into your team chat. Coaches have a separate invitation process."}
           </DialogDescription>
         </DialogHeader>
 
-        {(generateLink.isPending || fullLink || linkErrored) && (
+        {coachInvite ? (
+          <Button type="button" variant="outline" disabled={createInvite.isPending || bulkSending || csvSending} onClick={backToFamilyInvites} data-testid="button-back-family-invites">
+            Back to parents &amp; players
+          </Button>
+        ) : (
+          <div className="flex min-w-0 flex-col gap-2 rounded-xl border-2 border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-950/30">
+            <p className="text-sm font-bold">Inviting a coach?</p>
+            <Button type="button" variant="outline" className="w-full font-bold" disabled={createInvite.isPending || bulkSending || csvSending} onClick={openCoachInvites} data-testid="button-invite-coaches">
+              <UserCheck className="h-4 w-4" /> Invite coaches
+            </Button>
+            <p className="text-xs text-muted-foreground">Use this separate process for coaches—not the parent/player message below.</p>
+          </div>
+        )}
+
+        {!coachInvite && (generateLink.isPending || fullLink || linkErrored) && (
           <div className="mt-2 min-w-0 max-w-full overflow-hidden rounded-xl border border-primary/25 bg-primary/5 p-4 space-y-3" data-testid="invite-copy-share-panel">
             {fullLink ? (
               <>
@@ -755,10 +784,10 @@ export function InviteRosterDialog({
                   <div className="space-y-3">
                     <div className="space-y-3">
                       <h3 className="font-black tracking-tight text-base">
-                        Copy &amp; paste an invitation
+                        Invite parents &amp; players
                       </h3>
                       <p className="text-sm text-muted-foreground">
-                        Paste into a group text, GroupMe, TeamSnap, or 360 Player.
+                        Share with parents and players only. Paste into a group text, GroupMe, TeamSnap, or 360 Player.
                         Your name and the join link are already included.
                       </p>
                       <Button
@@ -766,18 +795,18 @@ export function InviteRosterDialog({
                         variant="brand"
                         onClick={onCopyMessage}
                         disabled={!inviteMessage}
-                        className="w-full gap-2 font-bold"
+                        className="h-auto min-h-10 w-full gap-2 whitespace-normal py-2 text-center font-bold"
                         data-testid="button-copy-invite-message"
                       >
                         {messageCopied ? (
                           <>
                             <CheckCircle2 className="w-4 h-4" />
-                            Copied! Paste into your team chat
+                            Copied! Share with parents &amp; players
                           </>
                         ) : (
                           <>
                             <Copy className="w-4 h-4" />
-                            Copy message &amp; join link
+                            Copy parent/player message &amp; link
                           </>
                         )}
                       </Button>
@@ -792,22 +821,9 @@ export function InviteRosterDialog({
                           className="font-bold"
                           data-testid="invite-message-current-role"
                         >
-                          Showing: {selectedPositionLabel} (
-                          {showingStaffInviteMessage
-                            ? "staff invitation"
-                            : "parent / player invitation"}
-                          ).
+                          For parents &amp; players only — not coaches.
                         </span>{" "}
-                        {otherMethodsOpen ? (
-                          <>
-                            Choose a different Position below to update this message.
-                            Parent/player invitations use family setup wording;
-                            coach and staff invitations use staff wording. Select the
-                            correct invite type before copying.
-                          </>
-                        ) : (
-                          <>For coach or staff invitations, choose a Position under Other ways to invite below.</>
-                        )}
+                        Use Invite coaches above for coach invitations.
                       </p>
                     </div>
                     {inviteMessage ? (
@@ -861,7 +877,7 @@ export function InviteRosterDialog({
                     </Button>
                   </div>
                   <p className="mt-2 text-[11px] text-muted-foreground">
-                    Anyone with this link can request to join the team.
+                    This is the parent/player join link. Invite coaches using the separate coach process.
                   </p>
                 </details>
               </>
@@ -886,7 +902,7 @@ export function InviteRosterDialog({
         <details className="min-w-0 rounded-xl border border-border p-3" data-testid="other-invite-methods"
           open={otherMethodsOpen} onToggle={(event) => setOtherMethodsOpen(event.currentTarget.open)}>
           <summary className="cursor-pointer text-sm font-bold">
-            Other ways to invite
+            {coachInvite ? "Coach invitation options" : "Other ways to invite"}
             <span className="mt-1 block text-xs font-normal text-muted-foreground">Existing users, email, bulk invites, or a spreadsheet</span>
           </summary>
         <Tabs

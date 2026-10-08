@@ -459,7 +459,7 @@ export function TeamHeaderCard({
                   data-testid="btn-invite-team"
                 >
                   <UserPlus className="h-4 w-4" />
-                  Invite people
+                  Invite
                 </Button>
               )}
               <div

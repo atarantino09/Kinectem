@@ -125,7 +125,7 @@ describe("TeamHeaderCard action hierarchy", () => {
     const user = userEvent.setup();
     const onInvite = vi.fn();
     renderHeader({ isAdmin, onInvite });
-    const invite = screen.getByRole("button", { name: "Invite people" });
+    const invite = screen.getByRole("button", { name: "Invite", exact: true });
     expect(invite).toBeVisible();
     expect(screen.getByTestId("team-header-action-group").firstElementChild).toBe(invite);
     expect(invite.closest('[role="menu"]')).toBeNull();
@@ -135,7 +135,7 @@ describe("TeamHeaderCard action hierarchy", () => {
 
   it("does not offer inviting to a viewer without management permission", () => {
     renderHeader();
-    expect(screen.queryByRole("button", { name: "Invite people" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Invite", exact: true })).not.toBeInTheDocument();
   });
 
   it("keeps a cropped photo edge-to-edge in the fixed banner frame", () => {
