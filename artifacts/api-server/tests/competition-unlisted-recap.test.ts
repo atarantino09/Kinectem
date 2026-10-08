@@ -149,6 +149,28 @@ describe("competition-only game recaps", () => {
     ]));
   });
 
+  it("returns every publicly eligible featured recap beyond twelve for accurate bracket counts", async () => {
+    const f = await fixture();
+    const created = await f.author.post("/api/v1/posts").send({
+      ...f.payload, gameDate: "2026-08-02T12:00:00.000Z",
+    }).expect(201);
+    const originalId = await trackRecap(created.body.id);
+    await f.author.post(`/api/v1/posts/${created.body.id}/publish`).expect(200);
+    const [original] = await db.select().from(articles).where(eq(articles.id, originalId));
+    const inserted = await db.insert(articles).values(Array.from({ length: 15 }, (_, index) => ({
+      ...original, id: undefined, title: `Count coverage ${index}`,
+      featured: index !== 13,
+      status: index === 14 ? "draft" as const : "published" as const,
+    }))).returning({ id: articles.id });
+    for (const row of inserted) await trackRecap(row.id);
+    const result = await request(app).get(`/api/v1/competitions/${f.competition.slug}`).expect(200);
+    expect(result.body.featuredRecaps).toHaveLength(13);
+    expect(result.body.featuredRecaps.map((recap: { id: string }) => recap.id)).toEqual(
+      expect.arrayContaining(inserted.slice(0, 13).map((row) => `article-${row.id}`)),
+    );
+    expect(result.body.featuredRecaps.map((recap: { id: string }) => recap.id)).not.toContain(`article-${inserted[13].id}`);
+    expect(result.body.featuredRecaps.map((recap: { id: string }) => recap.id)).not.toContain(`article-${inserted[14].id}`);
+  });
   it("honors an explicitly unlisted game even on a listed match date, and preserves untouched optional links", async () => {
     const f = await fixture();
     const [game] = await db.insert(tournamentMatches).values({

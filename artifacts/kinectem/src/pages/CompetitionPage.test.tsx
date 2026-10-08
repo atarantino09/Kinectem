@@ -264,13 +264,38 @@ describe("competition partnership directory", () => {
     const bracket = await screen.findByRole("combobox", { name: "Bracket" });
     expect(screen.queryByRole("option", { name: "Bracket A" })).not.toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "Bracket B" })).not.toBeInTheDocument();
-    await user.selectOptions(bracket, screen.getByRole("option", { name: gold }));
+    await user.selectOptions(bracket, screen.getByRole("option", { name: `${gold} (2)` }));
     expect(screen.getAllByTestId(/^card-featured-recap-/)).toHaveLength(2);
     expect(screen.getByTestId("bracket-featured-recap-gold-a")).toHaveTextContent(gold);
     expect(screen.getByTestId("bracket-featured-recap-gold-b")).toHaveTextContent(gold);
     expect(screen.getByTestId("bracket-featured-recap-gold-a")).toHaveAttribute("title", `Bracket: ${gold} · Bracket A`);
     expect(screen.getByTestId("bracket-featured-recap-gold-b")).toHaveAttribute("title", `Bracket: ${gold} · Bracket B`);
     expect(screen.queryByTestId("card-featured-recap-white")).not.toBeInTheDocument();
+  });
+  it.each([0, 13])("lists every bracket with accurate counts, including empty brackets (%s featured)", async (featuredCount) => {
+    const user = userEvent.setup();
+    mockedFetch.mockResolvedValue({
+      ...competitionResponse(),
+      brackets: [{ id: "gold", label: "2016 U10 Boys Gold" }, { id: "white", label: "2016 U10 Boys White" }],
+      featuredRecaps: Array.from({ length: featuredCount }, (_, index) => ({
+        id: `story-${index}`, bracketId: "gold", title: `Story ${index}`,
+        body: "A memorable game.", summary: null, coverImageUrl: null,
+        gameDate: "2026-05-04", opponentName: null, teamScore: null, opponentScore: null,
+        teamId: "team-a", teamName: "Alpha", publishedAt: "2026-05-05T12:00:00Z",
+      })),
+    });
+    renderWithProviders(<CompetitionPage />);
+    const bracket = await screen.findByRole("combobox", { name: "Bracket" });
+    expect(within(bracket).getByRole("option", { name: `All brackets (${featuredCount})` })).toBeVisible();
+    expect(within(bracket).getByRole("option", { name: `2016 U10 Boys Gold (${featuredCount})` })).toBeVisible();
+    const emptyBracket = within(bracket).getByRole("option", { name: "2016 U10 Boys White (0)" });
+    expect(emptyBracket).not.toBeDisabled();
+    await user.selectOptions(bracket, emptyBracket);
+    expect(screen.getByTestId("empty-recap-filters")).toBeVisible();
+    expect(screen.queryAllByTestId(/^card-featured-recap-/)).toHaveLength(0);
+    await user.click(screen.getByTestId("btn-clear-recap-filters"));
+    expect(screen.queryAllByTestId(/^card-featured-recap-/)).toHaveLength(featuredCount);
+    expect(emptyBracket).toHaveTextContent("2016 U10 Boys White (0)");
   });
   it.each([true, false])("keeps the removed results entry hidden (canManage=%s)", async (canManage) => {
     mockedFetch.mockResolvedValue(competitionResponse({ canManage }));

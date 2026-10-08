@@ -1569,11 +1569,16 @@ export default function CompetitionPage() {
             entirely until the operator features at least one recap. Each
             card carries the authoring team's identity inside the
             competition-branded page. */}
-        {(q.data.featuredRecaps?.length ?? 0) > 0 && (() => {
-          const allRecaps = q.data.featuredRecaps!;
+        {((q.data.featuredRecaps?.length ?? 0) > 0 || (q.data.brackets?.length ?? 0) > 0 || q.data.matches.some((match) => match.division?.trim())) && (() => {
+          const allRecaps = q.data.featuredRecaps ?? [];
           const brackets = q.data.brackets ?? [];
-          const { options: usedBrackets, byRecap: recapBrackets } = featuredRecapBrackets(allRecaps, brackets);
-          const hasOtherRecaps = allRecaps.some((recap) => recapBrackets.get(recap.id)?.key === "__other__");
+          const { options: usedBrackets, byRecap: recapBrackets } = featuredRecapBrackets(
+            allRecaps, brackets, q.data.matches.flatMap((match) => match.division ? [match.division] : []),
+          );
+          const otherRecapCount = allRecaps.filter((recap) => recapBrackets.get(recap.id)?.key === "__other__").length;
+          const selectedBracketEmpty = bracketFilter === "__other__"
+            ? otherRecapCount === 0
+            : usedBrackets.find((bracket) => bracket.id === bracketFilter)?.count === 0;
           const recapDateKey = (recap: FeaturedRecap) =>
             recap.effectiveGameDate ??
             recap.gameDate ??
@@ -1837,13 +1842,13 @@ export default function CompetitionPage() {
                     className="h-9 w-full min-w-0 rounded-lg border border-input bg-background px-3 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     data-testid="select-recap-bracket"
                   >
-                    <option value="">All brackets</option>
+                    <option value="">All brackets ({allRecaps.length})</option>
                     {usedBrackets.map((bracket) => (
                       <option key={bracket.id} value={bracket.id}>
-                        {bracket.label}
+                        {bracket.label} ({bracket.count})
                       </option>
                     ))}
-                    {hasOtherRecaps ? <option value="__other__">Other / no bracket</option> : null}
+                    <option value="__other__">Other / no bracket ({otherRecapCount})</option>
                   </select>
                 </label>
                 <label className="space-y-1">
@@ -1880,9 +1885,9 @@ export default function CompetitionPage() {
                   onClick={() => setBracketFilter("")}
                   data-testid="chip-bracket-all"
                 >
-                  All
+                  All ({allRecaps.length})
                 </Button>
-                {usedBrackets.map((b) => (
+                {usedBrackets.filter((bracket) => bracket.count > 0).map((b) => (
                   <Button
                     key={b.id}
                     size="sm"
@@ -1891,7 +1896,7 @@ export default function CompetitionPage() {
                     onClick={() => setBracketFilter(b.id)}
                     data-testid={`chip-bracket-${b.id}`}
                   >
-                    {b.label}
+                    {b.label} ({b.count})
                   </Button>
                 ))}
               </div>
@@ -1902,9 +1907,13 @@ export default function CompetitionPage() {
                 data-testid="empty-recap-filters"
               >
                 <Search className="mx-auto h-8 w-8 text-muted-foreground/60" />
-                <h3 className="mt-3 font-black">No recaps match those filters</h3>
+                <h3 className="mt-3 font-black">
+                  {allRecaps.length === 0 ? "No featured game recaps yet" : selectedBracketEmpty ? "No featured recaps in this bracket yet" : "No recaps match those filters"}
+                </h3>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Try another bracket, team, date, or search term.
+                  {allRecaps.length === 0 || selectedBracketEmpty
+                    ? "Only recaps featured by competition admins appear here."
+                    : "Try another bracket, team, date, or search term."}
                 </p>
                 <Button
                   type="button"
@@ -1971,7 +1980,7 @@ export default function CompetitionPage() {
 
         <CompetitionAlbumSection competition={c} />
 
-        {(q.data.featuredRecaps?.length ?? 0) === 0 ? (
+        {(q.data.featuredRecaps?.length ?? 0) === 0 && (q.data.brackets?.length ?? 0) === 0 && !q.data.matches.some((match) => match.division?.trim()) ? (
           <Card
             className="competition-section-surface rounded-xl border-l-4 border-dashed border-border bg-muted/20 shadow-sm"
             style={{ borderLeftColor: brand }}

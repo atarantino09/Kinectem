@@ -21,3 +21,9 @@ The user defines the full group, such as “2016 U10 Boys Gold,” as the overal
 **Why:** the user explicitly clarified that “Gold” or “Bracket A” alone is not the intended overall name; preserve the year, age, gender, and tier in the group name.
 
 **How to apply:** use the linked game's division when available, with the saved overall bracket name as a fallback. Keep subgroup detail separate, combine A/B under the overall recap filter and heading, and show the overall name as a small card label. Do not guess a missing full name from team names or rewrite persisted bracket assignments.
+
+The bracket dropdown must list every overall group, including groups with zero featured recaps, and show each group's total admin-featured recap count.
+
+**Why:** the user wants visitors to distinguish an empty bracket from an omitted one and know how much featured coverage each has.
+
+**How to apply:** include saved groups and schedule divisions even before any recaps are featured. Counts represent the complete publicly eligible curated set, not just a newest-N subset or search-filtered results. Keep zero-count choices selectable.

@@ -1306,8 +1306,9 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
           eq(articles.featured, true),
         ),
       )
-      .orderBy(desc(articles.createdAt))
-      .limit(12);
+      // Return the complete curated set so bracket counts and filters also
+      // include older featured recaps, not only the newest twelve.
+      .orderBy(desc(articles.createdAt));
 
     // Task #852 — brackets in the organizer's saved order, for the public
     // page's recap filter chips. Labels only; safe to expose publicly.
