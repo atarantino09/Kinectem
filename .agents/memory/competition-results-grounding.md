@@ -27,6 +27,12 @@ Do not show the “Post-competition results & bracket recaps” entry section on
 
 **How to apply:** Do not reintroduce the section during later competition-page changes. Removing its entry UI does not authorize deleting saved results, drafts, or published stories.
 
+Competition pages must show only organizer-curated Featured Game Recaps as their recap section. Do not display the automatic Tournament Recaps / More team coverage section.
+
+**Why:** On 2026-10-08 the user explicitly confirmed its removal and said recaps must be featured by the competition admin to appear.
+
+**How to apply:** Do not restore automatic recap coverage on competition pages. Keep the explicit featuring permission gate and leave saved recap records and team-page stories intact.
+
 Organizers must not be required to confirm individual matches, fill missing scores, or manually resolve every team before creating bracket recaps from a whole results source.
 
 **Why:** The user described the process as “way too difficult” and explicitly said they cannot confirm each match and will not do extra work when scores are missing.

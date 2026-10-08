@@ -186,6 +186,9 @@ describe("competition partnership directory", () => {
     });
     renderWithProviders(<CompetitionPage />);
     const card = await screen.findByTestId("card-featured-recap-club-recap");
+    expect(screen.getByRole("heading", { name: "Featured Game Recaps" })).toBeVisible();
+    expect(screen.queryByTestId("section-tournament-recaps")).not.toBeInTheDocument();
+    expect(mockedFetch.mock.calls.some(([url]) => String(url).includes("/tournament-recaps"))).toBe(false);
     expect(within(card).getByRole("img", { name: "Authoring Club logo" })).toHaveAttribute("src", "/author-club.png");
     expect(within(card).getByText("Authoring Club")).toBeVisible();
     expect(within(card).getByTestId("strip-competition-brand")).toHaveTextContent("Rolling Cup");
@@ -206,6 +209,10 @@ describe("competition partnership directory", () => {
     renderWithProviders(<CompetitionPage />);
     await screen.findByRole("heading", { name: "Rolling Cup" });
     expect(screen.queryByTestId("section-post-competition-results")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("section-tournament-recaps")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Tournament Recaps" })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("rail-featured-recaps")).not.toBeInTheDocument();
+    expect(mockedFetch.mock.calls.some(([url]) => String(url).includes("/tournament-recaps"))).toBe(false);
   });
 
   beforeEach(() => {

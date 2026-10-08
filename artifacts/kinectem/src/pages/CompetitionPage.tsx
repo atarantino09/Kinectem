@@ -61,7 +61,6 @@ import {
   inclusiveDateSpan,
   type CompetitionWeek,
 } from "@/lib/competition-weeks";
-import { PublishedRecaps } from "@/components/competition-results/PublishedRecaps";
 import { featuredRecapPreviewText } from "@/lib/featuredRecapPreview";
 import { FeaturedRecapOrganization, featuredOrgPalette, type FeaturedRecapOrg } from "@/components/FeaturedRecapOrganization";
 
@@ -1563,8 +1562,6 @@ export default function CompetitionPage() {
             defaultOpen={isClaimVisitor}
           />
         ) : null}
-
-        <PublishedRecaps competitionId={q.data.competition.id} brand={c.brandColor ?? DEFAULT_BRAND} />
 
         {/* Featured game recaps rail (§7) — the visual centerpiece; hidden
             entirely until the operator features at least one recap. Each
