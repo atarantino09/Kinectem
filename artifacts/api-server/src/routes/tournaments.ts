@@ -4413,7 +4413,7 @@ router.get(
     const hiddenRows =
       matchIds.length > 0
         ? await db
-            .select({ id: teamHiddenCompetitionGames.competitionGameId })
+            .select({ id: teamHiddenCompetitionGames.competitionGameId, removed: teamHiddenCompetitionGames.removed })
             .from(teamHiddenCompetitionGames)
             .where(
               and(
@@ -4426,6 +4426,7 @@ router.get(
             )
         : [];
     const hiddenSet = new Set(hiddenRows.map((r) => r.id));
+    const removedSet = new Set(hiddenRows.filter((r) => r.removed).map((r) => r.id));
     // This team's PUBLISHED recaps linked to a specific game. Ordered so
     // the earliest published recap wins when several link the same game.
     const recapRows =
@@ -4500,16 +4501,32 @@ router.get(
         logoUrl: string | null;
         brandColor: string | null;
         secondaryColor: string | null;
+        assignmentSnapshot?: { participantId: string; name: string; claimedAt: string | null }[];
         matches: OutMatch[];
       }
     >();
 
+    // Managers must still be able to release a competition after removing its last game.
+    if (viewerCanManage) {
+      for (const t of tourneyRows) {
+        groups.set(t.id, {
+          tournamentId: t.id, tournamentSlug: t.slug, tournamentName: t.name,
+          startDate: t.startDate, endDate: t.endDate, recapFreeUntil: isOrgBacked ? null : t.endDate,
+          logoUrl: t.logoUrl ?? null, brandColor: t.brandColor ?? null, secondaryColor: t.secondaryColor ?? null,
+          assignmentSnapshot: myParts.filter((p) => p.tournamentId === t.id).map((p) => ({
+            participantId: p.id, name: p.name, claimedAt: p.claimedAt?.toISOString() ?? null,
+          })),
+          matches: [],
+        });
+      }
+    }
     for (const m of matchRows) {
       const t = tourneyById.get(m.tournamentId);
       if (!t) continue;
       // Task #746 — hidden games: omitted entirely for the public,
       // greyed-out (hidden: true) for team admins.
       const isHidden = hiddenSet.has(m.id);
+      if (removedSet.has(m.id)) continue;
       if (isHidden && !viewerCanManage) continue;
       const isHome =
         m.homeParticipantId != null && myPartIdSet.has(m.homeParticipantId);

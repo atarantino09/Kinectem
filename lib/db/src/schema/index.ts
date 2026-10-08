@@ -2345,6 +2345,8 @@ export const teamHiddenCompetitionGames = pgTable("team_hidden_competition_games
   teamId: uuid("team_id").references(() => teams.id, { onDelete: "cascade" }).notNull(),
   competitionGameId: uuid("competition_game_id").references(() => tournamentMatches.id, { onDelete: "cascade" }).notNull(),
   hiddenByUserId: uuid("hidden_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  // Removed games are omitted even for managers; ordinary hides stay reversible in the UI.
+  removed: boolean("removed").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => ({
   pk: primaryKey({ columns: [t.teamId, t.competitionGameId] }),

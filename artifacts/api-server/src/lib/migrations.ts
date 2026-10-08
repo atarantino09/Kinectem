@@ -1876,6 +1876,10 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
     `,
   },
   {
+    name: "2026-10-07-team-competition-game-removal",
+    sql: `ALTER TABLE team_hidden_competition_games ADD COLUMN IF NOT EXISTS removed boolean NOT NULL DEFAULT false;`,
+  },
+  {
     // Competition-admin hide for participant slots — hidden slots are
     // omitted from the public Teams list on the competition page; operators
     // still see them (greyed) and can unhide. Schedule is unaffected.

@@ -551,7 +551,9 @@ export default function TeamPage() {
             <TournamentScheduleCard
               teamId={teamId}
               canPostRecap={canPostRecap}
-              canManage={isAdmin}
+              canManage={canManage}
+              viewerId={me?.id ?? "anon"}
+              teamName={team.name}
             />
             <TeamPostsSection
               teamId={teamId}

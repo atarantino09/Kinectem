@@ -50,3 +50,9 @@ Coaches and organization admins managing a team must be able to release its enti
 **Why:** The user explicitly requested coach/org-admin removal, a “double secure system” against accidents, and returning removed competition schedules to their original unclaimed teams.
 
 **How to apply:** Treat whole-competition removal as releasing the team-page assignment, not deleting imported matches, team ownership, roster memberships, or opponents’ schedules. Preserve the original competition team identity and require management permission plus explicit confirmation.
+
+Removing one competition game removes only that game from this team's views, including the manager view; the other games stay linked and the competition entry remains claimed. It is distinct from ordinary public-only hiding.
+
+**Why:** The user explicitly chose to keep the other games when removing one game. Only removing the whole competition should return its entry to Unclaimed.
+
+**How to apply:** Keep the original match and the opponent's schedule intact. A manager must still be able to release the whole competition after removing its last displayed game. A future deliberate re-claim should start with the complete original schedule, not inherit earlier team-page exclusions.

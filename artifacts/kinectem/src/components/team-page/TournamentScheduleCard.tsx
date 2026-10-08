@@ -20,6 +20,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { CompetitionScheduleRemovalDialog, type AssignmentSnapshot, type ScheduleRemovalTarget } from "./CompetitionScheduleRemovalDialog";
 import {
   Trophy,
   MapPin,
@@ -31,6 +32,7 @@ import {
   Eye,
   EyeOff,
   Newspaper,
+  Unlink,
 } from "lucide-react";
 
 // Surfaces the imported tournament schedule for a team that claimed a
@@ -75,6 +77,7 @@ interface TournamentGroup {
   logoUrl: string | null;
   brandColor: string | null;
   secondaryColor: string | null;
+  assignmentSnapshot?: AssignmentSnapshot[];
   matches: TournamentMatch[];
 }
 
@@ -337,6 +340,8 @@ export function TournamentScheduleCard({
   teamId,
   canPostRecap = false,
   canManage = false,
+  viewerId = "current",
+  teamName = "This team",
 }: {
   teamId: string;
   // When true (the viewer can author recaps for this team), played matches
@@ -346,6 +351,8 @@ export function TournamentScheduleCard({
   // controls and hidden games render greyed-out with a "Hidden"
   // notice instead of being omitted.
   canManage?: boolean;
+  viewerId?: string;
+  teamName?: string;
 }) {
   const [showAll, setShowAll] = useState(false);
   // Keep the panel open by default so this adds a way to declutter the team
@@ -353,6 +360,7 @@ export function TournamentScheduleCard({
   const [competitionsOpen, setCompetitionsOpen] = useState(true);
   const { toast } = useToast();
   const qc = useQueryClient();
+  const [removalTarget, setRemovalTarget] = useState<ScheduleRemovalTarget | null>(null);
   // Pending hide-confirmation target (null = dialog closed). Unhide
   // is immediate — restoring visibility is safe to do without asking.
   const [confirmHide, setConfirmHide] = useState<{
@@ -360,13 +368,14 @@ export function TournamentScheduleCard({
     opponentName: string | null;
   } | null>(null);
   const { data } = useQuery<{ data: TournamentGroup[] }>({
-    queryKey: ["team", teamId, "tournament-schedule"],
+    queryKey: ["team", teamId, "tournament-schedule", viewerId, canManage],
     queryFn: () =>
       customFetch<{ data: TournamentGroup[] }>(
         `/api/v1/teams/${teamId}/tournament-schedule`,
         { method: "GET" },
       ),
     enabled: !!teamId,
+    refetchInterval: 30_000,
   });
 
   // Task #746 — hide/unhide a single game from the public team page.
@@ -471,7 +480,22 @@ export function TournamentScheduleCard({
                     <ExternalLink className="h-3.5 w-3.5 text-white/80" />
                   </Link>
                 </div>
+                {/* The server emits snapshots only for canManageTeam actors,
+                    including coaches with custom position labels. */}
+                {!!g.assignmentSnapshot?.length && (
+                  <div className="flex justify-end">
+                    <button type="button" className="inline-flex items-center gap-1 rounded-md border border-destructive/30 px-2 py-1 text-xs font-semibold text-destructive hover:bg-destructive/5"
+                      data-testid={`btn-remove-competition-${g.tournamentId}`}
+                      onClick={() => setRemovalTarget({
+                        competitionId: g.tournamentId, competitionSlug: g.tournamentSlug, competitionName: g.tournamentName,
+                        teamName, assignments: g.assignmentSnapshot!,
+                      })}>
+                      <Unlink className="h-3 w-3" /> Remove competition from team page
+                    </button>
+                  </div>
+                )}
                 <CollapsibleContent>
+                  {g.matches.length === 0 && <p className="text-xs text-muted-foreground">No games are currently shown on this team page.</p>}
                   <ul className="space-y-1.5">
                     {g.matches.map((m) => (
                       <li
@@ -606,6 +630,17 @@ export function TournamentScheduleCard({
                                 Hide
                               </button>
                             ))}
+                          {!!g.assignmentSnapshot?.length && (
+                            <button type="button" className="inline-flex items-center gap-1 rounded-full border border-destructive/30 px-2 py-0.5 text-[11px] font-bold text-destructive hover:bg-destructive/5"
+                              data-testid={`btn-remove-game-${m.id}`}
+                              onClick={() => setRemovalTarget({
+                                competitionId: g.tournamentId, competitionSlug: g.tournamentSlug, competitionName: g.tournamentName,
+                                teamName, assignments: g.assignmentSnapshot!,
+                                match: { id: m.id, label: `${m.opponentName ? `Against ${m.opponentName}` : "Opponent TBD"} · ${fmtDate(m.matchDate)} ${fmtTime(m.startTime)}` },
+                              })}>
+                              <Unlink className="h-3 w-3" /> Remove game
+                            </button>
+                          )}
                         </div>
                       </li>
                     ))}
@@ -671,6 +706,9 @@ export function TournamentScheduleCard({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {removalTarget && (
+        <CompetitionScheduleRemovalDialog teamId={teamId} target={removalTarget} onClose={() => setRemovalTarget(null)} />
+      )}
     </Card>
   );
 }
