@@ -12,6 +12,8 @@ interface FitTextProps {
   /** Element rendered for the container (e.g. "h1"). Defaults to "div". */
   as?: ElementType;
   className?: string;
+  /** Identifies the visible line, excluding the hidden measurement copy. */
+  "data-testid"?: string;
 }
 
 export function fitFontSize({
@@ -42,6 +44,7 @@ export function FitText({
   lineHeight = 1.05,
   as: Tag = "div",
   className,
+  "data-testid": testId,
 }: FitTextProps) {
   const containerRef = useRef<HTMLElement>(null);
   const measureRef = useRef<HTMLSpanElement>(null);
@@ -96,6 +99,8 @@ export function FitText({
       </span>
       <span
         className="block overflow-hidden text-ellipsis whitespace-nowrap"
+        data-testid={testId}
+        title={typeof children === "string" ? children : undefined}
         style={{ fontSize, lineHeight, paddingBottom: "0.15em" }}
       >
         {children}

@@ -1,3 +1,5 @@
+import { FitText } from "@/components/FitText";
+
 export type FeaturedRecapOrg = {
   id: string;
   name: string | null;
@@ -17,7 +19,7 @@ export function FeaturedRecapOrganization({ org, teamName }: { org?: FeaturedRec
   const { primary, secondary } = featuredOrgPalette(org);
   return (
     <div
-      className="flex min-w-0 items-center gap-3 px-4 py-2.5"
+      className="flex min-w-0 items-center gap-2.5 px-3 py-1.5"
       data-testid="featured-recap-organization"
       style={{
         borderBottom: `3px solid ${primary}`,
@@ -28,19 +30,23 @@ export function FeaturedRecapOrganization({ org, teamName }: { org?: FeaturedRec
         <img
           src={org.logoUrl}
           alt={`${org.name || "Organization"} logo`}
-          className="h-12 w-12 shrink-0 rounded-lg bg-white object-contain p-1 shadow-sm"
+          className="h-10 w-10 shrink-0 rounded-lg bg-white object-contain p-1 shadow-sm"
           loading="lazy"
         />
       ) : (
-        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-white text-lg font-black text-slate-800 shadow-sm" aria-hidden="true">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white text-base font-black text-slate-800 shadow-sm" aria-hidden="true">
           {(org?.name || teamName).trim().split(/\s+/).slice(0, 2).map(word => word[0]).join("").toUpperCase()}
         </span>
       )}
-      <div className="min-w-0 space-y-1 [overflow-wrap:anywhere]">
-        {org?.name ? <p className="text-[11px] font-semibold leading-snug text-muted-foreground">{org.name}</p> : null}
-        <p className="text-sm font-black leading-snug text-foreground" data-testid="featured-recap-team-name">
+      <div className="min-w-0 flex-1 space-y-0.5">
+        {org?.name ? (
+          <FitText as="p" max={12} min={11} lineHeight={1.2} className="font-semibold text-muted-foreground" data-testid="featured-recap-organization-name">
+            {org.name}
+          </FitText>
+        ) : null}
+        <FitText as="p" max={14} min={12} lineHeight={1.2} className="font-black text-foreground" data-testid="featured-recap-team-name">
           {teamName}
-        </p>
+        </FitText>
       </div>
     </div>
   );

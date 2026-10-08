@@ -63,6 +63,7 @@ import {
 } from "@/lib/competition-weeks";
 import { featuredRecapPreviewText } from "@/lib/featuredRecapPreview";
 import { FeaturedRecapOrganization, featuredOrgPalette, type FeaturedRecapOrg } from "@/components/FeaturedRecapOrganization";
+import { FitText } from "@/components/FitText";
 
 // Competitions §9a — PUBLIC branded competition page (`/c/<slug>`). Distinct
 // from org/team pages on purpose: the hero is themed with the operator's
@@ -1665,10 +1666,10 @@ export default function CompetitionPage() {
                   secondaryColor={c.secondaryColor}
                 />
                 <FeaturedRecapOrganization org={r.organization} teamName={r.teamName} />
-                <CardContent className="min-w-0 px-4 py-3 space-y-1.5" style={{ backgroundColor: `color-mix(in srgb, ${orgPalette.primary} 8%, hsl(var(--card)))` }}>
-                  <p className="truncate text-lg font-black tracking-tight leading-snug" title={r.title}>
+                <CardContent className="min-w-0 px-4 py-2" style={{ backgroundColor: `color-mix(in srgb, ${orgPalette.primary} 8%, hsl(var(--card)))` }}>
+                  <FitText as="p" max={18} min={14} lineHeight={1.15} className="font-black tracking-tight" data-testid={`title-featured-recap-${r.id}`}>
                     {r.title}
-                  </p>
+                  </FitText>
                 </CardContent>
                 {r.coverImageUrl ? (
                   <div className="h-28 w-full overflow-hidden relative">
@@ -1681,7 +1682,7 @@ export default function CompetitionPage() {
                   </div>
                 ) : previewText ? (
                   <div
-                    className="relative flex h-36 w-full items-start overflow-hidden bg-muted/40 px-4 py-3"
+                    className="relative flex h-40 w-full items-start overflow-hidden bg-muted/40 px-4 py-2.5"
                     data-testid={`preview-featured-recap-${r.id}`}
                     style={{ background: `linear-gradient(145deg, color-mix(in srgb, ${orgPalette.primary} 16%, hsl(var(--card))), color-mix(in srgb, ${orgPalette.secondary} 12%, hsl(var(--card))))` }}
                   >
@@ -1692,14 +1693,14 @@ export default function CompetitionPage() {
                         background: `radial-gradient(circle at center, ${orgPalette.primary} 0%, transparent 72%)`,
                       }}
                     />
-                    <div className="relative min-w-0 space-y-1.5 pb-5">
+                    <div className="relative min-w-0 space-y-1 pb-5">
                       <p
                         className="text-[10px] font-black uppercase tracking-[0.18em]"
                         style={{ color: `color-mix(in srgb, ${orgPalette.primary} 65%, currentColor)` }}
                       >
                         From the recap
                       </p>
-                      <p className="line-clamp-4 text-sm font-semibold leading-snug text-foreground/85">
+                      <p className="line-clamp-5 text-sm font-semibold leading-snug text-foreground/85">
                         {previewText}
                       </p>
                     </div>

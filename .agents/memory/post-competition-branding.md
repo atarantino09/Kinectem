@@ -32,3 +32,9 @@ Favor the recap preview over matchup metadata on featured competition cards: no 
 **Why:** The user explicitly requested these constraints so the game-recap preview can take up more space.
 
 **How to apply:** Truncate long card headlines with the full title still accessible; keep opponent details in the full recap and give the card preview more visible lines.
+
+Organization names, team names, and recap titles must stay on one line with responsive font shrinking, bounded by readable minimum sizes. Keep the identity area compact to favor the recap excerpt.
+
+**Why:** The user explicitly requested smaller text for long names and headlines, but a limit for extremely long text instead of unreadably small fonts.
+
+**How to apply:** Fit text within its available width, then use an ellipsis once the minimum size is reached. Keep the full text accessible and preserve font-load remeasurement.

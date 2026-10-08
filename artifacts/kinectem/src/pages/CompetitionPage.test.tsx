@@ -190,19 +190,19 @@ describe("competition partnership directory", () => {
     expect(screen.queryByTestId("section-tournament-recaps")).not.toBeInTheDocument();
     expect(mockedFetch.mock.calls.some(([url]) => String(url).includes("/tournament-recaps"))).toBe(false);
     expect(within(card).getByRole("img", { name: "Authoring Club logo" })).toHaveAttribute("src", "/author-club.png");
-    expect(within(card).getByText("Authoring Club")).toBeVisible();
+    expect(within(card).getByTestId("featured-recap-organization-name")).toHaveTextContent("Authoring Club");
     expect(within(card).getByTestId("strip-competition-brand")).toHaveTextContent("Rolling Cup");
     expect(within(card).getByTestId("featured-recap-organization").getAttribute("style")).toContain("#abcdef");
     expect(within(card).getByTestId("featured-recap-team-name")).toHaveTextContent("Club U12");
     expect(within(card).queryByRole("button", { name: /share.*image/i })).not.toBeInTheDocument();
     expect(card.closest("a")).toHaveAttribute("href", "/posts/club-recap");
     expect(within(card).queryByText("Rivals")).not.toBeInTheDocument();
-    const title = within(card).getByText("A hard-fought victory in the final match of a very busy competition");
-    expect(title).toHaveClass("truncate");
+    const title = within(card).getByTestId("title-featured-recap-club-recap");
+    expect(title).toHaveClass("whitespace-nowrap", "text-ellipsis");
     expect(title).not.toHaveClass("line-clamp-2");
     expect(title).toHaveAttribute("title", title.textContent);
-    expect(within(card).getByTestId("preview-featured-recap-club-recap")).toHaveClass("h-36");
-    expect(within(card).getByText("A hard-fought win.")).toHaveClass("line-clamp-4");
+    expect(within(card).getByTestId("preview-featured-recap-club-recap")).toHaveClass("h-40");
+    expect(within(card).getByText("A hard-fought win.")).toHaveClass("line-clamp-5");
   });
   it.each([true, false])("keeps the removed results entry hidden (canManage=%s)", async (canManage) => {
     mockedFetch.mockResolvedValue(competitionResponse({ canManage }));
