@@ -1696,10 +1696,14 @@ export default function CompetitionPage() {
                   </div>
                 ) : previewText ? (
                   <div
-                    className="relative flex h-40 w-full items-start overflow-hidden bg-muted/40 px-4 py-2.5"
+                    className="flex h-40 w-full flex-col overflow-hidden"
                     data-testid={`preview-featured-recap-${r.id}`}
-                    style={{ background: `linear-gradient(145deg, color-mix(in srgb, ${orgPalette.primary} 16%, hsl(var(--card))), color-mix(in srgb, ${orgPalette.secondary} 12%, hsl(var(--card))))` }}
                   >
+                    <div
+                      className="relative min-h-0 flex-1 overflow-hidden px-4 py-2.5"
+                      data-testid={`gradient-featured-recap-${r.id}`}
+                      style={{ background: `linear-gradient(145deg, color-mix(in srgb, ${orgPalette.primary} 16%, hsl(var(--card))), color-mix(in srgb, ${orgPalette.secondary} 12%, hsl(var(--card))))` }}
+                    >
                     <div
                       aria-hidden="true"
                       className="pointer-events-none absolute -right-12 -top-10 h-28 w-28 opacity-[0.24]"
@@ -1707,7 +1711,7 @@ export default function CompetitionPage() {
                         background: `radial-gradient(circle at center, ${orgPalette.primary} 0%, transparent 72%)`,
                       }}
                     />
-                    <div className="relative min-w-0 space-y-1 pb-5">
+                    <div className="relative min-w-0 space-y-1">
                       <p
                         className="text-[10px] font-black uppercase tracking-[0.18em]"
                         style={{ color: `color-mix(in srgb, ${orgPalette.primary} 65%, currentColor)` }}
@@ -1718,14 +1722,17 @@ export default function CompetitionPage() {
                         {previewText}
                       </p>
                     </div>
+                    </div>
                     <div
-                      aria-hidden="true"
-                      className="pointer-events-none absolute inset-x-0 bottom-0 h-9"
-                      style={{ background: `linear-gradient(to top, color-mix(in srgb, ${orgPalette.secondary} 12%, hsl(var(--card))), transparent)` }}
-                    />
-                    <span className="absolute bottom-2.5 right-5 text-[10px] font-black uppercase tracking-widest text-black dark:text-white">
+                      className="flex h-6 shrink-0 items-center justify-end border-t px-4 text-[10px] font-black uppercase tracking-widest text-black dark:text-white"
+                      data-testid={`footer-featured-recap-${r.id}`}
+                      style={{
+                        backgroundColor: `color-mix(in srgb, ${orgPalette.primary} 8%, hsl(var(--card)))`,
+                        borderColor: `color-mix(in srgb, ${orgPalette.primary} 20%, hsl(var(--card)))`,
+                      }}
+                    >
                       Read full recap
-                    </span>
+                    </div>
                   </div>
                 ) : (
                   <div className="h-28 w-full bg-muted/40 flex items-center justify-center relative overflow-hidden">

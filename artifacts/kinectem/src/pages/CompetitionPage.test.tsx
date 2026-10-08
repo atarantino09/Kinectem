@@ -202,6 +202,12 @@ describe("competition partnership directory", () => {
     expect(title).not.toHaveClass("line-clamp-2");
     expect(title).toHaveAttribute("title", title.textContent);
     expect(within(card).getByTestId("preview-featured-recap-club-recap")).toHaveClass("h-40");
+    const gradient = within(card).getByTestId("gradient-featured-recap-club-recap");
+    const footer = within(card).getByTestId("footer-featured-recap-club-recap");
+    expect(footer).toHaveClass("border-t", "shrink-0");
+    expect(gradient.nextElementSibling).toBe(footer);
+    expect(gradient).not.toContainElement(within(card).getByText("Read full recap"));
+    expect(footer.style.backgroundColor).not.toContain("gradient");
     expect(within(card).getByText("A hard-fought win.")).toHaveClass("line-clamp-5");
     expect(within(card).getByText("A hard-fought win.")).toHaveClass("text-black");
     expect(within(card).getByTestId("bracket-featured-recap-club-recap")).toHaveClass("text-muted-foreground");

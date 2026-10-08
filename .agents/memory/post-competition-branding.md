@@ -44,3 +44,9 @@ Featured recap excerpts must be black in the light theme. Bracket names are gray
 **Why:** The user refined the contrast preference to gray bracket names and black story text, and explicitly removed repeated dates to save space.
 
 **How to apply:** Preserve organization-colored backgrounds and readable dark-theme contrast. Keep bracket labels and the date filter, but omit date/week headings from the featured-card display. Do not change schedule dates elsewhere.
+
+The excerpt gradient ends at a hard horizontal edge above a solid “Read full recap” footer.
+
+**Why:** The user wants the footer visually separated, like the solid identity/title area above the excerpt, rather than faded into the gradient.
+
+**How to apply:** Keep the footer outside the gradient surface, retain the organization palette, and preserve the compact card height.
