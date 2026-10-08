@@ -38,3 +38,9 @@ Organization names, team names, and recap titles must stay on one line with resp
 **Why:** The user explicitly requested smaller text for long names and headlines, but a limit for extremely long text instead of unreadably small fonts.
 
 **How to apply:** Fit text within its available width, then use an ellipsis once the minimum size is reached. Keep the full text accessible and preserve font-load remeasurement.
+
+Featured recap labels, bracket headings, counts, and dates should be high-contrast black in the light theme, not muted gray. Keep section spacing compact.
+
+**Why:** The user explicitly rejected the gray headings/date treatment and the excess empty space around featured recaps.
+
+**How to apply:** Preserve organization-colored backgrounds and readable dark-theme contrast. Tighten the surrounding layout without removing the expanded excerpt or hiding bracket/date context.

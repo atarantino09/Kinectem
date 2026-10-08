@@ -203,6 +203,13 @@ describe("competition partnership directory", () => {
     expect(title).toHaveAttribute("title", title.textContent);
     expect(within(card).getByTestId("preview-featured-recap-club-recap")).toHaveClass("h-40");
     expect(within(card).getByText("A hard-fought win.")).toHaveClass("line-clamp-5");
+    const rail = screen.getByTestId("rail-featured-recaps");
+    expect(rail).toHaveClass("space-y-2.5", "text-black");
+    expect(screen.getByTestId("rail-grouped-sections")).toHaveClass("grid", "gap-y-4", "md:grid-cols-2");
+    for (const heading of within(rail).getAllByRole("heading").filter((heading) => ["H3", "H4"].includes(heading.tagName))) {
+      expect(heading).toHaveClass("text-black");
+      expect(heading.className).not.toContain("text-muted");
+    }
   });
   it("filters featured recaps by bracket together with team, date, and search, then clears every filter", async () => {
     const user = userEvent.setup();

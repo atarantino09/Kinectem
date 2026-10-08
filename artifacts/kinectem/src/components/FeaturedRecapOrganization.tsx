@@ -40,11 +40,11 @@ export function FeaturedRecapOrganization({ org, teamName }: { org?: FeaturedRec
       )}
       <div className="min-w-0 flex-1 space-y-0.5">
         {org?.name ? (
-          <FitText as="p" max={12} min={11} lineHeight={1.2} className="font-semibold text-muted-foreground" data-testid="featured-recap-organization-name">
+          <FitText as="p" max={12} min={11} lineHeight={1.2} className="font-semibold text-black dark:text-white" data-testid="featured-recap-organization-name">
             {org.name}
           </FitText>
         ) : null}
-        <FitText as="p" max={14} min={12} lineHeight={1.2} className="font-black text-foreground" data-testid="featured-recap-team-name">
+        <FitText as="p" max={14} min={12} lineHeight={1.2} className="font-black text-black dark:text-white" data-testid="featured-recap-team-name">
           {teamName}
         </FitText>
       </div>

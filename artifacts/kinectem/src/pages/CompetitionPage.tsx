@@ -1679,7 +1679,7 @@ export default function CompetitionPage() {
                     {r.title}
                   </FitText>
                   <p
-                    className="mt-1 truncate text-[10px] font-semibold text-muted-foreground"
+                    className="mt-1 truncate text-[10px] font-semibold text-black dark:text-white"
                     title={`Bracket: ${bracketDetail}`}
                     data-testid={`bracket-featured-recap-${r.id}`}
                   >
@@ -1724,7 +1724,7 @@ export default function CompetitionPage() {
                       className="pointer-events-none absolute inset-x-0 bottom-0 h-9"
                       style={{ background: `linear-gradient(to top, color-mix(in srgb, ${orgPalette.secondary} 12%, hsl(var(--card))), transparent)` }}
                     />
-                    <span className="absolute bottom-2.5 right-5 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                    <span className="absolute bottom-2.5 right-5 text-[10px] font-black uppercase tracking-widest text-black dark:text-white">
                       Read full recap
                     </span>
                   </div>
@@ -1738,8 +1738,8 @@ export default function CompetitionPage() {
             );
           };
           return (
-          <section className="competition-section-surface space-y-4 rounded-xl border p-4 shadow-sm sm:p-5" data-testid="rail-featured-recaps">
-            <div className="competition-section-trigger -mx-4 -mt-4 flex items-center justify-between gap-2 rounded-t-xl border-b border-border/60 px-4 py-4 sm:-mx-5 sm:-mt-5 sm:px-5">
+          <section className="competition-section-surface space-y-2.5 rounded-xl border p-3 text-black shadow-sm dark:text-white sm:p-4" data-testid="rail-featured-recaps">
+            <div className="competition-section-trigger -mx-3 -mt-3 flex items-center justify-between gap-2 rounded-t-xl border-b border-border/60 px-3 py-2.5 sm:-mx-4 sm:-mt-4 sm:px-4">
               <h2 className="text-xl font-black tracking-tight flex items-center gap-2">
                 <span
                   aria-hidden="true"
@@ -1771,7 +1771,7 @@ export default function CompetitionPage() {
               </div>
             </div>
             <div
-              className="competition-filter-panel rounded-xl border p-3 shadow-sm space-y-3"
+              className="competition-filter-panel rounded-xl border p-2.5 shadow-sm space-y-2"
               data-testid="recap-filters"
             >
               <div className="flex flex-col gap-2 sm:flex-row">
@@ -1786,7 +1786,7 @@ export default function CompetitionPage() {
                     value={recapSearch}
                     onChange={(event) => setRecapSearch(event.target.value)}
                     placeholder="Search teams, opponents, or recap titles"
-                    className="h-10 w-full rounded-lg border border-input bg-background pl-9 pr-10 text-sm font-medium outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-ring"
+                    className="h-9 w-full rounded-lg border border-input bg-background pl-9 pr-10 text-sm font-medium text-black outline-none transition-shadow placeholder:text-black focus-visible:ring-2 focus-visible:ring-ring dark:text-white dark:placeholder:text-white"
                     data-testid="input-search-recaps"
                   />
                   {recapSearch ? (
@@ -1815,7 +1815,7 @@ export default function CompetitionPage() {
               </div>
               <div className="grid gap-2 sm:grid-cols-3">
                 <label className="space-y-1">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-black dark:text-white">
                     Team
                   </span>
                   <select
@@ -1833,7 +1833,7 @@ export default function CompetitionPage() {
                   </select>
                 </label>
                 <label className="min-w-0 space-y-1">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-black dark:text-white">
                     Bracket
                   </span>
                   <select
@@ -1852,7 +1852,7 @@ export default function CompetitionPage() {
                   </select>
                 </label>
                 <label className="space-y-1">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-black dark:text-white">
                     Game date
                   </span>
                   <select
@@ -1875,7 +1875,7 @@ export default function CompetitionPage() {
                 Week headings stay visible for every filter, including All. */}
             {usedBrackets.length > 0 && (
               <div
-                className="flex items-center gap-2 flex-wrap pt-1"
+                className="flex items-center gap-1.5 flex-wrap"
                 data-testid="filter-bracket-chips"
               >
                 <Button
@@ -1910,7 +1910,7 @@ export default function CompetitionPage() {
                 <h3 className="mt-3 font-black">
                   {allRecaps.length === 0 ? "No featured game recaps yet" : selectedBracketEmpty ? "No featured recaps in this bracket yet" : "No recaps match those filters"}
                 </h3>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <p className="mt-1 text-sm text-black dark:text-white">
                   {allRecaps.length === 0 || selectedBracketEmpty
                     ? "Only recaps featured by competition admins appear here."
                     : "Try another bracket, team, date, or search term."}
@@ -1927,20 +1927,20 @@ export default function CompetitionPage() {
                 </Button>
               </div>
             ) : (
-            <div className="space-y-8 pt-2" data-testid="rail-grouped-sections">
+            <div className="grid gap-x-3 gap-y-4 md:grid-cols-2 lg:grid-cols-3" data-testid="rail-grouped-sections">
               {groupedSections.map((s) => (
                 <div
                   key={s.key}
-                  className="space-y-3"
+                  className={`min-w-0 space-y-1.5 ${s.recaps.length > 1 ? "md:col-span-2 lg:col-span-3" : ""}`}
                   data-testid={`section-bracket-${s.key}`}
                 >
-                  <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                  <h3 className="text-sm font-black uppercase tracking-widest text-black dark:text-white flex items-center gap-1.5">
                       {s.label}
-                      <span className="font-bold normal-case tracking-normal text-muted-foreground/60">
+                      <span className="font-bold normal-case tracking-normal text-black dark:text-white">
                         ({s.recaps.length})
                       </span>
                   </h3>
-                  <div className="space-y-6">
+                  <div className="space-y-3">
                     {recapGroups(
                       s.recaps.map((r) => ({
                         ...r,
@@ -1950,10 +1950,10 @@ export default function CompetitionPage() {
                     ).map((weekGroup) => (
                       <div
                         key={weekGroup.key}
-                        className="space-y-2"
+                        className="space-y-1"
                         data-testid={`section-recap-week-${s.key}-${weekGroup.key}`}
                       >
-                        <h4 className="text-xs font-black uppercase tracking-widest text-muted-foreground/80">
+                        <h4 className="text-xs font-black uppercase tracking-widest text-black dark:text-white">
                           {shortTournament &&
                           weekGroup.key === SHORT_TOURNAMENT_GROUP_KEY
                             ? formatCompetitionDateRange(
@@ -1964,7 +1964,7 @@ export default function CompetitionPage() {
                             ? formatCompetitionWeek(weekGroup.week)
                             : "Undated"}
                         </h4>
-                        <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                        <div className={`grid min-w-0 gap-2.5 ${s.recaps.length > 1 ? "sm:grid-cols-2 lg:grid-cols-3" : ""}`}>
                           {weekGroup.items.map(renderRecapCard)}
                         </div>
                       </div>

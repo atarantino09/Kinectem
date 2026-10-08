@@ -105,3 +105,4 @@
 - [Partner suggestion identity](partner-suggestion-identity.md) — name suggestions are advisory; duplicate clubs/teams and gender metadata never authorize an assumed assignment.
 - [Browser download fixtures](browser-download-fixtures.md) — native downloads may bypass page-level mocks; verify saved bytes and HTTP status, not just a download event.
 - [Competition results grounding](competition-results-grounding.md) — reviewed evidence bounds AI claims; canonical ownership and truthful blocked-source fallback are product requirements.
+- [Multi-file patch failures](multi-file-patch-failure.md) — a failed call can still change other files; inspect per-file results and retry only failed changes.
