@@ -23,6 +23,6 @@ The supplied GotSport event page redirected to a JavaScript/reCAPTCHA verificati
 
 Post-competition results entry must be a visible, separate section for operators, distinct from schedule import, on both the competition page and its editor.
 
-**Why:** The user could not find the URL/upload controls behind the results-management link and explicitly requested a separate field for after a tournament or league.
+**Why:** The user could not find the URL/upload controls behind the results-management link and explicitly requested a separate field for after a tournament or league. They also requested that the CSV Results action immediately open file selection, not merely switch to a CSV text box.
 
-**How to apply:** Keep results URL and upload inputs discoverable without navigating first. Preserve explicit review and publication; importing results alone must never publish a recap.
+**How to apply:** Keep results URL and upload inputs discoverable without navigating first. Open the CSV file picker directly from the user's click so browser user-gesture requirements are respected. Preserve explicit review and publication; importing results alone must never publish a recap.

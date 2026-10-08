@@ -28,6 +28,20 @@ const story = (o: Record<string, unknown>) => ({
 beforeEach(() => fetchMock.mockReset());
 
 describe("visible post-competition results entry", () => {
+  it("opens the file picker directly when CSV Results is clicked, including when already selected", async () => {
+    renderWithProviders(<ImportCard cid="c1" onImported={vi.fn()} />);
+    const picker = screen.getByTestId("input-import-file");
+    const click = vi.spyOn(picker, "click").mockImplementation(() => {});
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("tab-import-csv"));
+    expect(click).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("tab-import-csv")).toHaveAttribute("aria-selected", "true");
+    await user.click(screen.getByTestId("tab-import-csv"));
+    expect(click).toHaveBeenCalledTimes(2);
+    expect(fetchMock).not.toHaveBeenCalled();
+    click.mockRestore();
+  });
+
   it("shows separate URL and upload fields immediately, with a route to bracket recaps", () => {
     renderWithProviders(<ResultsEntryPanel competitionId="c1" />);
     expect(screen.getByTestId("section-post-competition-results")).toHaveTextContent("After your tournament or league");

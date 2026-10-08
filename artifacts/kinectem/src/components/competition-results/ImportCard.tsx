@@ -12,6 +12,7 @@ export function ImportCard({ cid, onImported }: { cid: string; onImported: (s: S
   const [url, setUrl] = useState("");
   const [text, setText] = useState("");
   const clientId = useRef(uuid());
+  const fileInput = useRef<HTMLInputElement>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [readingFile, setReadingFile] = useState(false);
   const onFile = async (f: File | undefined) => {
@@ -70,7 +71,10 @@ export function ImportCard({ cid, onImported }: { cid: string; onImported: (s: S
               disabled={m.isPending || readingFile}
               variant={kind === k ? "brand" : "outline"}
               className="rounded-full font-bold capitalize"
-              onClick={() => setKind(k)}
+              onClick={() => {
+                setKind(k);
+                if (k === "csv") fileInput.current?.click();
+              }}
               data-testid={`tab-import-${k}`}
             >
               {k === "url" ? "Results URL" : k === "csv" ? "CSV results" : "Paste results"}
@@ -108,6 +112,7 @@ export function ImportCard({ cid, onImported }: { cid: string; onImported: (s: S
               use the CSV results tab to paste CSV text.
             </p>
             <input
+              ref={fileInput}
               type="file"
               id={`results-file-${cid}`}
               disabled={m.isPending || readingFile}
