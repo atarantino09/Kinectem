@@ -1279,6 +1279,11 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
       .select({
         article: articles,
         teamName: teams.name,
+        organizationId: organizations.id,
+        organizationName: organizations.name,
+        organizationLogoUrl: organizations.logoUrl,
+        organizationPrimary: organizations.brandPrimaryColor,
+        organizationSecondary: organizations.brandSecondaryColor,
         matchId: tournamentMatches.id,
         matchDate: tournamentMatches.matchDate,
         matchDivision: tournamentMatches.division,
@@ -1286,6 +1291,7 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
       })
       .from(articles)
       .innerJoin(teams, eq(teams.id, articles.teamId))
+      .leftJoin(organizations, eq(organizations.id, teams.organizationId))
       .leftJoin(users, eq(users.id, articles.authorId))
       .leftJoin(
         tournamentMatches,
@@ -1367,7 +1373,7 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
         ageGroup: b.ageGroup,
       })),
       featuredRecaps: featuredRows.map(
-        ({ article: a, teamName, matchId, matchDate, matchDivision, matchBracket }) => {
+        ({ article: a, teamName, organizationId, organizationName, organizationLogoUrl, organizationPrimary, organizationSecondary, matchId, matchDate, matchDivision, matchBracket }) => {
           const linkedMatch = matchId != null;
           const effectiveGameDate =
             linkedMatch && matchDate
@@ -1397,6 +1403,13 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
         opponentScore: a.opponentScore,
         teamId: a.teamId,
         teamName,
+        organization: organizationId ? {
+          id: organizationId,
+          name: organizationName,
+          logoUrl: organizationLogoUrl,
+          brandPrimaryColor: organizationPrimary,
+          brandSecondaryColor: organizationSecondary,
+        } : null,
         publishedAt: a.publishedAt,
         // Task #852 — used only for the public page's bracket filter;
         // never rendered on the post itself.

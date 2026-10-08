@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { customFetch } from "@workspace/api-client-react";
 import { renderWithProviders } from "@/test/renderWithProviders";
@@ -172,17 +172,30 @@ describe("schedule grouping model", () => {
 });
 
 describe("competition partnership directory", () => {
-  it.each([true, false])("shows direct results entry only for competition managers (canManage=%s)", async (canManage) => {
+  it("shows organization branding on the actual featured recap card alongside the event strip", async () => {
+    mockedFetch.mockResolvedValue({
+      ...competitionResponse(),
+      featuredRecaps: [{
+        id: "club-recap", title: "Club recap", body: "A hard-fought win.", summary: null,
+        coverImageUrl: null, gameDate: "2026-05-04", opponentName: "Rivals",
+        teamScore: 3, opponentScore: 1, teamId: "club-team", teamName: "Club U12",
+        publishedAt: "2026-05-05T12:00:00Z",
+        organization: { id: "club", name: "Authoring Club", logoUrl: "/author-club.png",
+          brandPrimaryColor: "#123456", brandSecondaryColor: "#abcdef" },
+      }],
+    });
+    renderWithProviders(<CompetitionPage />);
+    const card = await screen.findByTestId("card-featured-recap-club-recap");
+    expect(within(card).getByRole("img", { name: "Authoring Club logo" })).toHaveAttribute("src", "/author-club.png");
+    expect(within(card).getByText("Authoring Club")).toBeVisible();
+    expect(within(card).getByTestId("strip-competition-brand")).toHaveTextContent("Rolling Cup");
+    expect(within(card).getByTestId("featured-recap-organization").getAttribute("style")).toContain("#abcdef");
+  });
+  it.each([true, false])("keeps the removed results entry hidden (canManage=%s)", async (canManage) => {
     mockedFetch.mockResolvedValue(competitionResponse({ canManage }));
     renderWithProviders(<CompetitionPage />);
     await screen.findByRole("heading", { name: "Rolling Cup" });
-    if (canManage) {
-      expect(screen.getByTestId("section-post-competition-results")).toBeVisible();
-      expect(screen.getByLabelText("Results page URL")).toBeVisible();
-      expect(screen.getByLabelText("Or upload results (.csv)")).toBeVisible();
-    } else {
-      expect(screen.queryByTestId("section-post-competition-results")).not.toBeInTheDocument();
-    }
+    expect(screen.queryByTestId("section-post-competition-results")).not.toBeInTheDocument();
   });
 
   beforeEach(() => {

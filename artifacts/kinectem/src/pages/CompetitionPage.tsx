@@ -66,6 +66,7 @@ import {
 } from "@/lib/competition-weeks";
 import { PublishedRecaps } from "@/components/competition-results/PublishedRecaps";
 import { featuredRecapPreviewText } from "@/lib/featuredRecapPreview";
+import { FeaturedRecapOrganization, featuredOrgPalette, type FeaturedRecapOrg } from "@/components/FeaturedRecapOrganization";
 
 // Competitions §9a — PUBLIC branded competition page (`/c/<slug>`). Distinct
 // from org/team pages on purpose: the hero is themed with the operator's
@@ -159,6 +160,7 @@ type FeaturedRecap = {
   opponentScore: number | null;
   teamId: string;
   teamName: string;
+  organization?: FeaturedRecapOrg | null;
   publishedAt: string | null;
   // Task #852 — organizer-assigned sorting bracket (null = unbracketed).
   bracketId?: string | null;
@@ -1703,11 +1705,13 @@ export default function CompetitionPage() {
           }
           const renderRecapCard = (r: FeaturedRecap) => {
             const previewText = featuredRecapPreviewText(r);
+            const orgPalette = featuredOrgPalette(r.organization);
             return (
               <Link key={r.id} href={`/posts/${r.id}`} className="block min-w-0">
                 <Card
                   className="min-w-0 rounded-xl border-border overflow-hidden cursor-pointer transition-all hover:-translate-y-1 hover:shadow-lg h-full flex flex-col group"
                   data-testid={`card-featured-recap-${r.id}`}
+                  style={{ borderColor: `color-mix(in srgb, ${orgPalette.primary} 30%, transparent)` }}
                 >
                 <CompetitionBrandStrip
                   name={c.name}
@@ -1715,6 +1719,7 @@ export default function CompetitionPage() {
                   brandColor={c.brandColor}
                   secondaryColor={c.secondaryColor}
                 />
+                <FeaturedRecapOrganization org={r.organization} />
                 <CardContent className="min-w-0 p-5 pb-4 space-y-2 bg-card">
                   <p className="text-lg font-black tracking-tight line-clamp-2 leading-snug">
                     {r.title}
@@ -1746,13 +1751,13 @@ export default function CompetitionPage() {
                       aria-hidden="true"
                       className="pointer-events-none absolute -right-12 -top-10 h-28 w-28 opacity-[0.12]"
                       style={{
-                        background: `radial-gradient(circle at center, ${brand} 0%, transparent 72%)`,
+                        background: `radial-gradient(circle at center, ${orgPalette.primary} 0%, transparent 72%)`,
                       }}
                     />
                     <div className="relative min-w-0 space-y-1.5 pb-5">
                       <p
                         className="text-[10px] font-black uppercase tracking-[0.18em]"
-                        style={{ color: brand }}
+                        style={{ color: `color-mix(in srgb, ${orgPalette.primary} 65%, currentColor)` }}
                       >
                         From the recap
                       </p>

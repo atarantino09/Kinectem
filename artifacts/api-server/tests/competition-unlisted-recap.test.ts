@@ -15,7 +15,12 @@ afterEach(async () => {
 async function fixture() {
   const author = await loginAs("coach@kinectem.demo");
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const [org] = await db.insert(organizations).values({ name: `Unlisted recap club ${suffix}` }).returning();
+  const [org] = await db.insert(organizations).values({
+    name: `Unlisted recap club ${suffix}`,
+    logoUrl: "https://example.test/author-club-logo.png",
+    brandPrimaryColor: "#234567",
+    brandSecondaryColor: "#fedcba",
+  }).returning();
   cleanup.push(() => db.delete(organizations).where(eq(organizations.id, org.id)));
   await db.insert(organizationAdmins).values({ organizationId: org.id, userId: author.user.id, role: "owner" });
   const [team] = await db.insert(teams).values({ organizationId: org.id, name: `Playoff team ${suffix}` }).returning();
@@ -126,7 +131,21 @@ describe("competition-only game recaps", () => {
     expect(featured.status).toBe(200);
     const after = await request(app).get(`/api/v1/competitions/${f.competition.slug}`);
     expect(after.body.featuredRecaps).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: created.body.id, groupingSource: "recap", effectiveGameDate: "2026-08-10" }),
+      expect.objectContaining({
+        id: created.body.id, groupingSource: "recap", effectiveGameDate: "2026-08-10",
+        organization: expect.objectContaining({
+          id: f.team.organizationId,
+          logoUrl: "https://example.test/author-club-logo.png",
+          brandPrimaryColor: "#234567",
+          brandSecondaryColor: "#fedcba",
+        }),
+      }),
+    ]));
+    await db.update(teams).set({ organizationId: null }).where(eq(teams.id, f.team.id));
+    const independent = await request(app).get(`/api/v1/competitions/${f.competition.slug}`);
+    expect(independent.status).toBe(200);
+    expect(independent.body.featuredRecaps).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: created.body.id, organization: null }),
     ]));
   });
 
