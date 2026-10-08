@@ -28,6 +28,7 @@ import {
   TeamHeaderCard,
   type TeamPanel,
 } from "@/components/team-page/TeamHeaderCard";
+import { TeamRecapCards } from "@/components/competition-results/TeamRecapCards";
 import { TeamPostsSection } from "@/components/team-page/TeamPostsSection";
 import { PracticePlansSection } from "@/components/team-page/PracticePlansSection";
 import {
@@ -556,6 +557,7 @@ export default function TeamPage() {
               viewerId={me?.id ?? "anon"}
               teamName={team.name}
             />
+            <TeamRecapCards teamId={teamId} canManage={canManage} />
             <TeamPostsSection
               teamId={teamId}
               isAdmin={isAdmin}

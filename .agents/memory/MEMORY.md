@@ -104,3 +104,4 @@
 - [Long-picker browser verification](long-picker-browser-verification.md) — distinguish automation-session stalls from app freezes using isolated contexts and lightweight DOM checks.
 - [Partner suggestion identity](partner-suggestion-identity.md) — name suggestions are advisory; duplicate clubs/teams and gender metadata never authorize an assumed assignment.
 - [Browser download fixtures](browser-download-fixtures.md) — native downloads may bypass page-level mocks; verify saved bytes and HTTP status, not just a download event.
+- [Competition results grounding](competition-results-grounding.md) — reviewed evidence bounds AI claims; canonical ownership and truthful blocked-source fallback are product requirements.

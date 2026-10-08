@@ -11,6 +11,7 @@
 // other handlers.
 
 import { Router, type IRouter } from "express";
+import { publicCompetitionArticleConditions } from "../lib/competition-recap-coverage";
 import {
   db,
   tournaments,
@@ -21,6 +22,7 @@ import {
   organizations,
   rosterEntries,
   articles,
+  users,
   organizationAdmins,
   competitionFollowers,
   competitionOrganizers,
@@ -1284,6 +1286,7 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
       })
       .from(articles)
       .innerJoin(teams, eq(teams.id, articles.teamId))
+      .leftJoin(users, eq(users.id, articles.authorId))
       .leftJoin(
         tournamentMatches,
         and(
@@ -1293,10 +1296,8 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
       )
       .where(
         and(
-          eq(articles.competitionId, tournament.id),
+          publicCompetitionArticleConditions(tournament.id),
           eq(articles.featured, true),
-          eq(articles.status, "published"),
-          isNull(articles.hiddenAt),
         ),
       )
       .orderBy(desc(articles.createdAt))

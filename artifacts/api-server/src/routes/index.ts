@@ -39,6 +39,7 @@ import competitionPartnerTeamLinksRouter from "./competition-partner-team-links"
 import organizersRouter from "./organizers";
 import competitionAdminsRouter from "./competition-admins";
 import competitionBracketsRouter from "./competition-brackets";
+import competitionResultsRouter from "./competition-results";
 import broadcastsRouter from "./broadcasts";
 import dailyAdminDigestRouter from "./daily-admin-digest";
 import partnerLandingRouter from "./partner-landing";
@@ -102,6 +103,7 @@ router.use(competitionPartnerTeamLinksRouter);
 router.use(organizersRouter);
 router.use(competitionAdminsRouter);
 router.use(competitionBracketsRouter);
+router.use(competitionResultsRouter);
 router.use(broadcastsRouter);
 router.use(dailyAdminDigestRouter);
 router.use(partnerLandingRouter);

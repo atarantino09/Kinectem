@@ -23,6 +23,7 @@ import {
   db,
   tournaments,
   competitionBrackets,
+  competitionTournamentRecaps,
   tournamentParticipants,
   articles,
 } from "@workspace/db";
@@ -296,15 +297,16 @@ router.delete(
         code: "COMPETITION_FORBIDDEN",
       });
     }
-    const deleted = await db
-      .delete(competitionBrackets)
-      .where(
-        and(
-          eq(competitionBrackets.id, String(req.params.bracketId)),
-          eq(competitionBrackets.tournamentId, competition.id),
-        ),
-      )
-      .returning({ id: competitionBrackets.id });
+    const deleted = await db.transaction(async tx => {
+      const where = and(eq(competitionBrackets.id, String(req.params.bracketId)), eq(competitionBrackets.tournamentId, competition.id));
+      const [bracket] = await tx.select().from(competitionBrackets).where(where).for("update");
+      if (!bracket) return [];
+      const [recap] = await tx.select({ id: competitionTournamentRecaps.id }).from(competitionTournamentRecaps)
+        .where(eq(competitionTournamentRecaps.bracketId, bracket.id)).limit(1);
+      if (recap) return null;
+      return tx.delete(competitionBrackets).where(where).returning({ id: competitionBrackets.id });
+    });
+    if (deleted === null) return apiError(res, 409, "Delete this bracket's tournament recap explicitly before removing its sorting label.", { code: "BRACKET_HAS_TOURNAMENT_RECAP" });
     if (deleted.length === 0) return apiError(res, 404, "Bracket not found");
     // A deliberate delete is bracket management — stamp it so the lazy
     // backfill never treats a later-emptied list as "never seeded" and

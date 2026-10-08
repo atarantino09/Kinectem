@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { logger } from "./logger";
+import { COMPETITION_RESULTS_MIGRATION } from "./competition-results-migration";
 
 // Task #190 — This project uses `drizzle-kit push`, which has no
 // concept of file-backed migrations. Push is destructive when a column
@@ -3040,6 +3041,7 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
       END$migration$;
     `,
   },
+  COMPETITION_RESULTS_MIGRATION,
 ];
 
 export async function runStartupMigrations(): Promise<void> {

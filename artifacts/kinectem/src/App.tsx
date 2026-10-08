@@ -48,6 +48,12 @@ const PartnerLandingPage = lazy(() => import("@/pages/PartnerLandingPage"));
 const CompetitionConsolePage = lazy(
   () => import("@/pages/CompetitionConsolePage"),
 );
+const CompetitionResultsPage = lazy(
+  () => import("@/pages/CompetitionResultsPage"),
+);
+const CompetitionStoryPage = lazy(
+  () => import("@/pages/CompetitionStoryPage"),
+);
 const LoginPage = lazy(() => import("@/pages/LoginPage"));
 const ResetPasswordPage = lazy(() => import("@/pages/ResetPasswordPage"));
 const GuardianConfirmPage = lazy(() => import("@/pages/GuardianConfirmPage"));
@@ -157,6 +163,11 @@ function Router() {
         <Route path="/adopt-team/:token" component={TeamAdoptPage} />
         <Route path="/c/:slug/signup" component={TournamentSignupPage} />
         <Route path="/c/:slug" component={CompetitionPage} />
+        {/* Canonical bracket story — public, no login wall. */}
+        <Route
+          path="/competitions/stories/:id"
+          component={CompetitionStoryPage}
+        />
         {/* Public organizer hub (parent company) page — Task #723 */}
         <Route path="/organizers/:slug" component={OrganizerPage} />
         <Route path="/partners/:slug" component={PartnerLandingPage} />
@@ -224,6 +235,10 @@ function Router() {
                 {/* In-app organizer hub view — precedes `/competitions/:id`
                 so "o" isn't read as an id. */}
                 <Route path="/competitions/o/:slug" component={OrganizerPage} />
+                <Route
+                  path="/competitions/:id/results"
+                  component={CompetitionResultsPage}
+                />
                 <Route
                   path="/competitions/:id"
                   component={CompetitionConsolePage}

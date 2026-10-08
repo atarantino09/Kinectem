@@ -1,5 +1,6 @@
 import { useParams, Link, useSearch, useLocation } from "wouter";
 import { useEffect, useMemo, useState } from "react";
+import { BracketStoryLink } from "@/components/competition-results/BracketStoryLink";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   customFetch,
@@ -638,6 +639,10 @@ export default function PostPage() {
           </Link>
         )}
       </div>
+
+      {competition ? (
+        <BracketStoryLink competitionId={competition.id} postId={post.id} />
+      ) : null}
 
       {competition && (
         <Link

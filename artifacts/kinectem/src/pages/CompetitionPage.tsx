@@ -64,6 +64,7 @@ import {
   inclusiveDateSpan,
   type CompetitionWeek,
 } from "@/lib/competition-weeks";
+import { PublishedRecaps } from "@/components/competition-results/PublishedRecaps";
 import { featuredRecapPreviewText } from "@/lib/featuredRecapPreview";
 
 // Competitions §9a — PUBLIC branded competition page (`/c/<slug>`). Distinct
@@ -1558,6 +1559,18 @@ export default function CompetitionPage() {
                 </Button>
               </Link>
             ) : null}
+            {c.canManage ? (
+              <Link href={`/competitions/${c.id}/results`}>
+                <Button
+                  variant="outline"
+                  className="font-bold border-white/70 bg-transparent hover:bg-white/10"
+                  style={{ color: heroText }}
+                  data-testid="btn-manage-results"
+                >
+                  Results &amp; recaps
+                </Button>
+              </Link>
+            ) : null}
             <span className="text-xs font-bold opacity-90">
               {c.claimedCount} / {c.participantCount} teams telling their story
             </span>
@@ -1600,6 +1613,8 @@ export default function CompetitionPage() {
             defaultOpen={isClaimVisitor}
           />
         ) : null}
+
+        <PublishedRecaps competitionId={q.data.competition.id} brand={c.brandColor ?? DEFAULT_BRAND} />
 
         {/* Featured game recaps rail (§7) — the visual centerpiece; hidden
             entirely until the operator features at least one recap. Each

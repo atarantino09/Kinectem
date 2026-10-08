@@ -2,6 +2,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { db, aiProviderKeys } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { decryptSecret } from "./secret-crypto";
+import type { ResultGroup } from "@workspace/db";
+import { TOURNAMENT_DRAFT_INSTRUCTION, renderTournamentDraft } from "./tournament-recap-drafting";
 
 // Sensible default when an admin hasn't pinned a specific model. The admin
 // can override this per provider from /admin/ai-keys. Pinned to a dated
@@ -157,6 +159,22 @@ export async function generatePostText(input: AssistInput): Promise<string> {
     messages: [{ role: "user", content: user }],
   });
   return textFromMessage(message);
+}
+
+export async function generateTournamentRecapText(
+  input: { competitionName: string; group: ResultGroup; coverage: Array<{ title: string; teamName: string; summary: string | null }> },
+  signal?: AbortSignal,
+): Promise<string> {
+  const { apiKey, model } = await getAnthropicConfig();
+  // No personality override may weaken this constrained factuality contract.
+  const client = new Anthropic({ apiKey, timeout: 60_000, maxRetries: 0 });
+  const message = await client.messages.create({
+    model, max_tokens: 8192, system: TOURNAMENT_DRAFT_INSTRUCTION,
+    messages: [{ role: "user", content: JSON.stringify(input) }],
+  }, { signal });
+  if (message.stop_reason === "max_tokens") throw new Error("Draft plan exceeded its output limit.");
+  const raw = textFromMessage(message).replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  return renderTournamentDraft(input.group, JSON.parse(raw));
 }
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,7 @@
 import { pgTable, text, integer, timestamp, date, uuid, pgEnum, boolean, primaryKey, uniqueIndex, index, jsonb, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
+import type { ResultGroup, TournamentStoryContent } from "./competition-results-types";
+export type { ResultGroup, ResultGame, ResultStanding, TournamentStoryContent } from "./competition-results-types";
 
 export const userRoleEnum = pgEnum("user_role", ["athlete", "coach", "admin", "parent", "fan"]);
 export const rosterRoleEnum = pgEnum("roster_role", ["player", "coach"]);
@@ -2311,6 +2313,47 @@ export const competitionBrackets = pgTable("competition_brackets", {
     t.tournamentId,
     t.labelKey,
   ),
+}));
+
+// Canonical organizer content is never owned by a team/article. Draft and live
+// copies are separate so editing or regenerating cannot silently change public content.
+export const competitionResultImports = pgTable("competition_result_imports", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  competitionId: uuid("competition_id").references(() => tournaments.id, { onDelete: "cascade" }).notNull(),
+  clientId: uuid("client_id").notNull(),
+  kind: text("kind").notNull(),
+  sourceUrl: text("source_url"),
+  importedAt: timestamp("imported_at").defaultNow().notNull(),
+  status: text("status").notNull(),
+  message: text("message").notNull(),
+  groups: jsonb("groups").$type<ResultGroup[]>().notNull(),
+  confirmed: boolean("confirmed").notNull().default(false),
+  resultsAsOf: text("results_as_of").notNull(),
+}, (t) => ({
+  clientUnique: uniqueIndex("competition_result_imports_client_uniq").on(t.competitionId, t.clientId),
+}));
+
+export const competitionTournamentRecaps = pgTable("competition_tournament_recaps", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  competitionId: uuid("competition_id").references(() => tournaments.id, { onDelete: "cascade" }).notNull(),
+  bracketId: uuid("bracket_id").references(() => competitionBrackets.id, { onDelete: "no action" }).notNull(),
+  draft: jsonb("draft").$type<TournamentStoryContent>().notNull(),
+  published: jsonb("published").$type<TournamentStoryContent>(),
+  revision: integer("revision").notNull().default(1),
+  generationRequestId: uuid("generation_request_id"),
+  publishedAt: timestamp("published_at"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => ({
+  bracketUnique: uniqueIndex("competition_tournament_recaps_bracket_uniq").on(t.competitionId, t.bracketId),
+}));
+
+export const competitionRecapPlacements = pgTable("competition_recap_placements", {
+  recapId: uuid("recap_id").references(() => competitionTournamentRecaps.id, { onDelete: "cascade" }).notNull(),
+  teamId: uuid("team_id").references(() => teams.id, { onDelete: "cascade" }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.recapId, t.teamId] }),
+  teamIdx: index("competition_recap_placements_team_idx").on(t.teamId),
 }));
 
 // Competitions §6 — one row per team that self-reports a score for a
