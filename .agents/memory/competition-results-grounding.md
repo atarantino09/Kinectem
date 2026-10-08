@@ -21,11 +21,11 @@ The supplied GotSport event page redirected to a JavaScript/reCAPTCHA verificati
 
 **How to apply:** Treat verification responses as blocked before AI, give a truthful import status, and retain CSV/pasted-table fallback. Do not claim official GotSport parsing or use the schedule-import feature as proof of results support.
 
-Post-competition results entry must be a visible, separate section for operators, distinct from schedule import, on both the competition page and its editor.
+Do not show the “Post-competition results & bracket recaps” entry section on competition pages or in the competition console.
 
-**Why:** The user could not find the URL/upload controls behind the results-management link and explicitly requested a separate field for after a tournament or league. They also requested that the CSV Results action immediately open file selection, not merely switch to a CSV text box.
+**Why:** On 2026-10-08 the user explicitly asked to remove the whole section, saying “it didnt work out.” This supersedes their earlier request for a prominent results-upload entry.
 
-**How to apply:** Keep results URL and upload inputs discoverable without navigating first. Open the CSV file picker directly from the user's click so browser user-gesture requirements are respected. Preserve optional recap previews and explicit publication; importing results alone must never publish a recap.
+**How to apply:** Do not reintroduce the section during later competition-page changes. Removing its entry UI does not authorize deleting saved results, drafts, or published stories.
 
 Organizers must not be required to confirm individual matches, fill missing scores, or manually resolve every team before creating bracket recaps from a whole results source.
 
