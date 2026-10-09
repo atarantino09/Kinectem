@@ -215,10 +215,7 @@ describe("competition partnership directory", () => {
     expect(rail).toHaveClass("space-y-2.5", "text-black");
     expect(screen.getByTestId("rail-grouped-sections")).toHaveClass("grid", "gap-y-4", "md:grid-cols-2");
     expect(within(rail).queryByRole("heading", { level: 4 })).not.toBeInTheDocument();
-    for (const heading of within(rail).getAllByRole("heading", { level: 3 })) {
-      expect(heading).toHaveClass("text-black", "font-normal", "font-sans");
-      expect(heading).not.toHaveClass("font-black");
-    }
+    expect(within(rail).queryByRole("heading", { level: 3 })).not.toBeInTheDocument();
   });
   it("filters featured recaps by bracket together with team, date, and search, then clears every filter", async () => {
     const user = userEvent.setup();
