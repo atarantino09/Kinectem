@@ -1940,7 +1940,7 @@ export default function CompetitionPage() {
                   className={`min-w-0 space-y-1.5 ${s.recaps.length > 1 ? "md:col-span-2 lg:col-span-3" : ""}`}
                   data-testid={`section-bracket-${s.key}`}
                 >
-                  <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+                  <h3 className="text-sm font-sans font-normal uppercase tracking-widest text-black dark:text-white flex items-center gap-1.5">
                       {s.label}
                       <span className="font-bold normal-case tracking-normal text-black dark:text-white">
                         ({s.recaps.length})

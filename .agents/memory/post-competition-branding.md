@@ -39,9 +39,9 @@ Organization names, team names, and recap titles must stay on one line with resp
 
 **How to apply:** Fit text within its available width, then use an ellipsis once the minimum size is reached. Keep the full text accessible and preserve font-load remeasurement.
 
-Featured recap excerpts must be black in the light theme. Bracket names are gray, while counts and organization/team labels remain high-contrast. Do not display date headings above featured cards. Keep section spacing compact.
+Featured recap excerpts must be black in the light theme. Bracket names above cards are black with regular font weight; bracket labels on the cards stay gray. Counts and organization/team labels remain high-contrast. Do not display date headings above featured cards. Keep section spacing compact.
 
-**Why:** The user refined the contrast preference to gray bracket names and black story text, and explicitly removed repeated dates to save space.
+**Why:** The user explicitly distinguished black, non-bold bracket headings from gray on-card bracket labels, and removed repeated dates to save space.
 
 **How to apply:** Preserve organization-colored backgrounds and readable dark-theme contrast. Keep bracket labels and the date filter, but omit date/week headings from the featured-card display. Do not change schedule dates elsewhere.
 
