@@ -51,3 +51,15 @@ org; global platform-admin authority alone is insufficient. Preserve
 parent-facing player invites sent by somebody else. Repair old self-sent
 pending records consistently when loading either roster or invitations,
 but do not activate new memberships on archived teams.
+
+**Rule:** Do not infer a self-invite from the sender's display name or a
+partial email address. Only exact normalized account identity qualifies.
+
+**Why:** An incomplete invite address can coexist with an already-active
+owner's staff assignment, making the Pending tab appear to contradict it.
+Treating similar addresses as the same account could grant the wrong
+person access.
+
+**How to apply:** Inspect the invite recipient and actual membership
+separately. Reject incomplete addresses on submission; withdraw incorrect
+legacy invitations without changing accepted memberships.

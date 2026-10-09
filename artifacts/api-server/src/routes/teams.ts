@@ -1104,6 +1104,8 @@ router.post(
       return apiError(res, 409, "Team is archived", { code: "team_archived" });
     const email = String(req.body?.email ?? "").trim();
     if (!email) return apiError(res, 400, "email required");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+      return apiError(res, 400, "Enter a complete email address, such as name@example.com.");
     const positionRaw = String(req.body?.position ?? "player");
     const dbRole: "player" | "coach" =
       positionRaw === "coach" ||

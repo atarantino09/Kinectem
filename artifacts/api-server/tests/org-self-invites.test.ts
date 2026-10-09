@@ -14,6 +14,24 @@ async function createTeam(name: string) {
 }
 
 describe("organization manager self-invites", () => {
+  it("rejects incomplete email invitations without affecting the owner's active assignment", async () => {
+    const { agent, user } = await loginAs("coach@kinectem.demo");
+    const { teamId } = await createTeam("Invalid self-invite address");
+    const added = await agent.post(`/api/v1/teams/${teamId}/members`)
+      .send({ userId: user.id, position: "coach" });
+    expect(added.status).toBe(201);
+    for (const email of ["coach@kinectem", "not-an-email", "coach@@kinectem.demo", "coach name@kinectem.demo"]) {
+      const response = await agent.post(`/api/v1/teams/${teamId}/invites`)
+        .send({ email, position: "coach" });
+      expect(response.status).toBe(400);
+    }
+    expect(await db.select().from(rosterInvites).where(eq(rosterInvites.teamId, teamId))).toHaveLength(0);
+    const [entry] = await db.select().from(rosterEntries)
+      .where(and(eq(rosterEntries.teamId, teamId), eq(rosterEntries.userId, user.id)));
+    expect(entry.status).toBe("accepted");
+    expect(entry.role).toBe("coach");
+  });
+
   it.each(["sam@kinectem.demo", "coach@kinectem.demo"])("auto-approves every position for %s", async (email) => {
     const { agent, user } = await loginAs(email);
     for (const position of ["player", "coach", "assistant_coach", "admin", "manager"]) {

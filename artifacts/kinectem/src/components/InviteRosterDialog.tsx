@@ -437,6 +437,14 @@ export function InviteRosterDialog({
       toast({ title: "Email required", variant: "destructive" });
       return;
     }
+    if (!EMAIL_RE.test(email.trim())) {
+      toast({
+        title: "Enter a complete email address",
+        description: "Include the full address, such as name@example.com.",
+        variant: "destructive",
+      });
+      return;
+    }
     try {
       const resp = await createInvite.mutateAsync({
         teamId,
