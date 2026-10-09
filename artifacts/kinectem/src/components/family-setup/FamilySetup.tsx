@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -74,7 +73,6 @@ export function FamilySetup({ userId, mode, token, teamName, childHint, onDone, 
   const hintParts = (childHint ?? "").trim().split(/\s+/).filter(Boolean);
   const [first, setFirst] = useState(() => draft.requestName?.firstName ?? hintParts[0] ?? "");
   const [last, setLast] = useState(() => draft.requestName?.lastName ?? hintParts.slice(1).join(" "));
-  const [askOther, setAskOther] = useState(false);
   const [coFirst, setCoFirst] = useState(draft.coParent?.firstName ?? "");
   const [coLast, setCoLast] = useState(draft.coParent?.lastName ?? "");
   const [coEmail, setCoEmail] = useState(draft.coParent?.email ?? "");
@@ -262,15 +260,6 @@ export function FamilySetup({ userId, mode, token, teamName, childHint, onDone, 
             <p className="text-sm text-muted-foreground">
               Enter the other parent’s name and email below, or skip this step.
             </p>
-            {askOther ? (
-              <div className="space-y-3 rounded-lg border border-border p-3 text-sm" data-testid="guidance-other-parent-created">
-                <p>Ask them to invite you from their Family page. Accept that family invitation to share your child’s existing account. Do not create a second child account.</p>
-                <Link href="/family" className="inline-flex h-9 items-center rounded-md border border-border px-3 text-sm font-bold" data-testid="link-check-invitations" onClick={() => void refreshApp()}>Check my invitations</Link>
-                <Button type="button" variant="ghost" size="sm" onClick={() => setAskOther(false)} data-testid="btn-guidance-back">Back</Button>
-                <button type="button" className="block text-xs font-semibold text-violet-700 underline" onClick={() => setAskOther(false)} data-testid="btn-genuinely-new">My child still needs an account</button>
-              </div>
-            ) : (
-              <>
             <div className="rounded-lg border border-blue-200 bg-blue-50/60 p-3 text-sm text-slate-900" data-testid="coparent-invite-explainer">
               <p className="font-bold">How the other parent joins</p>
               <ul className="mt-2 space-y-2">
@@ -280,7 +269,6 @@ export function FamilySetup({ userId, mode, token, teamName, childHint, onDone, 
               </ul>
               <p className="mt-3 border-t border-blue-200 pt-2 text-xs font-semibold">Ask them to wait for this email—not use the team invite to create your child again.</p>
             </div>
-            <button type="button" className="text-left text-xs font-semibold text-violet-700 underline" onClick={() => setAskOther(true)} data-testid="btn-other-parent-yes">Other parent already created your child’s account?</button>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1"><Label className="text-xs font-bold">First name</Label>
                 <Input value={coFirst} onChange={(e) => setCoFirst(e.target.value)} data-testid="input-coparent-first" autoComplete="off" /></div>
@@ -302,8 +290,6 @@ export function FamilySetup({ userId, mode, token, teamName, childHint, onDone, 
               <Button type="button" variant="outline" onClick={() => update({ coParent: null, stage: "player" })} data-testid="btn-coparent-skip">Skip &amp; go to Step 3</Button>
             </div>
             <p className="text-xs text-muted-foreground">Continue now—you don’t need to wait for them to accept. If you skip, you can invite them later from your Family page.</p>
-              </>
-            )}
           </div>
         )}
 

@@ -5,7 +5,6 @@ import { FamilySetup } from "./FamilySetup";
 
 const fetchMock = vi.fn();
 vi.mock("@workspace/api-client-react", () => ({ customFetch: (...a: unknown[]) => fetchMock(...a) }));
-vi.mock("wouter", () => ({ Link: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a> }));
 vi.mock("@/components/UserAvatar", () => ({ UserAvatar: () => <span /> }));
 
 function setup(verifyAccount?: () => Promise<void>) {
@@ -53,8 +52,8 @@ describe("FamilySetup", () => {
     expect(screen.queryByTestId("note-check-other-parent")).not.toBeInTheDocument();
     expect(screen.getByTestId("coparent-invite-explainer")).toHaveTextContent("separate logins connected to the same child");
     expect(screen.queryByTestId("step-checkpoint")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByTestId("btn-other-parent-yes"));
-    expect(screen.getByTestId("guidance-other-parent-created")).toHaveTextContent("family invitation");
+    expect(screen.queryByTestId("btn-other-parent-yes")).not.toBeInTheDocument();
+    expect(screen.getByTestId("input-coparent-first")).toBeInTheDocument();
   });
 
   it("only sends the other-parent invitation after the child account exists", async () => {
