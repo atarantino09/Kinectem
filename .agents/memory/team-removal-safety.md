@@ -3,8 +3,8 @@ name: Team removal safety
 description: Authority and roster boundary for deleting or archiving organization team pages.
 ---
 
-Organization owners, organization admins, and platform admins may permanently delete a team only when it has zero roster rows. If any player or staff roster row exists, the team must be archived instead. Import provenance does not affect this rule.
+Only an actual organization owner or organization admin may archive, restore, or permanently delete its team page through the team-page removal flow. Platform-admin authority alone and coach/team-staff membership do not grant these actions.
 
-**Why:** Claimed organizations need a fast way to remove mistaken empty team pages created during setup, but existing team membership makes permanent deletion too destructive.
+**Why:** The user explicitly restricted this flow to org admins and replaced the previous empty-roster deletion rule with an archive-then-delete process.
 
-**How to apply:** Enforce the roster check in the same locked transaction as deletion, not only in the client. Show the applicable action and reason clearly on the team page. Organization admins may archive and unarchive; ordinary members may not. First-claim messaging may say claimants can delete incorrect listed teams because unclaimed organizations have no rosters, but it must also explain that teams with members are archived instead. Mention that claimants can edit team names and create additional teams.
+**How to apply:** Every team, including an empty one, must be archived before permanent deletion. Archived teams may be deleted even with roster members. Explain both steps before confirming archival, and state that archiving preserves data and never automatically deletes. Deletion is separate and irreversible: require the exact team name and an explicit acknowledgment in both the UI and the server, and recheck the stored org role and archived state under transaction locks. User accounts and original competition schedules remain. Keep first-claim setup guidance consistent with this sequence.

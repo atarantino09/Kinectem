@@ -49,7 +49,7 @@ async function archiveTeam(teamId: string) {
 
 describe("team archive flow", () => {
   describe("DELETE /teams/:teamId", () => {
-    it("lets an organization admin permanently delete an empty team", async () => {
+    it("requires archiving first, even for an empty team", async () => {
       const org = await getOrg();
       const [emptyTeam] = await db
         .insert(teams)
@@ -60,28 +60,56 @@ describe("team archive flow", () => {
         .returning();
       const { agent } = await loginAs((u) => u.email === "coach@kinectem.demo");
 
-      const res = await agent.delete(`/api/v1/teams/${emptyTeam.id}`);
+      const res = await agent.delete(`/api/v1/teams/${emptyTeam.id}`).send({
+        confirmTeamName: emptyTeam.name, acknowledgePermanentDeletion: true,
+      });
 
-      expect(res.status).toBe(204);
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe("team_not_archived");
       const remaining = await db
         .select({ id: teams.id })
         .from(teams)
         .where(eq(teams.id, emptyTeam.id));
-      expect(remaining).toHaveLength(0);
+      expect(remaining).toHaveLength(1);
     });
 
-    it("refuses permanent deletion when the team has rostered members", async () => {
+    it("lets an organization admin delete an archived team with members only after explicit confirmation", async () => {
       const org = await getOrg();
       const [target] = await getTeams(org.id);
       const { agent } = await loginAs((u) => u.email === "coach@kinectem.demo");
 
-      const res = await agent.delete(`/api/v1/teams/${target.id}`);
-
-      expect(res.status).toBe(409);
-      expect(res.body).toMatchObject({
-        code: "team_has_members",
+      const archived = await agent.post(`/api/v1/teams/${target.id}/archive`);
+      expect(archived.status).toBe(200);
+      for (const body of [
+        {},
+        { confirmTeamName: "Wrong name", acknowledgePermanentDeletion: true },
+        { confirmTeamName: target.name, acknowledgePermanentDeletion: false },
+      ]) {
+        const blocked = await agent.delete(`/api/v1/teams/${target.id}`).send(body);
+        expect(blocked.status).toBe(400);
+        expect(blocked.body.code).toBe("team_delete_not_confirmed");
+      }
+      const res = await agent.delete(`/api/v1/teams/${target.id}`).send({
+        confirmTeamName: target.name, acknowledgePermanentDeletion: true,
       });
-      expect(res.body.memberCount).toBeGreaterThan(0);
+      expect(res.status).toBe(204);
+      expect(await db.select().from(teams).where(eq(teams.id, target.id))).toHaveLength(0);
+    });
+
+    it("rejects a coach, ordinary member, and platform-only admin", async () => {
+      const org = await getOrg();
+      const [target] = await getTeams(org.id);
+      await archiveTeam(target.id);
+      const { user: platformUser } = await loginAs("sam@kinectem.demo");
+      await db.delete(organizationAdmins).where(eq(organizationAdmins.userId, platformUser.id));
+      for (const email of ["marcus@kinectem.demo", "daniela@kinectem.demo", "sam@kinectem.demo"]) {
+        const { agent } = await loginAs(email);
+        const res = await agent.delete(`/api/v1/teams/${target.id}`).send({
+          confirmTeamName: target.name, acknowledgePermanentDeletion: true,
+        });
+        expect(res.status).toBe(403);
+      }
+      expect(await db.select().from(teams).where(eq(teams.id, target.id))).toHaveLength(1);
     });
   });
 

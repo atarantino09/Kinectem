@@ -22,7 +22,7 @@ const STEPS: Array<{
     number: 1,
     title: "Claim your organization",
     description:
-      "Ownership is confirmed. Because unclaimed organizations do not yet have rostered players or staff, you can delete incorrect teams already listed, edit team names, and create additional teams. Once a team has rostered members, archive it instead of deleting it.",
+      "Ownership is confirmed. You can edit team names and create additional teams. To remove an incorrect team page, archive it first. Only your organization’s admins can then choose permanent deletion as a separate step. Deleting the team page cannot be undone.",
     Icon: CheckCircle2,
   },
   {

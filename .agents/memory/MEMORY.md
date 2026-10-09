@@ -89,7 +89,7 @@
 - [Private practice plans](private-practice-plans.md) — explicit private article kind; server-gate every read path to team members, active guardians, team staff, and org admins.
 - [Organization sport inheritance](organization-sport-inheritance.md) — a selected org sport is authoritative for all teams; clearing it preserves team labels and restores per-team editing.
 - [Partner duplicate resolution safety](partner-duplicate-resolution.md) — partner imports may stage duplicates; swaps are membership-only and require org-admin request plus platform-admin approval.
-- [Team removal safety](team-removal-safety.md) — org admins may permanently delete only teams with zero roster rows; teams with any player or staff row must be archived.
+- [Team removal safety](team-removal-safety.md) — actual org admins only: archive first, then separately confirm irreversible deletion; archived teams with members may be deleted.
 - [Competition hub owner handoff](competition-hub-owner-handoff.md) — platform admins stay invisible support operators; their hub owner invites transfer real ownership on acceptance.
 - [Critical email MIME parity](critical-email-mime-parity.md) — compliance, security, and billing terms must remain equivalent in HTML and plaintext even when only HTML is visually restructured.
 - [Vite invalid hook after dependency merge](vite-invalid-hook-cache.md) — if all components fail at React hooks after lockfile changes, clear the artifact's Vite cache before changing app code.

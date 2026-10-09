@@ -18,6 +18,7 @@ import {
   queryOpts,
 } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { NoIndex } from "@/components/NoIndex";
 import { TeamAdminPanel } from "@/components/TeamAdminPanel";
 import { InviteRosterDialog } from "@/components/InviteRosterDialog";
@@ -151,7 +152,7 @@ export default function TeamPage() {
     navigate(`/teams/${teamId}${qs ? `?${qs}` : ""}`, { replace: true });
   }
 
-  const { data: team, isLoading } = useGetTeamById(teamId);
+  const { data: team, isLoading, isError: teamUnavailable, refetch: retryTeam } = useGetTeamById(teamId);
   const followTeam = useFollowTeam();
   const unfollowTeam = useUnfollowTeam();
   const { data: membersResp } = useListTeamMembers(teamId);
@@ -392,6 +393,22 @@ export default function TeamPage() {
     }
   };
 
+  if (teamUnavailable) {
+    return (
+      <section className="mx-auto max-w-xl space-y-4 rounded-xl border bg-card p-6 text-center">
+        <h1 className="text-2xl font-black">Team page unavailable</h1>
+        <p className="text-sm text-muted-foreground">
+          This page may have been permanently deleted, or you may not have access to it.
+          If it still exists, try loading it again.
+        </p>
+        <div className="flex justify-center gap-3">
+          <Button variant="outline" onClick={() => void retryTeam()}>Try again</Button>
+          <Button asChild><Link href="/feed">Back to feed</Link></Button>
+        </div>
+      </section>
+    );
+  }
+
   if (isLoading || !team) {
     return (
       <div className="space-y-4">
@@ -609,6 +626,8 @@ export default function TeamPage() {
         {expanded === "admin" && isAdmin && (
           <TeamAdminPanel
             teamId={teamId}
+            teamName={team.name}
+            canPermanentlyDelete={org?.role === "owner" || org?.role === "admin"}
             isArchived={!!team.archivedAt}
             organizationId={orgRef?.id ?? ""}
             memberCount={

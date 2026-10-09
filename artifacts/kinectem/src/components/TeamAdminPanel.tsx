@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   useGetOrCreateTeamJoinLink,
   useListRosterInvites,
   useArchiveTeam,
-  useDeleteTeam,
+  customFetch,
   useUnarchiveTeam,
   getListRosterInvitesQueryKey,
   getGetTeamByIdQueryKey,
@@ -15,6 +15,8 @@ import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import {
   AlertDialog,
@@ -31,11 +33,15 @@ import { timeAgo } from "@/lib/format";
 
 export function TeamAdminPanel({
   teamId,
+  teamName,
+  canPermanentlyDelete,
   isArchived,
   organizationId,
   memberCount,
 }: {
   teamId: string;
+  teamName: string;
+  canPermanentlyDelete: boolean;
   isArchived: boolean;
   organizationId: string;
   memberCount: number;
@@ -45,6 +51,15 @@ export function TeamAdminPanel({
   const [, setLocation] = useLocation();
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const [confirmTeamName, setConfirmTeamName] = useState("");
+  const [acknowledgeDeletion, setAcknowledgeDeletion] = useState(false);
+
+  const resetDeletion = (open: boolean) => {
+    setDeleteDialogOpen(open);
+    setConfirmTeamName("");
+    setAcknowledgeDeletion(false);
+  };
 
   const { data: invitesResp } = useListRosterInvites(teamId);
   const invites = invitesResp?.data ?? [];
@@ -84,8 +99,9 @@ export function TeamAdminPanel({
   const archive = useArchiveTeam({
     mutation: {
       onSuccess: () => {
+        setArchiveDialogOpen(false);
         invalidateAfterArchive();
-        toast({ title: "Team archived" });
+        toast({ title: "Team archived — not deleted", description: "You can restore it, or an organization admin can choose permanent deletion as a separate step." });
       },
       onError: () =>
         toast({ title: "Couldn't archive team", variant: "destructive" }),
@@ -101,26 +117,28 @@ export function TeamAdminPanel({
         toast({ title: "Couldn't unarchive team", variant: "destructive" }),
     },
   });
-  const deleteTeam = useDeleteTeam({
-    mutation: {
-      onSuccess: () => {
-        qc.invalidateQueries({ queryKey: getListOrgTeamsQueryKey(organizationId) });
-        qc.invalidateQueries({
-          queryKey: getListArchivedOrgTeamsQueryKey(organizationId),
-        });
-        toast({ title: "Team permanently deleted" });
-        setLocation(`/organizations/${organizationId}`);
-      },
-      onError: () => {
-        invalidateAfterArchive();
-        setDeleteDialogOpen(false);
-        toast({
-          title: "This team can’t be deleted",
-          description:
-            "It may now have rostered players or staff. Archive it instead.",
-          variant: "destructive",
-        });
-      },
+  const deleteTeam = useMutation({
+    mutationFn: () => customFetch<void>(`/api/v1/teams/${encodeURIComponent(teamId)}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirmTeamName, acknowledgePermanentDeletion: acknowledgeDeletion }),
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: getListOrgTeamsQueryKey(organizationId) });
+      qc.invalidateQueries({ queryKey: getListArchivedOrgTeamsQueryKey(organizationId) });
+      qc.removeQueries({ queryKey: getGetTeamByIdQueryKey(teamId) });
+      qc.invalidateQueries({ queryKey: ["/api/v1/competitions"] });
+      qc.invalidateQueries({ queryKey: ["/api/v1/feed"] });
+      toast({ title: "Team permanently deleted" });
+      setLocation(`/organizations/${organizationId}`);
+    },
+    onError: (error: Error) => {
+      invalidateAfterArchive();
+      toast({
+        title: "Team was not deleted",
+        description: error.message || "Check that the team is archived and that you are its organization admin, then try again.",
+        variant: "destructive",
+      });
     },
   });
   const archivePending =
@@ -149,73 +167,109 @@ export function TeamAdminPanel({
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <h3 className="font-black tracking-tight text-sm flex items-center gap-2">
-                {memberCount === 0 && !isArchived ? (
-                  <Trash2 className="w-3.5 h-3.5" />
-                ) : (
-                  <Archive className="w-3.5 h-3.5" />
-                )}
-                {isArchived
-                  ? "Team Archived"
-                  : memberCount === 0
-                    ? "Delete Empty Team"
-                    : "Archive Team"}
+                <Archive className="w-3.5 h-3.5" />
+                {isArchived ? "Step 2: Keep archived or permanently delete" : "Step 1: Archive team"}
               </h3>
               <p className="text-xs text-muted-foreground mt-1">
-                {isArchived
-                  ? "This team is hidden from members and discovery. Unarchive to restore it."
-                  : memberCount === 0
-                    ? "This team has no rostered players or staff, so an organization admin can permanently delete it."
-                    : `This team has ${memberCount} rostered ${memberCount === 1 ? "member" : "members"}, so it cannot be deleted. Archive it to hide it from members and discovery.`}
+                Only this organization’s admins (including its owner) can archive or permanently delete this team page.
+                {" "}{isArchived
+                  ? "Archiving kept the data. Restore the page, or choose permanent deletion below. Deleting the page cannot be undone."
+                  : `Archive first to hide the page and keep its data${memberCount ? `, including its ${memberCount} rostered ${memberCount === 1 ? "member" : "members"}` : ""}. Permanent deletion is a separate second step, available only after archiving.`}
               </p>
             </div>
-            <Button
-              variant={memberCount === 0 && !isArchived ? "destructive" : isArchived ? "brand" : "outline"}
+            {canPermanentlyDelete && <Button
+              variant={isArchived ? "brand" : "outline"}
               size="sm"
               disabled={archivePending}
               onClick={() => {
                 if (isArchived) unarchive.mutate({ teamId });
-                else if (memberCount === 0) setDeleteDialogOpen(true);
-                else archive.mutate({ teamId });
+                else setArchiveDialogOpen(true);
               }}
               data-testid={
                 isArchived
                   ? "button-unarchive-team"
-                  : memberCount === 0
-                    ? "button-delete-empty-team"
-                    : "button-archive-team"
+                  : "button-archive-team"
               }
             >
               {archivePending
                 ? "Working…"
                 : isArchived
                   ? "Unarchive"
-                  : memberCount === 0
-                    ? "Delete team"
-                    : "Archive"}
-            </Button>
+                  : "Archive"}
+            </Button>}
           </div>
+          {isArchived && canPermanentlyDelete && (
+            <Button variant="destructive" size="sm" disabled={archivePending}
+              onClick={() => resetDeletion(true)} data-testid="button-delete-archived-team">
+              <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Permanently delete team page
+            </Button>
+          )}
         </CardContent>
       </Card>
 
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent data-testid="dialog-delete-empty-team">
+      <AlertDialog open={archiveDialogOpen} onOpenChange={setArchiveDialogOpen}>
+        <AlertDialogContent data-testid="dialog-archive-team">
           <AlertDialogHeader>
-            <AlertDialogTitle>Permanently delete this empty team?</AlertDialogTitle>
+            <AlertDialogTitle>Step 1: Archive this team?</AlertDialogTitle>
             <AlertDialogDescription>
-              This team has no rostered players or staff. Deleting it permanently
-              removes the team page and any related team data. This cannot be undone.
+              Only this organization’s admins can archive or permanently delete its team pages.
+              Archiving does not delete the page.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <ol className="space-y-3 text-sm">
+            <li><strong>1. Archive now.</strong> Hide the team page from members and discovery. Its data stays saved, and you can unarchive it.</li>
+            <li><strong>2. Delete later, only if you choose.</strong> Once archived, an organization admin can separately choose to permanently delete the team page and its related team content. <strong>This cannot be undone.</strong> Archiving never automatically deletes the team.</li>
+          </ol>
           <AlertDialogFooter>
-            <AlertDialogCancel data-testid="button-cancel-delete-empty-team">
+            <AlertDialogCancel disabled={archivePending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction disabled={archivePending}
+              onClick={(event) => { event.preventDefault(); archive.mutate({ teamId }); }}
+              data-testid="button-confirm-archive-team">
+              {archive.isPending ? "Archiving…" : "Archive only — keep data"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={resetDeletion}>
+        <AlertDialogContent data-testid="dialog-delete-archived-team">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Step 2: Permanently delete this team page?</AlertDialogTitle>
+            <AlertDialogDescription className="[overflow-wrap:anywhere]">
+              Only this organization’s admins can do this. Deleting “{teamName}” permanently
+              removes its team page and related team content, including recaps, roster memberships,
+              and team schedule entries. People’s user accounts and the original competition
+              schedules are not deleted. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm font-bold text-destructive">
+            The team page will be permanently deleted. This cannot be undone.
+          </div>
+          <div className="space-y-3">
+            <label className="block text-sm font-semibold" htmlFor="confirm-delete-team-name">
+              Type the exact team name to confirm: <span className="[overflow-wrap:anywhere]">{teamName}</span>
+            </label>
+            <Input id="confirm-delete-team-name" value={confirmTeamName}
+              onChange={(event) => setConfirmTeamName(event.target.value)} disabled={archivePending}
+              autoComplete="off" data-testid="input-confirm-delete-team-name" />
+            <label className="flex items-start gap-2 text-sm">
+              <Checkbox checked={acknowledgeDeletion} disabled={archivePending}
+                onCheckedChange={(checked) => setAcknowledgeDeletion(checked === true)}
+                data-testid="checkbox-confirm-permanent-deletion" />
+              <span>I understand that this team page will be permanently deleted and cannot be restored.</span>
+            </label>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={archivePending} data-testid="button-cancel-delete-archived-team">
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => deleteTeam.mutate({ teamId })}
-              data-testid="button-confirm-delete-empty-team"
+              disabled={!canPermanentlyDelete || !isArchived || confirmTeamName !== teamName || !acknowledgeDeletion || archivePending}
+              onClick={(event) => { event.preventDefault(); deleteTeam.mutate(); }}
+              data-testid="button-confirm-delete-archived-team"
             >
-              Permanently delete team
+              {deleteTeam.isPending ? "Deleting…" : "Permanently delete team page"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

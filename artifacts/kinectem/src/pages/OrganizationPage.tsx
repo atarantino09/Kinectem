@@ -851,11 +851,11 @@ export default function OrganizationPage() {
                 Your organization claim is approved
               </DialogTitle>
               <DialogDescription className="text-sm leading-relaxed">
-                You now manage {formatOrgName(organization.name)}. Because
-                unclaimed organizations do not yet have rostered players or
-                staff, you can delete incorrect teams already listed, edit team
-                names, and create additional teams. Once a team has rostered
-                members, archive it instead of deleting it.
+                You now manage {formatOrgName(organization.name)}. You can edit
+                team names and create additional teams. To remove an incorrect
+                team page, archive it first. Only your organization’s admins can
+                then choose permanent deletion as a separate step. Deleting the
+                team page cannot be undone.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
