@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserAvatar } from "@/components/UserAvatar";
-import { AlertTriangle, CheckCircle2, Clock, Loader2, Mail, Users } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, Loader2, Mail } from "lucide-react";
 import {
   clearDraft, emptyDraft, errorCode, errorStatus, isEmail, loadDraft,
   planRequest, saveDraft, deliveryLabel, type FamilyDraft, type Relationship,
@@ -254,17 +254,7 @@ export function FamilySetup({ userId, mode, token, teamName, childHint, onDone, 
   return (
     <Card className="rounded-xl border-border" data-testid="family-setup">
       <CardContent className="space-y-5 p-4 sm:p-6">
-        <div className="space-y-3">
-          <Steps current={draft.stage === "done" ? 3 : stageIndex} />
-          <div className="rounded-lg border border-violet-200 bg-violet-50 p-3 text-xs text-violet-900" data-testid="note-coordinate-first">
-            <div className="flex items-start gap-2">
-              <Users className="mt-0.5 h-4 w-4 shrink-0" />
-              <p>
-                <strong>Your child only needs one account.</strong> Check with the other parent before creating it.
-              </p>
-            </div>
-          </div>
-        </div>
+        <Steps current={draft.stage === "done" ? 3 : stageIndex} />
 
         {draft.stage === "coparent" && (
           <div className="space-y-3" data-testid="step-coparent">

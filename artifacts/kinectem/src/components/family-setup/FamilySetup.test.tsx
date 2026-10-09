@@ -42,10 +42,10 @@ describe("FamilySetup", () => {
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
   });
 
-  it("shows coordinate copy, steps and guidance when the other parent already did it", () => {
+  it("shows step 2 guidance without repeating the step 1 coordination reminder", () => {
     fetchMock.mockResolvedValue({ data: [] });
     setup();
-    expect(screen.getByTestId("note-coordinate-first")).toHaveTextContent("only needs one account");
+    expect(screen.queryByTestId("note-coordinate-first")).not.toBeInTheDocument();
     expect(screen.getByTestId("step-coparent")).toBeInTheDocument();
     expect(screen.getByTestId("coparent-invite-explainer")).toHaveTextContent("does not create their account or send an invitation yet");
     expect(screen.getByTestId("coparent-invite-explainer")).toHaveTextContent("After you finish Step 3:");
