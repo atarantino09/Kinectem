@@ -107,3 +107,4 @@
 - [Competition results grounding](competition-results-grounding.md) — reviewed evidence bounds AI claims; canonical ownership and truthful blocked-source fallback are product requirements.
 - [Multi-file patch failures](multi-file-patch-failure.md) — a failed call can still change other files; inspect per-file results and retry only failed changes.
 - [Parent family onboarding intent](parent-family-onboarding-intent.md) — coordinate and invite the other parent before player setup; one child profile, separate adult logins.
+- [Notification bell acknowledgement](notification-bell-acknowledgement.md) — opening clears unread counts; retain history and pending actions, with guardian-specific child reads.

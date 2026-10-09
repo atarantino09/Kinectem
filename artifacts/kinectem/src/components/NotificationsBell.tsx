@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -157,6 +157,8 @@ export function NotificationsBell() {
   const { data: childrenSummary } = useGetChildrenNotificationsSummary();
   const { data: notifs, isLoading } = useListNotifications();
   const [open, setOpen] = useState(false);
+  const [markingAllRead, setMarkingAllRead] = useState(false);
+  const markingReadRef = useRef(false);
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [actingOnEntryId, setActingOnEntryId] = useState<string | null>(null);
 
@@ -195,18 +197,27 @@ export function NotificationsBell() {
       invalidate();
     }
   };
-  const markAll = useMarkAllNotificationsAsRead({
-    mutation: { onSuccess: invalidate },
-  });
+  const markAll = useMarkAllNotificationsAsRead();
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next);
+    if (next && !open) void markEverythingRead();
   };
 
-  // Explicit "mark all read" — invoked from the dropdown header button, NOT
-  // on open. Opening the bell must leave notifications visible and unread so
-  // the user can actually see what came in before clearing them.
-  const markEverythingRead = () => {
+  // Opening the bell acknowledges both the user's and their children's
+  // notifications. Keep the rows and pending actions; only clear read state.
+  const markEverythingRead = async () => {
+    if (markingReadRef.current) return;
+    markingReadRef.current = true;
+    setMarkingAllRead(true);
+    const cached = qc.getQueryData<GetChildrenNotificationsSummary200>(
+      getGetChildrenNotificationsSummaryQueryKey(),
+    );
+    await Promise.all([
+      qc.cancelQueries({ queryKey: getGetUnreadNotificationCountQueryKey() }),
+      qc.cancelQueries({ queryKey: getGetChildrenNotificationsSummaryQueryKey() }),
+      qc.cancelQueries({ queryKey: getListNotificationsQueryKey() }),
+    ]);
     // Optimistically zero the badges so the dot disappears immediately.
     // The mutations below reconcile via invalidate().
     qc.setQueryData<NotificationUnreadCount | undefined>(
@@ -224,44 +235,46 @@ export function NotificationsBell() {
             }
           : prev,
     );
-
-    // Fire mark-all for the user's own notifications unconditionally —
-    // the endpoint is idempotent and a no-op when nothing's unread, so
-    // we don't need to wait for the unread-count query to populate.
-    markAll.mutate();
-
-    // For the COPPA / children stream we need the per-child IDs to call
-    // the per-child mark-all endpoint. If the summary isn't cached yet,
-    // refetch it first and then mark each child's stream read.
-    const fireChildren = (rows: GetChildrenNotificationsSummary200["data"]) => {
-      if (rows.length === 0) return Promise.resolve();
-      return Promise.all(
-        rows.map((c) =>
-          markAllChildNotificationsRead(c.childId).catch(() => undefined),
-        ),
-      ).then(() => undefined);
-    };
-    const cached = qc.getQueryData<GetChildrenNotificationsSummary200>(
-      getGetChildrenNotificationsSummaryQueryKey(),
+    qc.setQueryData<PaginatedNotifications | undefined>(
+      getListNotificationsQueryKey(),
+      (prev) => prev ? { ...prev, data: prev.data.map((n) => ({ ...n, isRead: true })) } : prev,
     );
-    const ensureRows = cached?.data
-      ? Promise.resolve(cached.data)
-      : qc
-          .fetchQuery<GetChildrenNotificationsSummary200>({
-            queryKey: getGetChildrenNotificationsSummaryQueryKey(),
-          })
-          .then((r) => r?.data ?? [])
-          .catch(() => []);
-    void ensureRows.then(fireChildren).then(() => {
-      qc.invalidateQueries({
-        queryKey: getGetChildrenNotificationsSummaryQueryKey(),
-      });
-    });
+    try {
+      const results = await Promise.allSettled([
+        markAll.mutateAsync(),
+        (async () => {
+          // Fetch without publishing unread counts back into the cache while
+          // the child read requests are still running.
+          const rows = cached?.data ?? (await customFetch<GetChildrenNotificationsSummary200>(
+            "/api/v1/users/me/children-notifications-summary",
+          )).data;
+          const childResults = await Promise.allSettled(
+            rows.map((c) => markAllChildNotificationsRead(c.childId)),
+          );
+          if (childResults.some((r) => r.status === "rejected")) {
+            throw new Error("Child notifications could not be marked as read");
+          }
+        })(),
+      ]);
+      if (results.some((r) => r.status === "rejected")) {
+        toast({ title: "Couldn't mark all notifications as read", description: "Please try again.", variant: "destructive" });
+      }
+    } finally {
+      // Reconcile once BOTH streams finish, including restoring counts on
+      // failure and showing any genuinely new notifications.
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: getGetUnreadNotificationCountQueryKey() }),
+        qc.invalidateQueries({ queryKey: getGetChildrenNotificationsSummaryQueryKey() }),
+        qc.invalidateQueries({ queryKey: getListNotificationsQueryKey() }),
+      ]);
+      markingReadRef.current = false;
+      setMarkingAllRead(false);
+    }
   };
 
   const ownUnread = countData?.unreadCount ?? 0;
   const childrenUnread = childrenSummary?.totalUnreadCount ?? 0;
-  const unread = ownUnread + childrenUnread;
+  const unread = markingAllRead ? 0 : ownUnread + childrenUnread;
   const items = notifs?.data ?? [];
 
   // Notifications are clickable only when we know where to send the
