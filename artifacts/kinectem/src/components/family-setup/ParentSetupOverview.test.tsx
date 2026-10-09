@@ -61,13 +61,20 @@ describe("parent setup messaging", () => {
     expect(screen.getByTestId("parent-setup-overview")).toHaveTextContent("automatically be added to Example Team’s roster");
   });
 
-  it("never repeats the first-step roadmap for a signed-in parent", () => {
+  it("keeps the first-step roadmap until the signed-in parent chooses their account", () => {
     render(<InviteHeaderCard organizationName="Example Club" teamName="Example Team"
       isPlayerInvite positionLabel="Player" childHint="" loggedIn accepted={false}
       needsChildSetup={false} accepting token="fixture-invite" onAccept={vi.fn()} />);
+    expect(screen.getByTestId("parent-setup-overview")).toBeInTheDocument();
+    expect(screen.getByTestId("invite-current-account")).toHaveTextContent("Step 1");
+    expect(within(screen.getByTestId("parent-setup-overview")).getByText(/automatically be added/)).toHaveTextContent("Example Team’s roster");
+  });
+  it("does not replay Step 1 once the parent account has been validated for setup", () => {
+    render(<InviteHeaderCard organizationName="Example Club" teamName="Example Team"
+      isPlayerInvite positionLabel="Player" childHint="" loggedIn accepted
+      needsChildSetup accepting={false} token="fixture-invite" onAccept={vi.fn()} />);
     expect(screen.queryByTestId("parent-setup-overview")).not.toBeInTheDocument();
-    expect(screen.getByText(/Your parent account is ready/)).toHaveTextContent("Step 2");
-    expect(screen.getByText(/automatically be added/)).toHaveTextContent("Example Team’s roster");
+    expect(screen.queryByTestId("btn-accept-invite")).not.toBeInTheDocument();
   });
 
   it("renders the real organization logo and brand colors in the invite header", () => {

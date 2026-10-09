@@ -57,6 +57,7 @@ const HEADINGS: Record<Mode, { title: string; subtitle: string }> = {
 export default function LoginPage() {
   const initialSignup = readQueryParam("signup");
   const returnTo = readQueryParam("returnTo");
+  const parentInvite = initialSignup === "parent" || readQueryParam("parentInvite") === "1";
   const claimOrgName = readQueryParam("claimOrg")?.trim() || null;
   // Task #864 — visitors arriving from a public game recap get a warm
   // invitation banner explaining why they're here.
@@ -84,7 +85,7 @@ export default function LoginPage() {
   };
 
   const initialRole: Role =
-    initialSignup === "parent" ? "parent" : familyInvite ? "fan" : "athlete";
+    parentInvite ? "parent" : familyInvite ? "fan" : "athlete";
 
   const heading = (() => {
     if (familyInvite && (mode === "signup" || mode === "signin")) {
@@ -103,7 +104,10 @@ export default function LoginPage() {
         subtitle: `You're about to become the owner of ${claimOrgName}.`,
       };
     }
-    if (mode === "signup" && initialSignup === "parent") {
+    if (parentInvite && mode === "signin") {
+      return { title: "Sign in with your parent account", subtitle: "Use your own adult account. Next, add the other parent or skip, then set up your child." };
+    }
+    if (mode === "signup" && parentInvite) {
       return {
         title: "Create your parent account",
         subtitle:
@@ -205,6 +209,7 @@ export default function LoginPage() {
           {mode === "signin" && (
             <SignInForm
               returnTo={returnTo}
+              parentInvite={parentInvite}
               onForgot={() => switchMode("forgot")}
               onSwitchSignup={() => switchMode("signup")}
               onError={setError}
@@ -225,7 +230,7 @@ export default function LoginPage() {
                 setSignupGuardianEmail(email);
                 setMode("signupPending");
               }}
-              skipPathStep={initialSignup === "parent" || familyInvite || !!claimOrgName}
+              skipPathStep={parentInvite || familyInvite || !!claimOrgName}
               claimingOrganizationName={claimOrgName}
               onPathChange={(path) => setSignupPath(path)}
             />

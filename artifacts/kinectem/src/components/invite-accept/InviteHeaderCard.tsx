@@ -26,6 +26,9 @@ interface InviteHeaderCardProps {
   accepting: boolean;
   token: string;
   onAccept: () => void;
+  accountLabel?: string;
+  onSwitchAccount?: () => void;
+  accountLoading?: boolean;
 }
 
 export function InviteHeaderCard({
@@ -42,6 +45,9 @@ export function InviteHeaderCard({
   accepting,
   token,
   onAccept,
+  accountLabel,
+  onSwitchAccount,
+  accountLoading = false,
 }: InviteHeaderCardProps) {
   const returnTo = encodeURIComponent(`/invites/${token}`);
   const multipleTeams = (teamNames?.length ?? 0) > 1;
@@ -100,18 +106,18 @@ export function InviteHeaderCard({
             </ul>
           </div>
         )}
-        {isPlayerInvite && !loggedIn && !accepted && (
+        {isPlayerInvite && !needsChildSetup && (
           <div className="space-y-3">
             <ParentSetupOverview teamName={teamName} />
           </div>
         )}
         {isPlayerInvite && loggedIn && (
           <div className="space-y-2 text-sm text-slate-900">
-            {!needsChildSetup && <p>Your parent account is ready. Next: <strong>Step 2 · Add the other parent (optional).</strong></p>}
+            {!needsChildSetup && <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-1" data-testid="invite-current-account"><p className="font-bold">Step 1 · Choose your parent account</p><p className="break-words [overflow-wrap:anywhere]">Signed in as <strong>{accountLabel}</strong>.</p><p>Continue only if this is your own adult account. Otherwise, switch accounts to create your parent account or sign in.</p></div>}
             <p>When you finish setup, your child{childHint ? ` (${childHint})` : ""} will automatically be added to <strong>{teamName}’s roster</strong>.</p>
           </div>
         )}
-        {!loggedIn && (
+        {accountLoading ? <p role="status" className="text-sm text-muted-foreground">Checking your account…</p> : !loggedIn && (
           <div className="space-y-2">
             <Link
               href={`/login?signup=${isPlayerInvite ? "parent" : "user"}&returnTo=${returnTo}`}
@@ -130,7 +136,7 @@ export function InviteHeaderCard({
             <p className="text-xs text-center text-muted-foreground">
               Already on Kinectem?{" "}
               <Link
-                href={`/login?returnTo=${returnTo}`}
+                href={`/login?${isPlayerInvite ? "parentInvite=1&" : ""}returnTo=${returnTo}`}
                 className="font-bold text-primary hover:underline"
               >
                 Sign in
@@ -138,18 +144,18 @@ export function InviteHeaderCard({
             </p>
           </div>
         )}
-        {loggedIn && !accepted ? (
+        {loggedIn && !needsChildSetup && (isPlayerInvite || !accepted) ? (
           <Button
             variant="brand"
             size="lg"
             onClick={onAccept}
-            disabled={accepting}
+            disabled={accepting || accountLoading}
             className="w-full"
             data-testid="btn-accept-invite"
           >
             {accepting
               ? "Opening..."
-              : isPlayerInvite ? "Continue to family setup" : "Accept invite"}
+               : isPlayerInvite ? "Continue with this parent account" : "Accept invite"}
           </Button>
         ) : loggedIn && accepted && !needsChildSetup ? (
           <div className="flex items-center justify-center gap-2 text-sm text-emerald-700">
@@ -157,6 +163,11 @@ export function InviteHeaderCard({
             <span className="font-bold">Invite accepted</span>
           </div>
         ) : null}
+        {isPlayerInvite && loggedIn && !needsChildSetup && onSwitchAccount && (
+          <Button variant="outline" className="w-full" onClick={onSwitchAccount} disabled={accepting || accountLoading} data-testid="btn-switch-parent-account">
+            Use another account — create or sign in
+          </Button>
+        )}
       </CardContent>
     </Card>
   );

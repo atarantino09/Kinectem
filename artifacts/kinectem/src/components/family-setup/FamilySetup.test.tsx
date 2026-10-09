@@ -8,17 +8,39 @@ vi.mock("@workspace/api-client-react", () => ({ customFetch: (...a: unknown[]) =
 vi.mock("wouter", () => ({ Link: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a> }));
 vi.mock("@/components/UserAvatar", () => ({ UserAvatar: () => <span /> }));
 
-function setup() {
+function setup(verifyAccount?: () => Promise<void>) {
   const qc = new QueryClient();
   return render(
     <QueryClientProvider client={qc}>
-      <FamilySetup userId="u1" mode="family" onDone={() => {}} />
+      <FamilySetup userId="u1" mode="family" onDone={() => {}} verifyAccount={verifyAccount} />
     </QueryClientProvider>,
   );
 }
 
 describe("FamilySetup", () => {
   beforeEach(() => { sessionStorage.clear(); fetchMock.mockReset(); });
+  it("blocks player creation if the adult session changes before submission", async () => {
+    fetchMock.mockResolvedValue({ data: [] });
+    const verify = vi.fn().mockRejectedValue(new Error("Your account changed"));
+    setup(verify);
+    fireEvent.click(screen.getByTestId("btn-coparent-skip"));
+    await screen.findByTestId("input-child-first");
+    fireEvent.change(screen.getByTestId("input-child-first"), { target: { value: "Ava" } });
+    fireEvent.change(screen.getByTestId("input-child-last"), { target: { value: "Lee" } });
+    fireEvent.click(screen.getByTestId("btn-add-child"));
+    await screen.findByText("Your account changed");
+    expect(verify).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
+  });
+  it("blocks selecting a child if the adult session is no longer verified", async () => {
+    fetchMock.mockResolvedValue({ data: [{ id: "existing", firstName: "Ava", lastName: "Lee" }] });
+    setup(vi.fn().mockRejectedValue(new Error("Your account changed")));
+    fireEvent.click(screen.getByTestId("btn-coparent-skip"));
+    fireEvent.click(await screen.findByTestId("btn-select-child-existing"));
+    await screen.findByText("Your account changed");
+    expect(screen.queryByTestId("step-done")).not.toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
+  });
 
   it("shows coordinate copy, steps and guidance when the other parent already did it", () => {
     fetchMock.mockResolvedValue({ data: [] });

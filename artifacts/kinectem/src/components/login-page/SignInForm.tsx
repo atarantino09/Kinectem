@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { safeInternalPath } from "@/lib/safePath";
 import { rateLimitMessage } from "@/lib/auth-errors";
+import { completeInviteAuthentication, inviteAccountToken } from "@/lib/parent-invite-account";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,6 +18,7 @@ export interface GuardianPendingInfo {
 
 interface SignInFormProps {
   returnTo: string | null;
+  parentInvite?: boolean;
   onForgot: () => void;
   onSwitchSignup: () => void;
   onError: (msg: string | null) => void;
@@ -25,6 +27,7 @@ interface SignInFormProps {
 
 export function SignInForm({
   returnTo,
+  parentInvite = false,
   onForgot,
   onSwitchSignup,
   onError,
@@ -42,14 +45,20 @@ export function SignInForm({
   ) => {
     onError(null);
     try {
-      await customFetch("/api/v1/auth/login", {
+      const loggedIn = await customFetch<{ id: string }>("/api/v1/auth/login", {
         method: "POST",
         body: JSON.stringify({
           email: submitEmail.trim().toLowerCase(),
           password: submitPassword,
         }),
       });
-      await qc.invalidateQueries();
+      if (parentInvite && inviteAccountToken(returnTo)) {
+        await qc.cancelQueries();
+        qc.clear();
+        await completeInviteAuthentication(returnTo, loggedIn.id);
+      } else {
+        await qc.invalidateQueries();
+      }
       const dest = safeInternalPath(returnTo) ?? "/";
       if (typeof window !== "undefined") {
         const base = import.meta.env.BASE_URL.replace(/\/$/, "");

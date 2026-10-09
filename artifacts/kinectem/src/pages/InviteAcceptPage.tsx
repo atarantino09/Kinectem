@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useRoute, useLocation, Link } from "wouter";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch, useGetLoggedInUser } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,8 @@ import { FamilySetup } from "@/components/family-setup/FamilySetup";
 import { loadDraft } from "@/lib/family-setup";
 import { InviteHeaderCard } from "@/components/invite-accept/InviteHeaderCard";
 import { InviteBenefitsCard } from "@/components/invite-accept/InviteBenefitsCard";
+import type { WhoamiResponse } from "@/hooks/useWhoami";
+import { forgetInviteAccount, hasInviteAccount, rememberInviteAccount } from "@/lib/parent-invite-account";
 
 interface InviteEnvelope {
   invite: {
@@ -40,6 +42,10 @@ interface InviteEnvelope {
 export default function InviteAcceptPage() {
   const [, params] = useRoute("/invites/:token");
   const token = params?.token ?? "";
+  return <InviteEntry key={token} token={token} />;
+}
+
+function InviteEntry({ token }: { token: string }) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -48,51 +54,106 @@ export default function InviteAcceptPage() {
   const [envelope, setEnvelope] = useState<InviteEnvelope | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [accepting, setAccepting] = useState(false);
   const [accepted, setAccepted] = useState(false);
-  const [needsChildSetup, setNeedsChildSetup] = useState(false);
+  const [setupAccount, setSetupAccount] = useState<string | null>(null);
+  const [acceptError, setAcceptError] = useState<string | null>(null);
   const autoStarted = useRef<string | null>(null);
-
-  const myId = me?.id ?? null;
+  const inFlight = useRef(false);
+  const mounted = useRef(true);
   useEffect(() => {
-    if (!token) return;
-    customFetch<InviteEnvelope>(`/api/v1/invites/${token}`)
-      .then((r) => setEnvelope(r))
-      .catch((e) => setError((e as Error).message ?? "Invite not found"))
-      .finally(() => setLoading(false));
-  }, [token]);
-
-  // Resume after refresh: a saved draft for this user and invitation, or an
-  // already accepted player invite, reopens family setup.
-  useEffect(() => {
-    if (!myId || !envelope || needsChildSetup) return;
-    if (
-      loadDraft(myId, `team:${token}`) ||
-      (envelope.invite.status === "accepted" && envelope.invite.position === "player")
-    ) {
-      setNeedsChildSetup(true);
-    }
-  }, [myId, envelope, token, needsChildSetup]);
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
 
   const isPlayerInvite = envelope?.invite.position === "player";
+  // Invitation entry must not trust a users/me result left by another session.
+  const session = useQuery<WhoamiResponse>({
+    queryKey: ["parent-invite-session", token],
+    queryFn: () => customFetch("/api/v1/auth/whoami", { method: "GET" }),
+    enabled: !!isPlayerInvite,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: "always",
+    retry: false,
+  });
+  const account = session.data?.authenticated
+    ? session.data.isMasquerading ? session.data.viewingAs : session.data.realUser
+    : null;
+  const myId = isPlayerInvite ? account?.id ?? null : me?.id ?? null;
+  const accountReady = !isPlayerInvite || (session.isFetchedAfterMount && !session.isFetching && !session.isError);
+  const accountKey = myId ? `${myId}:${token}` : null;
+  const currentKey = useRef(accountKey);
+  const identityVersion = useRef(0);
+  // Invalidate in-flight results and visible setup immediately on identity change.
+  if (currentKey.current !== accountKey) {
+    currentKey.current = accountKey;
+    identityVersion.current += 1;
+  }
+  // Keep the validated component mounted during a same-session recheck so its
+  // pending writes and in-memory draft cannot be lost. Disable it while checking.
+  const needsChildSetup = session.isFetchedAfterMount && !session.isError && !!accountKey && setupAccount === accountKey;
+  useEffect(() => {
+    if (!token) return;
+    let active = true;
+    setLoading(true);
+    setError(null);
+    customFetch<InviteEnvelope>(`/api/v1/invites/${encodeURIComponent(token)}`)
+      .then((r) => { if (active) setEnvelope(r); })
+      .catch((e) => { if (active) setError((e as Error).message ?? "Invite not found"); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [token, loadAttempt]);
+
+  useEffect(() => {
+    setSetupAccount(null);
+    setAcceptError(null);
+    setAccepted(false);
+  }, [accountKey]);
+
   const childHint = envelope?.invite.invitedName ?? "";
   const acceptedState = accepted || envelope?.invite.status === "accepted";
 
   const onAccept = async () => {
-    if (!me) {
+    if (!myId || !accountReady || !envelope || inFlight.current) {
+      if (isPlayerInvite) return;
       navigate("/login");
       return;
     }
+    const expectedKey = accountKey;
+    const expectedVersion = identityVersion.current;
+    const stillCurrent = () => mounted.current && currentKey.current === expectedKey && identityVersion.current === expectedVersion;
+    inFlight.current = true;
     setAccepting(true);
+    setAcceptError(null);
     try {
+      if (isPlayerInvite) {
+        const verified = await session.refetch();
+        const who = verified.data;
+        const user = who?.isMasquerading ? who.viewingAs : who?.realUser;
+        if (verified.isError || !who?.authenticated || user?.id !== myId || !stillCurrent()) {
+          throw new Error("Your account changed or could not be verified. Check your account and try again.");
+        }
+      }
       const r = await customFetch<{
         requiresChildSetup?: boolean;
         multiTeam?: boolean;
         teamIds?: string[];
       }>(
-        `/api/v1/invites/${token}/accept`,
+        `/api/v1/invites/${encodeURIComponent(token)}/accept`,
         { method: "POST" },
       );
+      if (isPlayerInvite) {
+        const verified = await session.refetch();
+        const who = verified.data;
+        const user = who?.isMasquerading ? who.viewingAs : who?.realUser;
+        if (verified.isError || !who?.authenticated || user?.id !== myId || !stillCurrent()) {
+          throw new Error("Your account changed or could not be verified. Check your account and try again.");
+        }
+      }
+      if (!stillCurrent()) return;
       setAccepted(true);
       // Accepting changes this user's roster status and capabilities on the
       // team. Drop any cached team/member data so the team page we navigate to
@@ -111,7 +172,8 @@ export default function InviteAcceptPage() {
         },
       });
       if (r.requiresChildSetup) {
-        setNeedsChildSetup(true);
+        rememberInviteAccount(token, myId);
+        if (stillCurrent()) setSetupAccount(expectedKey);
       } else {
         toast({
           title: r.multiTeam ? "Welcome to your teams!" : "Welcome to the team!",
@@ -119,26 +181,49 @@ export default function InviteAcceptPage() {
         navigate(`/teams/${envelope!.team.id}`);
       }
     } catch (e) {
+      if (!stillCurrent()) return;
+      setAcceptError((e as Error).message ?? "Failed to accept invite");
       toast({
         title: (e as Error).message ?? "Failed to accept invite",
         variant: "destructive",
       });
     } finally {
-      setAccepting(false);
+      inFlight.current = false;
+      if (mounted.current) setAccepting(false);
     }
   };
 
-  // A signed-in parent already completed step 1. Validate the invite through
-  // the same server gate, then open step 2 without another confirmation page.
-  // Guard by user+token so rerenders/StrictMode cannot send repeated requests;
-  // a rejected invite retains the existing explicit retry action.
+  // Only invitation-specific completed authentication or this user's own
+  // draft may resume. Public "accepted" status never establishes an identity.
   useEffect(() => {
-    if (!myId || !isPlayerInvite || needsChildSetup) return;
+    if (!myId || !isPlayerInvite || !accountReady || needsChildSetup || accepting) return;
+    if (!hasInviteAccount(token, myId) && !loadDraft(myId, `team:${token}`)) return;
     const key = `${myId}:${token}`;
     if (autoStarted.current === key) return;
     autoStarted.current = key;
     void onAccept();
-  }, [myId, isPlayerInvite, token, needsChildSetup]);
+  }, [myId, isPlayerInvite, token, needsChildSetup, accountReady, accepting]);
+
+  const switchAccount = async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setAccepting(true);
+    try {
+      await customFetch("/api/v1/auth/logout", { method: "POST" });
+      currentKey.current = null;
+      identityVersion.current += 1;
+      setSetupAccount(null);
+      forgetInviteAccount(token);
+      await qc.cancelQueries();
+      qc.clear();
+      const destination = `/login?signup=parent&returnTo=${encodeURIComponent(`/invites/${token}`)}`;
+      window.location.assign(import.meta.env.BASE_URL.replace(/\/$/, "") + destination);
+    } catch (e) {
+      inFlight.current = false;
+      setAcceptError((e as Error).message || "Could not switch accounts. Please try again.");
+      setAccepting(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -165,6 +250,7 @@ export default function InviteAcceptPage() {
                 Go home
               </Button>
             </Link>
+            <Button variant="outline" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>Retry invitation</Button>
           </CardContent>
         </Card>
       </div>
@@ -181,17 +267,28 @@ export default function InviteAcceptPage() {
         isPlayerInvite={isPlayerInvite}
         positionLabel={envelope.invite.position ?? envelope.invite.role}
         childHint={childHint}
-        loggedIn={!!me}
+        loggedIn={isPlayerInvite ? !!account && accountReady : !!me}
+        accountLabel={account ? `${account.name} (${account.email})` : undefined}
+        accountLoading={isPlayerInvite && !accountReady}
+        onSwitchAccount={switchAccount}
         accepted={acceptedState}
         needsChildSetup={needsChildSetup}
         accepting={accepting}
         token={token}
         onAccept={onAccept}
       />
+      {isPlayerInvite && session.isError && (
+        <div role="alert" className="text-sm space-y-2">
+          <p>We couldn’t verify your account. Retry before continuing.</p>
+          <Button variant="outline" onClick={() => void session.refetch()}>Retry account check</Button>
+        </div>
+      )}
+      {acceptError && <p role="alert" className="text-sm text-destructive">{acceptError} Try again using the continue button above.</p>}
       {/* Hide the explainer once the invite is accepted so attention
           moves to the success state / child-setup next action. */}
       {!acceptedState && <InviteBenefitsCard />}
       {needsChildSetup && myId && (
+        <fieldset disabled={session.isFetching} className="min-w-0">
         <FamilySetup
           key={`${myId}:team:${token}`}
           userId={myId}
@@ -199,12 +296,24 @@ export default function InviteAcceptPage() {
           token={token}
           teamName={envelope.team.name}
           childHint={childHint}
+          verifyAccount={async () => {
+            const expectedKey = accountKey;
+            const expectedVersion = identityVersion.current;
+            const checked = await session.refetch();
+            const who = checked.data;
+            const user = who?.isMasquerading ? who.viewingAs : who?.realUser;
+            if (checked.isError || !who?.authenticated || user?.id !== myId ||
+              !mounted.current || currentKey.current !== expectedKey || identityVersion.current !== expectedVersion) {
+              throw new Error("Your account changed or could not be verified. Reopen your invitation and check your account before continuing.");
+            }
+          }}
           onDone={() =>
             navigate(
               `/family?tour=1&next=${encodeURIComponent(`/teams/${envelope.team.id}`)}`,
             )
           }
         />
+        </fieldset>
       )}
     </div>
   );

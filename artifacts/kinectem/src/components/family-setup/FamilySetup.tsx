@@ -26,6 +26,8 @@ export interface FamilySetupProps {
   childHint?: string;
   onDone: () => void;
   onSkipLater?: () => void;
+  /** Team-invitation entry rechecks identity before any account-specific write. */
+  verifyAccount?: () => Promise<void>;
 }
 
 const STEPS = [
@@ -53,7 +55,7 @@ function Steps({ current }: { current: number }) {
   );
 }
 
-export function FamilySetup({ userId, mode, token, teamName, childHint, onDone, onSkipLater }: FamilySetupProps) {
+export function FamilySetup({ userId, mode, token, teamName, childHint, onDone, onSkipLater, verifyAccount }: FamilySetupProps) {
   const qc = useQueryClient();
   const scope = mode === "team" ? `team:${token}` : "family";
   const [draft, setDraftState] = useState<FamilyDraft>(() => {
@@ -114,6 +116,7 @@ export function FamilySetup({ userId, mode, token, teamName, childHint, onDone, 
     if (!co) return;
     setInviting(true);
     try {
+      await verifyAccount?.();
       const r = await customFetch<{ id: string; emailSent?: boolean | null }>(inviteEndpoint(id), {
         method: "POST",
         body: JSON.stringify(co),
@@ -147,6 +150,7 @@ export function FamilySetup({ userId, mode, token, teamName, childHint, onDone, 
       await selectExisting(receipt.child);
     };
     try {
+      await verifyAccount?.();
       let submittedFirst = f, submittedLast = l;
       const plan = planRequest(draftRef.current, f, l);
       if (plan.kind === "changed-after-attempt") {
@@ -211,6 +215,7 @@ export function FamilySetup({ userId, mode, token, teamName, childHint, onDone, 
   const selectExisting = async (c: ChildRow) => {
     setBusy(true); setError("");
     try {
+      await verifyAccount?.();
       if (mode === "team") {
         try {
           await customFetch(`/api/v1/invites/${token}/children`, { method: "POST", body: JSON.stringify({ childId: c.id }) });

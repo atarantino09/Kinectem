@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { safeInternalPath } from "@/lib/safePath";
 import { rateLimitMessage } from "@/lib/auth-errors";
+import { completeInviteAuthentication, inviteAccountToken } from "@/lib/parent-invite-account";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -206,12 +207,18 @@ export function SignUpForm({
           guardianEmail: isUnder13 ? guardianEmail.trim().toLowerCase() : null,
           guardianConsent: isUnder13 ? guardianConsent : undefined,
         }),
-      })) as { pendingGuardianConfirmation?: boolean };
+      })) as { id?: string; pendingGuardianConfirmation?: boolean };
       if (res?.pendingGuardianConfirmation) {
         onPending(guardianEmail);
         return;
       }
-      await qc.invalidateQueries();
+      if (initialRole === "parent" && inviteAccountToken(returnTo)) {
+        await qc.cancelQueries();
+        qc.clear();
+        await completeInviteAuthentication(returnTo, res.id);
+      } else {
+        await qc.invalidateQueries();
+      }
       // Org admins land straight on the Create Organization flow so their
       // first action is setting up the org they'll administer. An explicit
       // returnTo (e.g. an invite deep link) still wins.
