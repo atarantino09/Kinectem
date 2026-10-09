@@ -18,6 +18,10 @@ import {
   type CompetitionPartnerPage,
 } from "@/components/CompetitionPartnerDirectory";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
+  DropdownMenuRadioGroup, DropdownMenuRadioItem,
+} from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -1626,6 +1630,12 @@ export default function CompetitionPage() {
             recapSearch.trim() !== "" ||
             recapTeamFilter !== "all" ||
             recapDateFilter !== "all";
+          const activeRecapLabel = [
+            bracketFilter === "__other__" ? "Other" : usedBrackets.find((bracket) => bracket.id === bracketFilter)?.label,
+            recapTeamFilter !== "all" ? recapTeamOptions.find((team) => team.value === recapTeamFilter)?.label : null,
+            recapDateFilter !== "all" ? formatCompetitionDate(recapDateFilter) : null,
+            recapSearch.trim() ? `Search: ${recapSearch.trim()}` : null,
+          ].filter(Boolean).join(" · ") || "All";
           const clearRecapFilters = () => {
             setBracketFilter("");
             setRecapSearch("");
@@ -1877,36 +1887,41 @@ export default function CompetitionPage() {
                 </label>
               </div>
             </div>
-            {/* Bracket filter chips retain the organizer's saved ordering.
-                Week headings stay visible for every filter, including All. */}
-            {usedBrackets.length > 0 && (
+            {/* One pill identifies the current view; its menu switches brackets. */}
               <div
                 className="flex items-center gap-1.5 flex-wrap"
                 data-testid="filter-bracket-chips"
               >
-                <Button
-                  size="sm"
-                  variant={bracketFilter === "" ? "default" : "outline"}
-                  className="h-7 rounded-full font-bold text-xs"
-                  onClick={() => setBracketFilter("")}
-                  data-testid="chip-bracket-all"
-                >
-                  All ({allRecaps.length})
-                </Button>
-                {usedBrackets.filter((bracket) => bracket.count > 0).map((b) => (
-                  <Button
-                    key={b.id}
-                    size="sm"
-                    variant={bracketFilter === b.id ? "default" : "outline"}
-                    className="h-7 rounded-full font-bold text-xs"
-                    onClick={() => setBracketFilter(b.id)}
-                    data-testid={`chip-bracket-${b.id}`}
-                  >
-                    {b.label} ({b.count})
-                  </Button>
-                ))}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      size="sm"
+                      className="h-7 min-w-0 max-w-full rounded-full font-bold text-xs"
+                      data-testid="chip-recap-active"
+                      title={`${activeRecapLabel} (${shownRecaps.length})`}
+                    >
+                      <span className="min-w-0 truncate">{activeRecapLabel} ({shownRecaps.length})</span>
+                      <ChevronDown className="ml-1 h-3 w-3 shrink-0" aria-hidden="true" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="max-w-[min(28rem,calc(100vw-2rem))]">
+                    <DropdownMenuRadioGroup
+                      value={!recapFiltersActive ? "__all__" : bracketFilter || "__custom__"}
+                      onValueChange={(value) => value === "__all__" ? clearRecapFilters() : setBracketFilter(value)}
+                    >
+                      <DropdownMenuRadioItem value="__all__">All ({allRecaps.length})</DropdownMenuRadioItem>
+                      {usedBrackets.map((bracket) => (
+                        <DropdownMenuRadioItem key={bracket.id} value={bracket.id} className="break-words">
+                          {bracket.label} ({bracket.count})
+                        </DropdownMenuRadioItem>
+                      ))}
+                      {otherRecapCount > 0 || bracketFilter === "__other__" ? (
+                        <DropdownMenuRadioItem value="__other__">Other ({otherRecapCount})</DropdownMenuRadioItem>
+                      ) : null}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
-            )}
             {shownRecaps.length === 0 ? (
               <div
                 className="competition-empty-state rounded-xl border border-dashed p-8 text-center"

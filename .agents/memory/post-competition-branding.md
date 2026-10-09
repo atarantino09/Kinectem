@@ -50,3 +50,9 @@ The excerpt gradient ends at a hard horizontal edge above a solid “Read full r
 **Why:** The user wants the footer visually separated, like the solid identity/title area above the excerpt, rather than faded into the gradient.
 
 **How to apply:** Keep the footer outside the gradient surface, retain the organization palette, and preserve the compact card height.
+
+Show only one active-view filter pill: All when unfiltered, otherwise the selected bracket or combined active filters. Offer unassigned recaps as Other.
+
+**Why:** The user wants the current view clear without a row of redundant bracket pills.
+
+**How to apply:** Keep all bracket choices, including zero-count groups, available in the pill menu and bracket selector. Selecting All resets every recap filter; retain the gray bracket label on each card.

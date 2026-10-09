@@ -252,9 +252,21 @@ describe("competition partnership directory", () => {
     expect(screen.getAllByTestId(/^card-featured-recap-/)).toHaveLength(2);
     expect(screen.getByTestId("card-featured-recap-other")).toBeVisible();
     expect(screen.getByTestId("card-featured-recap-stale")).toBeVisible();
-    await user.click(screen.getByTestId("chip-bracket-group:silver"));
+    expect(screen.getByTestId("chip-recap-active")).toHaveTextContent("Other (2)");
+    expect(within(screen.getByTestId("filter-bracket-chips")).getAllByRole("button")).toHaveLength(1);
+    await user.click(screen.getByTestId("chip-recap-active"));
+    expect(screen.getByRole("menuitemradio", { name: "Other (2)" })).toHaveAttribute("aria-checked", "true");
+    await user.click(screen.getByRole("menuitemradio", { name: "Silver (1)" }));
     expect(bracket).toHaveValue("group:silver");
     expect(screen.getAllByTestId(/^card-featured-recap-/)).toHaveLength(1);
+    expect(screen.getByTestId("chip-recap-active")).toHaveTextContent("Silver (1)");
+    await user.selectOptions(screen.getByTestId("select-recap-team"), "team-a");
+    expect(screen.getByTestId("chip-recap-active")).toHaveTextContent("Silver · Alpha");
+    await user.click(screen.getByTestId("chip-recap-active"));
+    await user.click(screen.getByRole("menuitemradio", { name: "All (5)" }));
+    expect(screen.getByTestId("chip-recap-active")).toHaveTextContent("All (5)");
+    expect(screen.getByTestId("select-recap-team")).toHaveValue("all");
+    expect(screen.getAllByTestId(/^card-featured-recap-/)).toHaveLength(5);
   });
   it("shows the overall group on cards and filters both A and B together", async () => {
     const user = userEvent.setup();
