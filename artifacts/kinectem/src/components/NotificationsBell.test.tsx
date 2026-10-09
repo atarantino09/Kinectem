@@ -110,6 +110,9 @@ describe("notification bell acknowledgement", () => {
     expect(mocks.markOwn).toHaveBeenCalledTimes(1);
     await user.click(screen.getByTestId("button-notifications"));
     await waitFor(() => expect(mocks.markOwn).toHaveBeenCalledTimes(2));
+    expect(screen.getByText("Coach invited Ava to join Team.")).toBeInTheDocument();
+    expect(screen.getByTestId("button-accept-child-invite-invite-1")).toBeEnabled();
+    expect(screen.queryByTestId("badge-bell-unread")).not.toBeInTheDocument();
   });
 
   it("keeps the badge cleared immediately while server requests are still pending", async () => {

@@ -3,8 +3,8 @@ name: Notification bell acknowledgement
 description: Opening the bell acknowledges unread notifications without resolving pending actions.
 ---
 
-Opening the top-bar notification bell means marking current notifications as read and clearing the number immediately, including the parent’s child-notification counts. Do not require a separate “mark as read” click.
+Opening the top-bar notification bell means marking current notifications as read and clearing the number immediately, including the parent’s child-notification counts. Do not require a separate “mark as read” click. Read notifications must remain listed and clickable when the dropdown is reopened.
 
-**Why:** The user explicitly wants clicking the bell to acknowledge notifications, rather than leave the number until each notification is opened individually.
+**Why:** The user explicitly wants clicking the bell to acknowledge notifications, rather than leave the number until each notification is opened individually. They reiterated that this must clear only the bell alert, not the dropdown’s notification history.
 
 **How to apply:** Reading is not deletion, invitation acceptance, or consent. Preserve notification history and pending actions. Child-stream acknowledgement is specific to the viewing parent, not other guardians. Notifications arriving later should still count as new until the next opening.
