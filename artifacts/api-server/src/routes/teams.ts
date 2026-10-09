@@ -32,7 +32,7 @@ import {
   staffInviteRoleLabel,
 } from "@workspace/invite-copy";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
-import { findAccountByEmail, findPendingInvite, findRosterEntry, isOrganizationManager, lockRosterTeam, revokeRedundantInvites } from "../lib/roster-invite-consistency";
+import { findAccountByEmail, findPendingInvite, findRosterEntry, isOrganizationManager, lockRosterTeam, reconcileOrganizationSelfInvites, revokeRedundantInvites, revokeSelfInvites } from "../lib/roster-invite-consistency";
 import { asyncHandler } from "../lib/async-handler";
 import { getActiveGuardianIds, getActiveGuardianIdsForChildren, isActiveGuardian } from "../lib/guardian-links";
 import {
@@ -477,9 +477,27 @@ router.delete(
   }),
 );
 
+async function repairOrganizationSelfInvites(req: Request, team: typeof teams.$inferSelect) {
+  const activated = await reconcileOrganizationSelfInvites(team.id, team.organizationId);
+  for (const userId of activated) {
+    try {
+      await ensureOrgFollowedForTeam(userId, team.id);
+      await ensureTeamFollowed(userId, team.id);
+    } catch (err) {
+      req.log.warn({ err, userId, teamId: team.id }, "auto-follow on self-invite repair failed");
+    }
+  }
+}
+
 router.get(
   "/teams/:teamId/members",
   asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    const [repairTeam] = await db.select().from(teams)
+      .where(eq(teams.id, req.params.teamId)).limit(1);
+    if (me && repairTeam && await canManageTeam(me.id, repairTeam)) {
+      await repairOrganizationSelfInvites(req, repairTeam);
+    }
     const rows = await db
       .select({ r: rosterEntries, u: users })
       .from(rosterEntries)
@@ -503,12 +521,8 @@ router.get(
       ? await db.select().from(users).where(inArray(users.id, parentIds))
       : [];
     const parentMap = new Map(parentRows.map((p) => [p.id, p]));
-    const me = req.sessionUser;
-    const [team] = await db
-      .select()
-      .from(teams)
-      .where(eq(teams.id, req.params.teamId))
-      .limit(1);
+    const [team] = await db.select().from(teams)
+      .where(eq(teams.id, req.params.teamId)).limit(1);
     let canSeeParentEmail = false;
     if (me && team) {
       canSeeParentEmail =
@@ -550,6 +564,7 @@ router.get(
     if (!t) return notFound(res);
     if (!(await canManageTeam(me.id, t)))
       return apiError(res, 403, "Team coaches or org admins only");
+    await repairOrganizationSelfInvites(req, t);
     const rows = await db
       .select({ i: rosterInvites, u: users })
       .from(rosterInvites)
@@ -598,6 +613,8 @@ router.post(
       await lockRosterTeam(tx, teamId);
       const existing = await findRosterEntry(tx, teamId, userId);
       if (existing?.status === "accepted") {
+        if (selfApproved && u.email)
+          await revokeSelfInvites(tx, teamId, u.email, me.id);
         if (u.email && existing.role === "coach")
           await revokeRedundantInvites(tx, teamId, u.email);
         return { entry: existing, outcome: "already_active" as const, created: false };
@@ -616,8 +633,8 @@ router.post(
             position: positionRaw === "coach" ? null : positionRaw,
             invitedById: me.id,
           }).returning();
-      if (selfApproved && u.email && dbRole === "coach")
-        await revokeRedundantInvites(tx, teamId, u.email);
+      if (selfApproved && u.email)
+        await revokeSelfInvites(tx, teamId, u.email, me.id);
       return { entry: placed, outcome: selfApproved ? "auto_approved" as const : "invited" as const, created: true };
     });
     if (created || outcome === "already_pending") {
@@ -1095,19 +1112,24 @@ router.post(
         ? "coach"
         : "player";
     const normalizedEmail = email.toLowerCase();
-    // Player email invites enter the child chooser; the email owner is not
-    // necessarily the intended player, even when inviting themselves.
-    const selfApproved = dbRole === "coach" && normalizedEmail === me.email?.toLowerCase() &&
+    // Only an actual org manager explicitly inviting themselves skips acceptance,
+    // for every position. Other player invitations still use the child chooser.
+    const selfApproved = normalizedEmail === me.email?.trim().toLowerCase() &&
       await isOrganizationManager(me.id, t.organizationId);
     const placement = await db.transaction(async (tx) => {
       await lockRosterTeam(tx, teamId);
-      const existingUser = await findAccountByEmail(tx, normalizedEmail);
+      const existingUser = selfApproved
+        ? (await tx.select().from(users).where(eq(users.id, me.id)).limit(1))[0]
+        : await findAccountByEmail(tx, normalizedEmail);
       const existingEntry = existingUser
         ? await findRosterEntry(tx, teamId, existingUser.id) : undefined;
       // A player email invite can address the parent of a *different* child.
       // Only a staff invitation identifies the addressee as the member.
-      if (dbRole === "coach" && existingEntry?.status === "accepted") {
-        await revokeRedundantInvites(tx, teamId, normalizedEmail, dbRole);
+      if ((dbRole === "coach" || selfApproved) && existingEntry?.status === "accepted") {
+        if (dbRole === "coach")
+          await revokeRedundantInvites(tx, teamId, normalizedEmail, dbRole);
+        if (selfApproved)
+          await revokeSelfInvites(tx, teamId, normalizedEmail, me.id);
         return { outcome: "already_active" as const, existingUser, invite: null, entry: existingEntry };
       }
       if (selfApproved && existingUser) {
@@ -1121,7 +1143,7 @@ router.post(
               teamId, userId: existingUser.id, role: dbRole, status: "accepted",
               position: positionRaw === "coach" ? null : positionRaw, invitedById: me.id,
             }).returning();
-        await revokeRedundantInvites(tx, teamId, normalizedEmail, dbRole);
+        await revokeSelfInvites(tx, teamId, normalizedEmail, me.id);
         return { outcome: "auto_approved" as const, existingUser, invite: null, entry };
       }
       const pendingInvite = dbRole === "coach"

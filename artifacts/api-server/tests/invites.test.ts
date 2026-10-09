@@ -576,17 +576,21 @@ describe("invites", () => {
       .returning();
     expect(accepted.status).toBe("accepted");
 
-    // Minting a fresh invite for the same email persists the invite row but
-    // short-circuits placement (an accepted entry already exists), so the
-    // accepted membership is the only roster row.
-    const created = await coach.agent
+    // New redundant invites are prevented; model a legacy pending invite to
+    // prove withdrawing it still preserves the accepted membership.
+    const duplicate = await coach.agent
       .post(`/api/v1/teams/${teamId}/invites`)
       .send({ email: "morgan@kinectem.demo", position: "coach" });
-    expect(created.status).toBe(201);
+    expect(duplicate.status).toBe(200);
+    expect(duplicate.body.outcome).toBe("already_active");
+    const [created] = await db.insert(rosterInvites).values({
+      teamId, token: `legacy-active-${teamId}`, invitedEmail: morgan.email,
+      role: "coach", invitedById: coach.user.id,
+    }).returning();
 
     // Revoke the invite — the accepted membership must survive untouched.
     const revoke = await coach.agent.delete(
-      `/api/v1/teams/${teamId}/invites/${created.body.id}`,
+      `/api/v1/teams/${teamId}/invites/${created.id}`,
     );
     expect(revoke.status).toBe(200);
     expect(revoke.body.status).toBe("withdrawn");

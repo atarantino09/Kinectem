@@ -29,7 +29,7 @@ import {
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
-import { findAccountByEmail, findPendingInvite, findRosterEntry, isOrganizationManager, lockRosterTeam, revokeRedundantInvites } from "../lib/roster-invite-consistency";
+import { findAccountByEmail, findPendingInvite, findRosterEntry, isOrganizationManager, lockRosterTeam, revokeRedundantInvites, revokeSelfInvites } from "../lib/roster-invite-consistency";
 import { asyncHandler } from "../lib/async-handler";
 import {
   getActiveGuardianIds,
@@ -775,6 +775,8 @@ router.post(
           for (const assignment of groupedAssignments) {
             const existingEntry = await findRosterEntry(tx, assignment.teamId, existingUser.id);
             if (existingEntry?.status === "accepted") {
+              if (existingUser.id === me.id && actorIsOrgManager)
+                await revokeSelfInvites(tx, assignment.teamId, email, me.id);
               await revokeRedundantInvites(tx, assignment.teamId, email);
               teamOutcomes.push({ teamId: assignment.teamId, outcome: "already_active" });
               continue;
@@ -790,7 +792,7 @@ router.post(
                   status: "accepted", position: null, invitedById: me.id,
                 });
               }
-              await revokeRedundantInvites(tx, assignment.teamId, email);
+              await revokeSelfInvites(tx, assignment.teamId, email, me.id);
               approvedTeams.push(assignment.teamId);
               teamOutcomes.push({ teamId: assignment.teamId, outcome: "auto_approved" });
               continue;

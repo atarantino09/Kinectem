@@ -208,11 +208,12 @@ describe("teams", () => {
 
   it("keeps a parent's player chooser invitation even when they are already active staff", async () => {
     const { agent, user } = await loginAs((u) => u.email === "coach@kinectem.demo");
+    const { agent: otherAdmin } = await loginAs((u) => u.email === "sam@kinectem.demo");
     const { org } = await getOrgAndTeams();
     const created = await agent.post(`/api/v1/organizations/${org.id}/teams`)
       .send({ name: "Parent Chooser Alongside Staff", sport: "Soccer" });
     const teamId = created.body.id as string;
-    const player = await agent.post(`/api/v1/teams/${teamId}/invites`)
+    const player = await otherAdmin.post(`/api/v1/teams/${teamId}/invites`)
       .send({ email: user.email, position: "player" });
     expect(player.status).toBe(201);
     expect(player.body.outcome).toBe("invited");

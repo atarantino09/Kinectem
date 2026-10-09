@@ -1,5 +1,5 @@
-import { db, coachInviteGroups, organizationAdmins, rosterEntries, rosterInvites, users } from "@workspace/db";
-import { and, eq, sql } from "drizzle-orm";
+import { db, coachInviteGroups, organizationAdmins, rosterEntries, rosterInvites, teams, users } from "@workspace/db";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
 export type RosterTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -39,11 +39,13 @@ export async function findPendingInvite(
 // actionable, and close empty groups so their links cannot grant a new role.
 export async function revokeRedundantInvites(
   tx: RosterTx, teamId: string, email: string, role: "coach" | "player" = "coach",
+  invitedById?: string,
 ) {
   const revoked = await tx.update(rosterInvites).set({ status: "revoked" }).where(and(
     eq(rosterInvites.teamId, teamId),
     eq(rosterInvites.status, "pending"),
     eq(rosterInvites.role, role),
+    invitedById ? eq(rosterInvites.invitedById, invitedById) : undefined,
     sql`lower(btrim(${rosterInvites.invitedEmail})) = ${email.toLowerCase().trim()}`,
   )).returning({ groupId: rosterInvites.coachInviteGroupId });
   for (const groupId of new Set(revoked.map((row) => row.groupId).filter((id): id is string => !!id))) {
@@ -54,6 +56,63 @@ export async function revokeRedundantInvites(
         .where(and(eq(coachInviteGroups.id, groupId), eq(coachInviteGroups.status, "pending")));
     }
   }
+}
+
+// Self-invites identify the admin personally, including player assignments.
+// Never revoke somebody else's parent-facing player invitation to that email.
+export async function revokeSelfInvites(tx: RosterTx, teamId: string, email: string, userId: string) {
+  await revokeRedundantInvites(tx, teamId, email, "coach", userId);
+  await revokeRedundantInvites(tx, teamId, email, "player", userId);
+}
+
+// Repair legacy self-invites when a manager loads the roster or Pending tab.
+// Both reads use this repair so the two views cannot disagree after promotion.
+export async function reconcileOrganizationSelfInvites(teamId: string, organizationId: string | null) {
+  if (!organizationId) return [];
+  return db.transaction(async (tx) => {
+    await lockRosterTeam(tx, teamId);
+    const [team] = await tx.select().from(teams).where(eq(teams.id, teamId)).limit(1);
+    if (!team || team.organizationId !== organizationId) return [];
+    const pending = await tx.select({ invite: rosterInvites, account: users })
+      .from(rosterInvites)
+      .innerJoin(users, and(
+        eq(rosterInvites.invitedById, users.id),
+        sql`lower(btrim(${rosterInvites.invitedEmail})) = lower(btrim(${users.email}))`,
+      ))
+      .innerJoin(organizationAdmins, and(
+        eq(organizationAdmins.organizationId, organizationId),
+        eq(organizationAdmins.userId, users.id),
+      ))
+      .where(and(
+        eq(rosterInvites.teamId, teamId), eq(rosterInvites.status, "pending"),
+        inArray(organizationAdmins.role, ["owner", "admin"]),
+      ))
+      .orderBy(desc(rosterInvites.createdAt))
+      .for("share");
+    const processed = new Set<string>();
+    const activated: string[] = [];
+    for (const { invite, account } of pending) {
+      if (processed.has(account.id)) continue;
+      processed.add(account.id);
+      const existing = await findRosterEntry(tx, teamId, account.id);
+      if (existing?.status !== "accepted") {
+        // Archived teams remain read-only; only clear already-active duplicates.
+        if (team.archivedAt) continue;
+        const values = {
+          status: "accepted" as const, role: invite.role,
+          position: invite.position, invitedById: account.id,
+        };
+        if (existing) {
+          await tx.update(rosterEntries).set(values).where(eq(rosterEntries.id, existing.id));
+        } else {
+          await tx.insert(rosterEntries).values({ ...values, teamId, userId: account.id });
+        }
+        activated.push(account.id);
+      }
+      if (account.email) await revokeSelfInvites(tx, teamId, account.email, account.id);
+    }
+    return activated;
+  });
 }
 
 export async function isOrganizationManager(userId: string, organizationId: string | null) {

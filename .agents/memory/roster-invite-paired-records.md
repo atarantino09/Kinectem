@@ -34,3 +34,20 @@ parent-facing invitation for a different player.
 **How to apply:** resolve staff invites against the accepted account's
 team membership, but keep player chooser invitations distinct from
 staff assignments and preserve the accepted member's position.
+
+**Rule:** An actual owner/admin of the team's organization explicitly
+inviting their own account must become active immediately in every
+position, including player. This exception applies to both existing-user
+adds and email/bulk invites, not just coach invitations. Resolve their
+obsolete self-sent pending invitations as well, without replacing an
+already-active position.
+
+**Why:** The user explicitly requires org-admin self-invites never to
+remain pending. This overrides the earlier player-chooser exception for
+self-sent org-admin invitations only.
+
+**How to apply:** Verify identity and actual role in the target team's
+org; global platform-admin authority alone is insufficient. Preserve
+parent-facing player invites sent by somebody else. Repair old self-sent
+pending records consistently when loading either roster or invitations,
+but do not activate new memberships on archived teams.
