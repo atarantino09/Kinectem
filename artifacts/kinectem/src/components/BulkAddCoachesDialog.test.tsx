@@ -17,6 +17,17 @@ beforeEach(() => {
 });
 
 describe("bulk coach email reminders", () => {
+  it("keeps the team name on its own line when every status badge is present", async () => {
+    fetchMock.mockResolvedValue({ data: [{ teamId: "one", hasCoach: true, hasPendingCoachInvite: true }] });
+    renderWithProviders(<BulkAddCoachesDialog orgId="org" teams={[{ ...teams[0], name: "2014 boys Pre NPL", sport: "Soccer" }]} open onOpenChange={vi.fn()} />);
+    const badges = await screen.findByTestId("badge-pending-coach-one");
+    const heading = screen.getByTestId("team-heading-bulk-coach-one");
+    expect(within(heading).getByText("2014 boys Pre NPL")).toHaveClass("truncate");
+    expect(heading).not.toContainElement(badges);
+    expect(screen.getByTestId("team-badges-bulk-coach-one")).toContainElement(badges);
+    expect(heading).not.toContainElement(screen.getByTestId("badge-has-coach-one"));
+  });
+
   it("separates each team and labels additional coaches within their own team", () => {
     fetchMock.mockResolvedValue({ data: [] });
     renderWithProviders(<BulkAddCoachesDialog orgId="org" teams={teams} open onOpenChange={vi.fn()} />);

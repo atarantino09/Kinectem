@@ -444,7 +444,7 @@ export function BulkAddCoachesDialog({
             </p>
           </div>
         ) : !done ? (
-          <div className="space-y-4">
+          <div className="space-y-2.5">
             <p className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-950 dark:bg-blue-950/30 dark:text-blue-100">
               One coach on several teams receives one invitation. Sending again
               reminds pending coaches without creating duplicate invitations.
@@ -462,9 +462,13 @@ export function BulkAddCoachesDialog({
                   aria-label={`Coaches for ${t.name}`}
                   data-testid={`row-bulk-coach-${t.id}`}
                 >
-                  <div className="flex flex-wrap items-center gap-2 border-b border-blue-100 bg-blue-50 px-3 py-3 dark:border-blue-900 dark:bg-blue-950/30">
+                  <div className="space-y-1.5 border-b border-blue-100 bg-blue-50 px-3 py-2 dark:border-blue-900 dark:bg-blue-950/30">
+                    <div className="flex min-w-0 items-center gap-2" data-testid={`team-heading-bulk-coach-${t.id}`}>
                     <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-blue-800 dark:bg-blue-900 dark:text-blue-100">Team</span>
-                    <span className="min-w-0 flex-1 font-bold text-sm break-words">{t.name}</span>
+                    <span className="min-w-0 flex-1 truncate font-bold text-sm" title={t.name}>{t.name}</span>
+                    </div>
+                    {(t.sport || st?.hasCoach || st?.hasPendingCoachInvite) && (
+                    <div className="flex flex-wrap items-center gap-1.5" data-testid={`team-badges-bulk-coach-${t.id}`}>
                     {t.sport && (
                       <Badge
                         variant="outline"
@@ -491,9 +495,11 @@ export function BulkAddCoachesDialog({
                         <Clock className="w-3 h-3" /> Invite pending
                       </Badge>
                     )}
+                    </div>
+                    )}
                   </div>
-                  <div className="space-y-3 p-3">
-                  <div className="space-y-1.5 rounded-lg border border-border bg-muted/20 p-3">
+                  <div className="space-y-2 p-2.5">
+                  <div className="space-y-1 rounded-md border border-border bg-muted/20 p-2">
                   <label
                     htmlFor={`bulk-coach-email-${t.id}`}
                     className="flex items-center gap-1.5 text-xs font-semibold"
@@ -527,7 +533,7 @@ export function BulkAddCoachesDialog({
                     const extraInvalid =
                       extra.trim().length > 0 && !EMAIL_RE.test(extra.trim());
                     return (
-                      <div key={j} className="space-y-1.5 rounded-lg border border-border bg-muted/20 p-3">
+                      <div key={j} className="space-y-1 rounded-md border border-border bg-muted/20 p-2">
                         <label
                           htmlFor={`bulk-coach-email-extra-${t.id}-${j}`}
                           className="flex items-center gap-1.5 text-xs font-semibold"
@@ -592,7 +598,7 @@ export function BulkAddCoachesDialog({
                       }))
                     }
                     disabled={busy}
-                    className="rounded-md px-2 py-1.5 text-xs text-blue-700 hover:bg-blue-50 font-semibold flex items-center gap-1 disabled:opacity-50 dark:text-blue-300 dark:hover:bg-blue-950/30"
+                    className="rounded-md px-1.5 py-1 text-xs text-blue-700 hover:bg-blue-50 font-semibold flex items-center gap-1 disabled:opacity-50 dark:text-blue-300 dark:hover:bg-blue-950/30"
                     data-testid={`btn-bulk-coach-add-extra-${t.id}`}
                   >
                     <Plus className="w-3 h-3" />
