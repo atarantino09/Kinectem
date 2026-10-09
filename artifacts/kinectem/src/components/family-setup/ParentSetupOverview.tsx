@@ -1,3 +1,5 @@
+import { AlertTriangle } from "lucide-react";
+
 const steps = [
   { title: "Create your parent account", detail: "Use your own name and details." },
   { title: "Add the other parent", detail: "Enter their name and email, or skip.", optional: true },
@@ -24,8 +26,12 @@ export function ParentSetupOverview({ teamName }: { teamName?: string }) {
           </li>
         ))}
       </ol>
+      <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs leading-5 text-amber-900" data-testid="note-check-other-parent">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+        <p><strong>Before you start, check with the other parent.</strong> If they already created your child’s account, ask them to send you a family invitation instead of creating your child again.</p>
+      </div>
       <p className="mt-3 border-t border-violet-200 pt-3 text-xs leading-5 text-slate-700">
-        After you create your child’s account, we email the other parent a family invitation. They sign in or create their own parent account and accept it to connect to the same child. Ask them to wait for that email—not create your child again from the team invite.
+        Step 2 saves the other parent’s name and email. After you finish your child’s account in Step 3, we email the parent you added in Step 2 a family invitation. They sign in or create their own parent account and accept it to connect to the same child. Ask them to wait for that email—not create your child again from the team invite.
       </p>
       {teamName && <p className="mt-2 text-xs font-semibold leading-5 text-violet-900">When you finish setup, your child will automatically be added to {teamName}’s roster.</p>}
     </section>

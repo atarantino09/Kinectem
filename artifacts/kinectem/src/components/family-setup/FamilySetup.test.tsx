@@ -25,7 +25,10 @@ describe("FamilySetup", () => {
     setup();
     expect(screen.getByTestId("note-coordinate-first")).toHaveTextContent("only needs one account");
     expect(screen.getByTestId("step-coparent")).toBeInTheDocument();
-    expect(screen.getByTestId("coparent-invite-explainer")).toHaveTextContent("does not send an email yet");
+    expect(screen.getByTestId("coparent-invite-explainer")).toHaveTextContent("does not create their account or send an invitation yet");
+    expect(screen.getByTestId("coparent-invite-explainer")).toHaveTextContent("After you finish Step 3:");
+    expect(screen.getByTestId("coparent-invite-explainer")).toHaveTextContent("the other parent you added in Step 2");
+    expect(screen.queryByTestId("note-check-other-parent")).not.toBeInTheDocument();
     expect(screen.getByTestId("coparent-invite-explainer")).toHaveTextContent("separate logins connected to the same child");
     expect(screen.queryByTestId("step-checkpoint")).not.toBeInTheDocument();
     fireEvent.click(screen.getByTestId("btn-other-parent-yes"));
@@ -64,8 +67,8 @@ describe("FamilySetup", () => {
     });
     setup();
     fireEvent.click(screen.getByTestId("btn-coparent-skip"));
-    await screen.findByTestId("note-check-other-parent");
     await screen.findByTestId("input-child-first");
+    expect(screen.queryByTestId("note-check-other-parent")).not.toBeInTheDocument();
     fireEvent.change(screen.getByTestId("input-child-first"), { target: { value: "Ava" } });
     fireEvent.change(screen.getByTestId("input-child-last"), { target: { value: "Lee" } });
     fireEvent.click(screen.getByTestId("btn-add-child"));

@@ -278,11 +278,11 @@ export function FamilySetup({ userId, mode, token, teamName, childHint, onDone, 
               <>
             <div className="rounded-lg border border-blue-200 bg-blue-50/60 p-3 text-sm text-slate-900" data-testid="coparent-invite-explainer">
               <p className="font-bold">How the other parent joins</p>
-              <ol className="mt-2 list-decimal space-y-2 pl-5">
-                <li><strong>You create your child’s account next.</strong> Saving their details here does not send an email yet.</li>
-                <li><strong>We email them a family invitation.</strong> It links to the child’s account you just created.</li>
-                <li><strong>They open the email and accept.</strong> They sign in or create their own parent account. Both parents have separate logins connected to the same child.</li>
-              </ol>
+              <ul className="mt-2 space-y-2">
+                <li><strong>Now, in Step 2:</strong> Save the other parent’s name and email. This does not create their account or send an invitation yet.</li>
+                <li><strong>After you finish Step 3:</strong> Once your child’s account is set up, we email a family invitation to the other parent you added in Step 2.</li>
+                <li><strong>Then the other parent:</strong> They open that email, sign in or create their own parent account, and accept the invitation. Both parents have separate logins connected to the same child.</li>
+              </ul>
               <p className="mt-3 border-t border-blue-200 pt-2 text-xs font-semibold">Ask them to wait for this email—not use the team invite to create your child again.</p>
             </div>
             <button type="button" className="text-left text-xs font-semibold text-violet-700 underline" onClick={() => setAskOther(true)} data-testid="btn-other-parent-yes">Other parent already created your child’s account?</button>
@@ -315,11 +315,7 @@ export function FamilySetup({ userId, mode, token, teamName, childHint, onDone, 
         {draft.stage === "player" && (
           <div className="space-y-4" data-testid="step-player">
             <h2 className="text-lg font-black tracking-tight">Step 3 · Your child’s account</h2>
-            <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900" data-testid="note-check-other-parent">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-              <p>Already created by the other parent? Ask for their family invitation instead of creating your child again.</p>
-            </div>
-            {co && <p className="text-xs text-muted-foreground" data-testid="text-staged-coparent">Once your child’s account is ready, we’ll send the invitation to {co.firstName} {co.lastName} ({co.email}).</p>}
+            {co && <p className="text-xs text-muted-foreground" data-testid="text-staged-coparent">After you finish this step and your child’s account is ready, we’ll email a family invitation to {co.firstName} {co.lastName} ({co.email})—the other parent you added in Step 2.</p>}
             {kids.isLoading ? <Skeleton className="h-16 rounded-lg" /> : kids.isError ? (
               <div className="space-y-2 rounded-lg border border-destructive/40 p-3 text-sm" data-testid="error-children-load">
                 <p>We could not load your family, so we cannot tell whether your player already exists.</p>
