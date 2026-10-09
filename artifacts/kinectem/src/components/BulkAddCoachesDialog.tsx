@@ -421,21 +421,20 @@ export function BulkAddCoachesDialog({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-        className="sm:max-w-lg max-h-[85vh] overflow-y-auto"
+        className="sm:max-w-lg max-h-[85vh] overflow-hidden flex flex-col"
         data-testid="dialog-bulk-add-coaches"
       >
-        <DialogHeader>
+        <DialogHeader className="shrink-0">
           <DialogTitle className="font-black tracking-tight">
             Bulk add coaches
           </DialogTitle>
           <DialogDescription>
-            Add a coach email next to any team and send every invite at once.
-            Rows left blank are skipped. New coaches assigned to multiple teams
-            receive one secure invitation listing them all. Sending again also
-            emails reminders for pending invitations without creating duplicates.
+            Add coaches under each team, then send all invitations at once.
+            Leave a team blank to skip it.
           </DialogDescription>
         </DialogHeader>
 
+        <div className="min-h-0 overflow-y-auto space-y-3 pr-1">
         {teams.length === 0 ? (
           <div className="p-6 text-center" data-testid="bulk-coaches-empty">
             <Building2 className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
@@ -445,7 +444,11 @@ export function BulkAddCoachesDialog({
             </p>
           </div>
         ) : !done ? (
-          <div className="space-y-3">
+          <div className="space-y-4">
+            <p className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-950 dark:bg-blue-950/30 dark:text-blue-100">
+              One coach on several teams receives one invitation. Sending again
+              reminds pending coaches without creating duplicate invitations.
+            </p>
             {teams.map((t) => {
               const st = statusByTeam.get(t.id);
               const value = drafts[t.id] ?? "";
@@ -454,11 +457,14 @@ export function BulkAddCoachesDialog({
               return (
                 <div
                   key={t.id}
-                  className="space-y-1"
+                  className="overflow-hidden rounded-xl border border-blue-200 bg-card shadow-sm dark:border-blue-900"
+                  role="group"
+                  aria-label={`Coaches for ${t.name}`}
                   data-testid={`row-bulk-coach-${t.id}`}
                 >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-bold text-sm truncate">{t.name}</span>
+                  <div className="flex flex-wrap items-center gap-2 border-b border-blue-100 bg-blue-50 px-3 py-3 dark:border-blue-900 dark:bg-blue-950/30">
+                    <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-blue-800 dark:bg-blue-900 dark:text-blue-100">Team</span>
+                    <span className="min-w-0 flex-1 font-bold text-sm break-words">{t.name}</span>
                     {t.sport && (
                       <Badge
                         variant="outline"
@@ -486,7 +492,17 @@ export function BulkAddCoachesDialog({
                       </Badge>
                     )}
                   </div>
+                  <div className="space-y-3 p-3">
+                  <div className="space-y-1.5 rounded-lg border border-border bg-muted/20 p-3">
+                  <label
+                    htmlFor={`bulk-coach-email-${t.id}`}
+                    className="flex items-center gap-1.5 text-xs font-semibold"
+                  >
+                    <Mail className="h-3.5 w-3.5 text-blue-600" />
+                    Coach 1 email
+                  </label>
                   <Input
+                    id={`bulk-coach-email-${t.id}`}
                     type="email"
                     placeholder="coach@example.com"
                     value={value}
@@ -506,13 +522,22 @@ export function BulkAddCoachesDialog({
                       "{value.trim()}" doesn't look like an email
                     </p>
                   )}
+                  </div>
                   {(extraDrafts[t.id] ?? []).map((extra, j) => {
                     const extraInvalid =
                       extra.trim().length > 0 && !EMAIL_RE.test(extra.trim());
                     return (
-                      <div key={j} className="space-y-1">
+                      <div key={j} className="space-y-1.5 rounded-lg border border-border bg-muted/20 p-3">
+                        <label
+                          htmlFor={`bulk-coach-email-extra-${t.id}-${j}`}
+                          className="flex items-center gap-1.5 text-xs font-semibold"
+                        >
+                          <Mail className="h-3.5 w-3.5 text-blue-600" />
+                          Coach {j + 2} email
+                        </label>
                         <div className="flex items-center gap-1">
                           <Input
+                            id={`bulk-coach-email-extra-${t.id}-${j}`}
                             type="email"
                             placeholder="another-coach@example.com"
                             value={extra}
@@ -540,7 +565,7 @@ export function BulkAddCoachesDialog({
                               })
                             }
                             disabled={busy}
-                            aria-label="Remove coach"
+                            aria-label={`Remove coach ${j + 2} from ${t.name}`}
                             className="shrink-0 rounded p-1 text-muted-foreground hover:text-foreground disabled:opacity-50"
                             data-testid={`btn-bulk-coach-remove-extra-${t.id}-${j}`}
                           >
@@ -567,12 +592,13 @@ export function BulkAddCoachesDialog({
                       }))
                     }
                     disabled={busy}
-                    className="flex items-center gap-1 px-1 text-[11px] font-medium text-muted-foreground hover:text-foreground disabled:opacity-50"
+                    className="rounded-md px-2 py-1.5 text-xs text-blue-700 hover:bg-blue-50 font-semibold flex items-center gap-1 disabled:opacity-50 dark:text-blue-300 dark:hover:bg-blue-950/30"
                     data-testid={`btn-bulk-coach-add-extra-${t.id}`}
                   >
                     <Plus className="w-3 h-3" />
                     Add another coach to this team
                   </button>
+                  </div>
                 </div>
               );
             })}
@@ -735,7 +761,8 @@ export function BulkAddCoachesDialog({
           </div>
         )}
 
-        <DialogFooter>
+        </div>
+        <DialogFooter className="shrink-0 border-t border-border pt-3">
           {done || teams.length === 0 ? (
             <Button
               type="button"

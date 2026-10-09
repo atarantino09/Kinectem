@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { renderWithProviders } from "@/test";
 import { customFetch } from "@workspace/api-client-react";
 import { BulkAddCoachesDialog } from "./BulkAddCoachesDialog";
@@ -17,6 +17,23 @@ beforeEach(() => {
 });
 
 describe("bulk coach email reminders", () => {
+  it("separates each team and labels additional coaches within their own team", () => {
+    fetchMock.mockResolvedValue({ data: [] });
+    renderWithProviders(<BulkAddCoachesDialog orgId="org" teams={teams} open onOpenChange={vi.fn()} />);
+    const firstTeam = within(screen.getByRole("group", { name: "Coaches for Team One" }));
+    const secondTeam = within(screen.getByRole("group", { name: "Coaches for Team Two" }));
+    expect(firstTeam.getByLabelText("Coach 1 email")).toBeInTheDocument();
+    expect(secondTeam.getByLabelText("Coach 1 email")).toBeInTheDocument();
+    fireEvent.change(firstTeam.getByLabelText("Coach 1 email"), { target: { value: "first@example.com" } });
+    fireEvent.click(firstTeam.getByTestId("btn-bulk-coach-add-extra-one"));
+    fireEvent.change(firstTeam.getByLabelText("Coach 2 email"), { target: { value: "second@example.com" } });
+    expect(secondTeam.queryByLabelText("Coach 2 email")).not.toBeInTheDocument();
+    fireEvent.click(firstTeam.getByRole("button", { name: "Remove coach 2 from Team One" }));
+    expect(firstTeam.queryByLabelText("Coach 2 email")).not.toBeInTheDocument();
+    expect(firstTeam.getByLabelText("Coach 1 email")).toHaveValue("first@example.com");
+    expect(secondTeam.getByLabelText("Coach 1 email")).toHaveValue("");
+  });
+
   it("does not send a second reminder when the one-team endpoint already resent it", async () => {
     fetchMock.mockImplementation(async (_url, options) => {
       if (options?.method === "GET") return { data: [] };
