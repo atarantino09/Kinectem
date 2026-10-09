@@ -54,3 +54,28 @@ export function orgHeroGradient(colors: OrgBrandColors): string {
 export function orgStripGradient(colors: OrgBrandColors): string {
   return `linear-gradient(135deg, ${expandHex(colors.primary)} 0%, ${expandHex(colors.primary)} 40%, ${expandHex(colors.secondary)} 100%)`;
 }
+
+/** Preserve full-strength branding when text is readable across the gradient.
+ * Mixed light/dark palettes need a shade layer so white text stays readable. */
+export function orgInviteHeaderStyle(colors: OrgBrandColors): { background: string; color: string } {
+  const rgb = (hex: string) => {
+    const expanded = expandHex(hex).slice(1);
+    return [0, 2, 4].map((offset) => parseInt(expanded.slice(offset, offset + 2), 16));
+  };
+  const first = rgb(colors.primary), second = rgb(colors.secondary);
+  const lightness = Array.from({ length: 11 }, (_, index) => {
+    const fraction = index / 10;
+    const channels = first.map((value, channel) => {
+      const srgb = (value + (second[channel] - value) * fraction) / 255;
+      return srgb <= 0.04045 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
+    });
+    return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+  });
+  const background = orgStripGradient(colors);
+  if (1.05 / (Math.max(...lightness) + 0.05) >= 4.5) return { background, color: "#ffffff" };
+  if ((Math.min(...lightness) + 0.05) / 0.05 >= 4.5) return { background, color: "#000000" };
+  return {
+    background: `linear-gradient(#0000008c, #0000008c), ${background}`,
+    color: "#ffffff",
+  };
+}

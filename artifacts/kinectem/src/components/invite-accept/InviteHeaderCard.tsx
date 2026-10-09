@@ -1,13 +1,20 @@
 import { Link } from "wouter";
+import { useState } from "react";
 import { formatOrgName } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle2 } from "lucide-react";
 import { ParentSetupOverview } from "@/components/family-setup/ParentSetupOverview";
+import { readOrgBrandColors, orgInviteHeaderStyle } from "@/lib/orgBrand";
 
 interface InviteHeaderCardProps {
   organizationName: string;
+  organizationBranding?: {
+    logoUrl?: string | null;
+    brandPrimaryColor?: string | null;
+    brandSecondaryColor?: string | null;
+  };
   teamName: string;
   teamNames?: string[];
   isPlayerInvite: boolean;
@@ -23,6 +30,7 @@ interface InviteHeaderCardProps {
 
 export function InviteHeaderCard({
   organizationName,
+  organizationBranding,
   teamName,
   teamNames,
   isPlayerInvite,
@@ -37,21 +45,43 @@ export function InviteHeaderCard({
 }: InviteHeaderCardProps) {
   const returnTo = encodeURIComponent(`/invites/${token}`);
   const multipleTeams = (teamNames?.length ?? 0) > 1;
+  const brandColors = readOrgBrandColors(organizationBranding);
+  const headerStyle = brandColors ? orgInviteHeaderStyle(brandColors) : undefined;
+  const logoUrl = organizationBranding?.logoUrl;
+  const [failedLogoUrl, setFailedLogoUrl] = useState<string | null>(null);
+  const showLogo = !!logoUrl && logoUrl !== failedLogoUrl;
   return (
     <Card className="rounded-xl border-border overflow-hidden">
-      <div className="bg-gradient-to-br from-purple-600 to-blue-600 p-6 text-white">
+      <div
+        className={`p-6 text-white ${brandColors ? "" : "bg-gradient-to-br from-purple-600 to-blue-600"}`}
+        style={headerStyle}
+        data-testid="invite-branded-header"
+      >
+        <div className="flex items-start gap-3 sm:gap-4">
+        {showLogo && (
+          <img
+            src={logoUrl}
+            alt={`${formatOrgName(organizationName)} logo`}
+            className="h-14 w-14 shrink-0 rounded-lg bg-white p-1.5 object-contain sm:h-16 sm:w-16"
+            onError={() => setFailedLogoUrl(logoUrl)}
+            data-testid="invite-org-logo"
+          />
+        )}
+        <div className="min-w-0 flex-1">
         <p className="text-xs uppercase tracking-widest font-bold opacity-90">
           {formatOrgName(organizationName)}
         </p>
         <h1 className="text-3xl font-black tracking-tight mt-1">
           {multipleTeams ? "You're invited to join these teams" : "You're invited to "}
           {!multipleTeams && (
-            <span className="underline decoration-white/40">{teamName}</span>
+            <span className="underline decoration-current">{teamName}</span>
           )}
         </h1>
-        <Badge className="mt-3 bg-white/20 text-white border-white/30 font-bold">
+        <Badge className="mt-3 font-bold" style={{ color: headerStyle?.color ?? "#ffffff", backgroundColor: `${headerStyle?.color ?? "#ffffff"}1a`, borderColor: `${headerStyle?.color ?? "#ffffff"}4d` }}>
           {isPlayerInvite ? "Parent & child setup" : positionLabel}
         </Badge>
+        </div>
+        </div>
       </div>
 
       <CardContent className="p-6 space-y-4">

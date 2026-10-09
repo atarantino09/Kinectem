@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, within, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ParentSetupOverview } from "./ParentSetupOverview";
 import { SignUpForm } from "@/components/login-page/SignUpForm";
@@ -67,5 +67,20 @@ describe("parent setup messaging", () => {
     expect(screen.queryByTestId("parent-setup-overview")).not.toBeInTheDocument();
     expect(screen.getByText(/Your parent account is ready/)).toHaveTextContent("Step 2");
     expect(screen.getByText(/automatically be added/)).toHaveTextContent("Example Team’s roster");
+  });
+
+  it("renders the real organization logo and brand colors in the invite header", () => {
+    render(<InviteHeaderCard organizationName="Example Club" teamName="Example Team"
+      organizationBranding={{ logoUrl: "https://example.com/club-logo.png", brandPrimaryColor: "#002266", brandSecondaryColor: "#004488" }}
+      isPlayerInvite positionLabel="Player" childHint="" loggedIn={false} accepted={false}
+      needsChildSetup={false} accepting={false} token="fixture-invite" onAccept={vi.fn()} />);
+    const logo = screen.getByTestId("invite-org-logo");
+    expect(logo).toHaveAttribute("src", "https://example.com/club-logo.png");
+    expect(logo).toHaveAttribute("alt", "EXAMPLE CLUB logo");
+    expect(screen.getByTestId("invite-branded-header").getAttribute("style")).toContain("#002266");
+    expect(screen.getByTestId("invite-branded-header")).not.toHaveClass("from-purple-600");
+    fireEvent.error(logo);
+    expect(screen.queryByTestId("invite-org-logo")).not.toBeInTheDocument();
+    expect(screen.getByText("EXAMPLE CLUB")).toBeInTheDocument();
   });
 });

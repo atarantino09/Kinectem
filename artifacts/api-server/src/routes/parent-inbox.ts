@@ -1985,7 +1985,13 @@ router.get(
           status: row.invite.status,
           available: !row.team.archivedAt && row.invite.status === "pending",
         })),
-        organization: { id: groupRow.org.id, name: groupRow.org.name },
+        organization: {
+          id: groupRow.org.id,
+          name: groupRow.org.name,
+          logoUrl: groupRow.org.logoUrl,
+          brandPrimaryColor: groupRow.org.brandPrimaryColor,
+          brandSecondaryColor: groupRow.org.brandSecondaryColor,
+        },
       });
     }
     const [row] = await db
@@ -1999,7 +2005,13 @@ router.get(
     res.json({
       invite: toInvite(row.i, null),
       team: { id: row.t.id, name: row.t.name },
-      organization: { id: row.org.id, name: row.org.name },
+      organization: {
+        id: row.org.id,
+        name: row.org.name,
+        logoUrl: row.org.logoUrl,
+        brandPrimaryColor: row.org.brandPrimaryColor,
+        brandSecondaryColor: row.org.brandSecondaryColor,
+      },
     });
   }),
 );

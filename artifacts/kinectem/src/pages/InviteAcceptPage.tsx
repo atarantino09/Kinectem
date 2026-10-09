@@ -28,7 +28,13 @@ interface InviteEnvelope {
     available?: boolean;
   }>;
   multiTeam?: boolean;
-  organization: { id: string; name: string };
+  organization: {
+    id: string;
+    name: string;
+    logoUrl?: string | null;
+    brandPrimaryColor?: string | null;
+    brandSecondaryColor?: string | null;
+  };
 }
 
 export default function InviteAcceptPage() {
@@ -169,6 +175,7 @@ export default function InviteAcceptPage() {
     <div className="min-h-screen max-w-xl mx-auto p-6 space-y-4">
       <InviteHeaderCard
         organizationName={envelope.organization.name}
+        organizationBranding={envelope.organization}
         teamName={envelope.team.name}
         teamNames={envelope.teams?.map((team) => team.name)}
         isPlayerInvite={isPlayerInvite}
