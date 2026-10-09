@@ -27,7 +27,7 @@ describe("parent setup messaging", () => {
     expect(items[1]).toHaveTextContent("(optional)");
     expect(items[1]).toHaveTextContent("or skip");
     expect(items[2]).toHaveTextContent("Create your child’s account");
-    expect(screen.getByText(/They finish their own account/)).toBeInTheDocument();
+    expect(screen.getByText(/They sign in or create their own parent account and accept/)).toHaveTextContent("we email the other parent a family invitation");
   });
 
   it("shows the complete roadmap on the very first parent DOB screen", () => {

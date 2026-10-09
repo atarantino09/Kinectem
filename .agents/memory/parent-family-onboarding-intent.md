@@ -7,6 +7,12 @@ Parent onboarding must prominently ask parents to coordinate, offer the other-pa
 
 **Why:** The user reports that both parents receive a coach’s invitation in TeamSnap or similar team chats and independently create the same child, producing duplicate roster players. They explicitly want the other-parent setup and coordination guidance before creating the player.
 
+Invitation instructions must name who acts and when: the first parent saves contact details without emailing yet, finishes child setup, and then the other parent uses a family invitation to sign in or create their own adult account and accept access to that same child.
+
+**Why:** The user repeatedly found vague “add the other parent” and “finish their account” wording confusing. They want parents to understand exactly what the invitation does, not assume the first adult creates the second adult’s login.
+
+**How to apply:** Explain the email timing and separate logins together, tell the second parent to use the family invitation rather than create the child again from the coach’s team link, and keep both skipping and continuing without waiting clear.
+
 **How to apply:** Show all three steps from the very first parent screen, before DOB entry, and on the logged-out team invitation: create your parent account → add the other parent (optional, or skip) → create your child’s account. Name the invited team during step 1 and explain that finishing adds the child to its roster automatically. Once the parent is signed in, go directly to step 2; do not replay signup instructions or require another continue screen. Keep the existing-child/family-invitation safety guidance available within that optional-parent step. Use plain parent/child account labels in this setup, reserving legal guardian terminology for actual consent and relationship controls. The user found the earlier guardian/player-profile wording confusing and repeated that the full sequence must be explained immediately. Reuse secure guardian invitations to connect the second adult to the same child, never infer family authorization from names, and treat existing duplicate cleanup as a separate reviewed action.
 
 An uncertain player-creation response remains the same creation intent even if the parent edits the spelling before retrying. Invitation delivery and player creation are separate outcomes; an email failure must never restart player creation.

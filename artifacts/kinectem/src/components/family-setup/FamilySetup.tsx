@@ -265,7 +265,7 @@ export function FamilySetup({ userId, mode, token, teamName, childHint, onDone, 
           <div className="space-y-3" data-testid="step-coparent">
             <h2 className="text-lg font-black tracking-tight">Step 2 · Add the other parent <span className="text-sm font-normal">(optional)</span></h2>
             <p className="text-sm text-muted-foreground">
-              Enter their name and email, or skip. After step 3, we’ll invite them to finish their account and connect to the same child.
+              Enter the other parent’s name and email below, or skip this step.
             </p>
             {askOther ? (
               <div className="space-y-3 rounded-lg border border-border p-3 text-sm" data-testid="guidance-other-parent-created">
@@ -276,6 +276,15 @@ export function FamilySetup({ userId, mode, token, teamName, childHint, onDone, 
               </div>
             ) : (
               <>
+            <div className="rounded-lg border border-blue-200 bg-blue-50/60 p-3 text-sm text-slate-900" data-testid="coparent-invite-explainer">
+              <p className="font-bold">How the other parent joins</p>
+              <ol className="mt-2 list-decimal space-y-2 pl-5">
+                <li><strong>You create your child’s account next.</strong> Saving their details here does not send an email yet.</li>
+                <li><strong>We email them a family invitation.</strong> It links to the child’s account you just created.</li>
+                <li><strong>They open the email and accept.</strong> They sign in or create their own parent account. Both parents have separate logins connected to the same child.</li>
+              </ol>
+              <p className="mt-3 border-t border-blue-200 pt-2 text-xs font-semibold">Ask them to wait for this email—not use the team invite to create your child again.</p>
+            </div>
             <button type="button" className="text-left text-xs font-semibold text-violet-700 underline" onClick={() => setAskOther(true)} data-testid="btn-other-parent-yes">Other parent already created your child’s account?</button>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1"><Label className="text-xs font-bold">First name</Label>
@@ -294,10 +303,10 @@ export function FamilySetup({ userId, mode, token, teamName, childHint, onDone, 
             </div>
             {coError && <p role="alert" className="text-xs text-destructive" data-testid="error-coparent">{coError}</p>}
             <div className="flex flex-col gap-2 sm:flex-row">
-              <Button type="button" variant="brand" onClick={saveCoParent} data-testid="btn-coparent-continue">Save &amp; continue to child</Button>
-              <Button type="button" variant="outline" onClick={() => update({ coParent: null, stage: "player" })} data-testid="btn-coparent-skip">Skip &amp; continue to child</Button>
+              <Button type="button" variant="brand" onClick={saveCoParent} data-testid="btn-coparent-continue">Save details &amp; go to Step 3</Button>
+              <Button type="button" variant="outline" onClick={() => update({ coParent: null, stage: "player" })} data-testid="btn-coparent-skip">Skip &amp; go to Step 3</Button>
             </div>
-            <p className="text-xs text-muted-foreground">You can add them later. You don’t need to wait for them to continue.</p>
+            <p className="text-xs text-muted-foreground">Continue now—you don’t need to wait for them to accept. If you skip, you can invite them later from your Family page.</p>
               </>
             )}
           </div>

@@ -25,9 +25,33 @@ describe("FamilySetup", () => {
     setup();
     expect(screen.getByTestId("note-coordinate-first")).toHaveTextContent("only needs one account");
     expect(screen.getByTestId("step-coparent")).toBeInTheDocument();
+    expect(screen.getByTestId("coparent-invite-explainer")).toHaveTextContent("does not send an email yet");
+    expect(screen.getByTestId("coparent-invite-explainer")).toHaveTextContent("separate logins connected to the same child");
     expect(screen.queryByTestId("step-checkpoint")).not.toBeInTheDocument();
     fireEvent.click(screen.getByTestId("btn-other-parent-yes"));
     expect(screen.getByTestId("guidance-other-parent-created")).toHaveTextContent("family invitation");
+  });
+
+  it("only sends the other-parent invitation after the child account exists", async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.endsWith("/family/setup/children")) return { child: { id: "c1", firstName: "Ava", lastName: "Lee", avatarUrl: null } };
+      if (url.endsWith("/guardians/invite")) return { id: "g1", emailSent: true };
+      return { data: [] };
+    });
+    setup();
+    fireEvent.change(screen.getByTestId("input-coparent-first"), { target: { value: "Sam" } });
+    fireEvent.change(screen.getByTestId("input-coparent-last"), { target: { value: "Lee" } });
+    fireEvent.change(screen.getByTestId("input-coparent-email"), { target: { value: "sam@example.com" } });
+    fireEvent.click(screen.getByTestId("btn-coparent-continue"));
+    expect(await screen.findByTestId("input-child-first")).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith("/guardians/invite"))).toBe(false);
+    fireEvent.change(screen.getByTestId("input-child-first"), { target: { value: "Ava" } });
+    fireEvent.change(screen.getByTestId("input-child-last"), { target: { value: "Lee" } });
+    fireEvent.click(screen.getByTestId("btn-add-child"));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/v1/users/c1/guardians/invite", expect.objectContaining({
+      method: "POST", body: expect.stringContaining("sam@example.com"),
+    })));
+    expect(screen.getByTestId("step-done")).toBeInTheDocument();
   });
 
   it("skips the other parent, then reuses one request id and shows duplicate warning", async () => {

@@ -25,7 +25,7 @@ export function ParentSetupOverview({ teamName }: { teamName?: string }) {
         ))}
       </ol>
       <p className="mt-3 border-t border-violet-200 pt-3 text-xs leading-5 text-slate-700">
-        The other parent gets an invitation after your child’s account is ready. They finish their own account—no need to create your child again.
+        After you create your child’s account, we email the other parent a family invitation. They sign in or create their own parent account and accept it to connect to the same child. Ask them to wait for that email—not create your child again from the team invite.
       </p>
       {teamName && <p className="mt-2 text-xs font-semibold leading-5 text-violet-900">When you finish setup, your child will automatically be added to {teamName}’s roster.</p>}
     </section>
