@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ParentSetupOverview } from "./ParentSetupOverview";
@@ -6,6 +6,8 @@ import { SignUpForm } from "@/components/login-page/SignUpForm";
 import { InviteHeaderCard } from "@/components/invite-accept/InviteHeaderCard";
 
 vi.mock("wouter", () => ({ Link: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a> }));
+const fetchMock = vi.fn();
+vi.mock("@workspace/api-client-react", () => ({ customFetch: (...args: unknown[]) => fetchMock(...args) }));
 
 function renderSignup(returnTo: string | null = null) {
   return render(<QueryClientProvider client={new QueryClient()}>
@@ -15,6 +17,7 @@ function renderSignup(returnTo: string | null = null) {
 }
 
 describe("parent setup messaging", () => {
+  beforeEach(() => fetchMock.mockReset());
   it("explains the ordered three steps and optional second parent", () => {
     render(<ParentSetupOverview />);
     const items = within(screen.getByTestId("text-parent-steps")).getAllByRole("listitem");
@@ -47,5 +50,22 @@ describe("parent setup messaging", () => {
     expect(screen.getByTestId("parent-setup-overview")).toBeInTheDocument();
     expect(screen.getByTestId("btn-create-guardian")).toHaveTextContent("Start with your parent account");
     expect(screen.queryByText("Create a guardian account")).not.toBeInTheDocument();
+    expect(screen.getByTestId("parent-setup-overview")).toHaveTextContent("automatically be added to Example Team’s roster");
+  });
+
+  it("names the invited team during the first parent signup step", async () => {
+    fetchMock.mockResolvedValue({ team: { name: "Example Team" }, invite: { position: "player" } });
+    renderSignup("/invites/fixture-team-token");
+    expect(await screen.findByText(/Your child is invited to/)).toHaveTextContent("Example Team");
+    expect(screen.getByTestId("parent-setup-overview")).toHaveTextContent("automatically be added to Example Team’s roster");
+  });
+
+  it("never repeats the first-step roadmap for a signed-in parent", () => {
+    render(<InviteHeaderCard organizationName="Example Club" teamName="Example Team"
+      isPlayerInvite positionLabel="Player" childHint="" loggedIn accepted={false}
+      needsChildSetup={false} accepting token="fixture-invite" onAccept={vi.fn()} />);
+    expect(screen.queryByTestId("parent-setup-overview")).not.toBeInTheDocument();
+    expect(screen.getByText(/Your parent account is ready/)).toHaveTextContent("Step 2");
+    expect(screen.getByText(/automatically be added/)).toHaveTextContent("Example Team’s roster");
   });
 });

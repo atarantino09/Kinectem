@@ -24,6 +24,8 @@ describe("FamilySetup", () => {
     fetchMock.mockResolvedValue({ data: [] });
     setup();
     expect(screen.getByTestId("note-coordinate-first")).toHaveTextContent("only needs one account");
+    expect(screen.getByTestId("step-coparent")).toBeInTheDocument();
+    expect(screen.queryByTestId("step-checkpoint")).not.toBeInTheDocument();
     fireEvent.click(screen.getByTestId("btn-other-parent-yes"));
     expect(screen.getByTestId("guidance-other-parent-created")).toHaveTextContent("family invitation");
   });
@@ -37,7 +39,6 @@ describe("FamilySetup", () => {
       return { child: { id: "c1", firstName: "Ava", lastName: "Lee", avatarUrl: null } };
     });
     setup();
-    fireEvent.click(screen.getByTestId("btn-other-parent-no"));
     fireEvent.click(screen.getByTestId("btn-coparent-skip"));
     await screen.findByTestId("note-check-other-parent");
     await screen.findByTestId("input-child-first");
@@ -54,7 +55,6 @@ describe("FamilySetup", () => {
   it("does not treat a failed family load as empty", async () => {
     fetchMock.mockRejectedValue(new Error("down"));
     setup();
-    fireEvent.click(screen.getByTestId("btn-other-parent-no"));
     fireEvent.click(screen.getByTestId("btn-coparent-skip"));
     await screen.findByTestId("error-children-load");
     expect(screen.queryByTestId("form-new-player")).toBeNull();
@@ -81,7 +81,6 @@ describe("FamilySetup", () => {
       return { child };
     });
     setup();
-    fireEvent.click(screen.getByTestId("btn-other-parent-no"));
     fireEvent.click(screen.getByTestId("btn-coparent-skip"));
     await screen.findByTestId("input-child-first");
     fireEvent.change(screen.getByTestId("input-child-first"), { target: { value: "Ava" } });
@@ -115,7 +114,6 @@ describe("FamilySetup", () => {
       throw Object.assign(new Error("Request already committed"), { status: 409, data: { code: "SETUP_REQUEST_REUSED" } });
     });
     setup();
-    fireEvent.click(screen.getByTestId("btn-other-parent-no"));
     fireEvent.click(screen.getByTestId("btn-coparent-skip"));
     await screen.findByTestId("input-child-first");
     fireEvent.change(screen.getByTestId("input-child-first"), { target: { value: "Ava" } });

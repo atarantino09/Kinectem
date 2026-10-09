@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ParentSetupOverview } from "@/components/family-setup/ParentSetupOverview";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { safeInternalPath } from "@/lib/safePath";
 import { rateLimitMessage } from "@/lib/auth-errors";
@@ -88,6 +88,14 @@ export function SignUpForm({
   claimingOrganizationName,
 }: SignUpFormProps) {
   const qc = useQueryClient();
+  const inviteToken = /^\/invites\/([^/?#]+)\/?$/.exec(returnTo ?? "")?.[1];
+  const signupInvite = useQuery<{ team: { name: string }; invite: { position: string | null } }>({
+    queryKey: ["parent-signup-invite", inviteToken],
+    queryFn: () => customFetch(`/api/v1/invites/${encodeURIComponent(inviteToken!)}`),
+    enabled: initialRole === "parent" && !!inviteToken,
+    retry: false,
+  });
+  const invitedTeamName = signupInvite.data?.invite.position === "player" ? signupInvite.data.team.name : undefined;
   const [submitting, setSubmitting] = useState(false);
   // Task #359 — neutral age-gate: the user first sees ONLY a date-of-
   // birth field, with no role-related copy that would tip them off to
@@ -336,7 +344,8 @@ export function SignUpForm({
     const showInvalidHint = dobComplete && !dobValid;
     return (
       <form className="space-y-4" onSubmit={handleAgeSubmit} data-testid="form-age-gate">
-        {initialRole === "parent" && !isGuardianInviteReturn && <ParentSetupOverview />}
+        {initialRole === "parent" && !isGuardianInviteReturn && <ParentSetupOverview teamName={invitedTeamName} />}
+        {signupInvite.isError && <p role="alert" className="text-xs text-destructive">We couldn’t load the team details. Your invitation will be checked after signup.</p>}
         {orgAdminViaPath && (
           <div className="flex items-center justify-between">
             <button
@@ -518,7 +527,8 @@ export function SignUpForm({
           </div>
         </div>
       )}
-      {effectiveRole === "parent" && !isGuardianInviteReturn && <ParentSetupOverview />}
+      {effectiveRole === "parent" && !isGuardianInviteReturn && <ParentSetupOverview teamName={invitedTeamName} />}
+      {signupInvite.isError && <p role="alert" className="text-xs text-destructive">We couldn’t load the team details. Your invitation will be checked after signup.</p>}
       {effectiveRole === "parent" && isGuardianInviteReturn && (
         <div
           className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3"

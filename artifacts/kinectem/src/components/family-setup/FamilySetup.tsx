@@ -56,7 +56,10 @@ function Steps({ current }: { current: number }) {
 export function FamilySetup({ userId, mode, token, teamName, childHint, onDone, onSkipLater }: FamilySetupProps) {
   const qc = useQueryClient();
   const scope = mode === "team" ? `team:${token}` : "family";
-  const [draft, setDraftState] = useState<FamilyDraft>(() => loadDraft(userId, scope) ?? emptyDraft());
+  const [draft, setDraftState] = useState<FamilyDraft>(() => {
+    const saved = loadDraft(userId, scope) ?? emptyDraft();
+    return { ...saved, stage: saved.stage === "checkpoint" ? "coparent" : saved.stage };
+  });
   const draftRef = useRef(draft);
   const update = useCallback((patch: Partial<FamilyDraft>) => {
     const next = { ...draftRef.current, ...patch };
@@ -258,39 +261,22 @@ export function FamilySetup({ userId, mode, token, teamName, childHint, onDone, 
           </div>
         </div>
 
-        {draft.stage === "checkpoint" && (
-          <div className="space-y-3" data-testid="step-checkpoint">
-            <h2 className="text-lg font-black tracking-tight">Has the other parent already created your child’s account?</h2>
-            {!askOther ? (
-              <div className="grid gap-2 sm:grid-cols-2">
-                <Button type="button" variant="outline" className="h-auto whitespace-normal py-3 font-bold" onClick={() => setAskOther(true)} data-testid="btn-other-parent-yes">
-                  Yes, they already did
-                </Button>
-                <Button type="button" variant="brand" className="h-auto whitespace-normal py-3 font-bold" onClick={() => update({ stage: "coparent" })} data-testid="btn-other-parent-no">
-                  No, continue
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-3 rounded-lg border border-border p-3 text-sm" data-testid="guidance-other-parent-created">
-                <p>Ask them to invite you from their Family page. Accept that family invitation to share your child’s existing account. Do not create a second child account.</p>
-                <div className="flex flex-wrap gap-2">
-                  <Link href="/family" className="inline-flex h-9 items-center rounded-md border border-border px-3 text-sm font-bold" data-testid="link-check-invitations" onClick={() => void refreshApp()}>Check my invitations</Link>
-                  <Button type="button" variant="ghost" size="sm" onClick={() => setAskOther(false)} data-testid="btn-guidance-back">Back</Button>
-                </div>
-                <button type="button" className="text-xs font-semibold text-violet-700 underline" onClick={() => update({ stage: "coparent" })} data-testid="btn-genuinely-new">
-                  My child still needs an account
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
         {draft.stage === "coparent" && (
           <div className="space-y-3" data-testid="step-coparent">
             <h2 className="text-lg font-black tracking-tight">Step 2 · Add the other parent <span className="text-sm font-normal">(optional)</span></h2>
             <p className="text-sm text-muted-foreground">
               Enter their name and email, or skip. After step 3, we’ll invite them to finish their account and connect to the same child.
             </p>
+            {askOther ? (
+              <div className="space-y-3 rounded-lg border border-border p-3 text-sm" data-testid="guidance-other-parent-created">
+                <p>Ask them to invite you from their Family page. Accept that family invitation to share your child’s existing account. Do not create a second child account.</p>
+                <Link href="/family" className="inline-flex h-9 items-center rounded-md border border-border px-3 text-sm font-bold" data-testid="link-check-invitations" onClick={() => void refreshApp()}>Check my invitations</Link>
+                <Button type="button" variant="ghost" size="sm" onClick={() => setAskOther(false)} data-testid="btn-guidance-back">Back</Button>
+                <button type="button" className="block text-xs font-semibold text-violet-700 underline" onClick={() => setAskOther(false)} data-testid="btn-genuinely-new">My child still needs an account</button>
+              </div>
+            ) : (
+              <>
+            <button type="button" className="text-left text-xs font-semibold text-violet-700 underline" onClick={() => setAskOther(true)} data-testid="btn-other-parent-yes">Other parent already created your child’s account?</button>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1"><Label className="text-xs font-bold">First name</Label>
                 <Input value={coFirst} onChange={(e) => setCoFirst(e.target.value)} data-testid="input-coparent-first" autoComplete="off" /></div>
@@ -312,6 +298,8 @@ export function FamilySetup({ userId, mode, token, teamName, childHint, onDone, 
               <Button type="button" variant="outline" onClick={() => update({ coParent: null, stage: "player" })} data-testid="btn-coparent-skip">Skip &amp; continue to child</Button>
             </div>
             <p className="text-xs text-muted-foreground">You can add them later. You don’t need to wait for them to continue.</p>
+              </>
+            )}
           </div>
         )}
 

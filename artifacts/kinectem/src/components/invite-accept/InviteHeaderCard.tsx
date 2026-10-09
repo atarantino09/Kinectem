@@ -70,12 +70,15 @@ export function InviteHeaderCard({
             </ul>
           </div>
         )}
-        {isPlayerInvite && !accepted && (
+        {isPlayerInvite && !loggedIn && !accepted && (
           <div className="space-y-3">
-            <ParentSetupOverview />
-            <p className="text-sm text-slate-700">
-              Your child{childHint ? ` (${childHint})` : ""} will join this team after setup.
-            </p>
+            <ParentSetupOverview teamName={teamName} />
+          </div>
+        )}
+        {isPlayerInvite && loggedIn && (
+          <div className="space-y-2 text-sm text-slate-900">
+            {!needsChildSetup && <p>Your parent account is ready. Next: <strong>Step 2 · Add the other parent (optional).</strong></p>}
+            <p>When you finish setup, your child{childHint ? ` (${childHint})` : ""} will automatically be added to <strong>{teamName}’s roster</strong>.</p>
           </div>
         )}
         {!loggedIn && (

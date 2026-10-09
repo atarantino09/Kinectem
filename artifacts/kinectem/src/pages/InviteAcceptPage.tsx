@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRoute, useLocation, Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { customFetch, useGetLoggedInUser } from "@workspace/api-client-react";
@@ -45,6 +45,7 @@ export default function InviteAcceptPage() {
   const [accepting, setAccepting] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [needsChildSetup, setNeedsChildSetup] = useState(false);
+  const autoStarted = useRef<string | null>(null);
 
   const myId = me?.id ?? null;
   useEffect(() => {
@@ -120,6 +121,18 @@ export default function InviteAcceptPage() {
       setAccepting(false);
     }
   };
+
+  // A signed-in parent already completed step 1. Validate the invite through
+  // the same server gate, then open step 2 without another confirmation page.
+  // Guard by user+token so rerenders/StrictMode cannot send repeated requests;
+  // a rejected invite retains the existing explicit retry action.
+  useEffect(() => {
+    if (!myId || !isPlayerInvite || needsChildSetup) return;
+    const key = `${myId}:${token}`;
+    if (autoStarted.current === key) return;
+    autoStarted.current = key;
+    void onAccept();
+  }, [myId, isPlayerInvite, token, needsChildSetup]);
 
   if (loading) {
     return (
