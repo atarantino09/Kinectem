@@ -27,6 +27,8 @@ vi.mock("wouter", () => ({
   useParams: () => ({ orgId: ORG_ID }),
 }));
 vi.mock("@/hooks/use-toast", () => useToastMock);
+const whoamiMock = vi.hoisted(() => vi.fn());
+vi.mock("@/hooks/useWhoami", () => ({ useWhoami: () => whoamiMock() }));
 
 // Force the mobile (single-column) layout so the TeamsRail only mounts once
 // and the hero/empty-admins/members blocks all render inline.
@@ -47,14 +49,16 @@ vi.mock("@/components/ManageMembersDialog", () => ({
   ManageMembersDialog: ({
     open,
     ownershipHandoff,
+    canInviteOwner,
     onOpenChange,
   }: {
     open: boolean;
     ownershipHandoff?: boolean;
+    canInviteOwner?: boolean;
     onOpenChange: (open: boolean) => void;
   }) =>
     open ? (
-      <div data-testid="dialog-manage-members">
+      <div data-testid="dialog-manage-members" data-can-invite-owner={String(!!canInviteOwner)}>
         {ownershipHandoff && (
           <div data-testid="ownership-handoff-message">
             You are now the owner of this entire organization. Because
@@ -229,6 +233,7 @@ function installHandlers({
 }
 
 beforeEach(() => {
+  whoamiMock.mockReturnValue({ data: { realUser: { role: "coach" } }, isLoading: false });
   useGetLoggedInUserMock.mockReturnValue({
     data: { id: "user-owner", role: "user" },
     isLoading: false,
@@ -247,6 +252,25 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("OrganizationPage — admin control gating", () => {
+  it.each([
+    { role: null, hasOwner: false, platformRole: "admin", masquerading: false, allowed: true },
+    { role: "owner", hasOwner: true, platformRole: "admin", masquerading: false, allowed: false },
+    { role: "admin", hasOwner: false, platformRole: "coach", masquerading: false, allowed: false },
+    { role: "admin", hasOwner: false, platformRole: "admin", masquerading: true, allowed: false },
+  ] as const)("gates owner email invitations: %j", async ({ role, hasOwner, platformRole, masquerading, allowed }) => {
+    const user = userEvent.setup();
+    installHandlers({ role, organization: { hasOwner } });
+    whoamiMock.mockReturnValue({
+      data: { realUser: { role: platformRole }, isMasquerading: masquerading, viewingAs: { role: "coach" } },
+      isLoading: false,
+    });
+    localStorage.setItem(ORG_TOUR_STORAGE_KEY, "1");
+    renderWithProviders(<OrganizationPage />);
+    await user.click(await screen.findByTestId("btn-org-manage-menu"));
+    await user.click(screen.getByTestId("btn-manage-admins-hero"));
+    expect(screen.getByTestId("dialog-manage-members")).toHaveAttribute("data-can-invite-owner", String(allowed));
+  });
+
   it("shows a platform admin's self-created page as owned after navigation and remount", async () => {
     useGetLoggedInUserMock.mockReturnValue({
       data: { id: "user-owner", role: "admin" },

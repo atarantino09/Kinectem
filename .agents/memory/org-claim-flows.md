@@ -49,3 +49,17 @@ refuses to transfer ownership.
 applies and don't bolt an instant-claim path onto the review-gated flow or vice
 versa. Both must stay owner-exclusive (one owner per org, enforced by the
 index).
+
+## Owner invitations from the organization page
+
+Platform admins must be able to email an owner invitation from the unclaimed
+organization's member-management dialog, without leaving for an admin directory.
+This is an invitation to claim ownership, not an ordinary admin membership invite.
+
+**Why:** The user explicitly requested owner outreach from this spot while
+preparing an unclaimed organization for handoff.
+
+**How to apply:** Reuse the secure ownership-claim email process; do not assign
+ownership merely because an email was sent. Only an effective platform admin
+can send this invitation, and an already-owned organization cannot be handed
+off through this path. Masquerading must not retain the operator's authority.

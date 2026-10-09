@@ -58,6 +58,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getInitials, formatOrgName } from "@/lib/format";
+import { OrgOwnerEmailInvite } from "@/components/OrgOwnerEmailInvite";
 
 type Role = "owner" | "admin" | "member";
 
@@ -95,6 +96,7 @@ export function ManageMembersDialog({
   myRole,
   onBulkAddCoaches,
   ownershipHandoff = false,
+  canInviteOwner = false,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -108,6 +110,7 @@ export function ManageMembersDialog({
   // a "Bulk add coach" button; clicking it closes this dialog first.
   onBulkAddCoaches?: () => void;
   ownershipHandoff?: boolean;
+  canInviteOwner?: boolean;
 }) {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -340,6 +343,10 @@ export function ManageMembersDialog({
               of the org. Only the owner can transfer ownership.
             </DialogDescription>
           </DialogHeader>
+
+          {canInviteOwner && !isLoading && !members.some((m) => m.role === "owner") && (
+            <OrgOwnerEmailInvite key={orgId} orgId={orgId} orgName={formatOrgName(orgName)} />
+          )}
 
           {ownershipHandoff && (
             <div
