@@ -1,0 +1,31 @@
+const steps = [
+  { title: "Create your parent account", detail: "Use your own name and details." },
+  { title: "Add the other parent", detail: "Enter their name and email, or skip.", optional: true },
+  { title: "Create your child’s account", detail: "One child account, shared by both parents." },
+];
+
+/** The same plain-language roadmap at both parent entry points. */
+export function ParentSetupOverview() {
+  return (
+    <section className="rounded-xl border border-violet-200 bg-violet-50/80 p-4" aria-label="Family setup steps" data-testid="parent-setup-overview">
+      <p className="text-sm font-bold text-slate-950">Set up your family in 3 steps</p>
+      <ol className="mt-3 space-y-3" data-testid="text-parent-steps">
+        {steps.map((step, index) => (
+          <li key={step.title} className="flex items-start gap-3">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-violet-600 text-xs font-bold text-white" aria-hidden="true">{index + 1}</span>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold leading-5 text-slate-950">
+                {step.title}
+                {step.optional && <span className="ml-1.5 text-xs font-normal text-violet-700">(optional)</span>}
+              </p>
+              <p className="text-xs leading-5 text-slate-700">{step.detail}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
+      <p className="mt-3 border-t border-violet-200 pt-3 text-xs leading-5 text-slate-700">
+        The other parent gets an invitation after your child’s account is ready. They finish their own account—no need to create your child again.
+      </p>
+    </section>
+  );
+}

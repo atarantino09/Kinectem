@@ -105,9 +105,9 @@ export default function LoginPage() {
     }
     if (mode === "signup" && initialSignup === "parent") {
       return {
-        title: "Create your guardian account",
+        title: "Create your parent account",
         subtitle:
-          "This account is for you, the adult. Each parent signs up separately and shares one player profile.",
+          "Start with your own details. Add the other parent or skip, then set up your child.",
       };
     }
     if (mode === "signup") {

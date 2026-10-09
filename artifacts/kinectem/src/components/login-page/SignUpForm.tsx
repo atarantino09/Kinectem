@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ParentSetupOverview } from "@/components/family-setup/ParentSetupOverview";
 import { useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { safeInternalPath } from "@/lib/safePath";
@@ -335,6 +336,7 @@ export function SignUpForm({
     const showInvalidHint = dobComplete && !dobValid;
     return (
       <form className="space-y-4" onSubmit={handleAgeSubmit} data-testid="form-age-gate">
+        {initialRole === "parent" && !isGuardianInviteReturn && <ParentSetupOverview />}
         {orgAdminViaPath && (
           <div className="flex items-center justify-between">
             <button
@@ -371,7 +373,7 @@ export function SignUpForm({
             id="age-dob-label"
             className="text-xs font-semibold uppercase tracking-wide text-slate-600"
           >
-            Date of birth
+            {initialRole === "parent" ? "Your date of birth" : "Date of birth"}
           </Label>
           {/* Task #506 — Three scrollable Select dropdowns (Month /
               Day / Year) match the profile editor pattern and avoid
@@ -463,8 +465,7 @@ export function SignUpForm({
             </p>
           ) : (
             <p className="text-xs text-slate-500">
-              We ask everyone for their date of birth before creating an
-              account.
+              {initialRole === "parent" ? "Enter your date of birth—not your child’s." : "We ask everyone for their date of birth before creating an account."}
             </p>
           )}
         </div>
@@ -517,7 +518,8 @@ export function SignUpForm({
           </div>
         </div>
       )}
-      {effectiveRole === "parent" && (
+      {effectiveRole === "parent" && !isGuardianInviteReturn && <ParentSetupOverview />}
+      {effectiveRole === "parent" && isGuardianInviteReturn && (
         <div
           className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3"
           data-testid="note-guardian-account"
@@ -531,11 +533,6 @@ export function SignUpForm({
               ? " After sign-up you will review the invitation and share the player profile your family already created. You will not create another player."
               : " Each adult has their own login and shares one player profile."}
           </p>
-          {!isGuardianInviteReturn && (
-            <ol className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-semibold text-violet-900" data-testid="text-parent-steps">
-              <li>1 Your parent account</li><li aria-hidden>&rarr;</li><li>2 Other parent</li><li aria-hidden>&rarr;</li><li>3 Player profile</li>
-            </ol>
-          )}
         </div>
       )}
       <div className="grid grid-cols-2 gap-3">

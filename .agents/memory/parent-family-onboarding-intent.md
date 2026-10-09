@@ -7,7 +7,7 @@ Parent onboarding must prominently ask parents to coordinate, offer the other-pa
 
 **Why:** The user reports that both parents receive a coach’s invitation in TeamSnap or similar team chats and independently create the same child, producing duplicate roster players. They explicitly want the other-parent setup and coordination guidance before creating the player.
 
-**How to apply:** Apply this ordering and clear copy to parent signup and team-invitation onboarding. Reuse secure guardian invitations to connect the second adult to the same child, never infer family authorization from names, and treat existing duplicate cleanup as a separate reviewed action.
+**How to apply:** Show all three steps from the very first parent screen, before DOB entry, and on the team invitation: create your parent account → add the other parent (optional, or skip) → create your child’s account. Use plain parent/child account labels in this setup, reserving legal guardian terminology for actual consent and relationship controls. The user found the earlier guardian/player-profile wording confusing and repeated that the full sequence must be explained immediately. Reuse secure guardian invitations to connect the second adult to the same child, never infer family authorization from names, and treat existing duplicate cleanup as a separate reviewed action.
 
 An uncertain player-creation response remains the same creation intent even if the parent edits the spelling before retrying. Invitation delivery and player creation are separate outcomes; an email failure must never restart player creation.
 

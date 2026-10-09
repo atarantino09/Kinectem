@@ -3,7 +3,8 @@ import { formatOrgName } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Shield, CheckCircle2 } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
+import { ParentSetupOverview } from "@/components/family-setup/ParentSetupOverview";
 
 interface InviteHeaderCardProps {
   organizationName: string;
@@ -49,7 +50,7 @@ export function InviteHeaderCard({
           )}
         </h1>
         <Badge className="mt-3 bg-white/20 text-white border-white/30 font-bold">
-          {isPlayerInvite ? "Player roster" : positionLabel}
+          {isPlayerInvite ? "Parent & child setup" : positionLabel}
         </Badge>
       </div>
 
@@ -70,15 +71,10 @@ export function InviteHeaderCard({
           </div>
         )}
         {isPlayerInvite && !accepted && (
-          <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-            <Shield className="w-4 h-4 mt-0.5 shrink-0" />
-            <p>
-              <span className="font-bold">
-                This invite is for a parent or guardian.
-              </span>{" "}
-              After you accept, you'll add your child
-              {childHint ? ` (${childHint})` : ""} to the roster — and any
-              siblings on the same team.
+          <div className="space-y-3">
+            <ParentSetupOverview />
+            <p className="text-sm text-slate-700">
+              Your child{childHint ? ` (${childHint})` : ""} will join this team after setup.
             </p>
           </div>
         )}
@@ -94,7 +90,7 @@ export function InviteHeaderCard({
                 data-testid="btn-create-guardian"
               >
                 {isPlayerInvite
-                  ? "Create a guardian account"
+                  ? "Start with your parent account"
                   : "Create your account"}
               </Button>
             </Link>
@@ -119,8 +115,8 @@ export function InviteHeaderCard({
             data-testid="btn-accept-invite"
           >
             {accepting
-              ? "Accepting..."
-              : `Accept invite${isPlayerInvite ? " as guardian" : ""}`}
+              ? "Opening..."
+              : isPlayerInvite ? "Continue to family setup" : "Accept invite"}
           </Button>
         ) : loggedIn && accepted && !needsChildSetup ? (
           <div className="flex items-center justify-center gap-2 text-sm text-emerald-700">

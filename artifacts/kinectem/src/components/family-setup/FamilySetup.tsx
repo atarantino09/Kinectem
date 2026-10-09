@@ -30,8 +30,8 @@ export interface FamilySetupProps {
 
 const STEPS = [
   { id: "account", full: "Your parent account", short: "Account" },
-  { id: "coparent", full: "Other parent", short: "Other parent" },
-  { id: "player", full: "Player profile", short: "Player" },
+  { id: "coparent", full: "Other parent (optional)", short: "Other parent" },
+  { id: "player", full: "Your child’s account", short: "Your child" },
 ];
 
 function Steps({ current }: { current: number }) {
@@ -252,8 +252,7 @@ export function FamilySetup({ userId, mode, token, teamName, childHint, onDone, 
             <div className="flex items-start gap-2">
               <Users className="mt-0.5 h-4 w-4 shrink-0" />
               <p>
-                <strong>Your child only needs one profile.</strong> Two adults each sign in with their own login and share the same player.
-                {teamName ? ` Coordinate with the other parent before you add a player to ${teamName}.` : " Coordinate with the other parent before creating a player."}
+                <strong>Your child only needs one account.</strong> Check with the other parent before creating it.
               </p>
             </div>
           </div>
@@ -261,25 +260,25 @@ export function FamilySetup({ userId, mode, token, teamName, childHint, onDone, 
 
         {draft.stage === "checkpoint" && (
           <div className="space-y-3" data-testid="step-checkpoint">
-            <h2 className="text-lg font-black tracking-tight">Has your child's other parent already set up a player?</h2>
+            <h2 className="text-lg font-black tracking-tight">Has the other parent already created your child’s account?</h2>
             {!askOther ? (
               <div className="grid gap-2 sm:grid-cols-2">
                 <Button type="button" variant="outline" className="h-auto whitespace-normal py-3 font-bold" onClick={() => setAskOther(true)} data-testid="btn-other-parent-yes">
                   Yes, they already did
                 </Button>
                 <Button type="button" variant="brand" className="h-auto whitespace-normal py-3 font-bold" onClick={() => update({ stage: "coparent" })} data-testid="btn-other-parent-no">
-                  No, I will set it up
+                  No, continue
                 </Button>
               </div>
             ) : (
               <div className="space-y-3 rounded-lg border border-border p-3 text-sm" data-testid="guidance-other-parent-created">
-                <p>Ask them to send you a family invitation from the player's Family page. Open the link in that email while signed in as you, and accept it to share the same player. Do not create another profile.</p>
+                <p>Ask them to invite you from their Family page. Accept that family invitation to share your child’s existing account. Do not create a second child account.</p>
                 <div className="flex flex-wrap gap-2">
                   <Link href="/family" className="inline-flex h-9 items-center rounded-md border border-border px-3 text-sm font-bold" data-testid="link-check-invitations" onClick={() => void refreshApp()}>Check my invitations</Link>
                   <Button type="button" variant="ghost" size="sm" onClick={() => setAskOther(false)} data-testid="btn-guidance-back">Back</Button>
                 </div>
                 <button type="button" className="text-xs font-semibold text-violet-700 underline" onClick={() => update({ stage: "coparent" })} data-testid="btn-genuinely-new">
-                  They have not, my child needs a new profile
+                  My child still needs an account
                 </button>
               </div>
             )}
@@ -288,9 +287,9 @@ export function FamilySetup({ userId, mode, token, teamName, childHint, onDone, 
 
         {draft.stage === "coparent" && (
           <div className="space-y-3" data-testid="step-coparent">
-            <h2 className="text-lg font-black tracking-tight">Invite another parent / legal guardian</h2>
+            <h2 className="text-lg font-black tracking-tight">Step 2 · Add the other parent <span className="text-sm font-normal">(optional)</span></h2>
             <p className="text-sm text-muted-foreground">
-              They sign up with their own credentials and share the same player. We send the secure invitation once the player profile is ready. We never create an account or password for another adult.
+              Enter their name and email, or skip. After step 3, we’ll invite them to finish their account and connect to the same child.
             </p>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1"><Label className="text-xs font-bold">First name</Label>
@@ -309,21 +308,21 @@ export function FamilySetup({ userId, mode, token, teamName, childHint, onDone, 
             </div>
             {coError && <p role="alert" className="text-xs text-destructive" data-testid="error-coparent">{coError}</p>}
             <div className="flex flex-col gap-2 sm:flex-row">
-              <Button type="button" variant="brand" onClick={saveCoParent} data-testid="btn-coparent-continue">Continue</Button>
-              <Button type="button" variant="outline" onClick={() => update({ coParent: null, stage: "player" })} data-testid="btn-coparent-skip">Skip for now</Button>
+              <Button type="button" variant="brand" onClick={saveCoParent} data-testid="btn-coparent-continue">Save &amp; continue to child</Button>
+              <Button type="button" variant="outline" onClick={() => update({ coParent: null, stage: "player" })} data-testid="btn-coparent-skip">Skip &amp; continue to child</Button>
             </div>
-            <p className="text-xs text-muted-foreground">You can invite them later from your Family page. Nothing waits on them.</p>
+            <p className="text-xs text-muted-foreground">You can add them later. You don’t need to wait for them to continue.</p>
           </div>
         )}
 
         {draft.stage === "player" && (
           <div className="space-y-4" data-testid="step-player">
-            <h2 className="text-lg font-black tracking-tight">Player profile</h2>
+            <h2 className="text-lg font-black tracking-tight">Step 3 · Your child’s account</h2>
             <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900" data-testid="note-check-other-parent">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-              <p>Check with your child's other parent before creating a player profile. Your child only needs one profile. If another parent already created it, ask them for a family invitation.</p>
+              <p>Already created by the other parent? Ask for their family invitation instead of creating your child again.</p>
             </div>
-            {co && <p className="text-xs text-muted-foreground" data-testid="text-staged-coparent">After the profile is ready we will invite {co.firstName} {co.lastName} ({co.email}).</p>}
+            {co && <p className="text-xs text-muted-foreground" data-testid="text-staged-coparent">Once your child’s account is ready, we’ll send the invitation to {co.firstName} {co.lastName} ({co.email}).</p>}
             {kids.isLoading ? <Skeleton className="h-16 rounded-lg" /> : kids.isError ? (
               <div className="space-y-2 rounded-lg border border-destructive/40 p-3 text-sm" data-testid="error-children-load">
                 <p>We could not load your family, so we cannot tell whether your player already exists.</p>
@@ -346,10 +345,10 @@ export function FamilySetup({ userId, mode, token, teamName, childHint, onDone, 
                   </div>
                 )}
                 {(kids.data ?? []).length > 0 && !showCreate ? (
-                  <Button type="button" variant="outline" className="w-full font-bold" onClick={() => setShowCreate(true)} data-testid="btn-show-create-child-form">My child needs a new profile</Button>
+                  <Button type="button" variant="outline" className="w-full font-bold" onClick={() => setShowCreate(true)} data-testid="btn-show-create-child-form">Create my child’s account</Button>
                 ) : (
                   <form onSubmit={(e) => { e.preventDefault(); void submitCreate(false); }} className="space-y-3" data-testid="form-new-player">
-                    <p className="text-xs text-muted-foreground">New player. No email needed; the profile lives under your guardian account.</p>
+                    <p className="text-xs text-muted-foreground">Use your child’s name. They don’t need their own email.</p>
                     <div className="grid grid-cols-2 gap-2">
                       <div className="space-y-1"><Label className="text-xs font-bold">First name</Label>
                         <Input value={first} onChange={(e) => { setFirst(e.target.value); setDuplicate(false); }} data-testid="input-child-first" /></div>
@@ -364,7 +363,7 @@ export function FamilySetup({ userId, mode, token, teamName, childHint, onDone, 
                       </div>
                     )}
                     <Button type="submit" variant="brand" disabled={busy || duplicate} data-testid="btn-add-child">
-                      {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{mode === "team" ? "Create player and add to roster" : "Create player profile"}
+                      {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{mode === "team" ? "Create child’s account & join team" : "Create child’s account"}
                     </Button>
                   </form>
                 )}

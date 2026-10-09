@@ -23,7 +23,7 @@ describe("FamilySetup", () => {
   it("shows coordinate copy, steps and guidance when the other parent already did it", () => {
     fetchMock.mockResolvedValue({ data: [] });
     setup();
-    expect(screen.getByTestId("note-coordinate-first")).toHaveTextContent("only needs one profile");
+    expect(screen.getByTestId("note-coordinate-first")).toHaveTextContent("only needs one account");
     fireEvent.click(screen.getByTestId("btn-other-parent-yes"));
     expect(screen.getByTestId("guidance-other-parent-created")).toHaveTextContent("family invitation");
   });
