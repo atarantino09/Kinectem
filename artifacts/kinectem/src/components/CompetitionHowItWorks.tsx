@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
+import { NumericBadge } from "@/components/ui/numeric-badge";
 import {
   Collapsible,
   CollapsibleContent,
@@ -132,9 +133,9 @@ export function CompetitionHowItWorks({
                   data-testid={`step-how-it-works-${i + 1}`}
                 >
                   <div className="shrink-0 flex flex-col items-center gap-2 mt-0.5">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-black shadow-sm">
+                    <NumericBadge size={28} className="bg-primary/10 text-primary text-xs font-black shadow-sm">
                       {i + 1}
-                    </span>
+                    </NumericBadge>
                     <s.icon className="w-4 h-4 text-muted-foreground/60" />
                   </div>
                   <div className="min-w-0">

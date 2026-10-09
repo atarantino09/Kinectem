@@ -811,6 +811,7 @@ function AffiliationColumn({
             variant="outline"
             className="text-[10px] uppercase tracking-wider font-bold"
             data-testid={`affiliation-count-${testId}`}
+            numeric
           >
             {items.length}
           </Badge>

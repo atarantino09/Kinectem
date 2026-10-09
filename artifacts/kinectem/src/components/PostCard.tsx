@@ -3,6 +3,7 @@ import { Link, useLocation, useSearch } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { NumericBadge } from "@/components/ui/numeric-badge";
 import { TeamAvatar } from "@/components/UserAvatar";
 import { OrgLogo } from "@/components/OrgLogoFallback";
 import { Button } from "@/components/ui/button";
@@ -1095,12 +1096,13 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
                 <Camera className="w-3.5 h-3.5" />
                 Media
                 {albumPhotoCount > 0 && (
-                  <span
-                    className="text-[9px] font-bold leading-none rounded-full bg-primary text-primary-foreground min-w-3.5 h-3.5 px-1 flex items-center justify-center"
+                  <NumericBadge
+                    size={14}
+                    className="text-[9px] font-bold bg-primary text-primary-foreground"
                     data-testid={`badge-album-count-${post.id}`}
                   >
                     {albumPhotoCount > 99 ? "99+" : albumPhotoCount}
-                  </span>
+                  </NumericBadge>
                 )}
               </Button>
             </Link>

@@ -3,6 +3,7 @@ import { Link, useSearch } from "wouter";
 import { Camera, ChevronDown, ImagePlus, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { NumericBadge } from "@/components/ui/numeric-badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
@@ -156,7 +157,7 @@ function SignedInCompetitionAlbumSection({
                   <span className="flex items-center gap-2 text-xl font-black tracking-tight">
                     <Camera className="h-5 w-5 shrink-0" style={{ color: brand }} />
                     Photo Album
-                    {album && <Badge variant="secondary" data-testid="badge-approved-count">{album.approvedCount}</Badge>}
+                    {album && <Badge numeric variant="secondary" data-testid="badge-approved-count">{album.approvedCount}</Badge>}
                   </span>
                   <span className="mt-0.5 block text-sm font-normal text-muted-foreground">
                     {expanded
@@ -177,7 +178,7 @@ function SignedInCompetitionAlbumSection({
         <div className="flex flex-wrap items-center gap-2">
           {canManage && (album?.pendingCount ?? 0) > 0 && effectiveView !== "pending" && (
             <Button size="sm" variant="outline" className="font-bold" onClick={() => { setExpanded(true); setView("pending"); }} data-testid="button-review-pending">
-              <span className="mr-1.5 rounded-full bg-amber-400 px-1.5 text-xs text-amber-950">{album?.pendingCount}</span>
+              <NumericBadge className="mr-1.5 bg-amber-400 text-xs text-amber-950">{album?.pendingCount}</NumericBadge>
               Review pending
             </Button>
           )}

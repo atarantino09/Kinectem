@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { NumericBadge } from "@/components/ui/numeric-badge";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -40,9 +41,13 @@ function Steps({ current }: { current: number }) {
     <ol className="flex items-center gap-1 text-[11px] sm:text-xs" data-testid="family-setup-steps" aria-label="Setup progress">
       {STEPS.map((s, i) => (
         <li key={s.id} className="flex min-w-0 items-center gap-1" aria-current={i === current ? "step" : undefined}>
-          <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-black ${i < current ? "bg-emerald-600 text-white" : i === current ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
-            {i < current ? "\u2713" : i + 1}
-          </span>
+          {i < current ? (
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-black bg-emerald-600 text-white">{"\u2713"}</span>
+          ) : (
+            <NumericBadge className={`text-[10px] font-black ${i === current ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+              {i + 1}
+            </NumericBadge>
+          )}
           <span className={`truncate font-semibold ${i === current ? "text-foreground" : "text-muted-foreground"}`}>
             <span className="sm:hidden">{s.short}</span>
             <span className="hidden sm:inline">{s.full}</span>

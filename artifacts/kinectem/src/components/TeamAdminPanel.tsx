@@ -327,7 +327,7 @@ export function TeamAdminPanel({
             <h3 className="font-black tracking-tight text-sm">
               Roster Invites
             </h3>
-            <Badge variant="secondary" className="text-[10px] font-bold">
+            <Badge numeric variant="secondary" className="text-[10px] font-bold">
               {invites.length}
             </Badge>
           </div>

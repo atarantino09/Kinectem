@@ -284,7 +284,7 @@ function Section({
         <div className="mb-2 flex items-center gap-2">
           {icon}
           <h3 className="app-section-heading text-base">{title}</h3>
-          <Badge variant="secondary" className="brand-pill px-2 py-1">
+          <Badge numeric variant="secondary" className="brand-pill px-2 py-1">
             {count}
           </Badge>
         </div>

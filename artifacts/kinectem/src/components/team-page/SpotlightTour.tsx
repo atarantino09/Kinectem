@@ -9,6 +9,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
+import { NumericBadge } from "@/components/ui/numeric-badge";
 
 export type TourStep = {
   /** Highlighted element, located via `[data-testid="..."]`. */
@@ -281,9 +282,9 @@ export function SpotlightTour({
         data-testid="team-tour-card"
       >
         <div className="flex items-center justify-between">
-          <span className="inline-flex items-center justify-center h-7 min-w-[1.75rem] px-2 rounded-full bg-primary text-primary-foreground text-xs font-black">
+          <NumericBadge size={28} className="bg-primary text-primary-foreground text-xs font-black">
             {index + 1}
-          </span>
+          </NumericBadge>
           <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
             Step {index + 1} of {total}
           </span>

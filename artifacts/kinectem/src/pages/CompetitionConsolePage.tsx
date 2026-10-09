@@ -2091,7 +2091,7 @@ function CurationPanel({
         label="Game recaps"
         badge={
           recaps.length > 0 ? (
-            <Badge variant="secondary" className="ml-1">
+            <Badge numeric variant="secondary" className="ml-1">
               {recaps.length}
             </Badge>
           ) : undefined

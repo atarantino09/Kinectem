@@ -198,13 +198,15 @@ export default function MessagesPage() {
                 className="min-w-0 flex-1 text-left cursor-pointer"
                 data-testid={`link-conversation-${c.id}`}
               >
-                <div className="flex items-center justify-between">
-                  <p className="font-bold text-sm truncate">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="min-w-0 font-bold text-sm truncate">
                     {c.participant.displayName}
                   </p>
                   {c.unreadCount > 0 && (
                     <Badge
-                      className="text-[10px] font-black bg-primary text-primary-foreground h-4 px-1.5"
+                      numeric
+                      style={{ "--numeric-badge-size": "16px" } as React.CSSProperties}
+                      className="text-[10px] font-black bg-primary text-primary-foreground"
                       data-testid={`badge-conversation-unread-${c.id}`}
                     >
                       {c.unreadCount}

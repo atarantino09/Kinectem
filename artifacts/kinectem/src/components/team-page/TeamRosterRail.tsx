@@ -53,6 +53,7 @@ export function TeamRosterRail({
             variant="outline"
             className="text-[10px] uppercase tracking-wider font-bold"
             data-testid="rail-roster-count"
+            numeric
           >
             {list.length}
           </Badge>

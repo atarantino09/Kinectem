@@ -1,4 +1,5 @@
 import { AlertTriangle } from "lucide-react";
+import { NumericBadge } from "@/components/ui/numeric-badge";
 
 const steps = [
   { title: "Create your parent account", detail: "Use your own name and details." },
@@ -15,7 +16,7 @@ export function ParentSetupOverview({ teamName }: { teamName?: string }) {
       <ol className="mt-3 space-y-3" data-testid="text-parent-steps">
         {steps.map((step, index) => (
           <li key={step.title} className="flex items-start gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-violet-600 text-xs font-bold text-white" aria-hidden="true">{index + 1}</span>
+            <NumericBadge size={24} className="bg-violet-600 text-xs font-bold text-white" aria-hidden="true">{index + 1}</NumericBadge>
             <div className="min-w-0">
               <p className="text-sm font-semibold leading-5 text-slate-950">
                 {step.title}

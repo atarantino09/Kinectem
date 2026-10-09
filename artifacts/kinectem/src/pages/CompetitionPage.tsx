@@ -2432,7 +2432,7 @@ export default function CompetitionPage() {
                     style={{ backgroundColor: brand }}
                   />
                   Schedule
-                  <Badge variant="secondary" className="rounded-full px-2 py-0.5 text-xs" data-testid="badge-schedule-count">
+                  <Badge numeric={!scheduleFiltersActive} variant="secondary" className="rounded-full px-2 py-0.5 text-xs" data-testid="badge-schedule-count">
                     {scheduleFiltersActive
                       ? `${scheduleFilterData.filtered.length} of ${q.data.matches.length}`
                       : q.data.matches.length}

@@ -848,7 +848,7 @@ export function TeamRosterTabs({
           >
             Pending
             {invites.length > 0 && (
-              <Badge className="ml-1.5 h-5">{invites.length}</Badge>
+              <Badge numeric style={{ "--numeric-badge-size": "20px" } as React.CSSProperties} className="ml-1.5">{invites.length}</Badge>
             )}
           </TabsTrigger>
         )}

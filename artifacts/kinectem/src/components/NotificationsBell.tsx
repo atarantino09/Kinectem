@@ -22,6 +22,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { NumericBadge } from "@/components/ui/numeric-badge";
 import { Bell, ShieldAlert, Users, CheckCheck } from "lucide-react";
 import { timeAgo } from "@/lib/format";
 import { useToast } from "@/hooks/use-toast";
@@ -409,12 +410,13 @@ export function NotificationsBell() {
         >
           <Bell className="w-5 h-5" />
           {unread > 0 && (
-            <span
-              className="brand-count-marker absolute top-1 right-1 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-black flex items-center justify-center"
+            <NumericBadge
+              size={16}
+              className="brand-count-marker absolute top-1 right-1 bg-primary text-primary-foreground text-[10px] font-black"
               data-testid="badge-bell-unread"
             >
               {unread > 9 ? "9+" : unread}
-            </span>
+            </NumericBadge>
           )}
         </Button>
       </DropdownMenuTrigger>

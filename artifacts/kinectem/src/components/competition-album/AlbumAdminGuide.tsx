@@ -1,3 +1,5 @@
+import { NumericBadge } from "@/components/ui/numeric-badge";
+
 const steps = [
   {
     title: "Add your own competition photos",
@@ -36,9 +38,9 @@ export function AlbumAdminGuide() {
       <ol className="mt-4 grid gap-4 md:grid-cols-2">
         {steps.map((step, index) => (
           <li key={step.title} className="flex min-w-0 items-start gap-2.5">
-            <span aria-hidden="true" className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-foreground/10 text-xs font-black">
+            <NumericBadge size={24} aria-hidden="true" className="bg-foreground/10 text-xs font-black">
               {index + 1}
-            </span>
+            </NumericBadge>
             <div className="min-w-0">
               <h4 className="text-sm font-bold">{step.title}</h4>
               <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{step.text}</p>

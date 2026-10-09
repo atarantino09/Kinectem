@@ -1362,7 +1362,8 @@ export default function OrganizationPage() {
                               Admin queue
                               {pendingAdminCount > 0 && (
                                 <Badge
-                                  className="ml-auto px-1.5 min-w-5 justify-center rounded-full font-bold"
+                                  numeric
+                                  className="ml-auto font-bold"
                                   data-testid="badge-admin-queue-count"
                                 >
                                   {pendingAdminCount}
@@ -1713,6 +1714,7 @@ function TeamsRail({
             variant="outline"
             className="text-[10px] uppercase tracking-wider font-bold"
             data-testid="rail-teams-count"
+            numeric
           >
             {teams.length}
           </Badge>
@@ -1920,6 +1922,7 @@ export function ArchivedTeamsCard({
             Archived teams
           </h2>
           <Badge
+            numeric
             variant="outline"
             className="text-[10px] uppercase tracking-wider font-bold"
           >

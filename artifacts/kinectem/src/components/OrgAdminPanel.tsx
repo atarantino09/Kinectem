@@ -153,7 +153,7 @@ export function OrgAdminPanel({
             <h3 className="font-black tracking-tight text-sm">
               Join Requests
             </h3>
-            <Badge variant="secondary" className="text-[10px] font-bold">
+            <Badge numeric variant="secondary" className="text-[10px] font-bold">
               {requests.length}
             </Badge>
           </div>
@@ -257,7 +257,7 @@ export function OrgAdminPanel({
             <h3 className="font-black tracking-tight text-sm">
               Post Approvals
             </h3>
-            <Badge variant="secondary" className="text-[10px] font-bold">
+            <Badge numeric variant="secondary" className="text-[10px] font-bold">
               {approvals.length}
             </Badge>
           </div>

@@ -6,6 +6,7 @@ import { safeInternalPath } from "@/lib/safePath";
 import { rateLimitMessage } from "@/lib/auth-errors";
 import { completeInviteAuthentication, inviteAccountToken } from "@/lib/parent-invite-account";
 import { Button } from "@/components/ui/button";
+import { NumericBadge } from "@/components/ui/numeric-badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -279,15 +280,15 @@ export function SignUpForm({
               </p>
               <div className="mt-3 space-y-1.5">
                 <div className="flex items-center gap-2 text-xs text-slate-700">
-                  <span className="w-5 h-5 rounded-full bg-primary text-primary-foreground text-[10px] font-black flex items-center justify-center shrink-0">
+                  <NumericBadge className="bg-primary text-primary-foreground text-[10px] font-black">
                     1
-                  </span>
+                  </NumericBadge>
                   <span className="font-medium">Create your account</span>
                 </div>
                 <div className="flex items-center gap-2 text-xs text-slate-500">
-                  <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-400 text-[10px] font-black flex items-center justify-center shrink-0">
+                  <NumericBadge className="bg-slate-200 text-slate-400 text-[10px] font-black">
                     2
-                  </span>
+                  </NumericBadge>
                   <span>Name and launch your organization</span>
                 </div>
               </div>
@@ -376,9 +377,9 @@ export function SignUpForm({
               className="flex items-center gap-1.5 text-xs"
               data-testid="text-step-indicator"
             >
-              <span className="w-4 h-4 rounded-full bg-primary text-primary-foreground text-[9px] font-black flex items-center justify-center">
+              <NumericBadge size={16} className="bg-primary text-primary-foreground text-[9px] font-black">
                 1
-              </span>
+              </NumericBadge>
               <span className="font-semibold text-primary">Step 1 of 2</span>
               <span className="text-slate-400">· Create your account</span>
             </div>
@@ -526,9 +527,9 @@ export function SignUpForm({
             className="flex items-center gap-1.5 text-xs"
             data-testid="text-step-indicator"
           >
-            <span className="w-4 h-4 rounded-full bg-primary text-primary-foreground text-[9px] font-black flex items-center justify-center">
+            <NumericBadge size={16} className="bg-primary text-primary-foreground text-[9px] font-black">
               1
-            </span>
+            </NumericBadge>
             <span className="font-semibold text-primary">Step 1 of 2</span>
             <span className="text-slate-400">· Create your account</span>
           </div>

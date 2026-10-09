@@ -359,6 +359,40 @@
  * Even without handling focused or not, this is six possible combinations that
  * need to be distinguished from eachother visually.
  */
+/* Unlayered, opt-in styles deliberately override Badge's generic padding and
+ * inherited tracking utilities without affecting ordinary text/status badges. */
+  /* Inter's line box is not its digit ink box. Measured after fonts.ready:
+   * at 100px, digit ink is ~72px tall vs ascent/descent 107/29; "1" also
+   * has unequal side bearings. Apply the same small optical correction to
+   * ALL numeric labels, not a digit-specific offset or a global badge rule. */
+  .numeric-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    box-sizing: border-box;
+    height: var(--numeric-badge-size, 20px);
+    min-width: var(--numeric-badge-size, 20px);
+    width: auto;
+    padding: 0 0.35em;
+    border-radius: 9999px;
+    white-space: nowrap;
+    line-height: 1;
+    letter-spacing: 0;
+    text-align: center;
+    font-variant-numeric: lining-nums tabular-nums;
+  }
+  .numeric-badge-bordered {
+    --numeric-badge-size: 24px;
+  }
+  .numeric-badge-label {
+    display: block;
+    flex-shrink: 0;
+    line-height: 1;
+    letter-spacing: 0;
+    white-space: nowrap;
+    transform: translate(0.035em, -0.035em);
+  }
 @layer utilities {
   .brand-gradient {
     background: var(--brand-gradient);

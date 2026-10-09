@@ -39,6 +39,7 @@ import { MobileTopBar } from "@/components/MobileTopBar";
 import { useWhoami } from "@/hooks/useWhoami";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
+import { NumericBadge } from "@/components/ui/numeric-badge";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { data: currentUser, error: currentUserError } = useGetLoggedInUser({
@@ -368,9 +369,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   <Icon className="w-5 h-5" />
                   <span className="flex-1">{item.label}</span>
                   {item.badge !== undefined && item.badge > 0 && (
-                    <span className="brand-count-marker min-w-[20px] h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-[11px] font-black flex items-center justify-center">
+                    <NumericBadge className="brand-count-marker bg-primary text-primary-foreground text-[11px] font-black">
                       {item.badge > 9 ? "9+" : item.badge}
-                    </span>
+                    </NumericBadge>
                   )}
                 </Link>
               );
@@ -455,14 +456,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     <Icon className="h-4 w-4 lg:mr-2" />
                     <span className="hidden lg:inline">{item.label}</span>
                     {hasBadge && (
-                      <span
-                        className="brand-count-marker ml-2 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-black flex items-center justify-center"
+                      <NumericBadge
+                        size={18}
+                        className="brand-count-marker ml-2 bg-primary text-primary-foreground text-[10px] font-black"
                         data-testid={
                           item.testId ? `badge-${item.testId}` : undefined
                         }
                       >
                         {item.badge! > 9 ? "9+" : item.badge}
-                      </span>
+                      </NumericBadge>
                     )}
                   </Button>
                 </Link>
@@ -502,12 +504,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     fallbackClassName="bg-slate-900 text-primary-foreground"
                   />
                   {menuBadgeTotal > 0 && (
-                    <span
-                      className="brand-count-marker absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-black flex items-center justify-center"
+                    <NumericBadge
+                      size={16}
+                      className="brand-count-marker absolute -top-0.5 -right-0.5 bg-primary text-primary-foreground text-[10px] font-black"
                       data-testid="badge-user-menu"
                     >
                       {menuBadgeTotal > 9 ? "9+" : menuBadgeTotal}
-                    </span>
+                    </NumericBadge>
                   )}
                 </button>
               </DropdownMenuTrigger>
@@ -529,12 +532,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 >
                   <Mail className="w-4 h-4 mr-2" /> Inbox
                   {unreadCount > 0 && (
-                    <span
-                      className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-black flex items-center justify-center"
+                    <NumericBadge
+                      size={18}
+                      className="ml-auto bg-primary text-primary-foreground text-[10px] font-black"
                       data-testid="badge-menu-messages"
                     >
                       {unreadCount > 9 ? "9+" : unreadCount}
-                    </span>
+                    </NumericBadge>
                   )}
                 </DropdownMenuItem>
                 <DropdownMenuItem
@@ -543,12 +547,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 >
                   <Megaphone className="w-4 h-4 mr-2" /> Announcements
                   {announcementsUnread > 0 && (
-                    <span
-                      className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-black flex items-center justify-center"
+                    <NumericBadge
+                      size={18}
+                      className="ml-auto bg-primary text-primary-foreground text-[10px] font-black"
                       data-testid="badge-menu-announcements"
                     >
                       {announcementsUnread > 9 ? "9+" : announcementsUnread}
-                    </span>
+                    </NumericBadge>
                   )}
                 </DropdownMenuItem>
                 {isAdmin && (

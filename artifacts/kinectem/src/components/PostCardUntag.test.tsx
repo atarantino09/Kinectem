@@ -147,6 +147,26 @@ function renderWithClient(ui: React.ReactElement) {
   };
 }
 
+describe("PostCard Media numeric badge", () => {
+  it.each([1, 8, 12, 99, 100])("preserves the Media control and count cap for %i items", (count) => {
+    const post = { ...basePost(), albumPhotoCount: count };
+    renderWithClient(<PostCard post={post} />);
+    const badge = screen.getByTestId(`badge-album-count-${post.id}`);
+    expect(badge).toHaveClass("numeric-badge", "bg-primary", "text-primary-foreground");
+    expect(badge.querySelector(".numeric-badge-label")).toHaveTextContent(count > 99 ? "99+" : String(count));
+    expect(badge).toHaveStyle("--numeric-badge-size: 14px");
+    const button = screen.getByRole("button", { name: "Open photo and video album" });
+    expect(button).toHaveClass("h-11", "sm:h-8");
+    expect(button.closest("a")).toHaveAttribute("href", `/posts/${post.id}?album=1`);
+  });
+
+  it("does not show a numeric badge for an empty album", () => {
+    renderWithClient(<PostCard post={basePost()} />);
+    expect(screen.queryByTestId("badge-album-count-article-abc")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open photo and video album" })).toBeVisible();
+  });
+});
+
 describe("Historical recap deletion", () => {
   beforeEach(() => {
     customFetchMock.mockReset().mockResolvedValue(null);

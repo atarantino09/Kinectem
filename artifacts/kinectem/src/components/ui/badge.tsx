@@ -2,6 +2,7 @@ import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@/lib/utils"
+import { NumericLabel } from "./numeric-badge"
 
 const badgeVariants = cva(
   // @replit
@@ -32,11 +33,16 @@ const badgeVariants = cva(
 
 export interface BadgeProps
   extends React.HTMLAttributes<HTMLDivElement>,
-    VariantProps<typeof badgeVariants> {}
+    VariantProps<typeof badgeVariants> {
+  /** Opt in only for number-only counts, never status or text badges. */
+  numeric?: boolean
+}
 
-function Badge({ className, variant, ...props }: BadgeProps) {
+function Badge({ className, variant, numeric, children, ...props }: BadgeProps) {
   return (
-    <div className={cn(badgeVariants({ variant }), className)} {...props} />
+    <div className={cn(badgeVariants({ variant }), numeric && "numeric-badge numeric-badge-bordered", className)} {...props}>
+      {numeric ? <NumericLabel>{children}</NumericLabel> : children}
+    </div>
   )
 }
 

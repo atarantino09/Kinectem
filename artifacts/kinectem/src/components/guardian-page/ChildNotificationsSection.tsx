@@ -399,7 +399,9 @@ export function ChildNotificationsSection({
             {decidedItems.length > 0 && (
               <Badge
                 variant="outline"
-                className="font-bold text-[10px] h-5 px-1.5"
+                numeric
+                style={{ "--numeric-badge-size": "20px" } as React.CSSProperties}
+                className="font-bold text-[10px]"
                 data-testid={`badge-decided-count-${c.id}`}
               >
                 {decidedItems.length}
