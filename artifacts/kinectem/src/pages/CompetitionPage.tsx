@@ -1982,8 +1982,6 @@ export default function CompetitionPage() {
           );
         })()}
 
-        <CompetitionAlbumSection competition={c} />
-
         {(q.data.featuredRecaps?.length ?? 0) === 0 && (q.data.brackets?.length ?? 0) === 0 && !q.data.matches.some((match) => match.division?.trim()) ? (
           <Card
             className="competition-section-surface rounded-xl border-l-4 border-dashed border-border bg-muted/20 shadow-sm"
@@ -2016,6 +2014,8 @@ export default function CompetitionPage() {
             </CardContent>
           </Card>
         ) : null}
+
+        <CompetitionAlbumSection competition={c} />
 
         {/* Teams / claim list and Schedule as full-width reading sections */}
         <div className="flex w-full min-w-0 flex-col gap-6">

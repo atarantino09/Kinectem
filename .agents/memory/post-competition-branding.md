@@ -56,3 +56,9 @@ Show only one active-view filter pill: All when unfiltered, otherwise the select
 **Why:** The user wants the current view clear without a row of redundant bracket pills.
 
 **How to apply:** Keep all bracket choices, including zero-count groups, available in the pill menu and bracket selector. Selecting All resets every recap filter; retain the gray bracket label on each card.
+
+Featured game recaps must appear above the competition photo album, including when the featured section is empty.
+
+**Why:** The user expects the same section order in development and production; different competition data must not change it.
+
+**How to apply:** Check both populated and empty states, for visitors and organizers. Do not substitute unfeatured recaps to fill an empty section.

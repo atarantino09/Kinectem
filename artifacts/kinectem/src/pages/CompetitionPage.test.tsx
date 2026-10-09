@@ -172,6 +172,13 @@ describe("schedule grouping model", () => {
 });
 
 describe("competition partnership directory", () => {
+  it.each([false, true])("keeps the empty featured recap section above photos (canManage=%s)", async (canManage) => {
+    mockedFetch.mockResolvedValue(competitionResponse({ canManage }));
+    renderWithProviders(<CompetitionPage />);
+    const featured = await screen.findByTestId("card-featured-recaps-empty");
+    expect(featured.compareDocumentPosition(screen.getByTestId("section-competition-album")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("shows organization branding on the actual featured recap card alongside the event strip", async () => {
     mockedFetch.mockResolvedValue({
       ...competitionResponse(),
@@ -212,6 +219,7 @@ describe("competition partnership directory", () => {
     expect(within(card).getByText("A hard-fought win.")).toHaveClass("text-black");
     expect(within(card).getByTestId("bracket-featured-recap-club-recap")).toHaveClass("text-muted-foreground");
     const rail = screen.getByTestId("rail-featured-recaps");
+    expect(rail.compareDocumentPosition(screen.getByTestId("section-competition-album")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(rail).toHaveClass("space-y-2.5", "text-black");
     expect(screen.getByTestId("rail-grouped-sections")).toHaveClass("grid", "gap-y-4", "md:grid-cols-2");
     expect(within(rail).queryByRole("heading", { level: 4 })).not.toBeInTheDocument();
