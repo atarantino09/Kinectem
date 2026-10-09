@@ -47,11 +47,18 @@ export function InviteFamilyContactDialog({
     };
     try {
       if (values.role === "guardian") {
-        await guardian.mutateAsync({
+        const result = await guardian.mutateAsync({
           userId: childId,
           data: { ...payload, relationshipType: values.relationshipType },
         });
         await qc.invalidateQueries({ queryKey: getListUserGuardiansQueryKey(childId) });
+        const emailSent = (result as typeof result & { emailSent?: boolean | null }).emailSent;
+        if (emailSent !== true) {
+          setServerError(emailSent === false
+            ? "The invitation is saved, but the email could not be sent. Try again to resend the same invitation."
+            : "The invitation is saved. We have not confirmed email delivery; it also appears in the other parent's Family page after they sign in.");
+          return;
+        }
       } else {
         await contact.mutateAsync(payload);
       }

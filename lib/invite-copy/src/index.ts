@@ -50,7 +50,8 @@ const BULLETS: readonly string[] = [
   "You review and approve photos and posts before anything goes public",
 ];
 
-const AFTER_BULLETS = "There's no cost to families. Setup takes about two minutes.";
+const AFTER_BULLETS =
+  "One parent sets up the player, then invites the other parent from inside Kinectem. Please coordinate with each other so you don't create your player twice. Your player only needs one profile. There's no cost to families. Setup takes about two minutes.";
 
 const LEARN_MORE =
   "Check out www.kinectem.com to learn even more prior to signing up.";

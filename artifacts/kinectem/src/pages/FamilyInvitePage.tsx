@@ -113,6 +113,11 @@ export default function FamilyInvitePage() {
                   <p><strong>{invite.data.invitedBy ?? "A guardian"}</strong> invited you to
                     {invite.data.kind === "guardian" ? ` become ${invite.data.child.displayName}'s ${invite.data.access === "legal_guardian" ? "legal guardian" : "parent"}` :
                       ` follow ${invite.data.child.displayName}'s updates`}.</p>
+                  {invite.data.kind === "guardian" && (
+                    <p className="rounded-lg border border-violet-200 bg-violet-50 p-3 text-sm text-violet-900" data-testid="text-shared-profile">
+                      {invite.data.child.displayName} already has a player profile. Accepting shares that same profile with your own login. You will not create another player.
+                    </p>
+                  )}
                   <p className="text-sm text-muted-foreground">
                     {invite.data.kind === "guardian"
                       ? "Accepting links you as a guardian with family management and applicable consent permissions."

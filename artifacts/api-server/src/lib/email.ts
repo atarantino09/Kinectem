@@ -744,6 +744,11 @@ export async function sendGuardianLinkInviteEmail(
     relationshipType: "parent" | "legal_guardian";
   },
 ): Promise<void> {
+  // This invite flow reports delivery to the parent and supports retries.
+  // sendEmail's generic no-credentials no-op must not look like success here.
+  if (!(await isEmailConfiguredAsync())) {
+    throw new Error("Guardian invitation email delivery is not configured");
+  }
   const url = buildFamilyInviteUrl("guardian", args.inviteId);
   const roleLabel =
     args.relationshipType === "legal_guardian" ? "legal guardian" : "parent";

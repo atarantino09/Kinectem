@@ -67,6 +67,7 @@ import {
 } from "../lib/spec-helpers";
 import { getOrCreateTeamJoinLink } from "../lib/team-join-link";
 import { findRosterEntry, lockRosterTeam } from "../lib/roster-invite-consistency";
+import { FamilySetupError, maySetUpFamily, setUpFamilyPlayer } from "../lib/family-setup";
 import {
   loadPostStats,
   statsFor,
@@ -2207,14 +2208,18 @@ router.post(
       .where(eq(rosterInvites.token, req.params.token))
       .limit(1);
     if (!invite) return notFound(res);
-    if (invite.status !== "pending")
-      return apiError(res, 409, "Invite no longer pending");
-
     // Player invites are addressed to the parent / guardian. The accepting
     // user does NOT become a player; instead they're prompted to add their
     // child(ren) as players on the roster.
     const isPlayerInvite = invite.position === "player";
     if (isPlayerInvite) {
+      if (!maySetUpFamily(me)) return apiError(res, 403, "Only an adult parent or guardian can set up a player.");
+      if (invite.invitedEmail && invite.invitedEmail.trim().toLowerCase() !== me.email?.trim().toLowerCase())
+        return apiError(res, 403, "Use the email address that received this invitation.");
+      if (!["pending", "accepted"].includes(invite.status))
+        return apiError(res, 409, "Invite no longer available");
+      const [team] = await db.select().from(teams).where(eq(teams.id, invite.teamId)).limit(1);
+      if (!team || team.archivedAt) return apiError(res, 409, "Team is archived");
       // Email-targeted player invites are single-use (mark accepted).
       // Email-less shareable links stay pending so multiple guardians can
       // use the same link to add their kids.
@@ -2231,6 +2236,8 @@ router.post(
       });
     }
 
+    if (invite.status !== "pending")
+      return apiError(res, 409, "Invite no longer pending");
     if (invite.role === "coach" && invite.invitedEmail &&
         invite.invitedEmail.trim().toLowerCase() !== me.email?.trim().toLowerCase()) {
       return apiError(res, 403, "This invite is for a different email address");
@@ -2290,111 +2297,68 @@ router.post(
 // After a parent accepts a player invite, they add 1+ children as players.
 router.post(
   "/invites/:token/children",
+  rateLimit({ name: "family-player-team-setup", windowMs: 60 * 60 * 1000, max: 60, keys: (req) => [ipKey(req)] }),
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
     if (!me) return apiError(res, 401, "Not authenticated");
-    const [invite] = await db
-      .select()
-      .from(rosterInvites)
-      .where(eq(rosterInvites.token, req.params.token))
-      .limit(1);
-    if (!invite) return notFound(res);
-    if (invite.position !== "player") {
-      return apiError(res, 400, "Only player invites support adding children");
+    try {
+      const result = await setUpFamilyPlayer(me, req.body ?? {}, String(req.params.token));
+      // A notification/follow failure must not turn a committed creation into
+      // an apparent failure; the persisted setup receipt still permits retry.
+      try {
+        await ensureOrgFollowedForTeam(me.id, result.teamId!);
+        await ensureTeamFollowedAsGuardian(me.id, result.teamId!);
+      } catch (err) { req.log.warn({ err }, "Family setup follow sync failed"); }
+      const [first, ...rest] = result.child.name.split(" ");
+      return res.status(result.reused ? 200 : 201).json({
+        child: { id: result.child.id, firstName: first, lastName: rest.join(" "), avatarUrl: safeAvatarUrl(result.child.avatarUrl) },
+        member: result.member ? toTeamMember(result.member, result.child) : undefined,
+        reused: result.reused,
+      });
+    } catch (err) {
+      if (err instanceof FamilySetupError) return apiError(res, err.status, err.message, { code: err.code });
+      throw err;
     }
+  }),
+);
 
-    // Branch on body shape: pick an existing linked child, or create new.
-    const rawChildId = typeof req.body?.childId === "string"
-      ? req.body.childId.trim()
-      : "";
+router.get(
+  "/family/setup/requests/:requestId",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const requestId = String(req.params.requestId);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId))
+      return apiError(res, 400, "Invalid setup request");
+    const receipt = await db.execute<{ child_id: string }>(sql`
+      SELECT child_id FROM family_player_setups WHERE parent_id = ${me.id} AND request_id = ${requestId}::uuid
+    `);
+    const childId = receipt.rows[0]?.child_id;
+    if (!childId || !(await isActiveGuardian(me.id, childId))) return notFound(res);
+    const [child] = await db.select().from(users).where(eq(users.id, childId));
+    if (!child) return notFound(res);
+    const [firstName, ...rest] = child.name.split(" ");
+    return res.json({ child: { id: child.id, firstName, lastName: rest.join(" "), avatarUrl: safeAvatarUrl(child.avatarUrl) } });
+  }),
+);
 
-    let child: typeof users.$inferSelect;
-    let childFirstName: string;
-    let childLastName: string;
-
-    if (rawChildId) {
-      const [existing] = await db
-        .select()
-        .from(users)
-        .where(eq(users.id, rawChildId))
-        .limit(1);
-      // Task #755 — any ACTIVE guardian may act, not just the primary.
-      if (!existing || !(await isActiveGuardian(me.id, existing.id))) {
-        // Don't leak whether the child exists under another guardian.
-        return apiError(res, 404, "Child not found");
-      }
-      // Idempotent: if the child already has a roster row on this team
-      // (any status), surface a clear "already on roster" response
-      // instead of duplicating the row.
-      const [dupe] = await db
-        .select({ id: rosterEntries.id })
-        .from(rosterEntries)
-        .where(
-          and(
-            eq(rosterEntries.teamId, invite.teamId),
-            eq(rosterEntries.userId, existing.id),
-          ),
-        )
-        .limit(1);
-      if (dupe) {
-        return apiError(
-          res,
-          409,
-          "This child is already on the team's roster.",
-          { code: "ALREADY_ON_ROSTER" },
-        );
-      }
-      child = existing;
-      const [first, ...rest] = existing.name.split(" ");
-      childFirstName = first ?? existing.name;
-      childLastName = rest.join(" ");
-    } else {
-      const firstName = String(req.body?.firstName ?? "").trim();
-      const lastName = String(req.body?.lastName ?? "").trim();
-      if (!firstName || !lastName) {
-        return apiError(res, 400, "firstName and lastName required");
-      }
-      const [created] = await db
-        .insert(users)
-        .values({
-          name: `${firstName} ${lastName}`,
-          role: "athlete",
-          email: null,
-          parentId: me.id,
-          // Task #800 — auto-approve by default; the parent can flip
-          // "Require tag consent" on from the Family dashboard.
-        })
-        .returning();
-      child = created;
-      childFirstName = firstName;
-      childLastName = lastName;
+router.post(
+  "/family/setup/children",
+  rateLimit({ name: "family-player-setup", windowMs: 60 * 60 * 1000, max: 60, keys: (req) => [ipKey(req)] }),
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    try {
+      const result = await setUpFamilyPlayer(me, req.body ?? {});
+      const [first, ...rest] = result.child.name.split(" ");
+      return res.status(result.reused ? 200 : 201).json({
+        child: { id: result.child.id, firstName: first, lastName: rest.join(" "), avatarUrl: safeAvatarUrl(result.child.avatarUrl) },
+        reused: result.reused,
+      });
+    } catch (err) {
+      if (err instanceof FamilySetupError) return apiError(res, err.status, err.message, { code: err.code });
+      throw err;
     }
-
-    const [entry] = await db
-      .insert(rosterEntries)
-      .values({
-        teamId: invite.teamId,
-        userId: child.id,
-        role: "player",
-        status: "accepted",
-        position: "player",
-      })
-      .returning();
-    await ensureOrgFollowedForTeam(me.id, invite.teamId);
-    // The parent now has a child rostered on this team — auto-follow the
-    // team itself so it shows up under the parent's profile Teams section
-    // (synthesized as a `position: "parent"` membership row by
-    // GET /users/:userId/teams).
-    await ensureTeamFollowedAsGuardian(me.id, invite.teamId);
-    res.status(201).json({
-      child: {
-        id: child.id,
-        firstName: childFirstName,
-        lastName: childLastName,
-        avatarUrl: safeAvatarUrl(child.avatarUrl),
-      },
-      member: toTeamMember(entry, child),
-    });
   }),
 );
 

@@ -16,7 +16,7 @@
 
 import { Router, type IRouter } from "express";
 import { db, users, guardianLinks, notifications, consentAuditLog } from "@workspace/db";
-import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { asyncHandler } from "../lib/async-handler";
 import { apiError, displayName, safeAvatarUrl } from "../lib/spec-helpers";
 import { clientIp } from "../lib/coppa";
@@ -325,29 +325,37 @@ router.post(
         ),
       );
     }
-    for (const cond of dupConds) {
-      const [dup] = await db.select({ id: guardianLinks.id }).from(guardianLinks).where(cond).limit(1);
-      if (dup) {
-        return res.json({ message: "Invite processed." });
+    const invitation = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${childId}))`);
+      if (!isSelf && (req.isMasquerading || (!isAdmin(me) && !(await isActiveGuardian(me.id, childId, tx)))))
+        return null;
+      // Serialize the live-link check and insertion, including unknown-email
+      // invites which have no guardian id and cannot rely on the pair index.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`guardian-invite:${childId}:${email}`}))`);
+      let [current] = await tx.select().from(guardianLinks).where(or(...dupConds)).limit(1);
+      const created = !current;
+      if (!current) {
+        [current] = await tx.insert(guardianLinks).values({
+          childId, guardianId: invitee?.id ?? null, inviteEmail: email,
+          inviteFirstName: firstName, inviteLastName: lastName,
+          relationshipType, isPrimary: false, status: "pending", invitedByUserId: me.id,
+        }).returning();
       }
-    }
+      const sent = await tx.execute<{ sent: boolean }>(sql`
+        SELECT invite_email_sent_at IS NOT NULL AS sent FROM guardian_links WHERE id = ${current!.id}
+      `);
+      const claim = current!.status === "pending" ? await tx.execute(sql`
+        UPDATE guardian_links SET invite_email_attempted_at = now()
+         WHERE id = ${current!.id} AND status = 'pending' AND invite_email_sent_at IS NULL
+           AND (invite_email_attempted_at IS NULL OR invite_email_attempted_at < now() - interval '1 minute')
+         RETURNING id
+      `) : null;
+      return { link: current!, created, alreadySent: sent.rows[0]?.sent === true, claimedDelivery: !!claim?.rows.length };
+    });
+    if (!invitation) return apiError(res, 403, "Not allowed");
+    const { link, created, claimedDelivery, alreadySent } = invitation;
 
-    const [link] = await db
-      .insert(guardianLinks)
-      .values({
-        childId,
-        guardianId: invitee?.id ?? null,
-        inviteEmail: email,
-        inviteFirstName: firstName,
-        inviteLastName: lastName,
-        relationshipType,
-        isPrimary: false,
-        status: "pending",
-        invitedByUserId: me.id,
-      })
-      .returning();
-
-    await logGuardianLinkEvent({
+    if (created) await logGuardianLinkEvent({
       event: "guardian_link_invited",
       childUserId: childId,
       actorEmail: me.email ?? null,
@@ -356,7 +364,7 @@ router.post(
     });
 
     // In-app bell for invitees who already have an account.
-    if (invitee) {
+    if (created && invitee) {
       const childFirst = child.name?.trim().split(/\s+/)[0] || "a child";
       await db.insert(notifications).values({
         userId: invitee.id,
@@ -369,8 +377,10 @@ router.post(
       });
     }
 
-    // Email is best-effort — the invite also surfaces in-app.
-    try {
+    // Pending invitations with failed delivery can be retried without a second
+    // link. A lease prevents concurrent requests from sending duplicate mail.
+    let emailSent: boolean | null = alreadySent ? true : null;
+    if (claimedDelivery) try {
       await sendGuardianLinkInviteEmail(email, {
         inviteId: link.id,
         childName: child.name,
@@ -378,18 +388,24 @@ router.post(
         inviteeName: `${firstName} ${lastName}`,
         relationshipType,
       });
+      await db.execute(sql`UPDATE guardian_links SET invite_email_sent_at = now(), invite_email_attempted_at = NULL WHERE id = ${link.id}`);
+      emailSent = true;
     } catch (err) {
+      await db.execute(sql`UPDATE guardian_links SET invite_email_attempted_at = NULL WHERE id = ${link.id}`);
+      emailSent = false;
       logger.error({ err }, "Failed to send guardian link invite email");
     }
 
-    res.status(201).json(
-      toGuardianLinkResponse(
+    res.status(created ? 201 : 200).json({
+      ...toGuardianLinkResponse(
         link,
         invitee
           ? { id: invitee.id, name: invitee.name, avatarUrl: invitee.avatarUrl }
           : null,
       ),
-    );
+      emailSent,
+      message: "Invite processed.",
+    });
   }),
 );
 

@@ -12,6 +12,7 @@ import { ChildGuardiansSection } from "@/components/guardian-page/ChildGuardians
 import { PendingGuardianInvites } from "@/components/guardian-page/PendingGuardianInvites";
 import { FamilyContactInvitations } from "@/components/guardian-page/FamilyContactInvitations";
 import { useGuardianDashboard } from "@/components/guardian-page/useGuardianDashboard";
+import { FamilySetup } from "@/components/family-setup/FamilySetup";
 import { useWhoami } from "@/hooks/useWhoami";
 import { useFamilyContactInvitations } from "@/hooks/useFamilyContacts";
 import {
@@ -45,6 +46,8 @@ export default function GuardianPage() {
   const nextDest = searchParams.get("next");
   const invitedChildId = searchParams.get("child");
 
+  const wantsSetup = searchParams.get("setup") === "1";
+  const leaveSetup = () => navigate("/family", { replace: true });
   const [tourOpen, setTourOpen] = useState(false);
   const [tourHandled, setTourHandled] = useState(false);
   useEffect(() => {
@@ -148,6 +151,9 @@ export default function GuardianPage() {
         </div>
       </div>
 
+      {wantsSetup && myUserId && (
+        <FamilySetup key={`${myUserId}:family`} userId={myUserId} mode="family" onDone={leaveSetup} onSkipLater={leaveSetup} />
+      )}
        <FamilyContactInvitations />
        {!isGuardian && !followsChild && (
         <Card

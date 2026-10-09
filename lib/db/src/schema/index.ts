@@ -4,6 +4,7 @@ import type { ResultGroup, TournamentStoryContent } from "./competition-results-
 export type { ResultGroup, ResultGame, ResultStanding, TournamentStoryContent } from "./competition-results-types";
 
 export const userRoleEnum = pgEnum("user_role", ["athlete", "coach", "admin", "parent", "fan"]);
+export { familyPlayerSetups } from "./family-player-setups";
 export const rosterRoleEnum = pgEnum("roster_role", ["player", "coach"]);
 export const rosterStatusEnum = pgEnum("roster_status", ["pending", "accepted", "declined"]);
 export const articleStatusEnum = pgEnum("article_status", ["draft", "pending_approval", "published"]);
@@ -1808,6 +1809,8 @@ export const guardianLinks = pgTable(
     inviteEmail: text("invite_email"),
     inviteFirstName: text("invite_first_name"),
     inviteLastName: text("invite_last_name"),
+    inviteEmailSentAt: timestamp("invite_email_sent_at", { withTimezone: true }),
+    inviteEmailAttemptedAt: timestamp("invite_email_attempted_at", { withTimezone: true }),
     relationshipType: guardianRelationshipEnum("relationship_type")
       .notNull()
       .default("parent"),

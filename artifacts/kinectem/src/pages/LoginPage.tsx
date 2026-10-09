@@ -107,7 +107,7 @@ export default function LoginPage() {
       return {
         title: "Create your guardian account",
         subtitle:
-          "Set up your own account first — you'll add your athlete's profile next.",
+          "This account is for you, the adult. Each parent signs up separately and shares one player profile.",
       };
     }
     if (mode === "signup") {
@@ -225,7 +225,7 @@ export default function LoginPage() {
                 setSignupGuardianEmail(email);
                 setMode("signupPending");
               }}
-              skipPathStep={familyInvite || !!claimOrgName}
+              skipPathStep={initialSignup === "parent" || familyInvite || !!claimOrgName}
               claimingOrganizationName={claimOrgName}
               onPathChange={(path) => setSignupPath(path)}
             />

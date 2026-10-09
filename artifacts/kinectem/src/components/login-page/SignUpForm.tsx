@@ -125,6 +125,7 @@ export function SignUpForm({
   const [guardianEmail, setGuardianEmail] = useState("");
   const [guardianConsent, setGuardianConsent] = useState(false);
 
+  const isGuardianInviteReturn = /^\/family-invites\/guardian\//i.test(returnTo ?? "");
   const age = ageInYears(dob);
   const clientUnder13 = age !== null && age < 13;
   // Once the server has classified the visitor, trust that flag — the
@@ -213,7 +214,9 @@ export function SignUpForm({
           ? "/organizations/mine?new=1"
           : isCompetitionOrganizer
             ? "/competitions?newHub=1"
-            : "/");
+            : effectiveRole === "parent"
+              ? "/family?setup=1"
+              : "/");
       if (typeof window !== "undefined") {
         const base = import.meta.env.BASE_URL.replace(/\/$/, "");
         window.location.assign(base + (dest.startsWith("/") ? dest : "/" + dest));
@@ -520,13 +523,19 @@ export function SignUpForm({
           data-testid="note-guardian-account"
         >
           <div className="text-[11px] font-bold uppercase tracking-wider text-violet-700">
-            Guardian account
+            Adult account
           </div>
           <p className="mt-1 text-xs text-violet-900">
-            These details are for{" "}
-            <span className="font-semibold">your own guardian account</span>.
-            You'll add your athlete's profile — no email needed — right after.
+            These details are for <span className="font-semibold">you, the adult</span>, not the player.
+            {isGuardianInviteReturn
+              ? " After sign-up you will review the invitation and share the player profile your family already created. You will not create another player."
+              : " Each adult has their own login and shares one player profile."}
           </p>
+          {!isGuardianInviteReturn && (
+            <ol className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-semibold text-violet-900" data-testid="text-parent-steps">
+              <li>1 Your parent account</li><li aria-hidden>&rarr;</li><li>2 Other parent</li><li aria-hidden>&rarr;</li><li>3 Player profile</li>
+            </ol>
+          )}
         </div>
       )}
       <div className="grid grid-cols-2 gap-3">
