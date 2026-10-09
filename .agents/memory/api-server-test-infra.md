@@ -19,6 +19,7 @@ description: How api-server vitest builds its DB, which tests fail pre-existing,
 - The whole api-server also has pervasive pre-existing TS errors (TS7030 "Not all code paths return a value", `string|string[]` arg mismatches) — a separate "fix backend type errors" concern, not caused by feature edits.
 
 ## vitest / background-run gotchas
+- Use `pnpm --filter <package> exec vitest run <files>` for targeted runs. In this workspace, `pnpm ... test -- <files>` passes a literal `--` to Vitest, which ignores the file filters and runs the whole suite.
 - **vitest 4 removed `--reporter=basic`** — passing it throws a "Failed to load custom Reporter" startup error. Use `default`, `dot`, `tap`, `json`, `junit`, `verbose`.
 - The suite has `fileParallelism: false` (serial) + 39 files, so a full run exceeds the 120s bash limit. Run synchronously per-file or use `--shard=N/3`.
 - **Background `nohup`/`setsid` vitest gets reaped** when the bash tool call's process group ends — output never flushes. Prefer synchronous `timeout 115 ... 2>&1 | grep ...` runs, sharded.

@@ -66,11 +66,11 @@ describe("archive then delete team page", () => {
     expect(screen.getByTestId("button-confirm-delete-archived-team")).toBeDisabled();
   });
 
-  it.each([false, true])("does not offer archive or deletion to a platform-only admin (archived=%s)", (isArchived) => {
+  it.each([false, true])("does not offer removal controls to coaches or ordinary members (archived=%s)", (isArchived) => {
     renderWithProviders(<TeamAdminPanel {...props} canPermanentlyDelete={false} isArchived={isArchived} />);
     expect(screen.queryByTestId("button-archive-team")).not.toBeInTheDocument();
     expect(screen.queryByTestId("button-unarchive-team")).not.toBeInTheDocument();
     expect(screen.queryByTestId("button-delete-archived-team")).not.toBeInTheDocument();
-    expect(screen.getByText(/Only this organization’s admins/)).toBeVisible();
+    expect(screen.getByText(/Only this organization’s owners\/admins or platform admins/)).toBeVisible();
   });
 });

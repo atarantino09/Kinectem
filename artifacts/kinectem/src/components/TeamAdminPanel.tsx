@@ -101,7 +101,7 @@ export function TeamAdminPanel({
       onSuccess: () => {
         setArchiveDialogOpen(false);
         invalidateAfterArchive();
-        toast({ title: "Team archived — not deleted", description: "You can restore it, or an organization admin can choose permanent deletion as a separate step." });
+        toast({ title: "Team archived — not deleted", description: "You can restore it, or an organization owner/admin or platform admin can choose permanent deletion as a separate step." });
       },
       onError: () =>
         toast({ title: "Couldn't archive team", variant: "destructive" }),
@@ -136,7 +136,7 @@ export function TeamAdminPanel({
       invalidateAfterArchive();
       toast({
         title: "Team was not deleted",
-        description: error.message || "Check that the team is archived and that you are its organization admin, then try again.",
+        description: error.message || "Check that the team is archived and that you are its organization owner/admin or a platform admin, then try again.",
         variant: "destructive",
       });
     },
@@ -171,7 +171,7 @@ export function TeamAdminPanel({
                 {isArchived ? "Step 2: Keep archived or permanently delete" : "Step 1: Archive team"}
               </h3>
               <p className="text-xs text-muted-foreground mt-1">
-                Only this organization’s admins (including its owner) can archive or permanently delete this team page.
+                Only this organization’s owners/admins or platform admins can archive, restore, or permanently delete this team page.
                 {" "}{isArchived
                   ? "Archiving kept the data. Restore the page, or choose permanent deletion below. Deleting the page cannot be undone."
                   : `Archive first to hide the page and keep its data${memberCount ? `, including its ${memberCount} rostered ${memberCount === 1 ? "member" : "members"}` : ""}. Permanent deletion is a separate second step, available only after archiving.`}
@@ -212,13 +212,13 @@ export function TeamAdminPanel({
           <AlertDialogHeader>
             <AlertDialogTitle>Step 1: Archive this team?</AlertDialogTitle>
             <AlertDialogDescription>
-              Only this organization’s admins can archive or permanently delete its team pages.
+               Only this organization’s owners/admins or platform admins can archive or permanently delete its team pages.
               Archiving does not delete the page.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <ol className="space-y-3 text-sm">
             <li><strong>1. Archive now.</strong> Hide the team page from members and discovery. Its data stays saved, and you can unarchive it.</li>
-            <li><strong>2. Delete later, only if you choose.</strong> Once archived, an organization admin can separately choose to permanently delete the team page and its related team content. <strong>This cannot be undone.</strong> Archiving never automatically deletes the team.</li>
+            <li><strong>2. Delete later, only if you choose.</strong> Once archived, an organization owner/admin or platform admin can separately choose to permanently delete the team page and its related team content. <strong>This cannot be undone.</strong> Archiving never automatically deletes the team.</li>
           </ol>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={archivePending}>Cancel</AlertDialogCancel>
@@ -236,7 +236,7 @@ export function TeamAdminPanel({
           <AlertDialogHeader>
             <AlertDialogTitle>Step 2: Permanently delete this team page?</AlertDialogTitle>
             <AlertDialogDescription className="[overflow-wrap:anywhere]">
-              Only this organization’s admins can do this. Deleting “{teamName}” permanently
+              Only this organization’s owners/admins or platform admins can do this. Deleting “{teamName}” permanently
               removes its team page and related team content, including recaps, roster memberships,
               and team schedule entries. People’s user accounts and the original competition
               schedules are not deleted. This cannot be undone.

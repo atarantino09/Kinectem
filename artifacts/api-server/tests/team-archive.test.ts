@@ -1,14 +1,16 @@
-// Task #474 — regression coverage for the team archive flow added in
-// Task #472. Pins down owner-only archive/unarchive, the visibility
+// Regression coverage for the team archive flow. Pins down organization
+// owner/admin and effective platform-admin archive/unarchive, the visibility
 // filter on every read surface that lists teams, and the 409
 // `team_archived` block on every write surface that targets a team.
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import {
   adminActivityLog,
   db,
   organizationAdmins,
   teams,
+  users,
+  rosterEntries,
 } from "@workspace/db";
 import { app, loginAs, request } from "./helpers";
 
@@ -73,10 +75,12 @@ describe("team archive flow", () => {
       expect(remaining).toHaveLength(1);
     });
 
-    it("lets an organization admin delete an archived team with members only after explicit confirmation", async () => {
+    it.each(["coach@kinectem.demo", "sam@kinectem.demo"])("lets an authorized admin (%s) delete an archived team with members only after explicit confirmation", async (email) => {
       const org = await getOrg();
       const [target] = await getTeams(org.id);
-      const { agent } = await loginAs((u) => u.email === "coach@kinectem.demo");
+      const { agent, user } = await loginAs(email);
+      if (user.role === "admin") await db.delete(organizationAdmins).where(eq(organizationAdmins.userId, user.id));
+      expect(await db.select().from(rosterEntries).where(eq(rosterEntries.teamId, target.id))).not.toHaveLength(0);
 
       const archived = await agent.post(`/api/v1/teams/${target.id}/archive`);
       expect(archived.status).toBe(200);
@@ -84,6 +88,9 @@ describe("team archive flow", () => {
         {},
         { confirmTeamName: "Wrong name", acknowledgePermanentDeletion: true },
         { confirmTeamName: target.name, acknowledgePermanentDeletion: false },
+        { confirmTeamName: target.name },
+        { acknowledgePermanentDeletion: true },
+        { confirmTeamName: target.name, acknowledgePermanentDeletion: "true" },
       ]) {
         const blocked = await agent.delete(`/api/v1/teams/${target.id}`).send(body);
         expect(blocked.status).toBe(400);
@@ -94,26 +101,106 @@ describe("team archive flow", () => {
       });
       expect(res.status).toBe(204);
       expect(await db.select().from(teams).where(eq(teams.id, target.id))).toHaveLength(0);
+      expect((await agent.get(`/api/v1/organizations/${org.id}/teams/archived`)).body.data.map((t: { id: string }) => t.id)).not.toContain(target.id);
+      expect(await db.select().from(users).where(eq(users.id, user.id))).toHaveLength(1);
     });
 
-    it("rejects a coach, ordinary member, and platform-only admin", async () => {
+    it("rejects a coach, ordinary member, anonymous caller, and non-admin masquerade target", async () => {
       const org = await getOrg();
       const [target] = await getTeams(org.id);
       await archiveTeam(target.id);
-      const { user: platformUser } = await loginAs("sam@kinectem.demo");
-      await db.delete(organizationAdmins).where(eq(organizationAdmins.userId, platformUser.id));
-      for (const email of ["marcus@kinectem.demo", "daniela@kinectem.demo", "sam@kinectem.demo"]) {
+      const coach = await loginAs("coach@kinectem.demo");
+      await db.delete(organizationAdmins).where(eq(organizationAdmins.userId, coach.user.id));
+      const member = await loginAs("marcus@kinectem.demo");
+      await addOrgMember(org.id, member.user.id);
+      for (const email of ["coach@kinectem.demo", "marcus@kinectem.demo", "daniela@kinectem.demo"]) {
         const { agent } = await loginAs(email);
         const res = await agent.delete(`/api/v1/teams/${target.id}`).send({
           confirmTeamName: target.name, acknowledgePermanentDeletion: true,
         });
         expect(res.status).toBe(403);
       }
+      const body = { confirmTeamName: target.name, acknowledgePermanentDeletion: true };
+      expect((await request(app).delete(`/api/v1/teams/${target.id}`).send(body)).status).toBe(401);
+      const platform = await loginAs("sam@kinectem.demo");
+      expect((await platform.agent.post(`/api/v1/admin/masquerade/${member.user.id}/start`)).status).toBe(200);
+      expect((await platform.agent.delete(`/api/v1/teams/${target.id}`).send(body)).status).toBe(403);
       expect(await db.select().from(teams).where(eq(teams.id, target.id))).toHaveLength(1);
+    });
+
+    it.each(["platform", "organization", "moved", "renamed", "restored"])("rechecks %s authority/state after preflight under the deletion lock", async (change) => {
+      const org = await getOrg();
+      const [target] = await getTeams(org.id);
+      await archiveTeam(target.id);
+      const actor = await loginAs(change === "platform" ? "sam@kinectem.demo" : "coach@kinectem.demo");
+      if (change === "platform") await db.delete(organizationAdmins).where(eq(organizationAdmins.userId, actor.user.id));
+      const original = db.transaction.bind(db);
+      const spy = vi.spyOn(db, "transaction").mockImplementationOnce(async (callback, config) => {
+        if (change === "platform") await db.update(users).set({ role: "coach" }).where(eq(users.id, actor.user.id));
+        if (change === "organization") await db.delete(organizationAdmins).where(eq(organizationAdmins.userId, actor.user.id));
+        if (change === "moved") await db.update(teams).set({ organizationId: null }).where(eq(teams.id, target.id));
+        if (change === "renamed") await db.update(teams).set({ name: "Changed current name" }).where(eq(teams.id, target.id));
+        if (change === "restored") await db.update(teams).set({ archivedAt: null }).where(eq(teams.id, target.id));
+        return original(callback, config);
+      });
+      try {
+        const response = await actor.agent.delete(`/api/v1/teams/${target.id}`).send({
+          confirmTeamName: target.name, acknowledgePermanentDeletion: true,
+        });
+        expect(response.status).toBe(change === "renamed" ? 400 : change === "restored" ? 409 : 403);
+        expect(await db.select().from(teams).where(eq(teams.id, target.id))).toHaveLength(1);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it("allows a stored organization owner without platform authority", async () => {
+      const org = await getOrg();
+      const [target] = await getTeams(org.id);
+      const actor = await loginAs("sam@kinectem.demo");
+      await db.update(users).set({ role: "coach" }).where(eq(users.id, actor.user.id));
+      expect((await actor.agent.post(`/api/v1/teams/${target.id}/archive`)).status).toBe(200);
+      expect((await actor.agent.delete(`/api/v1/teams/${target.id}`).send({
+        confirmTeamName: target.name, acknowledgePermanentDeletion: true,
+      })).status).toBe(204);
     });
   });
 
   describe("POST /teams/:teamId/archive permissions", () => {
+    it("lets a platform-only admin archive, restore and view teams without gaining membership", async () => {
+      const org = await getOrg();
+      const [target] = await getTeams(org.id);
+      const actor = await loginAs("sam@kinectem.demo");
+      await db.delete(organizationAdmins).where(eq(organizationAdmins.userId, actor.user.id));
+      await db.delete(rosterEntries).where(eq(rosterEntries.userId, actor.user.id));
+      const body = { confirmTeamName: target.name, acknowledgePermanentDeletion: true };
+      expect((await actor.agent.delete(`/api/v1/teams/${target.id}`).send(body)).status).toBe(409);
+      expect((await actor.agent.post(`/api/v1/teams/${target.id}/archive`)).status).toBe(200);
+      expect((await actor.agent.get(`/api/v1/teams/${target.id}`)).status).toBe(200);
+      expect((await actor.agent.post(`/api/v1/teams/${target.id}/unarchive`)).status).toBe(200);
+      expect(await db.select().from(organizationAdmins).where(eq(organizationAdmins.userId, actor.user.id))).toHaveLength(0);
+      expect(await db.select().from(rosterEntries).where(eq(rosterEntries.userId, actor.user.id))).toHaveLength(0);
+    });
+
+    it("denies archive and restore to a coach-only masquerade target and keeps standalone teams out of this flow", async () => {
+      const org = await getOrg();
+      const [target] = await getTeams(org.id);
+      const coach = await loginAs("coach@kinectem.demo");
+      await db.delete(organizationAdmins).where(eq(organizationAdmins.userId, coach.user.id));
+      for (const action of ["archive", "unarchive"]) {
+        expect((await coach.agent.post(`/api/v1/teams/${target.id}/${action}`)).status).toBe(404);
+      }
+      const platform = await loginAs("sam@kinectem.demo");
+      const [solo] = await db.insert(teams).values({ name: "Standalone safety" }).returning();
+      expect((await platform.agent.post(`/api/v1/teams/${solo.id}/archive`)).status).toBe(404);
+      expect((await platform.agent.delete(`/api/v1/teams/${solo.id}`).send({
+        confirmTeamName: solo.name, acknowledgePermanentDeletion: true,
+      })).status).toBe(403);
+      expect((await platform.agent.post(`/api/v1/admin/masquerade/${coach.user.id}/start`)).status).toBe(200);
+      for (const action of ["archive", "unarchive"]) {
+        expect((await platform.agent.post(`/api/v1/teams/${target.id}/${action}`)).status).toBe(404);
+      }
+    });
     it("lets the org owner archive and unarchive (idempotent)", async () => {
       const org = await getOrg();
       const teamsList = await getTeams(org.id);
@@ -196,7 +283,7 @@ describe("team archive flow", () => {
   // Symmetric permission coverage for the unarchive endpoint. The route
   // shares `loadTeamForArchiveAction` with archive, but a future
   // refactor could split them; pinning down both sides keeps the
-  // owner-only invariant honest end-to-end.
+  // removal-authority invariant honest end-to-end.
   describe("POST /teams/:teamId/unarchive permissions", () => {
     async function setupArchivedTeam(): Promise<string> {
       const org = await getOrg();

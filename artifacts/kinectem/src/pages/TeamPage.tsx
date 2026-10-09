@@ -627,7 +627,7 @@ export default function TeamPage() {
           <TeamAdminPanel
             teamId={teamId}
             teamName={team.name}
-            canPermanentlyDelete={org?.role === "owner" || org?.role === "admin"}
+            canPermanentlyDelete={!!orgRef?.id && isAdmin}
             isArchived={!!team.archivedAt}
             organizationId={orgRef?.id ?? ""}
             memberCount={

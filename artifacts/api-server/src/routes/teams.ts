@@ -418,9 +418,8 @@ router.delete(
       .where(eq(teams.id, teamId))
       .limit(1);
     if (!existing) return notFound(res);
-    const role = await getOrgRole(me.id, existing.organizationId);
-    if (role !== "owner" && role !== "admin") {
-      return apiError(res, 403, "Only this team's organization admins can permanently delete its page.");
+    if (!(await canManageOrganization(me.id, existing.organizationId))) {
+      return apiError(res, 403, "Only this team's organization owners/admins or platform admins can permanently delete its page.");
     }
 
     const result = await db.transaction(async (tx) => {
@@ -431,9 +430,17 @@ router.delete(
         .for("update")
         .limit(1);
       if (!lockedTeam) return { kind: "not_found" as const };
+      // Standalone teams are outside this organization-team removal flow.
+      if (!lockedTeam.organizationId) return { kind: "forbidden" as const };
 
       // Check the canonical organization again under locks: a team can move
       // organizations or an administrator can lose their role after preflight.
+      const [actor] = await tx
+        .select({ role: users.role })
+        .from(users)
+        .where(eq(users.id, me.id))
+        .for("share")
+        .limit(1);
       const [orgAdmin] = lockedTeam.organizationId ? await tx
         .select({ role: organizationAdmins.role })
         .from(organizationAdmins)
@@ -443,7 +450,7 @@ router.delete(
         ))
         .for("share")
         .limit(1) : [];
-      if (orgAdmin?.role !== "owner" && orgAdmin?.role !== "admin") {
+      if (actor?.role !== "admin" && orgAdmin?.role !== "owner" && orgAdmin?.role !== "admin") {
         return { kind: "forbidden" as const };
       }
       if (!lockedTeam.archivedAt) {
@@ -460,7 +467,7 @@ router.delete(
 
     if (result.kind === "not_found") return notFound(res);
     if (result.kind === "forbidden") {
-      return apiError(res, 403, "Only this team's organization admins can permanently delete its page.");
+      return apiError(res, 403, "Only this team's organization owners/admins or platform admins can permanently delete its page.");
     }
     if (result.kind === "not_archived") {
       return apiError(
@@ -1751,7 +1758,7 @@ router.get(
 // ---------------------------------------------------------------------------
 // Task #472 — Archive / unarchive a team.
 //
-// Only stored organization owners/admins can archive or permanently delete
+// Organization owners/admins and effective platform admins can archive or permanently delete
 // these team pages. Deletion requires prior archival and explicit confirmation.
 //
 // Both endpoints are idempotent. Each archive/unarchive transition writes a
@@ -1781,11 +1788,11 @@ async function loadTeamForArchiveAction(
     return null;
   }
   const role = await getOrgRole(me.id, t.organizationId);
-  if (role === "owner" || role === "admin") {
+  if (t.organizationId && (role === "owner" || role === "admin" || await isPlatformAdmin(me.id))) {
     return { team: t, actorId: me.id };
   }
   if (role === "member") {
-    apiError(res, 403, "Only organization admins can archive a team");
+    apiError(res, 403, "Only organization owners/admins or platform admins can archive or restore a team");
     return null;
   }
   // Not a member of the org at all → opaque 404 so we don't leak the
@@ -1826,7 +1833,7 @@ router.post(
           actorUserId: actorId,
       });
     }
-    // Task #628 — solo teams (no org) 403 in loadTeamForArchiveAction, so by
+    // Solo teams (no org) are rejected by loadTeamForArchiveAction, so by
     // here a team always has an org; guard keeps the nullable type honest.
     let org: typeof organizations.$inferSelect | null = null;
     if (updated.organizationId) {
