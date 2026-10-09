@@ -186,7 +186,8 @@ export function PostInteractions({ post }: { post: PostResponse }) {
 
   return (
     <div className="space-y-4 pt-2">
-      <div className="flex items-center gap-2 border-y border-border py-3">
+      <div className="border-y border-border py-3">
+        <div className="flex flex-wrap items-center gap-2" data-testid="post-detail-actions">
         <Button
           variant={post.hasReacted ? "default" : "outline"}
           size="sm"
@@ -230,13 +231,14 @@ export function PostInteractions({ post }: { post: PostResponse }) {
             {post.shareCount ?? 0}
           </Button>
         )}
-        {post.recentReactorName && (
-          <span className="text-xs text-muted-foreground ml-2">
+        </div>
+        {post.recentReactorName?.trim() && post.reactionCount > 0 && (
+          <p className="mt-2 min-w-0 text-xs text-muted-foreground [overflow-wrap:anywhere]" data-testid="post-detail-liker-summary">
             {post.recentReactorName}
             {post.reactionCount > 1
               ? ` and ${post.reactionCount - 1} others reacted`
               : " reacted"}
-          </span>
+          </p>
         )}
       </div>
 

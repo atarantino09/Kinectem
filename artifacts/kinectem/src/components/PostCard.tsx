@@ -1036,7 +1036,8 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
           />
         )}
 
-        <div className="px-5 py-3 border-t border-border/60 flex flex-wrap items-center gap-2">
+        <div className="px-5 py-3 border-t border-border/60">
+          <div className="flex flex-wrap items-center gap-2" data-testid={`post-actions-${post.id}`}>
           <Button
             variant={post.hasReacted ? "default" : "outline"}
             size="sm"
@@ -1122,11 +1123,12 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
               <span className="hidden sm:inline">Share as image</span>
             </Button>
           )}
-          {post.recentReactorName && post.reactionCount > 0 && (
-            <span className="text-xs text-muted-foreground ml-1 truncate">
+          </div>
+          {post.recentReactorName?.trim() && post.reactionCount > 0 && (
+            <p className="mt-2 min-w-0 text-xs text-muted-foreground [overflow-wrap:anywhere]" data-testid={`post-liker-summary-${post.id}`}>
               {post.recentReactorName}
               {post.reactionCount > 1 ? ` +${post.reactionCount - 1}` : ""}
-            </span>
+            </p>
           )}
         </div>
         {isNews && (
