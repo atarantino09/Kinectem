@@ -74,7 +74,7 @@ function Body({ teamId, competitions, onConfirm, onCancel }: Omit<Props, "open">
       <DialogHeader>
         <DialogTitle>Link this recap to a competition?</DialogTitle>
         <DialogDescription>
-          Your team has a competition during this game date. If this was a
+          Competition recaps open at 12:01 a.m. the day before the competition starts. If this was a
           competition game, choose the competition below.{" "}
           Linking adds competition branding and makes this recap available to the
           competition admin, who may choose to feature it. It is not automatically

@@ -21,6 +21,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { competitionRecapsOpen as recapsOpen, nextLocalRecapBoundary } from "@/lib/competitionRecapAvailability";
 import { CompetitionScheduleRemovalDialog, type AssignmentSnapshot, type ScheduleRemovalTarget } from "./CompetitionScheduleRemovalDialog";
 import {
   Trophy,
@@ -118,12 +119,10 @@ function todayKey(): string {
   return `${y}-${m}-${d}`;
 }
 
-// All games unlock together one calendar day before the competition starts.
+// All games unlock together at 12:01 AM the day before the competition starts.
 // Use the viewer-local calendar, never the imported game date/kickoff time.
 function competitionRecapsOpen(g: TournamentGroup, now: number): boolean {
-  if (!g.startDate) return false;
-  const [year, month, day] = g.startDate.split("-").map(Number);
-  return now >= new Date(year, month - 1, day - 1).getTime();
+  return recapsOpen(g.startDate, now);
 }
 
 function isRecappable(m: TournamentMatch, g: TournamentGroup, now: number): boolean {
@@ -139,15 +138,12 @@ function useRecapClock(teamId: string): number {
       clearTimeout(timer);
       const current = Date.now();
       setNow(current);
-      const local = new Date(current);
-      const next = new Date(
-        local.getFullYear(), local.getMonth(), local.getDate() + 1,
-      );
+      const next = nextLocalRecapBoundary(current);
       // Standalone-team permissions use UTC days; refresh those too even when
       // the viewer's local midnight occurs at a different instant.
       const nextUtc = new Date(current);
       nextUtc.setUTCHours(24, 0, 0, 0);
-      timer = setTimeout(() => refresh(), Math.min(next.getTime(), nextUtc.getTime()) - current);
+      timer = setTimeout(() => refresh(), Math.min(next, nextUtc.getTime()) - current);
       if (refreshPermissions) {
         void qc.invalidateQueries({ queryKey: getGetTeamByIdQueryKey(teamId) });
       }

@@ -119,8 +119,8 @@ describe("TournamentScheduleCard", () => {
   it.each([
     ["two days before", new Date(2026, 5, 10, 12), false],
     ["just before the prior day", new Date(2026, 5, 10, 23, 59, 59, 999), false],
-    ["midnight the prior day", new Date(2026, 5, 11, 0, 0), true],
-    ["12:00:59 the prior day", new Date(2026, 5, 11, 0, 0, 59, 999), true],
+    ["midnight the prior day", new Date(2026, 5, 11, 0, 0), false],
+    ["12:00:59 the prior day", new Date(2026, 5, 11, 0, 0, 59, 999), false],
     ["12:01 the prior day", new Date(2026, 5, 11, 0, 1), true],
     ["later before kickoff", new Date(2026, 5, 12, 8), true],
     ["past competition", new Date(2026, 5, 20), true],
@@ -138,7 +138,7 @@ describe("TournamentScheduleCard", () => {
     ["unknown opponent", { opponentName: null }, false],
     ["empty opponent", { opponentName: "" }, false],
   ])("retains game requirements but ignores kickoff for a %s", async (_label, match, available) => {
-    await renderClockCard(new Date(2026, 5, 11), match);
+    await renderClockCard(new Date(2026, 5, 11, 0, 1), match);
     expect(!!screen.queryByTestId("btn-write-recap-match-1")).toBe(available);
     expect(screen.getByTestId("button-competition-recap-competition-1")).toBeVisible();
   });
@@ -158,7 +158,7 @@ describe("TournamentScheduleCard", () => {
   });
 
   it("preserves every prefilled composer parameter for a future game", async () => {
-    await renderClockCard(new Date(2026, 5, 11), { matchDate: "2026-06-14", opponentName: "Rovers & United" });
+    await renderClockCard(new Date(2026, 5, 11, 0, 1), { matchDate: "2026-06-14", opponentName: "Rovers & United" });
     const link = screen.getByTestId("btn-write-recap-match-1").closest("a")!;
     const url = new URL(link.getAttribute("href")!, "https://example.test");
     expect(url.pathname).toBe("/posts/new");
@@ -169,10 +169,13 @@ describe("TournamentScheduleCard", () => {
     });
   });
 
-  it("unlocks an open page exactly at midnight without new schedule data", async () => {
+  it("unlocks an open page exactly at 12:01 AM without new schedule data", async () => {
     await renderClockCard(new Date(2026, 5, 10, 23, 59, 59, 999));
     customFetchMock.mockClear();
     await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(screen.queryByTestId("btn-write-recap-match-1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("button-competition-recap-competition-1")).not.toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
     expect(screen.getByTestId("btn-write-recap-match-1")).toBeVisible();
     expect(screen.getByTestId("button-competition-recap-competition-1")).toBeVisible();
     expect(customFetchMock).not.toHaveBeenCalled();
@@ -202,7 +205,7 @@ describe("TournamentScheduleCard", () => {
   });
 
   it("handles a prior-day boundary in the previous year", async () => {
-    await renderClockCard(new Date(2025, 11, 31), {}, true, false, "2026-01-01");
+    await renderClockCard(new Date(2025, 11, 31, 0, 1), {}, true, false, "2026-01-01");
     expect(screen.getByTestId("btn-write-recap-match-1")).toBeVisible();
   });
 

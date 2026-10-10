@@ -29,13 +29,14 @@ competitions should keep access open while any one of them is active.
 - A team can be in several competitions; "free" if ANY window is currently open.
   The UI countdown targets the latest currently-active window's end.
 
-Team-page competition recap actions unlock together at viewer-local midnight
+Team-page competition recap actions unlock together at viewer-local 12:01 AM
 one calendar day before the competition starts; they do not wait for each
 game's date or imported kickoff time. Per-game links still require a date and
 known opponent, and existing published recaps replace authoring links.
 
 **Why:** The user requested all competition recaps be available starting one day
-prior to competition start, replacing the earlier per-game 12:01 AM proposal.
+prior to competition start, then explicitly clarified that competition buttons
+and the regular recap prompt must agree at 12:01 AM on that prior day.
 The task's viewer-local UI convention and the existing UTC permission convention
 remain distinct; neither should silently change the other's timezone.
 
