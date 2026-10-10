@@ -2,23 +2,6 @@ import { readOrgBrandColors, orgInviteHeaderStyle, type OrgBrandColors } from "@
 
 const HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 
-/** Keep the stronger treatment exclusive to regular and combined game recaps. */
-export function isGameRecapForOrgBranding(post: unknown): boolean {
-  const p = post as {
-    id?: string;
-    postType?: string;
-    gameDate?: string | null;
-    recapKind?: string | null;
-    articleKind?: string | null;
-  } | null;
-  return Boolean(
-    p?.id?.startsWith("article-") &&
-    p.postType === "long" &&
-    p.articleKind !== "practice_plan" &&
-    (p.gameDate || p.recapKind === "combined"),
-  );
-}
-
 export function validHex(value: unknown): string | null {
   return typeof value === "string" && HEX.test(value.trim()) ? value.trim() : null;
 }

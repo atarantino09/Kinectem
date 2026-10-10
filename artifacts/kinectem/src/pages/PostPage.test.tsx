@@ -102,13 +102,13 @@ describe("PostPage delete permissions", () => {
       },
     });
     renderWithProviders(<PostPage />);
-    // This suite's Link stub renders only children; the banner link itself is
-    // checked with the real Link in RecapOrgBanner.test.tsx.
     expect(await screen.findByTestId(`img-recap-org-logo-${POST_ID}`)).toHaveAttribute("src", "/club-logo.png");
-    expect(screen.getByTestId(`text-recap-org-name-${POST_ID}`)).toHaveTextContent("LEGACY CLUB");
+    expect(screen.getByTestId(`text-post-parent-org-${POST_ID}`)).toHaveTextContent("LEGACY CLUB");
+    expect(screen.getByTestId(`post-header-${POST_ID}`).style.borderBottomColor).toBe("rgb(18, 52, 86)");
+    expect(screen.queryByTestId(`banner-recap-org-${POST_ID}`)).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Match recap" })).toBeVisible();
   });
-  it("does not apply new recap branding to private practice plans", async () => {
+  it("keeps branding consistent for an authorized team-context plan without changing its content", async () => {
     customFetchMock.mockResolvedValue({
       ...(postFixture({ canEdit: false, canDelete: false }) as object),
       postType: "long",
@@ -122,7 +122,7 @@ describe("PostPage delete permissions", () => {
     });
     renderWithProviders(<PostPage />);
     await screen.findByRole("heading", { name: "Match recap" });
-    expect(screen.queryByTestId(`img-recap-org-logo-${POST_ID}`)).not.toBeInTheDocument();
+    expect(screen.getByTestId(`img-recap-org-logo-${POST_ID}`)).toHaveAttribute("src", "/club-logo.png");
   });
   it("does not imply a team album on a direct school historical recap", async () => {
     customFetchMock.mockResolvedValue({

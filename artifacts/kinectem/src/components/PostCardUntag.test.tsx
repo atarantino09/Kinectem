@@ -127,10 +127,47 @@ it.each(["regular", "combined"])("features the owning organization on %s recap c
     },
   };
   renderWithClient(<PostCard post={post} />);
-  expect(screen.getByTestId("banner-recap-org-article-abc")).toHaveAttribute("href", "/organizations/org-1");
+  expect(screen.getByTestId("post-header-article-abc").style.borderBottomColor).toBe("rgb(18, 52, 86)");
+  expect(screen.getByTestId("text-post-parent-org-article-abc").closest("a")).toHaveAttribute("href", "/organizations/org-1");
+  expect(screen.queryByTestId("banner-recap-org-article-abc")).not.toBeInTheDocument();
   expect(screen.getByTestId("img-recap-org-logo-article-abc")).toHaveAttribute("src", "/club-logo.png");
   expect(screen.getByTestId("banner-post-competition-article-abc")).toHaveAttribute("href", "/competitions/c/cup");
-  expect(screen.getByText("Varsity Football")).toBeVisible();
+  expect(screen.getByTestId("text-post-context-name-article-abc")).toHaveTextContent("Varsity Football");
+});
+
+it.each(["highlight", "news", "update", "history"])("uses one branded original header for %s posts", (kind) => {
+  const directOrg = kind === "update" || kind === "history";
+  const id = `${kind === "highlight" ? "highlight" : kind === "news" ? "news" : "orgpost"}-branding`;
+  const post = {
+    ...basePost({
+      id,
+      postType: kind === "highlight" ? "short" : "long",
+      context: {
+        type: directOrg ? "organization" : "team",
+        id: directOrg ? "org-1" : "team-1",
+        name: directOrg ? "Legacy Club" : "Varsity Football",
+        orgId: directOrg ? null : "org-1",
+        orgName: directOrg ? null : "Legacy Club",
+        avatarUrl: directOrg ? "/club-logo.png" : "/team-logo.png",
+        orgAvatarUrl: directOrg ? null : "/club-logo.png",
+        orgBrandPrimaryColor: "#123456", orgBrandSecondaryColor: "#abcdef",
+      } as PostResponse["context"],
+    }),
+    ...(kind === "news" ? { newsLink: { url: "https://example.com/story", sourceName: "Paper" } } : {}),
+    ...(kind === "history" ? {
+      recapKind: "historical",
+      historical: { year: 1974, gameDate: null, reviewed: true, rightsConfirmed: true },
+    } : {}),
+  };
+  renderWithClient(<PostCard post={post} />);
+  expect(screen.getByTestId(`post-header-${id}`).style.borderBottomColor).toBe("rgb(18, 52, 86)");
+  expect(screen.getAllByTestId(`img-recap-org-logo-${id}`)).toHaveLength(1);
+  expect(screen.queryByTestId(`banner-recap-org-${id}`)).not.toBeInTheDocument();
+  expect(screen.queryByTestId(`strip-post-org-brand-${id}`)).not.toBeInTheDocument();
+  if (!directOrg) {
+    expect(screen.getByTestId(`text-post-context-name-${id}`)).toHaveStyle({ fontSize: "16px" });
+    expect(screen.getByTestId(`text-post-parent-org-${id}`)).toHaveStyle({ fontSize: "12px" });
+  }
 });
 
 const userPostsPredicate = (q: { queryKey: unknown }) =>
@@ -558,8 +595,8 @@ describe("PostCard compact mobile header", () => {
         "PARSIPPANY SOCCER CLUB AND COMMUNITY ATHLETIC ORGANIZATION",
       );
       expect(
-        screen.getByText("2014 Boys Premier National Championship Soccer Team"),
-      ).toBeInTheDocument();
+        screen.getByTestId(`text-post-context-name-${post.id}`),
+      ).toHaveTextContent("2014 Boys Premier National Championship Soccer Team");
       expect(
         screen.getByTestId(`link-post-author-${post.id}`),
       ).toHaveTextContent("Coach Carter");

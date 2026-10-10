@@ -22,9 +22,9 @@ import {
   type FeedPost,
 } from "@workspace/api-client-react";
 import { timeAgo, formatDate, formatDateUTC, formatOrgName } from "@/lib/format";
-import { readOrgBrandColors, orgStripGradient } from "@/lib/orgBrand";
-import { RecapOrgBanner } from "@/components/RecapOrgBanner";
-import { isGameRecapForOrgBranding, readRecapOrgIdentity } from "@/lib/recapOrgBrand";
+import { OrgPostLogo } from "@/components/OrgPostLogo";
+import { FitText } from "@/components/FitText";
+import { readRecapOrgIdentity } from "@/lib/recapOrgBrand";
 import { linkify } from "@/lib/linkify";
 import {
   renderBodyWithMentions,
@@ -438,28 +438,9 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
 
   const sharedBy = "sharedBy" in post ? post.sharedBy : null;
 
-  // Org brand strip for game recap cards — same thin full-strength strip
-  // as team pages. The colors ride on the post context as extra fields
-  // beyond the locked spec (`orgBrandPrimaryColor` / `orgBrandSecondaryColor`,
-  // recapKind precedent). Only article-backed recap posts get the strip;
-  // solo teams / unbranded orgs have no colors and render nothing.
-  const isRecapArticle = isGameRecapForOrgBranding(post);
-  // News cards get the same strip — their team context carries the same
-  // org brand color fields.
-  const recapOrgBrand = isRecapArticle || isNews
-    ? readOrgBrandColors({
-        brandPrimaryColor: (
-          post.context as { orgBrandPrimaryColor?: string | null }
-        ).orgBrandPrimaryColor,
-        brandSecondaryColor: (
-          post.context as { orgBrandSecondaryColor?: string | null }
-        ).orgBrandSecondaryColor,
-      })
-    : null;
-
-  const recapOrgIdentity = isRecapArticle && !isHistorical
-    ? readRecapOrgIdentity(post.context)
-    : null;
+  // Every org-associated post uses the same original identity header.
+  // Context determines the owning org; post type does not change branding.
+  const postOrgIdentity = readRecapOrgIdentity(post.context);
 
   if (historicalDeleted) return null;
 
@@ -478,15 +459,6 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
       )}
     >
       <CardContent className="p-0">
-        {recapOrgIdentity ? (
-          <RecapOrgBanner org={recapOrgIdentity} postId={post.id} />
-        ) : recapOrgBrand && (
-          <div
-            className="h-1.5"
-            style={{ background: orgStripGradient(recapOrgBrand) }}
-            data-testid={`strip-post-org-brand-${post.id}`}
-          />
-        )}
         {sharedBy && (
           <Link
             href={`/users/${sharedBy.id}`}
@@ -526,7 +498,14 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
           </Link>
         )}
         <div
-          className="relative px-5 py-4 flex items-center justify-between border-b border-border/60"
+          className={cn(
+            "relative px-5 flex items-center justify-between border-b border-border/60",
+            postOrgIdentity ? "py-3 [&_.text-muted-foreground]:text-inherit" : "py-4",
+          )}
+          style={postOrgIdentity ? {
+            ...postOrgIdentity.style,
+            borderBottom: `4px solid ${postOrgIdentity.accent}`,
+          } : undefined}
           data-testid={`post-header-${post.id}`}
         >
           <div
@@ -560,7 +539,9 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
                   dialogTestId={`dialog-post-avatar-lightbox-${post.id}`}
                   imageTestId={`img-post-avatar-lightbox-${post.id}`}
                 >
-                  {isOrgAvatar ? (
+                  {postOrgIdentity ? (
+                    <OrgPostLogo org={postOrgIdentity} postId={post.id} />
+                  ) : isOrgAvatar ? (
                     <OrgLogo
                       logoUrl={displayedAvatarUrl}
                       name={post.context.name ?? "Organization"}
@@ -586,23 +567,37 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
             <div className="min-w-0 flex-1">
               {post.context.type === "team" && post.context.orgName && post.context.orgId && (
                 <Link href={`/organizations/${post.context.orgId}`}>
-                  <p
-                    className="text-xs text-muted-foreground truncate hover:underline"
+                  <FitText
+                    as="p"
+                    max={12}
+                    min={11}
+                    lineHeight={1.2}
+                    className={cn("font-normal hover:underline", !postOrgIdentity && "text-muted-foreground")}
                     data-testid={`text-post-parent-org-${post.id}`}
                   >
                     {formatOrgName(post.context.orgName)}
-                  </p>
+                  </FitText>
                 </Link>
               )}
               <Link href={getContextHref(post.context)}>
-                <p className="font-bold text-sm truncate hover:underline">
-                  {post.context.name ?? post.context.type}
-                </p>
+                <FitText
+                  as="p"
+                  max={postOrgIdentity ? 16 : 14}
+                  min={postOrgIdentity ? 13 : 12}
+                  lineHeight={1.25}
+                  className="font-bold hover:underline"
+                  data-testid={`text-post-context-name-${post.id}`}
+                >
+                  {post.context.type === "organization" ? formatOrgName(post.context.name ?? post.context.type) : post.context.name ?? post.context.type}
+                </FitText>
               </Link>
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mt-0.5 truncate">
+              <p className={cn(
+                "mt-0.5 truncate",
+                postOrgIdentity ? "text-[9px] font-medium" : "text-[10px] font-bold text-muted-foreground uppercase tracking-wider",
+              )}>
                 <Link
                   href={`/users/${post.author.id}`}
-                  className="hover:underline hover:text-primary"
+                  className={cn("hover:underline", !postOrgIdentity && "hover:text-primary")}
                   data-testid={`link-post-author-${post.id}`}
                 >
                   {post.author.displayName}

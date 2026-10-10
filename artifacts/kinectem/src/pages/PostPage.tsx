@@ -26,7 +26,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserAvatar, TeamAvatar } from "@/components/UserAvatar";
-import { readOrgBrandColors, orgStripGradient } from "@/lib/orgBrand";
 import {
   Play,
   FileText,
@@ -72,8 +71,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { TakedownDialog } from "@/components/TakedownDialog";
 import { ShareRecapImageDialog } from "@/components/share-image/ShareRecapImageDialog";
-import { RecapOrgBanner } from "@/components/RecapOrgBanner";
-import { isGameRecapForOrgBranding, readRecapOrgIdentity } from "@/lib/recapOrgBrand";
+import { OrgPostLogo } from "@/components/OrgPostLogo";
+import { readRecapOrgIdentity } from "@/lib/recapOrgBrand";
 import { FitText } from "@/components/FitText";
 import { apiErrorMessage } from "@/lib/api-errors";
 import { ClippingViewer } from "@/components/historical/ClippingViewer";
@@ -366,24 +365,7 @@ export default function PostPage() {
       } | null;
     }
   ).competition;
-  // Team branding on the published recap page — the org brand colors ride
-  // on the post context as extra fields beyond the locked spec (same block
-  // PostCard reads for the feed-card strip). Recap detail pages for team
-  // posts get the thin full-strength brand strip plus the team logo in the
-  // context pill; solo teams / unbranded orgs render nothing extra.
-  const recapOrgBrand =
-    !isShort && post.context.type === "team"
-      ? readOrgBrandColors({
-          brandPrimaryColor: (
-            post.context as { orgBrandPrimaryColor?: string | null }
-          ).orgBrandPrimaryColor,
-          brandSecondaryColor: (
-            post.context as { orgBrandSecondaryColor?: string | null }
-          ).orgBrandSecondaryColor,
-        })
-      : null;
-  const recapOrgIdentity =
-    isGameRecapForOrgBranding(post) && !isHistorical ? readRecapOrgIdentity(post.context) : null;
+  const postOrgIdentity = readRecapOrgIdentity(post.context);
   const contextAvatarUrl =
     post.context.type === "team"
       ? ((post.context as { avatarUrl?: string | null }).avatarUrl ??
@@ -573,15 +555,6 @@ export default function PostPage() {
           </div>
         </div>
       )}
-      {recapOrgIdentity ? (
-        <RecapOrgBanner org={recapOrgIdentity} postId={post.id} size="page" />
-      ) : recapOrgBrand && (
-        <div
-          className="h-1.5 rounded-full"
-          style={{ background: orgStripGradient(recapOrgBrand) }}
-          data-testid={`strip-post-org-brand-${post.id}`}
-        />
-      )}
       <div className="flex flex-wrap items-center gap-2">
         {(post as { hidden?: boolean }).hidden && (
           <span
@@ -596,7 +569,7 @@ export default function PostPage() {
           <Icon className="w-3 h-3 mr-1 inline" />
           {label}
         </Badge>
-        {post.context.type === "team" &&
+        {!postOrgIdentity && post.context.type === "team" &&
           post.context.orgId &&
           post.context.orgName && (
             <Link href={`/organizations/${post.context.orgId}`}>
@@ -617,7 +590,7 @@ export default function PostPage() {
               </Badge>
             </Link>
           )}
-        {post.context.name && (
+        {!postOrgIdentity && post.context.name && (
           <Link
             href={
               post.context.type === "team"
@@ -774,7 +747,25 @@ export default function PostPage() {
         />
       )}
 
-      <div className="flex items-center gap-3">
+      <div
+        className={postOrgIdentity ? "flex items-center gap-3 rounded-xl px-4 py-3" : "flex items-center gap-3"}
+        style={postOrgIdentity ? {
+          ...postOrgIdentity.style,
+          borderBottom: `4px solid ${postOrgIdentity.accent}`,
+        } : undefined}
+        data-testid={`post-header-${post.id}`}
+      >
+        {postOrgIdentity ? (
+          <AvatarLightbox
+            avatarUrl={postOrgIdentity.logoUrl}
+            displayName={postOrgIdentity.orgName}
+            triggerTestId={`btn-open-post-avatar-lightbox-${post.id}`}
+            dialogTestId={`dialog-post-avatar-lightbox-${post.id}`}
+            imageTestId={`img-post-avatar-lightbox-${post.id}`}
+          >
+            <OrgPostLogo org={postOrgIdentity} postId={post.id} />
+          </AvatarLightbox>
+        ) : (
         <AvatarLightbox
           avatarUrl={post.author.avatarUrl}
           displayName={post.author.displayName}
@@ -790,16 +781,48 @@ export default function PostPage() {
             fallbackClassName="bg-slate-900 text-primary-foreground"
           />
         </AvatarLightbox>
+        )}
         <div className="flex-1 min-w-0">
-          <Link href={`/users/${post.author.id}`}>
+          {postOrgIdentity && (
+            <>
+              {post.context.type === "team" && (
+                <Link href={`/organizations/${postOrgIdentity.orgId}`} data-testid="link-post-context-organization">
+                  <FitText as="p" max={12} min={11} lineHeight={1.2} className="font-normal hover:underline" data-testid={`text-post-parent-org-${post.id}`}>
+                    {formatOrgName(postOrgIdentity.orgName)}
+                  </FitText>
+                </Link>
+              )}
+              <Link
+                href={post.context.type === "team" ? `/teams/${post.context.id}` : `/organizations/${postOrgIdentity.orgId}`}
+                data-testid={`link-post-context-${post.context.type}`}
+              >
+                <FitText as="p" max={18} min={13} lineHeight={1.25} className="font-bold hover:underline" data-testid={`text-post-context-name-${post.id}`}>
+                  {post.context.type === "team" ? post.context.name ?? "Team" : formatOrgName(postOrgIdentity.orgName)}
+                </FitText>
+              </Link>
+            </>
+          )}
+          <div className={postOrgIdentity ? "flex flex-wrap items-center gap-x-1.5 mt-0.5" : undefined}>
+          {postOrgIdentity && (
+            <AvatarLightbox
+              avatarUrl={post.author.avatarUrl}
+              displayName={post.author.displayName}
+              triggerTestId={`btn-open-post-author-avatar-lightbox-${post.id}`}
+              dialogTestId={`dialog-post-author-avatar-lightbox-${post.id}`}
+              imageTestId={`img-post-author-avatar-lightbox-${post.id}`}
+            >
+              <UserAvatar avatarUrl={post.author.avatarUrl} displayName={post.author.displayName} size="xs" className="h-4 w-4" fallbackClassName="bg-slate-900 text-white" />
+            </AvatarLightbox>
+          )}
+          <Link href={`/users/${post.author.id}`} className={postOrgIdentity ? "min-w-0" : undefined}>
             <p
-              className="font-bold text-sm hover:text-primary cursor-pointer"
+              className={postOrgIdentity ? "truncate text-[9px] font-medium hover:underline cursor-pointer" : "font-bold text-sm hover:text-primary cursor-pointer"}
               data-testid={`text-post-author-name-${post.id}`}
             >
               {post.author.displayName}
               {post.author.authorRole && (
                 <span
-                  className="ml-1 text-xs text-muted-foreground font-medium"
+                  className={postOrgIdentity ? "ml-1 text-[9px] font-medium" : "ml-1 text-xs text-muted-foreground font-medium"}
                   data-testid={`text-post-author-role-${post.id}`}
                 >
                   · {post.author.authorRole}
@@ -807,14 +830,16 @@ export default function PostPage() {
               )}
             </p>
           </Link>
-          <p className="text-xs text-muted-foreground font-medium">
+          <p className={postOrgIdentity ? "text-[9px] font-medium" : "text-xs text-muted-foreground font-medium"}>
+            {postOrgIdentity && "· "}
             {isShort ? timeAgo(post.createdAt) : formatDate(post.createdAt)}
             {post.isEdited && " • edited"}
           </p>
+          </div>
         </div>
         {isHistorical && post.canEdit ? (
           <Link href={historicalEditHref(post)}>
-            <Button variant="outline" size="sm" data-testid="button-edit-post">
+            <Button variant="outline" size="sm" className="text-foreground" data-testid="button-edit-post">
               <Pencil className="w-3.5 h-3.5 mr-1.5" /> Edit
             </Button>
           </Link>
@@ -827,7 +852,7 @@ export default function PostPage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="font-bold rounded-full"
+                className="font-bold rounded-full text-foreground"
                 onClick={() => {
                   setEditing(false);
                   setEditTitle(post.title ?? "");
@@ -854,7 +879,7 @@ export default function PostPage() {
             <Button
               variant="outline"
               size="sm"
-              className="font-bold rounded-full"
+              className="font-bold rounded-full text-foreground"
               onClick={() => setEditing(true)}
               data-testid="button-edit-post-inline"
             >
@@ -869,7 +894,7 @@ export default function PostPage() {
             // get `canEdit` but never `canDelete`) fall through to the
             // plain Edit button below.
             <div
-              className="inline-flex rounded-full border border-input overflow-hidden"
+              className="inline-flex rounded-full border border-input overflow-hidden bg-background text-foreground"
               data-testid="post-author-actions"
             >
               <Link

@@ -111,3 +111,4 @@
 - [Notification bell acknowledgement](notification-bell-acknowledgement.md) — opening clears unread counts; retain history and pending actions, with guardian-specific child reads.
 - [Regular recap competition choice](regular-recap-competition-prompt.md) — prompt for active competitions from regular recap entry; overlapping events need a choice, explicit opt-outs stay unlinked.
 - [Competition recap curation](competition-recap-curation.md) — review is not publication approval; personal email opt-outs must neither erase outstanding reviews nor replay old backlog.
+- [Org post header intent](org-post-header-intent.md) — one branded original header across post types; team name stays larger than org name and author metadata.
