@@ -266,7 +266,7 @@ describe("TournamentScheduleCard", () => {
     expect(screen.getByTestId("btn-hide-game-match-1")).toBeVisible();
   });
 
-  it("shows the inherited overall bracket with the imported subgroup kept separate", async () => {
+  it("shows only the inherited overall bracket, without the imported subgroup", async () => {
     customFetchMock.mockResolvedValue({ data: [{
       ...competitions[0],
       matches: [{ ...competitions[0].matches[0],
@@ -275,7 +275,9 @@ describe("TournamentScheduleCard", () => {
     const user = userEvent.setup();
     await renderCard(false, true);
     await user.click(screen.getByTestId("toggle-tournament-competition-1"));
-    expect(screen.getByTestId("tournament-match-match-1")).toHaveTextContent("2016 U10 Boys Gold · Bracket A");
+    const game = screen.getByTestId("tournament-match-match-1");
+    expect(game).toHaveTextContent("2016 U10 Boys Gold");
+    expect(game).not.toHaveTextContent("Bracket A");
   });
 
   it("keeps TBD opponents and dates without falling back to division when there is no bracket", async () => {

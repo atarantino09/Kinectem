@@ -27,7 +27,7 @@ Claimed competition teams must show their organizer-assigned overall bracket on 
 
 **Why:** The user requires claimed-team recaps to arrive already sorted for the competition organizer, without coaches re-entering the bracket.
 
-**How to apply:** Prefer the existing participant-to-bracket identity so organizer renames carry through. Keep subgroup A/B separate. Preserve deliberate bracket overrides and ordinary autosaves. Resolve ambiguous slots through the selected game rather than guessing, and never recreate deleted brackets as a side effect of inheritance.
+**How to apply:** Prefer the existing participant-to-bracket identity so organizer renames carry through. Show only the overall bracket on team-page schedule cards (for example, “U12 Girls Black”); omit subgroup A/B from that display but preserve imported subgroup data. Preserve deliberate bracket overrides and ordinary autosaves. Resolve ambiguous slots through the selected game rather than guessing, and never recreate deleted brackets as a side effect of inheritance.
 
 The bracket dropdown must list every overall group, including groups with zero featured recaps, and show each group's total admin-featured recap count.
 
