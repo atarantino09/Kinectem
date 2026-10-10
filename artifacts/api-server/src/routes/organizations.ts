@@ -1,4 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
+import { sweepCompetitionRecapMail } from "../lib/competition-recap-scheduler";
 import {
   db,
   users,
@@ -3389,6 +3390,7 @@ async function transitionApproval(
     .set({
       status: next,
       publishedAt: next === "published" ? new Date() : null,
+      publishedById: next === "published" ? me.id : null,
     })
     .where(a.recapKind === "historical"
       ? and(eq(articles.id, a.id), eq(articles.status, "pending_approval"),
@@ -3406,6 +3408,7 @@ async function transitionApproval(
   // ON CONFLICT DO NOTHING on (article_id, user_id)) so it's safe to run
   // here even if the publish path already ran it. (task #242)
   if (next === "published") {
+    void sweepCompetitionRecapMail();
     const taggerUserId = a.authorId ?? me.id;
     // Task #739 — @-mention tags were upserted at create/publish time,
     // but the "you were tagged" notify was deferred while the recap sat

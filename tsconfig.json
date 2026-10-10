@@ -3,6 +3,7 @@
   "compileOnSave": false,
   "files": [],
   "references": [
+    { "path": "./lib/competition-recap-alerts" },
     {
       "path": "./lib/db"
     },

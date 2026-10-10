@@ -12,6 +12,7 @@
 
 import { Router, type IRouter } from "express";
 import { publicCompetitionArticleConditions } from "../lib/competition-recap-coverage";
+import { eligibleRecapConditions, pendingRecapCount } from "@workspace/competition-recap-alerts";
 import {
   db,
   tournaments,
@@ -1367,6 +1368,7 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
       // read the same payload during the rename transition.
       tournament: competitionMeta,
       competition: competitionMeta,
+      ...(canManage ? { pendingRecapCount: await pendingRecapCount(tournament.id) } : {}),
       // Task #852 — organizer-ordered brackets driving the recap filter.
       brackets: bracketRows.map((b) => ({
         id: b.id,
@@ -3762,6 +3764,14 @@ router.get(
       });
     }
 
+    const reviewView = z.enum(["pending", "reviewed", "featured", "all"]).safeParse(req.query.review ?? "all");
+    const pageInput = z.coerce.number().int().min(0).max(100000).safeParse(req.query.offset ?? 0);
+    if (!reviewView.success || !pageInput.success) return apiError(res, 400, "Invalid recap page.");
+    const stateCondition = reviewView.data === "pending"
+      ? and(isNull(articles.competitionReviewedAt), eq(articles.featured, false))
+      : reviewView.data === "reviewed"
+        ? and(sql`${articles.competitionReviewedAt} IS NOT NULL`, eq(articles.featured, false))
+        : reviewView.data === "featured" ? eq(articles.featured, true) : undefined;
     const rows = await db
       .select({
         article: articles,
@@ -3783,12 +3793,13 @@ router.get(
       .where(
         and(
           eq(articles.competitionId, competition.id),
-          eq(articles.status, "published"),
-          isNull(articles.hiddenAt),
+          eligibleRecapConditions("articles"),
+          stateCondition,
         ),
       )
-      .orderBy(desc(articles.createdAt))
-      .limit(100);
+      .orderBy(desc(articles.createdAt), desc(articles.id))
+      .offset(pageInput.data)
+      .limit(101);
 
     const [bracketRows] = await Promise.all([
       db
@@ -3799,7 +3810,9 @@ router.get(
     const bracketLabelById = new Map(bracketRows.map((b) => [b.id, b.label]));
 
     res.json({
-      data: rows.map(
+      pendingCount: await pendingRecapCount(competition.id),
+      nextOffset: rows.length > 100 ? pageInput.data + 100 : null,
+      data: rows.slice(0, 100).map(
         ({ article: a, teamName, matchId, matchDate, matchDivision, matchBracket }) => {
           const linkedMatch = matchId != null;
           const effectiveGameDate =
@@ -3818,6 +3831,7 @@ router.get(
                 : null;
           return {
         id: a.id,
+        postId: articlePostId(a.id),
         title: a.title,
         summary: a.summary,
         coverImageUrl: a.coverImageUrl,
@@ -3828,6 +3842,8 @@ router.get(
         teamId: a.teamId,
         teamName,
         featured: a.featured,
+        reviewedAt: a.competitionReviewedAt?.toISOString() ?? (a.featured ? a.updatedAt.toISOString() : null),
+        reviewState: a.featured ? "featured" : a.competitionReviewedAt ? "reviewed" : "pending",
         competitionGameId: a.competitionGameId,
         // Task #852 — current bracket assignment for the curation dropdown.
         bracketId: a.bracketId,
@@ -3873,11 +3889,16 @@ router.post(
 
     const updated = await db
       .update(articles)
-      .set({ featured: parsed.data.featured, updatedAt: new Date() })
+      .set({
+        featured: parsed.data.featured, updatedAt: new Date(),
+        competitionReviewedAt: sql`coalesce(competition_reviewed_at, now())`,
+        competitionReviewedBy: sql`coalesce(competition_reviewed_by, ${me.id}::uuid)`,
+      })
       .where(
         and(
           eq(articles.id, String(req.params.articleId)),
           eq(articles.competitionId, competition.id),
+          eligibleRecapConditions("articles"),
         ),
       )
       .returning({ id: articles.id, featured: articles.featured });

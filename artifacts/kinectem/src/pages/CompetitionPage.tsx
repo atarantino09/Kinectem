@@ -184,6 +184,7 @@ type CompetitionBracketInfo = {
 
 type CompetitionResponse = {
   competition: CompetitionMeta;
+  pendingRecapCount?: number;
   participants: CompetitionParticipant[];
   matches: Match[];
   featuredRecaps?: FeaturedRecap[];
@@ -1568,6 +1569,12 @@ export default function CompetitionPage() {
           />
         ) : null}
 
+        {c.canManage && (q.data.pendingRecapCount ?? 0) > 0 && (
+          <div className="rounded-xl border-2 border-primary bg-primary/10 p-4 flex flex-wrap items-center justify-between gap-3" data-testid="competition-review-notice">
+            <p className="font-bold">{q.data.pendingRecapCount} recap{q.data.pendingRecapCount === 1 ? "" : "s"} need{q.data.pendingRecapCount === 1 ? "s" : ""} review</p>
+            <Link href={`/competitions/${c.id}?recaps=pending#recaps`}><Button variant="brand">Review recaps</Button></Link>
+          </div>
+        )}
         {/* Featured game recaps rail (§7) — the visual centerpiece; hidden
             entirely until the operator features at least one recap. Each
             card carries the authoring team's identity inside the

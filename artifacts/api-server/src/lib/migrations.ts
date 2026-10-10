@@ -5,6 +5,7 @@ import { COMPETITION_RESULTS_MIGRATION } from "./competition-results-migration";
 import { FAMILY_SETUP_MIGRATION } from "./family-setup";
 import { FREE_ACCESS_SCHEMA_MIGRATIONS } from "./free-access-promo";
 import { COMPETITION_REFERRAL_MIGRATION } from "./competition-referrals";
+import { COMPETITION_RECAP_MIGRATION } from "@workspace/competition-recap-alerts";
 
 // Task #190 — This project uses `drizzle-kit push`, which has no
 // concept of file-backed migrations. Push is destructive when a column
@@ -3048,6 +3049,7 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   { name: "2026-10-09-parent-family-player-setup", sql: FAMILY_SETUP_MIGRATION },
   ...FREE_ACCESS_SCHEMA_MIGRATIONS,
   COMPETITION_REFERRAL_MIGRATION,
+  COMPETITION_RECAP_MIGRATION,
 ];
 
 export async function runStartupMigrations(): Promise<void> {

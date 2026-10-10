@@ -1015,8 +1015,11 @@ export const articles = pgTable("articles", {
   // rendered on the published post itself.
   bracketId: uuid("bracket_id").references((): AnyPgColumn => competitionBrackets.id, { onDelete: "set null" }),
   featured: boolean("featured").notNull().default(false),
+  competitionReviewedAt: timestamp("competition_reviewed_at"),
+  competitionReviewedBy: uuid("competition_reviewed_by").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
   status: articleStatusEnum("status").notNull().default("published"),
   publishedAt: timestamp("published_at"),
+  publishedById: uuid("published_by_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
   hiddenAt: timestamp("hidden_at"),
   hiddenByUserId: uuid("hidden_by_user_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -1430,10 +1433,37 @@ export const notificationPreferences = pgTable("notification_preferences", {
   digestWeekly: boolean("digest_weekly").notNull().default(true),
   motivational: boolean("motivational").notNull().default(true),
   pauseAll: boolean("pause_all").notNull().default(false),
+  competitionRecapMode: text("competition_recap_mode").notNull().default("digest"),
+  competitionRecapDiscardBefore: timestamp("competition_recap_discard_before"),
   unsubscribeToken: text("unsubscribe_token").notNull().unique(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+export const competitionRecapPublications = pgTable("competition_recap_publications", {
+  articleId: uuid("article_id").primaryKey().references(() => articles.id, { onDelete: "cascade" }),
+  competitionId: uuid("competition_id").notNull().references((): AnyPgColumn => tournaments.id, { onDelete: "cascade" }),
+  actorId: uuid("actor_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+export const competitionRecapMail = pgTable("competition_recap_mail", {
+  articleId: uuid("article_id").notNull().references(() => competitionRecapPublications.articleId, { onDelete: "cascade" }),
+  recipientId: uuid("recipient_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  targetIds: uuid("target_ids").array().notNull(),
+  mode: text("mode").notNull(),
+  windowStart: timestamp("window_start").notNull(),
+  finishedAt: timestamp("finished_at"),
+}, t => ({
+  pk: primaryKey({ columns: [t.articleId, t.recipientId] }),
+  pending: index("competition_recap_mail_pending").on(t.recipientId, t.windowStart).where(sql`${t.finishedAt} IS NULL`),
+}));
+export const competitionRecapDeliveries = pgTable("competition_recap_deliveries", {
+  recipientId: uuid("recipient_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  batchKey: text("batch_key").notNull(),
+  completedAt: timestamp("completed_at"),
+  attempts: integer("attempts").notNull().default(0),
+  retryAt: timestamp("retry_at").notNull().defaultNow(),
+}, t => ({ pk: primaryKey({ columns: [t.recipientId, t.batchKey] }) }));
 
 // Per-child soft-hide for an individual message. Used when a parent
 // removes a `message:<id>` from the family dashboard: the message stays

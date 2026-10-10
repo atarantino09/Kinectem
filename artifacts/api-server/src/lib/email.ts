@@ -39,6 +39,8 @@ function escapeHtml(value: string): string {
 }
 
 export type EmailMessage = {
+  // Durable outboxes must distinguish a skipped send from delivery.
+  requireDelivery?: boolean;
   to: string;
   subject: string;
   text: string;
@@ -116,6 +118,7 @@ async function resolveCredentials(): Promise<{
     const res = await fetch(
       `https://${hostname}/api/v2/connection?include_secrets=true&connector_names=sendgrid`,
       {
+        signal: AbortSignal.timeout(10_000),
         headers: { Accept: "application/json", "X-Replit-Token": xReplitToken },
       },
     );
@@ -175,6 +178,7 @@ export async function isEmailConfiguredAsync(): Promise<boolean> {
 export async function sendEmail(message: EmailMessage): Promise<void> {
   const creds = await resolveCredentials();
   if (!creds) {
+    if (message.requireDelivery) throw new Error("Email is not configured");
     logger.warn(
       // S12 — log only a non-PII event kind; the recipient address and the
       // subject (which can embed minor names / post titles) are never logged.
@@ -224,6 +228,7 @@ export async function sendEmail(message: EmailMessage): Promise<void> {
   };
 
   const res = await fetch(SENDGRID_URL, {
+    signal: AbortSignal.timeout(30_000),
     method: "POST",
     headers: {
       Authorization: `Bearer ${creds.apiKey}`,

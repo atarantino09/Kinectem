@@ -1,4 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
+import { sweepCompetitionRecapMail } from "../lib/competition-recap-scheduler";
 import {
   db,
   users,
@@ -762,9 +763,11 @@ router.post(
       .set({
         status: newStatus,
         publishedAt: newStatus === "published" ? new Date() : null,
+        publishedById: newStatus === "published" ? me.id : null,
       })
       .where(eq(articles.id, a.id))
       .returning();
+    if (newStatus === "published") void sweepCompetitionRecapMail();
     // Task #739 — upsert @-mention tags from the draft's body before
     // the roster fan-out so mention rows land as `source: "manual"`
     // (drafts skip mention tagging on PATCH; publish is where the

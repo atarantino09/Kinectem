@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { sweepCompetitionRecapMail } from "../lib/competition-recap-scheduler";
 import {
   db,
   users,
@@ -3231,6 +3232,7 @@ router.post(
           bracketId,
           status,
           publishedAt: status === "published" ? new Date() : null,
+          publishedById: status === "published" ? me.id : null,
         })
         .returning();
 
@@ -3279,6 +3281,7 @@ router.post(
           actorUserId: me.id,
         });
       }
+      if (status === "published") void sweepCompetitionRecapMail();
 
       // Task #633 — recap-only engagement emails, fired once the recap is
       // actually live (`gameDate` distinguishes a game recap from a non-recap

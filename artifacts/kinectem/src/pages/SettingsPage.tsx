@@ -27,6 +27,7 @@ interface NotificationPrefs {
   digestWeekly: boolean;
   motivational: boolean;
   pauseAll: boolean;
+  competitionRecapMode: "digest" | "immediate" | "off";
 }
 
 type PrefKey = keyof NotificationPrefs;
@@ -34,7 +35,7 @@ type PrefKey = keyof NotificationPrefs;
 const PREFS_QUERY_KEY = ["notification-preferences"] as const;
 
 interface ToggleDef {
-  key: Exclude<PrefKey, "pauseAll">;
+  key: Exclude<PrefKey, "pauseAll" | "competitionRecapMode">;
   label: string;
   description: string;
 }
@@ -146,7 +147,7 @@ export default function SettingsPage() {
   // All cache writes touch only this one key (functional updates) so two
   // rapid toggles on different switches don't clobber each other — a failed
   // request reverts just its own key and leaves any concurrent change intact.
-  const save = async (key: PrefKey, value: boolean) => {
+  const save = async (key: PrefKey, value: boolean | NotificationPrefs["competitionRecapMode"]) => {
     const before = qc.getQueryData<NotificationPrefs>(PREFS_QUERY_KEY);
     const prevValue = before?.[key];
     qc.setQueryData<NotificationPrefs>(PREFS_QUERY_KEY, (cur) =>
@@ -192,7 +193,7 @@ export default function SettingsPage() {
       <section className="space-y-4" data-testid="section-notifications">
         <div className="flex items-center gap-2">
           <Bell className="w-4 h-4 text-primary" />
-          <h2 className="font-black tracking-tight">Email notifications</h2>
+          <h2 id="email-notifications" className="font-black tracking-tight">Email notifications</h2>
         </div>
 
         {isLoading || !data ? (
@@ -227,6 +228,20 @@ export default function SettingsPage() {
               </CardContent>
             </Card>
 
+            <Card className="rounded-xl border-border">
+              <CardContent className="p-4 space-y-2">
+                <label htmlFor="competition-recap-mode" className="font-bold text-sm">Competition recap review emails</label>
+                <p className="text-xs text-muted-foreground">Your personal choice for competitions you administer. In-app alerts and pending reviews stay available. Changing this choice discards unsent recap emails.</p>
+                <select id="competition-recap-mode" data-testid="competition-recap-mode"
+                  className="w-full rounded-md border border-input bg-background p-2 text-sm"
+                  value={data.competitionRecapMode ?? "digest"} disabled={paused}
+                  onChange={event => void save("competitionRecapMode", event.target.value as NotificationPrefs["competitionRecapMode"])}>
+                  <option value="digest">Every 2 hours (default)</option>
+                  <option value="immediate">Immediately</option>
+                  <option value="off">Off</option>
+                </select>
+              </CardContent>
+            </Card>
             {GROUPS.map((group) => {
               const Icon = group.icon;
               return (

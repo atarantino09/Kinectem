@@ -1,4 +1,5 @@
 import app from "./app";
+import { startCompetitionRecapScheduler } from "./lib/competition-recap-scheduler";
 import { logger } from "./lib/logger";
 import { seedIfEmpty } from "./lib/seed";
 import { runStartupMigrations } from "./lib/migrations";
@@ -69,6 +70,7 @@ async function start() {
     );
   }
 
+  startCompetitionRecapScheduler();
   app.listen(port, (err) => {
     if (err) {
       logger.error({ err }, "Error listening on port");

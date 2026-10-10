@@ -41,6 +41,25 @@ vi.mock("@/components/share-image/ShareRecapImageDialog", () => ({
 
 const mockedFetch = vi.mocked(customFetch);
 
+describe("competition review notice", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    window.history.replaceState({}, "", "/c/rolling-cup");
+  });
+  it("prominently links two pending recaps to the expanded console", async () => {
+    mockedFetch.mockResolvedValue({ ...competitionResponse({ canManage: true }), pendingRecapCount: 2 });
+    renderWithProviders(<CompetitionPage />);
+    expect(await screen.findByText("2 recaps need review")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Review recaps" })).toHaveAttribute("href", "/competitions/competition-1?recaps=pending#recaps");
+  });
+  it("never shows review information to visitors even if a stale response contains a count", async () => {
+    mockedFetch.mockResolvedValue({ ...competitionResponse({ canManage: false }), pendingRecapCount: 2 });
+    renderWithProviders(<CompetitionPage />);
+    await screen.findByText("Rolling Cup");
+    expect(screen.queryByTestId("competition-review-notice")).not.toBeInTheDocument();
+  });
+});
+
 function competitionResponse(overrides: Record<string, unknown> = {}) {
   return {
     competition: {

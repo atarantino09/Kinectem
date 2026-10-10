@@ -7,8 +7,9 @@
 // NOT represented here — they bypass preferences entirely.
 
 import { db, notificationPreferences } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { generateToken } from "./passwords";
+import { competitionRecapEmailEnabled } from "@workspace/competition-recap-alerts";
 
 // The toggleable email categories. Each maps 1:1 to a boolean column on
 // notification_preferences (and to a camelCase row field via FIELD_BY_CATEGORY).
@@ -26,10 +27,10 @@ export const EMAIL_CATEGORIES = [
   "motivational",
 ] as const;
 
-export type EmailCategory = (typeof EMAIL_CATEGORIES)[number];
+export type EmailCategory = (typeof EMAIL_CATEGORIES)[number] | "competition_recap";
 
 export function isEmailCategory(value: string): value is EmailCategory {
-  return (EMAIL_CATEGORIES as readonly string[]).includes(value);
+  return value === "competition_recap" || (EMAIL_CATEGORIES as readonly string[]).includes(value);
 }
 
 export type NotificationPreferencesRow =
@@ -50,7 +51,7 @@ type CategoryField =
   | "digestWeekly"
   | "motivational";
 
-export const FIELD_BY_CATEGORY: Record<EmailCategory, CategoryField> = {
+export const FIELD_BY_CATEGORY: Record<Exclude<EmailCategory, "competition_recap">, CategoryField> = {
   social_follow: "socialFollow",
   social_comment: "socialComment",
   social_reaction: "socialReaction",
@@ -97,12 +98,13 @@ export function wantsCategory(
   category: EmailCategory,
 ): boolean {
   if (prefs.pauseAll) return false;
+  if (category === "competition_recap") return competitionRecapEmailEnabled(prefs);
   return prefs[FIELD_BY_CATEGORY[category]] === true;
 }
 
 // Wire shape for the preferences API: the camelCase category fields plus the
 // master pause switch. Stable contract consumed by the Settings page.
-export function serializePreferences(prefs: NotificationPreferencesRow): Record<CategoryField | "pauseAll", boolean> {
+export function serializePreferences(prefs: NotificationPreferencesRow) {
   return {
     socialFollow: prefs.socialFollow,
     socialComment: prefs.socialComment,
@@ -116,6 +118,7 @@ export function serializePreferences(prefs: NotificationPreferencesRow): Record<
     digestWeekly: prefs.digestWeekly,
     motivational: prefs.motivational,
     pauseAll: prefs.pauseAll,
+    competitionRecapMode: prefs.competitionRecapMode,
   };
 }
 
@@ -140,8 +143,15 @@ export async function updatePreferences(
   userId: string,
   patch: Record<string, unknown>,
 ): Promise<NotificationPreferencesRow | { error: string }> {
-  const set: Record<string, boolean | Date> = {};
+  const set: Record<string, boolean | Date | string> = {};
   for (const [key, value] of Object.entries(patch)) {
+    if (key === "competitionRecapMode") {
+      if (value !== "digest" && value !== "immediate" && value !== "off") {
+        return { error: "competitionRecapMode must be digest, immediate, or off" };
+      }
+      set[key] = value;
+      continue;
+    }
     if (!(WRITABLE_FIELDS as readonly string[]).includes(key)) {
       return { error: `Unknown preference: ${key}` };
     }
@@ -154,10 +164,19 @@ export async function updatePreferences(
   await getOrCreatePreferences(userId);
   if (Object.keys(set).length > 0) {
     set.updatedAt = new Date();
-    await db
-      .update(notificationPreferences)
-      .set(set)
-      .where(eq(notificationPreferences.userId, userId));
+    await db.transaction(async tx => {
+      // Serialize with the mail worker. Changing mode or pausing discards
+      // queued mail; it never converts/replays an old opt-out backlog.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`competition-recap:${userId}`},0))`);
+      const [prior] = await tx.select().from(notificationPreferences).where(eq(notificationPreferences.userId, userId)).for("update");
+      const discard = (typeof set.competitionRecapMode === "string" && set.competitionRecapMode !== prior?.competitionRecapMode) || set.pauseAll === true;
+      await tx.update(notificationPreferences).set({
+        ...set, ...(discard ? { competitionRecapDiscardBefore: new Date() } : {}),
+      }).where(eq(notificationPreferences.userId, userId));
+      if (discard) {
+        await tx.execute(sql`UPDATE competition_recap_mail SET finished_at=now() WHERE recipient_id=${userId} AND finished_at IS NULL`);
+      }
+    });
   }
   const [row] = await db
     .select()
@@ -174,14 +193,19 @@ export async function applyUnsubscribe(
   token: string,
   category: EmailCategory | "all",
 ): Promise<boolean> {
-  const set: Record<string, boolean | Date> =
+  const set: Record<string, boolean | Date | string> =
     category === "all"
       ? { pauseAll: true, updatedAt: new Date() }
-      : { [FIELD_BY_CATEGORY[category]]: false, updatedAt: new Date() };
-  const result = await db
-    .update(notificationPreferences)
-    .set(set)
-    .where(eq(notificationPreferences.unsubscribeToken, token))
-    .returning({ userId: notificationPreferences.userId });
-  return result.length > 0;
+      : category === "competition_recap"
+        ? { competitionRecapMode: "off", updatedAt: new Date() }
+        : { [FIELD_BY_CATEGORY[category]]: false, updatedAt: new Date() };
+  const [prefs] = await db.select().from(notificationPreferences).where(eq(notificationPreferences.unsubscribeToken, token));
+  if (!prefs) return false;
+  const result = await updatePreferences(prefs.userId, setWithoutTimestamp(set));
+  return !("error" in result);
+}
+
+function setWithoutTimestamp(set: Record<string, boolean | Date | string>) {
+  const { updatedAt: _, ...patch } = set;
+  return patch;
 }

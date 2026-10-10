@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CompetitionAlbumConsolePanel } from "@/components/competition-album/CompetitionAlbumConsolePanel";
-import { Link, useLocation, useRoute } from "wouter";
+import { Link, useLocation, useRoute, useSearch } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { BrandColorField } from "@/components/BrandColorField";
@@ -1934,6 +1934,8 @@ function BracketsPanel({
 }
 interface CurationRecap {
   id: string;
+  postId: string;
+  reviewState: "pending" | "reviewed" | "featured";
   title: string;
   summary: string | null;
   coverImageUrl: string | null;
@@ -1972,14 +1974,17 @@ function recapWeekSections(recaps: CurationRecap[]) {
   });
 }
 
-function CurationPanel({
+export function CurationPanel({
   competitionId,
   preview = false,
 }: {
   competitionId: string;
   preview?: boolean;
 }) {
-  const [open, setOpen] = useState(preview);
+  const [open, setOpen] = useState(preview || window.location.hash === "#recaps" || new URLSearchParams(window.location.search).has("recaps"));
+  const [review, setReview] = useState<"pending" | "reviewed" | "featured">("pending");
+  const [offset, setOffset] = useState(0);
+  const search = useSearch();
   const qc = useQueryClient();
   const { toast } = useToast();
 
@@ -1987,20 +1992,24 @@ function CurationPanel({
   // buttons — scroll this panel into view when arriving via #recaps.
   const anchorRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (window.location.hash === "#recaps") {
+    if (window.location.hash === "#recaps" || new URLSearchParams(search).has("recaps")) {
+      setOpen(true);
+      setReview("pending");
+      setOffset(0);
       anchorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
-  }, []);
+  }, [search]);
 
-  const recapsQ = useQuery<{ data: CurationRecap[] }>({
-    queryKey: ["competition", competitionId, "recaps"],
+  const recapsQ = useQuery<{ data: CurationRecap[]; pendingCount: number; nextOffset: number | null }>({
+    queryKey: ["competition", competitionId, "recaps", review, offset],
     queryFn: () =>
-      customFetch<{ data: CurationRecap[] }>(
-        `/api/v1/competitions/${competitionId}/recaps`,
+      customFetch<{ data: CurationRecap[]; pendingCount: number; nextOffset: number | null }>(
+        `/api/v1/competitions/${competitionId}/recaps?review=${review}&offset=${offset}`,
         { method: "GET" },
       ),
     // Owner-only endpoint — skip it in claim preview (would 401).
     enabled: !preview,
+    refetchInterval: 30_000,
   });
 
   // Task #852 — brackets for the per-recap sorting dropdown (organizer can
@@ -2049,10 +2058,11 @@ function CurationPanel({
         },
       ),
     onSuccess: (_r, vars) => {
+      setOffset(0);
       qc.invalidateQueries({ queryKey: ["competition", competitionId, "recaps"] });
       qc.invalidateQueries({ queryKey: ["competition"] });
       toast({
-        title: vars.featured ? "Featured on your public page" : "Removed from the rail",
+        title: vars.featured ? "Featured on your public page" : "Reviewed — not featured",
       });
     },
     onError: (err) =>
@@ -2099,7 +2109,7 @@ function CurationPanel({
         badge={
           recaps.length > 0 ? (
             <Badge numeric variant="secondary" className="ml-1">
-              {recaps.length}
+              {recapsQ.data?.pendingCount ?? 0} pending
             </Badge>
           ) : undefined
         }
@@ -2110,14 +2120,24 @@ function CurationPanel({
       {open && (
       <CardContent className="space-y-3">
         <p className="text-xs text-muted-foreground">
-          Recaps written by claimed teams land here. Feature the best ones to
-          show them on your public page.
+          Review coach recaps here. Feature adds a recap to your public page;
+          Reviewed — don’t feature leaves the team’s published post unchanged.
         </p>
+        <a href="/app/settings#email-notifications" className="text-sm font-bold underline">Competition recap email settings</a>
+        <div className="flex flex-wrap gap-2" aria-label="Recap review views">
+          {(["pending", "reviewed", "featured"] as const).map(view => (
+            <Button key={view} size="sm" variant={review === view ? "brand" : "outline"}
+              onClick={() => { setReview(view); setOffset(0); }} data-testid={`recaps-view-${view}`}>
+              {view === "pending" ? `Pending (${recapsQ.data?.pendingCount ?? 0})` : view === "reviewed" ? "Reviewed / not featured" : "Featured"}
+            </Button>
+          ))}
+        </div>
+        {recapsQ.isError && <p role="alert" className="text-sm text-destructive">Couldn’t load recaps. <button className="underline" onClick={() => void recapsQ.refetch()}>Retry</button></p>}
         {recapsQ.isLoading ? (
           <Skeleton className="h-16 rounded-lg" />
         ) : recaps.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No game recaps yet — they appear as claimed teams write them.
+            No recaps in this view.
           </p>
         ) : (
           <div className="space-y-5">
@@ -2158,6 +2178,7 @@ function CurationPanel({
                                 <Star className="inline w-3.5 h-3.5 ml-1.5 -mt-0.5 fill-amber-400 text-amber-400" />
                               )}
                             </p>
+                            <Badge variant="secondary">{r.reviewState === "pending" ? "Needs review" : r.featured ? "Featured · reviewed" : "Reviewed · not featured"}</Badge>
                             <p className="text-xs text-muted-foreground truncate">
                               {r.teamName}
                               {r.opponentName ? ` vs ${r.opponentName}` : ""}
@@ -2203,7 +2224,7 @@ function CurationPanel({
                                 </SelectContent>
                               </Select>
                             )}
-                            <a href={`/app/posts/${r.id}`} target="_blank" rel="noopener noreferrer">
+                            <a href={`/app/posts/${r.postId ?? `article-${r.id}`}`} target="_blank" rel="noopener noreferrer">
                               <Button size="sm" variant="ghost" className="font-bold text-muted-foreground">
                                 View
                               </Button>
@@ -2217,7 +2238,7 @@ function CurationPanel({
                                 onClick={() => feature.mutate({ articleId: r.id, featured: false })}
                                 data-testid={`btn-unfeature-${r.id}`}
                               >
-                                Hide
+                                Remove from rail
                               </Button>
                             ) : (
                               <Button
@@ -2231,6 +2252,10 @@ function CurationPanel({
                                 Feature
                               </Button>
                             )}
+                            {r.reviewState === "pending" && <Button size="sm" variant="outline"
+                              disabled={feature.isPending}
+                              onClick={() => feature.mutate({ articleId: r.id, featured: false })}
+                              data-testid={`btn-review-${r.id}`}>Reviewed — don’t feature</Button>}
                           </div>
                         </div>
                       ))}
@@ -2241,6 +2266,10 @@ function CurationPanel({
             ))}
           </div>
         )}
+        <div className="flex items-center gap-2">
+          {offset > 0 && <Button variant="outline" size="sm" onClick={() => setOffset(Math.max(0, offset - 100))}>Newer recaps</Button>}
+          {recapsQ.data?.nextOffset != null && <Button variant="outline" size="sm" onClick={() => setOffset(recapsQ.data!.nextOffset!)}>Older recaps</Button>}
+        </div>
       </CardContent>
       )}
     </Card>

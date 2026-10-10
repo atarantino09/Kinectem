@@ -7,6 +7,7 @@
     "./coppa-hard-delete": "./src/coppa-hard-delete.ts"
   },
   "scripts": {
+    "send-competition-recap-digests": "tsx src/send-competition-recap-digests.ts",
     "hello": "tsx ./src/hello.ts",
     "backfill-avatars": "tsx ./src/backfill-avatars.ts",
     "backfill-parent-team-follows": "tsx ./src/backfill-parent-team-follows.ts",
@@ -37,6 +38,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@workspace/competition-recap-alerts": "workspace:*",
     "@workspace/daily-admin-digest": "workspace:*",
     "@workspace/db": "workspace:*",
     "@workspace/email-template": "workspace:*",

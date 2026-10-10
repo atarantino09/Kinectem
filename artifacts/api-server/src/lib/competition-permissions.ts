@@ -10,7 +10,7 @@
 // with explicit owner checks — these helpers answer "can manage", not
 // "is owner".
 
-import { db, competitionAdmins, organizerAdmins } from "@workspace/db";
+import { db, competitionAdmins, organizerAdmins, competitionOrganizers } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 
 type SessionUserLike = { id: string; role: string };
@@ -73,6 +73,11 @@ export async function canOperateCompetition(
   if (owner != null && owner === me.id) return true;
   if (await isCompetitionAdmin(me.id, competition.id)) return true;
   if (competition.organizerId) {
+    // A hub's actual owner remains an operator even if a legacy/handed-off
+    // hub has no duplicate organizer_admins membership row.
+    const [organizer] = await db.select({ ownerUserId: competitionOrganizers.ownerUserId })
+      .from(competitionOrganizers).where(eq(competitionOrganizers.id, competition.organizerId)).limit(1);
+    if (organizer?.ownerUserId === me.id) return true;
     return isOrganizerAdmin(me.id, competition.organizerId);
   }
   return false;
