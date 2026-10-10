@@ -499,8 +499,8 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
         )}
         <div
           className={cn(
-            "relative px-5 flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-0 border-b border-border/60",
-            postOrgIdentity ? "py-3 [&_.text-muted-foreground]:text-inherit" : "py-4",
+            "relative px-5 flex flex-col items-stretch gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-0 border-b border-border/60",
+            postOrgIdentity ? "pt-2 pb-3 sm:py-3 [&_.text-muted-foreground]:text-inherit" : "pt-3 pb-4 sm:py-4",
           )}
           style={postOrgIdentity ? {
             ...postOrgIdentity.style,

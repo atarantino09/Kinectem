@@ -595,7 +595,7 @@ describe("PostCard compact mobile header", () => {
 
       expect(
         screen.getByTestId(`post-header-${post.id}`),
-      ).toHaveClass("flex-col", "items-stretch", "gap-2", "sm:flex-row", "sm:items-center");
+      ).toHaveClass("flex-col", "items-stretch", "gap-1", "pt-2", "pb-3", "sm:py-3", "sm:flex-row", "sm:items-center");
       expect(
         screen.getByTestId(`post-header-identity-${post.id}`),
       ).toHaveClass("order-2", "w-full", "sm:order-1", "sm:w-auto");
