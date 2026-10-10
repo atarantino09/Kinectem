@@ -12,6 +12,8 @@ import { CoAuthorsSection } from "@/components/new-post/CoAuthorsSection";
 import { PostHeaderBar } from "@/components/new-post/PostHeaderBar";
 import { PostFormFields } from "@/components/new-post/PostFormFields";
 import { useNewPostForm } from "@/components/new-post/useNewPostForm";
+import { RecapCompetitionPrompt } from "@/components/new-post/RecapCompetitionPrompt";
+import { localRecapDate, useCompetitionRecapReminder } from "@/components/new-post/useCompetitionRecapReminder";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -67,6 +69,16 @@ export default function NewPostPage() {
   });
 
   const { data: me } = useGetLoggedInUser();
+  const regularRecap = !form.isShort && form.loadedKind !== "org_post" &&
+    !initialDraftId && !initialEditId && !initialCompetitionId;
+  const competitionReminder = useCompetitionRecapReminder({
+    teamId: form.composerTeamId,
+    date: form.gameDate || localRecapDate(),
+    competitions: form.claimedCompetitions,
+    loading: form.claimedCompetitionsLoading,
+    competitionId: form.competitionId,
+    eligible: regularRecap,
+  });
   // Authorable-teams picker for the composer's "Post to Team" select.
   // Skipped when the URL already locks the post to a specific team
   // (the picker is hidden in that case anyway).
@@ -110,7 +122,10 @@ export default function NewPostPage() {
     !!form.teamId &&
     (!form.isShort ? form.teamId !== "__profile__" : true);
   const publishDisabled =
-    composerNeedsTeam && form.loadedKind !== "org_post" && !hasTeamSelection;
+    (composerNeedsTeam && form.loadedKind !== "org_post" && !hasTeamSelection) ||
+    competitionReminder.open ||
+    (regularRecap && !!form.composerTeamId &&
+      (form.claimedCompetitionsLoading || form.claimedCompetitionsError));
 
   // Roster for the per-player Tag Players picker. Originally added
   // for the highlight composer (task #313); task #322 extends the
@@ -174,6 +189,17 @@ export default function NewPostPage() {
 
   return (
     <div className="min-h-screen">
+      <RecapCompetitionPrompt
+        open={competitionReminder.open}
+        teamId={form.composerTeamId}
+        competitions={competitionReminder.competitions}
+        onCancel={form.requestCancel}
+        onConfirm={(competitionId, game) => {
+          competitionReminder.acknowledge();
+          form.setCompetitionId(competitionId);
+          if (game) form.setCompetitionGameId(game.id, game);
+        }}
+      />
       <PostHeaderBar
         Icon={Icon}
         heading={heading}
@@ -256,6 +282,12 @@ export default function NewPostPage() {
       </AlertDialog>
 
       <main className="max-w-3xl mx-auto px-4 py-8">
+        {regularRecap && form.composerTeamId && form.claimedCompetitionsError && (
+          <div role="alert" className="mb-4 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
+            <p>We couldn’t check this team’s competitions. Retry before publishing so a competition game doesn’t lose its link.</p>
+            <button type="button" onClick={form.retryClaimedCompetitions} className="mt-2 font-semibold text-primary underline">Retry competition check</button>
+          </div>
+        )}
         <Card className="rounded-xl border border-border shadow-sm">
           <CardContent className="p-6">
             <PostFormFields

@@ -158,4 +158,37 @@ describe("competition-only composer context", () => {
     expect(match.result.current.gameDate).toBe("2026-06-12");
     expect(match.result.current.competitionGameId).toBe("game-1");
   });
+
+  it("sends explicit null on a new non-competition recap instead of allowing automatic competition attribution", async () => {
+    const { result } = renderForm({ initialCompetitionId: null });
+    act(() => {
+      result.current.setTitle("Friendly win");
+      result.current.setBody("A friendly match outside our tournament.");
+      result.current.setCompetitionId("");
+    });
+    await act(() => result.current.onSaveDraft());
+    expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ competitionId: null }),
+    }));
+  });
+
+  it("persists a prompted competition and its chosen game on a regular recap", async () => {
+    const { result } = renderForm({ initialCompetitionId: null });
+    act(() => {
+      result.current.setTitle("Cup win");
+      result.current.setBody("A strong cup performance.");
+      result.current.setCompetitionId("cup-2");
+      result.current.setCompetitionGameId("game-1", {
+        id: "game-1", matchNumber: "1", matchDate: "2026-06-12",
+        startTime: null, isHome: true, opponentName: "Rovers",
+      });
+    });
+    await act(() => result.current.onSaveDraft());
+    expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        competitionId: "cup-2", competitionGameId: "game-1",
+        gameDate: "2026-06-12T12:00:00.000Z", opponentName: "Rovers",
+      }),
+    }));
+  });
 });

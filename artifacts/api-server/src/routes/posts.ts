@@ -3109,7 +3109,8 @@ router.post(
       // body field, same precedent as opponentName/recapKind). An explicit
       // pick is only honored when the team holds a CLAIMED slot in that
       // competition — otherwise the request is rejected so the coach goes
-      // and claims the team's spot first. Absent/empty → automatic derive.
+      // and claims the team's spot first. Absent/empty → automatic derive;
+      // explicit null means this is NOT a competition game.
       const requestedCompetitionId =
         typeof body.competitionId === "string" && body.competitionId.length > 0
           ? body.competitionId
@@ -3161,6 +3162,8 @@ router.post(
             );
           rawLink = { ...rawLink, competitionGameId: requestedGameId };
         }
+      } else if (body.competitionId === null) {
+        rawLink = { competitionId: null, competitionGameId: null };
       } else {
         rawLink = await deriveCompetitionLink(teamId, gameDate);
       }

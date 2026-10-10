@@ -53,6 +53,64 @@ async function trackRecap(postId: string) {
 }
 
 describe("competition-only game recaps", () => {
+  it("keeps an explicit non-competition recap unlinked through autosave and publish, while omitted choices still derive", async () => {
+    const f = await fixture();
+    const [game] = await db.insert(tournamentMatches).values({
+      tournamentId: f.competition.id, matchNumber: "1", matchDate: "2026-08-01",
+      homeParticipantId: f.slot.id,
+    }).returning();
+    const { competitionId: _competitionId, competitionGameId: _gameId, ...ordinary } = f.payload;
+    const base = { ...ordinary, gameDate: "2026-08-01T12:00:00.000Z" };
+    const derived = await f.author.post("/api/v1/posts").send(base);
+    expect(derived.status).toBe(201);
+    const derivedId = await trackRecap(derived.body.id);
+    const [derivedRow] = await db.select().from(articles).where(eq(articles.id, derivedId));
+    expect(derivedRow.competitionId).toBe(f.competition.id);
+    expect(derivedRow.competitionGameId).toBe(game.id);
+
+    const optedOut = await f.author.post("/api/v1/posts").send({ ...base, competitionId: null });
+    expect(optedOut.status).toBe(201);
+    const optedOutId = await trackRecap(optedOut.body.id);
+    expect((await f.author.patch(`/api/v1/posts/${optedOut.body.id}`).send({
+      body: "Friendly, not part of the competition.",
+    })).status).toBe(200);
+    expect((await f.author.post(`/api/v1/posts/${optedOut.body.id}/publish`)).status).toBe(200);
+    const [row] = await db.select().from(articles).where(eq(articles.id, optedOutId));
+    expect(row.competitionId).toBeNull();
+    expect(row.competitionGameId).toBeNull();
+  });
+
+  it("honors the chosen tournament and match when a league overlaps on the same date", async () => {
+    const f = await fixture();
+    const [league] = await db.insert(tournaments).values({
+      name: "Overlapping test league", slug: `overlap-${Date.now()}`,
+      startDate: "2026-07-01", endDate: "2026-09-30",
+      ownerUserId: f.user.id, createdById: f.user.id,
+    }).returning();
+    cleanup.push(() => db.delete(tournaments).where(eq(tournaments.id, league.id)));
+    await db.insert(tournamentParticipants).values({
+      tournamentId: league.id, teamId: f.team.id, name: f.team.name,
+      nameKey: f.team.name.toLowerCase(), claimedByUserId: f.user.id, claimedAt: new Date(),
+    });
+    const [game] = await db.insert(tournamentMatches).values({
+      tournamentId: f.competition.id, matchNumber: "2", matchDate: "2026-08-01",
+      homeParticipantId: f.slot.id,
+    }).returning();
+    const created = await f.author.post("/api/v1/posts").send({
+      ...f.payload, competitionGameId: game.id, gameDate: "2026-08-01T12:00:00.000Z",
+    });
+    expect(created.status).toBe(201);
+    const articleId = await trackRecap(created.body.id);
+    expect((await f.author.patch(`/api/v1/posts/${created.body.id}`).send({
+      title: "Tournament win, not a league game",
+    })).status).toBe(200);
+    expect((await f.author.post(`/api/v1/posts/${created.body.id}/publish`)).status).toBe(200);
+    const [row] = await db.select().from(articles).where(eq(articles.id, articleId));
+    expect(row.competitionId).toBe(f.competition.id);
+    expect(row.competitionGameId).toBe(game.id);
+    expect((await f.author.get(`/api/v1/posts/${created.body.id}`)).body.competition.id).toBe(f.competition.id);
+  });
+
   it.each(["author", "manager"])("returns empty and all-hidden competition groups to accepted %s staff without revealing hidden games", async (position) => {
     const f = await fixture();
     const staff = await loginAs("marcus@kinectem.demo");

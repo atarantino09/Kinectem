@@ -282,8 +282,8 @@ export function useNewPostForm({
   // still tags every rostered player. Unchecking sends `gameDate:
   // null` and skips the fan-out.
   const [tagRoster, setTagRoster] = useState<boolean>(true);
-  // Explicit competition pick for the recap (empty = none / let the
-  // server auto-derive). Reset whenever the team changes — a pick only
+  // Explicit competition pick for the recap (untouched empty = automatic;
+  // touched empty = deliberately no competition). Reset when the team changes — a pick only
   // makes sense for the team whose claimed slots produced the list.
   const [competitionId, setCompetitionId] = useState<string>(
     initialCompetitionId ?? "",
@@ -328,6 +328,9 @@ export function useNewPostForm({
   >([]);
   const [claimedCompetitionsLoading, setClaimedCompetitionsLoading] =
     useState(false);
+  const [claimedCompetitionsTeamId, setClaimedCompetitionsTeamId] = useState("");
+  const [claimedCompetitionsError, setClaimedCompetitionsError] = useState(false);
+  const [competitionLookupAttempt, setCompetitionLookupAttempt] = useState(0);
   // Highlight composer (and edit-post path) — list of roster userIds
   // the author hand-picks via the Tag Players dropdown. For new
   // highlights this is submitted as manual tags after the highlight
@@ -376,15 +379,23 @@ export function useNewPostForm({
     }
     let cancelled = false;
     setClaimedCompetitionsLoading(true);
+    setClaimedCompetitionsError(false);
     customFetch<{ competitions?: ClaimedCompetition[] }>(
       `/api/v1/teams/${composerTeamId}/claimed-competitions`,
       { method: "GET" },
     )
       .then((r) => {
-        if (!cancelled) setClaimedCompetitions(r.competitions ?? []);
+        if (!cancelled) {
+          setClaimedCompetitions(r.competitions ?? []);
+          setClaimedCompetitionsTeamId(composerTeamId);
+        }
       })
       .catch(() => {
-        if (!cancelled) setClaimedCompetitions([]);
+        if (!cancelled) {
+          setClaimedCompetitions([]);
+          setClaimedCompetitionsTeamId(composerTeamId);
+          setClaimedCompetitionsError(true);
+        }
       })
       .finally(() => {
         if (!cancelled) setClaimedCompetitionsLoading(false);
@@ -392,7 +403,7 @@ export function useNewPostForm({
     return () => {
       cancelled = true;
     };
-  }, [postType, composerTeamId]);
+  }, [postType, composerTeamId, competitionLookupAttempt]);
   // Task #746 — fetch the picked competition's games for the game
   // picker. Reuses the team page's tournament-schedule endpoint and
   // filters to the picked competition's already-played games (a recap
@@ -979,8 +990,8 @@ export function useNewPostForm({
       // Explicit competition pick (extra-spec field, recapKind
       // precedent). Only sent when the coach actually picked one —
       // absent lets the server keep its automatic best-effort derive.
-      ...(!isShort && competitionId
-        ? ({ competitionId } as object)
+      ...(!isShort && (competitionId || competitionTouched)
+        ? ({ competitionId: competitionId || null } as object)
         : {}),
       // Task #746 — the specific game the recap covers. Only
       // meaningful alongside an explicit competition pick.
@@ -1399,8 +1410,11 @@ export function useNewPostForm({
     // from. `composerTeamId` gates the picker's visibility (no team,
     // no picker).
     competitionId,
-    claimedCompetitions,
-    claimedCompetitionsLoading,
+    claimedCompetitions: claimedCompetitionsTeamId === composerTeamId ? claimedCompetitions : [],
+    claimedCompetitionsLoading: claimedCompetitionsLoading ||
+      (!!composerTeamId && claimedCompetitionsTeamId !== composerTeamId),
+    claimedCompetitionsError: claimedCompetitionsTeamId === composerTeamId && claimedCompetitionsError,
+    retryClaimedCompetitions: () => setCompetitionLookupAttempt((n) => n + 1),
     // Task #746 — game picker surface: the picked competition's
     // already-played games plus the current game pick.
     competitionGameId,
