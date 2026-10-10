@@ -48,6 +48,8 @@ interface TournamentMatch {
   startTime: string | null;
   division: string;
   bracket: string;
+  bracketId?: string | null;
+  bracketName?: string | null;
   venue: string | null;
   venueState: string | null;
   field: string | null;
@@ -598,9 +600,10 @@ export function TournamentScheduleCard({
                           )}
                         </div>
                         <div className="contents">
-                          {m.bracket ? (
+                          {(m.bracketName || m.bracket) ? (
                             <Badge variant="outline" className="max-w-40 self-start justify-self-end whitespace-normal [overflow-wrap:anywhere] text-[10px]">
-                              {m.bracket}
+                              {m.bracketName || m.bracket}
+                              {m.bracket && m.bracket !== (m.bracketName || m.bracket) ? ` · ${m.bracket}` : ""}
                             </Badge>
                           ) : <span aria-hidden="true" />}
                           {(m.recapPostId || (canPostRecap && isRecappable(m, g, recapNow)) || canManage || !!g.assignmentSnapshot?.length) && (

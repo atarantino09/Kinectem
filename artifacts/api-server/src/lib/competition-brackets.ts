@@ -18,6 +18,49 @@ export function bracketLabelKey(label: string): string {
   return label.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+type BracketIdentity = { id: string; label: string };
+type BracketParticipant = { id: string; bracketId: string | null; division: string; bracket: string };
+type BracketGame = { homeParticipantId: string | null; awayParticipantId: string | null; division: string; bracket: string };
+
+// Use existing organizer-managed brackets only. Reading a schedule must never
+// recreate a bracket the organizer deliberately deleted.
+export function resolveTeamCompetitionBracket(
+  participants: BracketParticipant[],
+  brackets: BracketIdentity[],
+  game?: BracketGame | null,
+): BracketIdentity | null {
+  const relevant = game ? participants.filter((p) =>
+    p.id === game.homeParticipantId || p.id === game.awayParticipantId) : participants;
+  if (!relevant.length) return null;
+  const linkedIds = new Set(relevant.map((p) => p.bracketId).filter(Boolean));
+  if (linkedIds.size > 1) return null;
+  if (linkedIds.size === 1) {
+    const linked = brackets.find((b) => linkedIds.has(b.id));
+    if (linked) return linked;
+  }
+  const labels = game ? [game.division || game.bracket] :
+    relevant.map((p) => p.division || p.bracket);
+  const keys = new Set(labels.map(bracketLabelKey).filter(Boolean));
+  if (keys.size !== 1) return null;
+  return brackets.find((b) => keys.has(bracketLabelKey(b.label))) ?? null;
+}
+
+export async function inheritTeamCompetitionBracket(
+  teamId: string, competitionId: string, gameId: string | null,
+): Promise<string | null> {
+  const participants = await db.select().from(tournamentParticipants).where(and(
+    eq(tournamentParticipants.teamId, teamId),
+    eq(tournamentParticipants.tournamentId, competitionId),
+  ));
+  const brackets = await db.select().from(competitionBrackets)
+    .where(eq(competitionBrackets.tournamentId, competitionId));
+  const [game] = gameId ? await db.select().from(tournamentMatches).where(and(
+    eq(tournamentMatches.id, gameId), eq(tournamentMatches.tournamentId, competitionId),
+  )) : [];
+  if (gameId && !game) return null;
+  return resolveTeamCompetitionBracket(participants, brackets, game)?.id ?? null;
+}
+
 // Normalize a CSV gender cell to a friendly display value; null when the
 // cell is empty or unrecognizable (kept optional — never required).
 function normalizeGender(raw: string | null | undefined): string | null {

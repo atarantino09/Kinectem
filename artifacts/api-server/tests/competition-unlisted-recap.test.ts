@@ -4,6 +4,7 @@ import {
   articles, db, organizations, organizationAdmins, teams, tournaments,
   tournamentParticipants, tournamentMatches,
   rosterEntries, teamHiddenCompetitionGames,
+  competitionBrackets,
 } from "@workspace/db";
 import { app, loginAs, request } from "./helpers";
 
@@ -53,6 +54,57 @@ async function trackRecap(postId: string) {
 }
 
 describe("competition-only game recaps", () => {
+  it("carries a claimed team's overall bracket onto its schedule and recaps, through reopen and publish", async () => {
+    const f = await fixture();
+    const [bracket] = await db.insert(competitionBrackets).values({
+      tournamentId: f.competition.id, label: "2016 U10 Boys Gold",
+      labelKey: "2016 u10 boys gold", sortOrder: 0,
+    }).returning();
+    await db.update(tournamentParticipants).set({
+      bracketId: bracket.id, division: bracket.label, bracket: "Bracket A",
+    }).where(eq(tournamentParticipants.id, f.slot.id));
+    const [game] = await db.insert(tournamentMatches).values({
+      tournamentId: f.competition.id, matchNumber: "1", matchDate: "2026-08-01",
+      homeParticipantId: f.slot.id, division: bracket.label, bracket: "Bracket A",
+    }).returning();
+    const schedule = await f.author.get(`/api/v1/teams/${f.team.id}/tournament-schedule`);
+    expect(schedule.status).toBe(200);
+    expect(schedule.body.data[0]).toMatchObject({ bracketId: bracket.id, bracketName: bracket.label });
+    expect(schedule.body.data[0].matches[0]).toMatchObject({
+      bracketId: bracket.id, bracketName: bracket.label, bracket: "Bracket A",
+    });
+    const created = await f.author.post("/api/v1/posts").send({
+      ...f.payload, competitionGameId: game.id, gameDate: "2026-08-01T12:00:00.000Z",
+    });
+    expect(created.status).toBe(201);
+    const articleId = await trackRecap(created.body.id);
+    expect(created.body.bracketId).toBe(bracket.id);
+    expect((await f.author.patch(`/api/v1/posts/${created.body.id}`).send({ body: "Autosaved." })).status).toBe(200);
+    const reopened = await f.author.get(`/api/v1/posts/${created.body.id}`);
+    expect(reopened.body.bracketId).toBe(bracket.id);
+    expect(reopened.body.competitionGameId).toBe(game.id);
+    expect((await f.author.post(`/api/v1/posts/${created.body.id}/publish`)).status).toBe(200);
+    const [stored] = await db.select().from(articles).where(eq(articles.id, articleId));
+    expect(stored.bracketId).toBe(bracket.id);
+
+    // Ordinary entry with competition selection, no listed game selected.
+    const ordinary = await f.author.post("/api/v1/posts").send(f.payload);
+    expect(ordinary.status).toBe(201);
+    await trackRecap(ordinary.body.id);
+    expect(ordinary.body.bracketId).toBe(bracket.id);
+    expect((await f.author.patch(`/api/v1/posts/${ordinary.body.id}`).send({ bracketId: null })).status).toBe(200);
+    expect((await f.author.patch(`/api/v1/posts/${ordinary.body.id}`).send({ title: "Manual override retained" })).body.bracketId).toBeNull();
+
+    // A draft created outside the competition inherits when linked later.
+    const unlinked = await f.author.post("/api/v1/posts").send({ ...f.payload, competitionId: null });
+    expect(unlinked.status).toBe(201);
+    await trackRecap(unlinked.body.id);
+    const linked = await f.author.patch(`/api/v1/posts/${unlinked.body.id}`).send({
+      competitionId: f.competition.id, competitionGameId: game.id,
+    });
+    expect(linked.status).toBe(200);
+    expect(linked.body.bracketId).toBe(bracket.id);
+  });
   it("keeps an explicit non-competition recap unlinked through autosave and publish, while omitted choices still derive", async () => {
     const f = await fixture();
     const [game] = await db.insert(tournamentMatches).values({

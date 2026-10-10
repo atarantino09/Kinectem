@@ -22,6 +22,13 @@ The user defines the full group, such as “2016 U10 Boys Gold,” as the overal
 
 **How to apply:** use the linked game's division when available, with the saved overall bracket name as a fallback. Keep subgroup detail separate, combine A/B under the overall recap filter and heading, and show the overall name as a small card label. Do not guess a missing full name from team names or rewrite persisted bracket assignments.
 
+## Claimed teams inherit their bracket
+Claimed competition teams must show their organizer-assigned overall bracket on the team-page competition schedule. Competition-linked recaps inherit that same saved bracket automatically, including regular recap entry and drafts linked later.
+
+**Why:** The user requires claimed-team recaps to arrive already sorted for the competition organizer, without coaches re-entering the bracket.
+
+**How to apply:** Prefer the existing participant-to-bracket identity so organizer renames carry through. Keep subgroup A/B separate. Preserve deliberate bracket overrides and ordinary autosaves. Resolve ambiguous slots through the selected game rather than guessing, and never recreate deleted brackets as a side effect of inheritance.
+
 The bracket dropdown must list every overall group, including groups with zero featured recaps, and show each group's total admin-featured recap count.
 
 **Why:** the user wants visitors to distinguish an empty bracket from an omitted one and know how much featured coverage each has.

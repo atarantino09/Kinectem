@@ -65,6 +65,7 @@ import {
 import {
   seedBracketsFromSchedule,
   linkParticipantsToBrackets,
+  resolveTeamCompetitionBracket,
 } from "../lib/competition-brackets";
 import {
   materialChanges,
@@ -4415,6 +4416,8 @@ router.get(
       .from(tournaments)
       .where(inArray(tournaments.id, tournamentIds));
     const tourneyById = new Map(tourneyRows.map((t) => [t.id, t]));
+    const scheduleBrackets = await db.select().from(competitionBrackets)
+      .where(inArray(competitionBrackets.tournamentId, tournamentIds));
 
     const matchRows = await db
       .select()
@@ -4496,6 +4499,8 @@ router.get(
       startTime: string | null;
       division: string;
       bracket: string;
+      bracketId: string | null;
+      bracketName: string | null;
       venue: string | null;
       venueState: string | null;
       field: string | null;
@@ -4522,6 +4527,8 @@ router.get(
         logoUrl: string | null;
         brandColor: string | null;
         secondaryColor: string | null;
+        bracketId: string | null;
+        bracketName: string | null;
         assignmentSnapshot?: { participantId: string; name: string; claimedAt: string | null }[];
         matches: OutMatch[];
       }
@@ -4531,10 +4538,15 @@ router.get(
     // Management snapshots and hidden games remain manager-only.
     if (viewerCanAuthor) {
       for (const t of tourneyRows) {
+        const defaultBracket = resolveTeamCompetitionBracket(
+          myParts.filter((p) => p.tournamentId === t.id),
+          scheduleBrackets.filter((b) => b.tournamentId === t.id),
+        );
         groups.set(t.id, {
           tournamentId: t.id, tournamentSlug: t.slug, tournamentName: t.name,
           startDate: t.startDate, endDate: t.endDate, recapFreeUntil: isOrgBacked ? null : t.endDate,
           logoUrl: t.logoUrl ?? null, brandColor: t.brandColor ?? null, secondaryColor: t.secondaryColor ?? null,
+          bracketId: defaultBracket?.id ?? null, bracketName: defaultBracket?.label ?? null,
           ...(viewerCanManage ? {
             assignmentSnapshot: myParts.filter((p) => p.tournamentId === t.id).map((p) => ({
               participantId: p.id, name: p.name, claimedAt: p.claimedAt?.toISOString() ?? null,
@@ -4557,6 +4569,10 @@ router.get(
       const oppId = isHome ? m.awayParticipantId : m.homeParticipantId;
       let g = groups.get(m.tournamentId);
       if (!g) {
+        const defaultBracket = resolveTeamCompetitionBracket(
+          myParts.filter((p) => p.tournamentId === t.id),
+          scheduleBrackets.filter((b) => b.tournamentId === t.id),
+        );
         g = {
           tournamentId: t.id,
           tournamentSlug: t.slug,
@@ -4567,10 +4583,17 @@ router.get(
           logoUrl: t.logoUrl ?? null,
           brandColor: t.brandColor ?? null,
           secondaryColor: t.secondaryColor ?? null,
+          bracketId: defaultBracket?.id ?? null,
+          bracketName: defaultBracket?.label ?? null,
           matches: [],
         };
         groups.set(m.tournamentId, g);
       }
+      const matchBracket = resolveTeamCompetitionBracket(
+        myParts.filter((p) => p.tournamentId === m.tournamentId),
+        scheduleBrackets.filter((b) => b.tournamentId === m.tournamentId),
+        m,
+      );
       g.matches.push({
         id: m.id,
         matchNumber: m.matchNumber,
@@ -4578,6 +4601,8 @@ router.get(
         startTime: parseStartTimeCell(m.startTime),
         division: m.division,
         bracket: m.bracket,
+        bracketId: matchBracket?.id ?? null,
+        bracketName: matchBracket?.label ?? null,
         venue: m.venue,
         venueState: m.venueState,
         field: m.field,

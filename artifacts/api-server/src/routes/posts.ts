@@ -111,6 +111,7 @@ import {
   type MinorNameViewerContext,
 } from "../lib/spec-helpers";
 import { loadCompetitionBrandMap } from "../lib/competition-brand";
+import { inheritTeamCompetitionBracket } from "../lib/competition-brackets";
 import { loadHistoricalOrgShares } from "../lib/historical-sharing";
 import { loadPostStats, statsFor, loadPostOwnerId, loadPostShareStats, shareStatsFor } from "../lib/post-stats";
 import {
@@ -3175,6 +3176,11 @@ router.post(
       // field, same precedent). Only honored when the recap ends up linked
       // to a competition and the bracket belongs to that competition.
       let bracketId: string | null = null;
+      if (!("bracketId" in body) && competitionLink.competitionId) {
+        bracketId = await inheritTeamCompetitionBracket(
+          teamId, competitionLink.competitionId, competitionLink.competitionGameId,
+        );
+      }
       if (
         typeof body.bracketId === "string" &&
         body.bracketId.length > 0 &&

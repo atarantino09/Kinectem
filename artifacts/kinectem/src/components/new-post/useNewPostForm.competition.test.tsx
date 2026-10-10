@@ -54,6 +54,50 @@ beforeEach(() => {
 });
 
 describe("competition-only composer context", () => {
+  it("preselects the saved overall bracket from the claimed schedule, including future deep-linked games", async () => {
+    const fallback = mocks.fetch.getMockImplementation()!;
+    mocks.fetch.mockImplementation(async (url: string, options?: RequestInit) => {
+      if (url.endsWith("/tournament-schedule")) return { data: [{
+        tournamentId: "cup-2", bracketId: "bracket-gold", matches: [{
+          id: "future-match", matchDate: "2099-06-12", opponentName: "Rovers", bracketId: "bracket-gold",
+        }],
+      }] };
+      if (url.endsWith("/brackets")) return { data: [{ id: "bracket-gold", label: "2016 U10 Boys Gold" }] };
+      return fallback(url, options);
+    });
+    const { result } = renderForm({ initialMatchId: "future-match", initialGameDate: "2099-06-12" });
+    await waitFor(() => expect(result.current.bracketId).toBe("bracket-gold"));
+    act(() => { result.current.setTitle("Gold recap"); result.current.setBody("The recap."); });
+    await act(() => result.current.onSaveDraft());
+    expect(mocks.create.mock.calls[0][0].data.bracketId).toBe("bracket-gold");
+  });
+  it("keeps an explicit no-bracket choice in new recap payloads", async () => {
+    const { result } = renderForm();
+    act(() => {
+      result.current.setTitle("No bracket"); result.current.setBody("The recap.");
+      result.current.setBracketId("");
+    });
+    await act(() => result.current.onSaveDraft());
+    expect(mocks.create.mock.calls[0][0].data.bracketId).toBeNull();
+  });
+  it("shows the inherited bracket and game when reopening, without treating either as a manual edit", async () => {
+    const fallback = mocks.fetch.getMockImplementation()!;
+    mocks.fetch.mockImplementation(async (url: string, options?: RequestInit) => {
+      const response = await fallback(url, options);
+      return url === "/api/v1/posts/article-draft" && options?.method === "GET"
+        ? { ...response, bracketId: "bracket-gold", competitionGameId: "game-1" } : response;
+    });
+    const { result } = renderForm({
+      initialDraftId: "article-draft", initialTeamId: null, initialCompetitionId: null,
+    });
+    await waitFor(() => expect(result.current.bracketId).toBe("bracket-gold"));
+    expect(result.current.competitionGameId).toBe("game-1");
+    act(() => result.current.setBody("Updated draft."));
+    await act(() => result.current.onSaveDraft());
+    const patch = mocks.fetch.mock.calls.find(([, options]) => options?.method === "PATCH")!;
+    expect(JSON.parse(patch[1].body)).not.toHaveProperty("bracketId");
+    expect(JSON.parse(patch[1].body)).not.toHaveProperty("competitionGameId");
+  });
   it("starts with no date, opponent, or match and keeps explicit context through create and autosave", async () => {
     const { result } = renderForm();
     expect(result.current.competitionId).toBe("cup-2");

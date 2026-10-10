@@ -13,6 +13,7 @@ import {
   competitionBrackets,
 } from "@workspace/db";
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { inheritTeamCompetitionBracket } from "../lib/competition-brackets";
 import { hashPassword, verifyPassword, generateToken, hashToken } from "../lib/passwords";
 import { rateLimit, ipKey, emailKey } from "../middlewares/rate-limit";
 import { asyncHandler } from "../lib/async-handler";
@@ -494,6 +495,19 @@ router.patch(
           updates["competitionGameId"] = body.competitionGameId;
         }
       }
+    }
+    // Re-inherit when the author links or switches competition/game context.
+    // Ordinary autosaves preserve the stored bracket, including manual clears.
+    const effectiveCompetition = "competitionId" in updates
+      ? updates["competitionId"] as string | null : a.competitionId;
+    const effectiveGame = "competitionGameId" in updates
+      ? updates["competitionGameId"] as string | null : a.competitionGameId;
+    if (!("bracketId" in body) && effectiveCompetition &&
+      (effectiveCompetition !== a.competitionId || effectiveGame !== a.competitionGameId ||
+        ("competitionId" in body && !a.bracketId))) {
+      updates["bracketId"] = await inheritTeamCompetitionBracket(
+        a.teamId, effectiveCompetition, effectiveGame,
+      );
     }
     // Task #852 — bracket pick from the composer (extra-spec field, same
     // precedent as competitionId above). Touch-gated client-side, so absent

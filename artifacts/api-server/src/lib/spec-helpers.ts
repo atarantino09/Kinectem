@@ -991,7 +991,7 @@ export function articleToPost(a: ArticleRow, extras: PostExtras) {
       displayOrder: assets.length,
     });
   }
-  return basePost({
+  return { ...basePost({
     id: articlePostId(a.id),
     postType: "long" as const,
     title: a.title,
@@ -1011,7 +1011,7 @@ export function articleToPost(a: ArticleRow, extras: PostExtras) {
     // Medal marker: operator-featured competition recap.
     competitionFeatured: a.featured === true && a.competitionId != null,
     extras,
-  });
+  }), bracketId: a.bracketId ?? null, competitionGameId: a.competitionGameId ?? null };
 }
 
 // "In the News" — a team_news_links row rendered as a feed post. `news-`

@@ -93,6 +93,8 @@ export type CompetitionGameOption = {
   startTime: string | null;
   isHome: boolean;
   opponentName: string | null;
+  bracketId?: string | null;
+  bracketName?: string | null;
 };
 
 // Task #852 — one bracket option in the composer's optional bracket
@@ -418,6 +420,7 @@ export function useNewPostForm({
     customFetch<{
       data?: Array<{
         tournamentId: string;
+        bracketId?: string | null;
         matches?: CompetitionGameOption[];
       }>;
     }>(`/api/v1/teams/${composerTeamId}/tournament-schedule`, {
@@ -433,6 +436,10 @@ export function useNewPostForm({
           (m) => !!m.matchDate && m.matchDate <= today,
         );
         setCompetitionGames(played);
+        if (!bracketTouched && ((!initialDraftId && !initialEditId) || competitionTouched)) {
+          const linkedGame = (group?.matches ?? []).find((m) => m.id === competitionGameId);
+          setBracketId(linkedGame?.bracketId ?? group?.bracketId ?? "");
+        }
       })
       .catch(() => {
         if (!cancelled) setCompetitionGames([]);
@@ -443,7 +450,8 @@ export function useNewPostForm({
     return () => {
       cancelled = true;
     };
-  }, [postType, composerTeamId, competitionId]);
+  }, [postType, composerTeamId, competitionId, competitionGameId, bracketTouched,
+    competitionTouched, initialDraftId, initialEditId]);
   // Task #852 — fetch the picked competition's brackets (organizer
   // order) for the optional bracket dropdown. Cleared with no pick.
   useEffect(() => {
@@ -846,6 +854,12 @@ export function useNewPostForm({
         // until the coach actually changes it.
         if (kind === "article") {
           setCompetitionId(d.competition?.id ?? "");
+          const savedCompetitionContext = d as typeof d & {
+            bracketId?: string | null;
+            competitionGameId?: string | null;
+          };
+          setBracketId(savedCompetitionContext.bracketId ?? "");
+          setCompetitionGameId(savedCompetitionContext.competitionGameId ?? "");
         }
         // Pre-populate the per-player tag picker (task #322). Only
         // meaningful when editing an already-published recap or
@@ -879,14 +893,9 @@ export function useNewPostForm({
           taggedUserIds: [],
           competitionId:
             kind === "article" ? (d.competition?.id ?? "") : "",
-          // GET /posts/:id doesn't surface the linked game id (locked
-          // spec), so re-opened sessions start with an untouched empty
-          // pick — autosaves omit it and the server keeps the stored
-          // link.
-          competitionGameId: "",
-          // Same locked-spec gap for the bracket — re-opened sessions
-          // start untouched/empty; autosaves omit it.
-          bracketId: "",
+          // Extra response fields restore context without touching it.
+          competitionGameId: (d as typeof d & { competitionGameId?: string | null }).competitionGameId ?? "",
+          bracketId: (d as typeof d & { bracketId?: string | null }).bracketId ?? "",
         });
         setBaseline(loadedSnapshot);
       })
@@ -1000,8 +1009,8 @@ export function useNewPostForm({
         : {}),
       // Task #852 — optional bracket pick; only meaningful alongside an
       // explicit competition pick.
-      ...(!isShort && competitionId && bracketId
-        ? ({ bracketId } as object)
+      ...(!isShort && competitionId && (bracketId || bracketTouched)
+        ? ({ bracketId: bracketId || null } as object)
         : {}),
       ...(status ? ({ status } as object) : {}),
     };
@@ -1522,6 +1531,7 @@ export function useNewPostForm({
       setGameTouched(true);
       setCompetitionTouched(true);
       if (v && game) {
+        if (!bracketTouched) setBracketId(game.bracketId ?? "");
         if (game.matchDate) setEnteredGameDate(game.matchDate.slice(0, 10));
         setPickedOpponent(game.opponentName ?? null);
       } else {
