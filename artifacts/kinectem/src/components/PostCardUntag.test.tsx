@@ -519,6 +519,19 @@ describe("PostCard compact mobile header", () => {
 
   const cases = [
     {
+      name: "competition-featured game recap",
+      post: () => ({
+        ...basePost({
+          id: "article-mobile-featured",
+          postType: "long",
+          gameDate: "2026-10-10",
+          context: longContext,
+        }),
+        competitionFeatured: true,
+      }) as Parameters<typeof PostCard>[0]["post"],
+      badge: "Game Recap",
+    },
+    {
       name: "ordinary update",
       post: () =>
         basePost({
@@ -575,20 +588,27 @@ describe("PostCard compact mobile header", () => {
   ];
 
   it.each(cases)(
-    "reserves the mobile upper-right controls for a $name while restoring the inline desktop layout",
+    "gives $name controls a separate mobile row while keeping the inline desktop layout",
     ({ post: makePost, badge }) => {
       const post = makePost();
       renderWithClient(<PostCard post={post} />);
 
       expect(
         screen.getByTestId(`post-header-${post.id}`),
-      ).toHaveClass("relative");
+      ).toHaveClass("flex-col", "items-stretch", "gap-2", "sm:flex-row", "sm:items-center");
       expect(
         screen.getByTestId(`post-header-identity-${post.id}`),
-      ).toHaveClass("w-full", "pt-7", "sm:w-auto", "sm:pt-0");
+      ).toHaveClass("order-2", "w-full", "sm:order-1", "sm:w-auto");
+      expect(screen.getByTestId(`post-header-identity-${post.id}`)).not.toHaveClass("pt-7");
       expect(
         screen.getByTestId(`post-header-actions-${post.id}`),
-      ).toHaveClass("absolute", "right-4", "top-2", "sm:static");
+      ).toHaveClass("order-1", "justify-end", "gap-2", "sm:order-2", "sm:gap-1");
+      expect(screen.getByTestId(`post-header-actions-${post.id}`)).not.toHaveClass("absolute");
+      if ("competitionFeatured" in post) {
+        expect(screen.getByTestId(`icon-featured-medal-${post.id}`).parentElement).toBe(
+          screen.getByTestId(`badge-post-type-${post.id}`).parentElement,
+        );
+      }
       expect(
         screen.getByTestId(`text-post-parent-org-${post.id}`),
       ).toHaveTextContent(

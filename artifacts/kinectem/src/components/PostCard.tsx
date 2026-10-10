@@ -499,7 +499,7 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
         )}
         <div
           className={cn(
-            "relative px-5 flex items-center justify-between border-b border-border/60",
+            "relative px-5 flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-0 border-b border-border/60",
             postOrgIdentity ? "py-3 [&_.text-muted-foreground]:text-inherit" : "py-4",
           )}
           style={postOrgIdentity ? {
@@ -509,7 +509,7 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
           data-testid={`post-header-${post.id}`}
         >
           <div
-            className="flex w-full items-center gap-3 min-w-0 pt-7 sm:w-auto sm:pt-0"
+            className="order-2 flex w-full items-center gap-3 min-w-0 sm:order-1 sm:w-auto"
             data-testid={`post-header-identity-${post.id}`}
           >
             {(() => {
@@ -653,7 +653,7 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
             </div>
           </div>
           <div
-            className="absolute right-4 top-2 flex items-center gap-1 shrink-0 sm:static"
+            className="order-1 flex items-center justify-end gap-2 shrink-0 sm:order-2 sm:gap-1 sm:ml-3"
             data-testid={`post-header-actions-${post.id}`}
           >
             {competitionFeatured && (
