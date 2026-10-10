@@ -39,6 +39,10 @@ not proof that a live promo has been provisioned.
 
 ## Key constraints / non-obvious decisions
 
+- **Existing custom codes need an explicit FREE2027 conversion with an August billing choice.**
+  - **Why:** The user wants to convert a current code and its current organizations from Edit promo code, choosing whether the original discount applies on August 1, 2027 or the first annual charge is full price.
+  - **How to apply:** Preserve the custom source identity; review affected orgs before changing granted terms. Keeping a discount applies to the first annual invoice only, not later renewals. Canonical FREE2027 remains full-price-only.
+
 - **Custom source codes may explicitly inherit FREE2027, but remain independent identities.**
   - **Why:** The user wants one customer-entered code for the fixed free-access benefit and source-specific usage attribution, not promo stacking. A referring person, club, or campaign is not automatically a competition.
   - **How to apply:** Preserve custom identity and granted terms after code edits/deletion. Keep each code's activation, expiry and cap independent; never infer commission or competition attribution from a custom code. Use a separate explicit competition referral with first-attribution-wins.
