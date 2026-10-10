@@ -25,7 +25,7 @@
 - [Startup migration registration](startup-migration-registration.md) — schema changes need a registered entry in migrations.ts MIGRATIONS array; dev push/raw SQL alone never reaches production.
 - [Competition console claim preview](competition-claim-preview.md) — claim-link visitors get the full console read-only & expanded via synthetic row + disabled fieldset; gate owner-only queries.
 - [Two org-claim flows](org-claim-flows.md) — ownerless org pages have a review-gated claim *request* AND a secret-token instant claim *link*; don't conflate; both owner-exclusive via one-owner index.
-- [Stripe org billing](stripe-org-billing.md) — card-on-file now, first charge Oct 1 via Checkout trial_end; connector has NO webhook secret so reconcile-on-return is source of truth; Sept-15 reminder is a standalone non-idempotent script.
+- [Stripe org billing](stripe-org-billing.md) — yearly discounts are first-year only; FREE2027 defers the first full-price charge until August 1, 2027 rather than discounting it.
 - [Per-tier team cap enforcement](team-cap-enforcement.md) — caps live in plan-limits.ts; enforce INSIDE insert tx behind pg_advisory_xact_lock(orgId) + recount, not a pre-check (TOCTOU).
 - [Production data seeding after publish](prod-data-seeding.md) — publish syncs schema NOT rows; reseed prod via Scheduled Deployment; secret tokens are per-env so export invite links from the prod run only.
 - [Broadcast/announcement attachments](broadcast-attachments.md) — org announcements attach flyers via shared asset pipeline; MUST enforce type allowlist server-side (id-attach bypasses client picker); list=count only, detail=data-URLs.

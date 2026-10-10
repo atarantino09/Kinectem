@@ -1,14 +1,28 @@
 ---
 name: Stripe org billing (card-on-file, deferred charge)
-description: How Kinectem org subscriptions wire to Stripe — card-on-file now, first charge Nov 1; connector has no webhook secret so reconcile-on-return is the source of truth.
+description: Organization billing product rules, first-year discounts, and the FREE2027 fixed-date offer.
 ---
 
 # Stripe org billing
 
 Kinectem orgs choose a plan **card-free** at signup. Putting a card on file is a
-separate, opt-in step that does NOT charge anything today — the first yearly
-charge runs automatically on **Nov 1 2026** (set via Stripe Checkout
-`trial_end`). This is a product decision, not a temporary state.
+separate, opt-in step that does NOT charge anything immediately. Ordinary
+organizations receive a rolling 90-day free period; legacy organizations retain
+their applicable first-charge floor. Do not treat November 1, 2026 as a universal
+first-charge date.
+
+## FREE2027 offer
+The user specified the public promo code **FREE2027**: an organization redeeming
+it gets free access until **August 1, 2027**, when its first annual payment must
+be the selected plan's **full price, with no discount**.
+
+**Why:** The requested benefit is free access before a fixed date, not a
+discounted annual invoice or an additional free year starting on that date.
+
+**How to apply:** Defer billing for this offer rather than attaching a 100%
+discount coupon. Make the access end and first full-price charge date agree in
+customer messaging and billing. This documents the requested product policy,
+not proof that a live promo has been provisioned.
 
 ## Key constraints / non-obvious decisions
 
