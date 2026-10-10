@@ -22,6 +22,7 @@ type Usage = {
   discountType: PromoDiscountType;
   freeUntil?: string | null;
   discountValue: number;
+  firstAnnualDiscount?: { discountType: "percent" | "amount"; discountValue: number } | null;
   endedAt: string | null;
   endReason: string | null;
   billingStatus: string;

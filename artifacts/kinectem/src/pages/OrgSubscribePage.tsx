@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { freeAccessDate, isFree2027Offer } from "@/lib/free-access-promo";
+import { freeAccessDate, isFree2027Offer, firstAnnualChargeLabel } from "@/lib/free-access-promo";
 import { CompetitionReferralField, pendingCompetitionReferral, clearPendingCompetitionReferral } from "@/components/CompetitionReferralField";
 import {
   PLANS,
@@ -445,7 +445,7 @@ export default function OrgSubscribePage() {
               <div className="text-sm">
                 <span className="font-bold uppercase">{promo.code}</span> applied —{" "}
                 {promo.discountType === "free_until"
-                  ? `free access until ${freeAccessDate(promo.freeUntil)}. The first annual charge on that date is full price`
+                  ? `free access until ${freeAccessDate(promo.freeUntil)}. On that date: ${firstAnnualChargeLabel(promo)}`
                   : promo.discountType === "percent"
                   ? `${promo.discountValue}% off your first year`
                   : `${formatUsd(promo.discountValue)} off your first year`}

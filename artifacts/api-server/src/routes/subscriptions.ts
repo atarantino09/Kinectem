@@ -29,8 +29,11 @@ import { resolvePromoBilling } from "../lib/promo-billing-status";
 import { availableFreeUntil, FREE2027_FIRST_CHARGE, isFree2027Offer, validateLinkedTerms } from "../lib/free-access-promo";
 import { processFree2027 } from "./admin-free-access";
 import { verifyUnpaidBilling } from "../lib/free-access-stripe";
+import promoConversionsRouter from "./promo-code-conversions";
+import { promoSnapshot } from "../lib/promo-conversion";
 
 const router: IRouter = Router();
+router.use(promoConversionsRouter);
 
 const ONE_MINUTE = 60 * 1000;
 
@@ -154,6 +157,7 @@ function publicPromo(row: NonNullable<Awaited<ReturnType<typeof findRedeemablePr
     linkedOffer: row.linkedOffer,
     discountType: row.discountType,
     discountValue: row.discountValue,
+    firstAnnualDiscount: row.firstAnnualDiscount,
     freeUntil: row.freeUntil?.toISOString() ?? null,
   };
 }
@@ -201,7 +205,7 @@ function serializeSubscription(
     organizationId: sub.organizationId,
     plan: sub.plan,
     status: sub.status,
-    promo: sub.freeUntil && sub.freeAccessPromo ? sub.freeAccessPromo : promo,
+    promo: sub.freeAccessPromo ?? sub.promoSnapshot ?? promo,
     hasCardOnFile: Boolean(sub.stripeSubscriptionId),
     billingStartsAt: sub.billingStartsAt?.toISOString() ?? null,
     freeUntil: sub.freeUntil?.toISOString() ?? null,
@@ -250,7 +254,7 @@ router.get(
       }
     }
 
-    if (sub?.freeAccessPromo && sub.freeUntil) promo = sub.freeAccessPromo;
+    if (sub?.freeAccessPromo || sub?.promoSnapshot) promo = sub.freeAccessPromo ?? sub.promoSnapshot!;
 
     // Staged promo + plan tier from admin creation — auto-applied /
     // pre-selected client-side when the org hasn't already chosen its own.
@@ -262,6 +266,7 @@ router.get(
         .select({
           pendingPromoCodeId: organizations.pendingPromoCodeId,
           pendingPlan: organizations.pendingPlan,
+          pendingPromoSnapshot: organizations.pendingPromoSnapshot,
         })
         .from(organizations)
         .where(eq(organizations.id, orgId))
@@ -270,7 +275,9 @@ router.get(
       if (!sub && org?.pendingPlan) {
         pendingPlan = org.pendingPlan as PlanTier;
       }
-      if (!sub?.promoCodeId && org?.pendingPromoCodeId) {
+      if (org?.pendingPromoSnapshot?.discountType === "free_until") {
+        pendingPromo = { description: null, linkedOffer: null, freeUntil: null, firstAnnualDiscount: null, ...org.pendingPromoSnapshot };
+      } else if (!sub?.promoCodeId && org?.pendingPromoCodeId) {
         const [row] = await db
           .select()
           .from(promoCodes)
@@ -282,7 +289,7 @@ router.get(
           (!row.expiresAt || row.expiresAt.getTime() > Date.now()) &&
           (row.maxRedemptions == null || row.redemptionCount < row.maxRedemptions)
         ) {
-          pendingPromo = publicPromo(row);
+            pendingPromo = { ...publicPromo(row), ...(org.pendingPromoSnapshot ?? {}) };
         }
       }
     }
@@ -369,10 +376,42 @@ router.put(
       .limit(1);
     const currentPromoId = currentPromo?.promoCodeId ?? null;
     const [orgPromoState] = await db
-      .select({ pendingPromoCodeId: organizations.pendingPromoCodeId })
+      .select({ pendingPromoCodeId: organizations.pendingPromoCodeId, pendingPromoSnapshot: organizations.pendingPromoSnapshot })
       .from(organizations)
       .where(eq(organizations.id, orgId as string))
       .limit(1);
+    // A granted reservation is not repriced by later code edits or deletion.
+    const detached = orgPromoState?.pendingPromoSnapshot;
+    if (!currentPromo && detached?.discountType === "free_until" && promoCode?.toLowerCase() === detached.code.toLowerCase()) {
+      const until = availableFreeUntil({ discountType: "free_until", freeUntil: detached.freeUntil ? new Date(detached.freeUntil) : null });
+      const grant = { ...detached, discountType: "free_until" as const, freeUntil: until.toISOString() };
+      const saved = await db.transaction(async (tx) => {
+        const [org] = await tx.select().from(organizations).where(eq(organizations.id, orgId as string)).for("update");
+        const [existing] = await tx.select().from(orgSubscriptions).where(eq(orgSubscriptions.organizationId, orgId as string)).for("update");
+        if (!org || existing || JSON.stringify(org.pendingPromoSnapshot) !== JSON.stringify(detached)) return null;
+        const [source] = org.pendingPromoCodeId ? await tx.select().from(promoCodes)
+          .where(eq(promoCodes.id, org.pendingPromoCodeId)).for("update") : [];
+        const referral = await checkReferral(tx, orgId as string, referralCode);
+        const [created] = await tx.insert(orgSubscriptions).values({
+          organizationId: orgId as string, plan, status: "trialing", freeUntil: until, billingStartsAt: until,
+          promoCodeId: source?.id ?? null,
+          freeAccessPromo: grant, promoSnapshot: grant,
+        }).returning();
+        await tx.insert(promoUsage).values({
+          organizationId: orgId as string, organizationName: org.name, actorUserId: me.id, actorName: me.name,
+          promoCodeId: source?.id ?? null,
+          actorEmail: me.email, code: grant.code, discountType: "free_until", discountValue: 0,
+          freeUntil: until, firstAnnualDiscount: grant.firstAnnualDiscount, plan,
+        });
+        // Consume the existing reservation: accepted + pending total is unchanged.
+        if (source) await tx.update(promoCodes).set({ redemptionCount: sql`${promoCodes.redemptionCount} + 1` }).where(eq(promoCodes.id, source.id));
+        if (referral) await attachReferral(tx, org, referral);
+        await tx.update(organizations).set({ pendingPromoCodeId: null, pendingPromoSnapshot: null, pendingPlan: null }).where(eq(organizations.id, orgId as string));
+        return created;
+      });
+      if (!saved) { apiError(res, 409, "The organization's billing changed. Reload and try again.", { code: "PLAN_LOCKED" }); return; }
+      res.json({ subscription: serializeSubscription(saved, grant), teamLimits: PLAN_TEAM_LIMITS }); return;
+    }
     let promoRow: Awaited<ReturnType<typeof findRedeemablePromo>> = null;
     if (promoCode) {
       promoRow = await findRedeemablePromo(promoCode);
@@ -394,7 +433,8 @@ router.put(
             if (sub.stripeSubscriptionId && sub.plan !== plan) return null;
             if ((!sub.stripeSubscriptionId && !sub.stripeCustomerId && ["active", "past_due"].includes(sub.status))) return null;
             const verified = await verifyUnpaidBilling({ orgId, subscriptionId: sub.stripeSubscriptionId,
-              customerId: sub.stripeCustomerId, plan: sub.plan, freeUntil: sub.freeUntil, apply: Boolean(sub.stripeSubscriptionId) });
+               customerId: sub.stripeCustomerId, plan: sub.plan, freeUntil: sub.freeUntil, apply: Boolean(sub.stripeSubscriptionId),
+               firstAnnualDiscount: sub.freeAccessPromo?.firstAnnualDiscount, promoCode: sub.freeAccessPromo?.code });
             if (verified.status !== "eligible") return null;
             const referral = await checkReferral(tx, orgId, referralCode);
             await attachReferral(tx, org, referral);
@@ -424,6 +464,13 @@ router.put(
       }
     }
 
+    const retained = currentPromo?.promoCodeId === promoRow?.id
+      ? currentPromo?.freeAccessPromo ?? currentPromo?.promoSnapshot
+      : orgPromoState?.pendingPromoCodeId === promoRow?.id ? orgPromoState?.pendingPromoSnapshot : null;
+    if (promoRow && retained) {
+      promoRow = { ...promoRow, ...retained, linkedOffer: retained.linkedOffer ?? null,
+        firstAnnualDiscount: retained.firstAnnualDiscount ?? null, freeUntil: retained.freeUntil ? new Date(retained.freeUntil) : null };
+    }
     const newPromoId = promoRow?.id ?? null;
     if (referralCode && !isFree2027Offer(promoRow)) {
       apiError(res, 400, "Use FREE2027 or a linked free-access code and enter the competition referral tag separately.", { code: "VALIDATION_FAILED" });
@@ -506,6 +553,7 @@ router.put(
           stripeSubscriptionId: orgSubscriptions.stripeSubscriptionId,
           freeUntil: orgSubscriptions.freeUntil,
           freeAccessPromo: orgSubscriptions.freeAccessPromo,
+          promoSnapshot: orgSubscriptions.promoSnapshot,
         })
         .from(orgSubscriptions)
         .where(eq(orgSubscriptions.organizationId, orgId))
@@ -557,9 +605,15 @@ router.put(
             error: "That promo code is no longer active.",
           } as const;
         }
-        appliedPromo = lockedPromo;
-        if (lockedPromo.discount_type === "free_until") {
-          const lockedUntil = availableFreeUntil({ discountType: "free_until", freeUntil: lockedPromo.free_until ? new Date(lockedPromo.free_until) : null });
+        const retainedTerms = oldPromoId === newPromoId ? existing?.promoSnapshot ?? existing?.freeAccessPromo
+          : lockedOrg?.pending_promo_code_id === newPromoId ? orgPromoState?.pendingPromoSnapshot : null;
+        appliedPromo = retainedTerms ? { ...lockedPromo, discount_type: retainedTerms.discountType,
+          discount_value: retainedTerms.discountValue, free_until: retainedTerms.freeUntil ? new Date(retainedTerms.freeUntil) : null } : lockedPromo;
+        if (appliedPromo.discount_type !== promoRow?.discountType || appliedPromo.discount_value !== promoRow.discountValue) {
+          return { error: "The promo terms changed. Reload and try again." } as const;
+        }
+        if (appliedPromo.discount_type === "free_until") {
+          const lockedUntil = availableFreeUntil({ discountType: "free_until", freeUntil: appliedPromo.free_until ? new Date(appliedPromo.free_until) : null });
           if (lockedUntil?.getTime() !== offerUntil?.getTime()) {
             return { error: "The promo terms changed. Reload and try again." } as const;
           }
@@ -597,6 +651,7 @@ router.put(
           promoCodeId: newPromoId,
           billingStartsAt: startsAt,
           freeUntil: offerUntil,
+          promoSnapshot: promoRow ? promoSnapshot(promoRow) : null,
         })
         .onConflictDoUpdate({
           target: orgSubscriptions.organizationId,
@@ -609,6 +664,7 @@ router.put(
             billingStartsAt: offerUntil || existing?.freeUntil
               ? startsAt : sql`COALESCE(${orgSubscriptions.billingStartsAt}, ${startsAt})`,
             freeUntil: offerUntil,
+            promoSnapshot: promoRow ? promoSnapshot(promoRow) : null,
             freeAccessPromo: offerUntil
               ? appliedPromo ? { code: appliedPromo.code, discountType: "free_until" as const,
                 discountValue: 0, freeUntil: offerUntil.toISOString() } : existing?.freeAccessPromo ?? null
@@ -662,7 +718,7 @@ router.put(
       // both staged and applied.
       await tx
         .update(organizations)
-        .set({ pendingPromoCodeId: null })
+        .set({ pendingPromoCodeId: null, pendingPromoSnapshot: null })
         .where(eq(organizations.id, orgId as string));
       if (referral) {
         const [org] = await tx.select({ id: organizations.id, name: organizations.name }).from(organizations).where(eq(organizations.id, orgId as string));
@@ -746,7 +802,10 @@ router.post(
         };
       }
     }
-    if (sub.freeUntil && sub.freeAccessPromo) promo = sub.freeAccessPromo;
+    if (sub.freeAccessPromo || sub.promoSnapshot) promo = sub.freeAccessPromo ?? sub.promoSnapshot!;
+    if (sub.freeUntil && sub.stripeSubscriptionId) {
+      apiError(res, 409, "Billing is already scheduled. Cancel the existing billing before adding another card.", { code: "PLAN_LOCKED" }); return;
+    }
 
     const createdAt = await orgCreatedAt(orgId);
     if (!createdAt) {
@@ -848,6 +907,8 @@ router.post(
       const aligned = await verifyUnpaidBilling({
         orgId: orgId as string, subscriptionId: info.subscriptionId, customerId: info.customerId,
         plan: currentSub.plan, freeUntil: currentSub.freeUntil, apply: true,
+        firstAnnualDiscount: currentSub.freeAccessPromo?.firstAnnualDiscount,
+        promoCode: currentSub.freeAccessPromo?.code,
       });
       if (aligned.status !== "eligible") {
         apiError(res, 409, aligned.reason, { code: "FREE_ACCESS_DATE_MISMATCH" }); return;
@@ -992,6 +1053,7 @@ function adminPromo(row: typeof promoCodes.$inferSelect) {
     code: row.code,
     description: row.description,
     linkedOffer: row.linkedOffer,
+    firstAnnualDiscount: row.firstAnnualDiscount,
     discountType: row.discountType,
     discountValue: row.discountValue,
     freeUntil: row.freeUntil?.toISOString() ?? null,
@@ -1141,6 +1203,8 @@ type AdminOrgRow = {
   promoFreeUntil?: Date | null;
   grantedFreeUntil?: Date | null;
   freeAccessPromo?: typeof orgSubscriptions.$inferSelect["freeAccessPromo"];
+  promoSnapshot?: typeof orgSubscriptions.$inferSelect["promoSnapshot"];
+  pendingPromoSnapshot?: typeof organizations.$inferSelect["pendingPromoSnapshot"];
   pendingPromoFreeUntil?: Date | null;
   pendingPromoDiscountType:
     | (typeof promoCodes.$inferSelect)["discountType"]
@@ -1150,22 +1214,24 @@ type AdminOrgRow = {
 };
 
 function adminOrgRow(r: AdminOrgRow) {
+  const snapshot = r.freeAccessPromo ?? r.promoSnapshot ?? r.pendingPromoSnapshot;
   return {
     organizationId: r.orgId,
     organizationName: r.orgName,
     plan: r.plan,
     status: r.status,
     billingStartsAt: r.billingStartsAt?.toISOString() ?? null,
-    promoFreeUntil: (r.grantedFreeUntil ?? r.promoFreeUntil ?? r.pendingPromoFreeUntil)?.toISOString() ?? null,
+    promoFreeUntil: snapshot ? snapshot.freeUntil ?? null : (r.grantedFreeUntil ?? r.promoFreeUntil ?? r.pendingPromoFreeUntil)?.toISOString() ?? null,
+    firstAnnualDiscount: snapshot?.firstAnnualDiscount ?? null,
     subscribedAt:
       (r.subscriptionUpdatedAt ?? r.subscriptionCreatedAt)?.toISOString() ??
       null,
-    promoCode: r.freeAccessPromo?.code ?? r.promoCode,
-    pendingPromoCode: r.pendingPromoCode,
+    promoCode: r.freeAccessPromo?.code ?? r.promoSnapshot?.code ?? r.promoCode,
+    pendingPromoCode: r.pendingPromoSnapshot?.code ?? r.pendingPromoCode,
     promoDiscountType:
-      r.freeAccessPromo?.discountType ?? r.promoDiscountType ?? r.pendingPromoDiscountType,
+      snapshot?.discountType ?? r.promoDiscountType ?? r.pendingPromoDiscountType,
     promoDiscountValue:
-      r.freeAccessPromo?.discountValue ?? r.promoDiscountValue ?? r.pendingPromoDiscountValue,
+      snapshot?.discountValue ?? r.promoDiscountValue ?? r.pendingPromoDiscountValue,
     promoExpiresAt:
       (r.promoExpiresAt ?? r.pendingPromoExpiresAt)?.toISOString() ?? null,
   };
@@ -1194,6 +1260,8 @@ router.get(
         promoFreeUntil: promoCodes.freeUntil,
         grantedFreeUntil: orgSubscriptions.freeUntil,
         freeAccessPromo: orgSubscriptions.freeAccessPromo,
+        promoSnapshot: orgSubscriptions.promoSnapshot,
+        pendingPromoSnapshot: organizations.pendingPromoSnapshot,
         pendingPromoFreeUntil: pendingPromoCodes.freeUntil,
         pendingPromoDiscountType: pendingPromoCodes.discountType,
         pendingPromoDiscountValue: pendingPromoCodes.discountValue,
@@ -1337,7 +1405,7 @@ router.patch(
       return;
     }
     if ((b.linkedOffer !== undefined && b.linkedOffer !== current.linkedOffer) ||
-        !validateLinkedTerms({ ...b, linkedOffer: current.linkedOffer })) {
+        !validateLinkedTerms({ ...b, linkedOffer: isFree2027Offer(current) ? "free2027" : current.linkedOffer })) {
       apiError(res, 400, "The FREE2027 linkage and inherited terms cannot be changed. Create a new code instead.", { code: "VALIDATION_FAILED" });
       return;
     }

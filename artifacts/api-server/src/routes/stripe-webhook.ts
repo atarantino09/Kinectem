@@ -9,6 +9,7 @@ import {
 } from "../lib/stripe-billing.js";
 import { logger } from "../lib/logger.js";
 import { recordReferralInvoice } from "../lib/competition-referrals";
+import { verifyUnpaidBilling } from "../lib/free-access-stripe";
 
 // Optional Stripe webhook. Only active when STRIPE_WEBHOOK_SECRET is set:
 // create an endpoint in the Stripe dashboard pointing at
@@ -74,6 +75,8 @@ export async function stripeWebhookHandler(
               orgId: orgSubscriptions.organizationId,
               orgCreatedAt: organizations.createdAt,
               freeUntil: orgSubscriptions.freeUntil,
+              plan: orgSubscriptions.plan,
+              freeAccessPromo: orgSubscriptions.freeAccessPromo,
             })
             .from(orgSubscriptions)
             .innerJoin(
@@ -87,6 +90,8 @@ export async function stripeWebhookHandler(
               orgId: orgSubscriptions.organizationId,
               orgCreatedAt: organizations.createdAt,
               freeUntil: orgSubscriptions.freeUntil,
+              plan: orgSubscriptions.plan,
+              freeAccessPromo: orgSubscriptions.freeAccessPromo,
             })
             .from(orgSubscriptions)
             .innerJoin(
@@ -101,6 +106,13 @@ export async function stripeWebhookHandler(
         ? new Date(sub.trial_end * 1000)
         : null;
       if (sub.status === "trialing" && knownSub?.freeUntil) {
+        const aligned = await verifyUnpaidBilling({
+          orgId: knownSub.orgId, subscriptionId: sub.id, customerId,
+          plan: knownSub.plan, freeUntil: knownSub.freeUntil, apply: true,
+          firstAnnualDiscount: knownSub.freeAccessPromo?.firstAnnualDiscount,
+          promoCode: knownSub.freeAccessPromo?.code, operationId: `webhook-${event.id}`,
+        });
+        if (aligned.status !== "eligible") throw new Error(aligned.reason);
         // Fixed-date offers must never be expanded into a rolling 90-day trial.
         if (effectiveTrialEnd?.getTime() !== knownSub.freeUntil.getTime()) {
           const fresh = await stripe.subscriptions.retrieve(sub.id);

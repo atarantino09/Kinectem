@@ -1,5 +1,9 @@
 import { getStripeClient } from "./stripeClient.js";
-import { PLAN_YEARLY_USD, type PlanTier } from "./stripe-billing.js";
+import { PLAN_YEARLY_USD, type PlanTier, firstAnnualCouponId, ensureFirstAnnualCoupon, couponMatchesFirstAnnual } from "./stripe-billing.js";
+import type { FirstAnnualDiscount } from "./free-access-promo.js";
+import { firstAnnualTerms } from "./free-access-promo.js";
+import { randomUUID } from "node:crypto";
+import type Stripe from "stripe";
 
 export type FreeAccessDecision = {
   status: "eligible" | "skipped" | "blocked";
@@ -10,6 +14,7 @@ export type FreeAccessDecision = {
 export async function verifyUnpaidBilling(input: {
   orgId: string; subscriptionId: string | null; customerId: string | null;
   plan: PlanTier; freeUntil: Date; apply: boolean;
+  firstAnnualDiscount?: FirstAnnualDiscount | null; promoCode?: string; operationId?: string;
 }): Promise<FreeAccessDecision> {
   if (!input.subscriptionId && !input.customerId) {
     return { status: "eligible", reason: "No card on file; free access can be applied." };
@@ -18,7 +23,7 @@ export async function verifyUnpaidBilling(input: {
   if (!stripe) return { status: "blocked", reason: "Stripe is not connected. No billing or access dates were changed." };
   try {
     const live = input.subscriptionId
-      ? await stripe.subscriptions.retrieve(input.subscriptionId) : null;
+      ? await stripe.subscriptions.retrieve(input.subscriptionId, { expand: ["discounts.source.coupon"] }) : null;
     if (live && live.metadata.orgId !== input.orgId) {
       return { status: "blocked", reason: "The Stripe subscription could not be verified as belonging to this organization." };
     }
@@ -66,20 +71,33 @@ export async function verifyUnpaidBilling(input: {
       items[0].price.recurring.interval_count !== 1) {
       return { status: "blocked", reason: "The saved Stripe price does not match this plan's full annual price. Billing needs review." };
     }
-    if (input.apply && (live.status !== "trialing" || live.trial_end !== Math.floor(input.freeUntil.getTime() / 1000) || live.discounts.length > 0)) {
+    const discount = input.firstAnnualDiscount;
+    if (discount && !input.promoCode) return { status: "blocked", reason: "The retained discount source is missing." };
+    const expectedCoupon = discount ? firstAnnualCouponId(input.promoCode!, discount) : null;
+    const matchesDiscount = (subscription: Stripe.Subscription) => {
+      if (!discount) return subscription.discounts.length === 0;
+      if (subscription.discounts.length !== 1) return false;
+      const d = subscription.discounts[0];
+      if (typeof d === "string") return false;
+      const coupon = d.source.coupon;
+      return typeof coupon === "object" && coupon !== null &&
+        coupon.id === expectedCoupon && couponMatchesFirstAnnual(coupon as Stripe.Coupon, discount);
+    };
+    if (input.apply && (live.status !== "trialing" || live.trial_end !== Math.floor(input.freeUntil.getTime() / 1000) || !matchesDiscount(live))) {
+      const couponId = discount ? await ensureFirstAnnualCoupon(stripe, input.promoCode!, discount) : null;
       const updated = await stripe.subscriptions.update(live.id, {
         trial_end: Math.floor(input.freeUntil.getTime() / 1000),
-        discounts: "",
+        discounts: couponId ? [{ coupon: couponId }] : "",
         proration_behavior: "none",
-      }, { idempotencyKey: `free-access-${input.orgId}-${live.id}-${input.freeUntil.getTime()}` });
-      const confirmed = await stripe.subscriptions.retrieve(updated.id);
+      }, { idempotencyKey: `free-access-${input.orgId}-${input.operationId ?? randomUUID()}` });
+      const confirmed = await stripe.subscriptions.retrieve(updated.id, { expand: ["discounts.source.coupon"] });
       if (confirmed.status !== "trialing" || confirmed.metadata.orgId !== input.orgId ||
           (typeof confirmed.customer === "string" ? confirmed.customer : confirmed.customer.id) !== customerId ||
-          confirmed.trial_end !== Math.floor(input.freeUntil.getTime() / 1000) || confirmed.discounts.length) {
-        return { status: "blocked", reason: "Stripe did not confirm the full-price billing date. Retry or review billing." };
+          confirmed.trial_end !== Math.floor(input.freeUntil.getTime() / 1000) || !matchesDiscount(confirmed)) {
+        return { status: "blocked", reason: "Stripe did not confirm the billing date and first annual invoice terms. Retry or review billing." };
       }
     }
-    return { status: "eligible", reason: "Unpaid subscription: first full-price annual charge moves to August 1, 2027." };
+    return { status: "eligible", reason: `Unpaid subscription: ${firstAnnualTerms(discount)}.` };
   } catch {
     return { status: "blocked", reason: "Could not verify or update Stripe billing. No successful application was recorded; retry after connecting Stripe." };
   }

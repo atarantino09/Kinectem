@@ -60,6 +60,7 @@ type AdminOrg = {
   pendingPromoCode: string | null;
   promoDiscountType: PromoDiscountType | null;
   promoFreeUntil?: string | null;
+  firstAnnualDiscount?: { discountType: "percent" | "amount"; discountValue: number } | null;
   promoDiscountValue: number | null;
   promoExpiresAt: string | null;
 };
@@ -132,7 +133,7 @@ const STATUS_STYLES: Record<NonNullable<AdminOrg["status"]>, string> = {
 };
 
 function formatDiscount(row: AdminOrg): string {
-  if (row.promoDiscountType === "free_until") return promoOfferLabel({ discountType: row.promoDiscountType, discountValue: 0, freeUntil: row.promoFreeUntil });
+  if (row.promoDiscountType === "free_until") return promoOfferLabel({ discountType: row.promoDiscountType, discountValue: 0, freeUntil: row.promoFreeUntil, firstAnnualDiscount: row.firstAnnualDiscount });
   if (!row.promoDiscountType || row.promoDiscountValue == null) return "—";
   return row.promoDiscountType === "percent"
     ? `${row.promoDiscountValue}%`

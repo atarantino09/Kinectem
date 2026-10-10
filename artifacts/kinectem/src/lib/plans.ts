@@ -76,6 +76,7 @@ export function nextPlan(tier: PlanTier): Plan | null {
 }
 
 export type AppliedPromo = {
+  firstAnnualDiscount?: { discountType: "percent" | "amount"; discountValue: number } | null;
   linkedOffer?: string | null;
   code: string;
   description?: string | null;
@@ -88,7 +89,10 @@ export type AppliedPromo = {
 // promo. Mirrors the server's interpretation of discountType.
 export function applyPromo(priceYearly: number, promo: AppliedPromo | null): number {
   if (!promo) return priceYearly;
-  if (promo.discountType === "free_until") return priceYearly;
+  if (promo.discountType === "free_until") {
+    if (!promo.firstAnnualDiscount) return priceYearly;
+    return applyPromo(priceYearly, { code: promo.code, ...promo.firstAnnualDiscount });
+  }
   if (promo.discountType === "percent") {
     return Math.max(0, Math.round(priceYearly * (1 - promo.discountValue / 100)));
   }

@@ -1,6 +1,8 @@
 import type Stripe from "stripe";
 import { getStripeClient } from "./stripeClient.js";
 import { MIN_CHECKOUT_LEAD_MS } from "./free-access-promo.js";
+import type { FirstAnnualDiscount } from "./free-access-promo.js";
+import { createHash } from "node:crypto";
 
 export type PlanTier = "starter" | "pro" | "elite";
 
@@ -136,7 +138,36 @@ type PromoInput = {
   code: string;
   discountType: "percent" | "amount" | "free_until";
   discountValue: number;
+  firstAnnualDiscount?: FirstAnnualDiscount | null;
 };
+
+export function firstAnnualCouponId(code: string, discount: FirstAnnualDiscount): string {
+  const hash = createHash("sha256").update(JSON.stringify([code, discount.discountType, discount.discountValue])).digest("hex").slice(0, 32);
+  return `kinectem_deferred_${hash}_y1`;
+}
+
+export function couponMatchesFirstAnnual(coupon: Stripe.Coupon, discount: FirstAnnualDiscount): boolean {
+  return !("deleted" in coupon && coupon.deleted) && coupon.duration === "once" &&
+    (discount.discountType === "percent" ? coupon.percent_off === discount.discountValue
+      : coupon.currency === "usd" && coupon.amount_off === discount.discountValue * 100);
+}
+
+// Deferred discounts are immutable, value-versioned, and never silently omitted.
+export async function ensureFirstAnnualCoupon(stripe: Stripe, code: string, discount: FirstAnnualDiscount): Promise<string> {
+  const id = firstAnnualCouponId(code, discount);
+  let coupon: Stripe.Coupon;
+  try { coupon = await stripe.coupons.retrieve(id) as Stripe.Coupon; }
+  catch (err) {
+    if ((err as { code?: string }).code !== "resource_missing") throw err;
+    coupon = await stripe.coupons.create({
+      id, duration: "once", name: `${code.toUpperCase()} (first annual invoice)`,
+      ...(discount.discountType === "percent" ? { percent_off: discount.discountValue }
+        : { amount_off: discount.discountValue * 100, currency: "usd" }),
+    }, { idempotencyKey: `${id}-create` });
+  }
+  if (!couponMatchesFirstAnnual(coupon, discount)) throw new Error("The first-annual discount could not be verified.");
+  return id;
+}
 
 // Idempotently ensure a Stripe coupon mirrors an app promo code, keyed by a
 // stable id. Returns the coupon id, or null when it can't be expressed.
@@ -240,7 +271,10 @@ export async function createCardOnFileCheckout(
     );
 
     let discounts: Stripe.Checkout.SessionCreateParams.Discount[] | undefined;
-    if (input.promo && input.promo.discountType !== "free_until" && !input.freeUntil) {
+    if (input.promo?.firstAnnualDiscount && input.freeUntil) {
+      const couponId = await ensureFirstAnnualCoupon(stripe, input.promo.code, input.promo.firstAnnualDiscount);
+      discounts = [{ coupon: couponId }];
+    } else if (input.promo && input.promo.discountType !== "free_until" && !input.freeUntil) {
       const couponId = await ensurePromoCouponId(stripe, input.promo);
       if (couponId) discounts = [{ coupon: couponId }];
     }
@@ -251,6 +285,7 @@ export async function createCardOnFileCheckout(
       orgId: input.orgId, plan: input.plan,
       ...(input.promo ? { promoCode: input.promo.code } : {}),
       ...(input.freeUntil ? { freeUntil: input.freeUntil.toISOString() } : {}),
+      ...(input.promo?.firstAnnualDiscount ? { firstAnnualDiscount: JSON.stringify(input.promo.firstAnnualDiscount) } : {}),
     };
 
     const session = await stripe.checkout.sessions.create({

@@ -5,7 +5,8 @@ import { z } from "zod";
 import { requireAdmin } from "../lib/auth";
 import { asyncHandler } from "../lib/async-handler";
 import { apiError } from "../lib/spec-helpers";
-import { availableFreeUntil, FREE2027_CODE, FREE2027_FIRST_CHARGE, isFree2027Offer } from "../lib/free-access-promo";
+import { availableFreeUntil, FREE2027_CODE, FREE2027_FIRST_CHARGE, isFree2027Offer, firstAnnualTerms } from "../lib/free-access-promo";
+import { promoSnapshot } from "../lib/promo-conversion";
 import { verifyUnpaidBilling } from "../lib/free-access-stripe";
 import { rateLimit, ipKey } from "../middlewares/rate-limit";
 import type { PlanTier } from "../lib/stripe-billing";
@@ -66,6 +67,14 @@ export async function processFree2027(
           let freeUntil: Date;
           try { freeUntil = availableFreeUntil(promo)!; }
           catch { return { ...base, status: "blocked", reason: "This free-access offer has expired or is too close to billing." }; }
+          // Existing grants, including staged ones, are promises rather than
+          // references to mutable code defaults. Only reviewed conversion changes them.
+          const savedGrant = sub?.promoCodeId === promo.id ? sub.freeAccessPromo
+            : org.pendingPromoCodeId === promo.id && org.pendingPromoSnapshot?.discountType === "free_until"
+              ? org.pendingPromoSnapshot : null;
+          const firstAnnualDiscount = savedGrant ? savedGrant.firstAnnualDiscount ?? null : promo.firstAnnualDiscount;
+          const grant = { ...promoSnapshot(promo), discountType: "free_until" as const,
+            freeUntil: freeUntil.toISOString(), firstAnnualDiscount };
           if (!sub?.stripeSubscriptionId && !sub?.stripeCustomerId && sub &&
             (sub.status === "active" || sub.status === "past_due")) {
             return { ...base, status: "blocked", reason: "An existing billing history needs verification before applying free access." };
@@ -73,6 +82,7 @@ export async function processFree2027(
           const check = await verifyUnpaidBilling({
             orgId, subscriptionId: sub?.stripeSubscriptionId ?? null, customerId: sub?.stripeCustomerId ?? null,
             plan: sub?.plan ?? "starter", freeUntil, apply: false,
+            firstAnnualDiscount, promoCode: promo.code,
           });
           if (check.status !== "eligible") return { ...base, ...check };
           const already = sub
@@ -91,9 +101,9 @@ export async function processFree2027(
           }
           if (action === "preview") return {
             ...base, status: "eligible", reason: sub
-              ? `${check.reason} Full-price annual billing starts August 1, 2027.`
-              : "Assign FREE2027 now; the owner chooses a plan and adds a card later.",
-            ...(referral ? { reason: `FREE2027 with referral credit to ${referral.competition.name}. First full-price annual billing August 1, 2027; commission only after payment.` } : {}),
+              ? `${check.reason} ${firstAnnualTerms(firstAnnualDiscount)}.`
+              : `Assign free access now; the owner chooses a plan and adds a card later. ${firstAnnualTerms(firstAnnualDiscount)}.`,
+             ...(referral ? { reason: `Free access with referral credit to ${referral.competition.name}. ${firstAnnualTerms(firstAnnualDiscount)}; commission eligibility requires a verified full-price payment.` } : {}),
           };
           // Unlimited by default, but honor an operator's later cap change.
           if (promo.maxRedemptions != null) {
@@ -105,7 +115,7 @@ export async function processFree2027(
             }
           }
           if (!sub && !selectedPlan) {
-            await tx.update(organizations).set({ pendingPromoCodeId: promo.id }).where(eq(organizations.id, orgId));
+            await tx.update(organizations).set({ pendingPromoCodeId: promo.id, pendingPromoSnapshot: grant }).where(eq(organizations.id, orgId));
             await attachReferral(tx, org, referral);
             return { ...base, status: "staged", reason: "FREE2027 assigned. It will apply when the owner chooses a plan." };
           }
@@ -113,6 +123,7 @@ export async function processFree2027(
             const synced = await verifyUnpaidBilling({
               orgId, subscriptionId: sub.stripeSubscriptionId, customerId: sub.stripeCustomerId,
               plan: sub.plan, freeUntil, apply: true,
+              firstAnnualDiscount, promoCode: promo.code,
             });
             if (synced.status !== "eligible") return { ...base, ...synced };
             if (already) {
@@ -125,16 +136,13 @@ export async function processFree2027(
             .where(and(eq(promoUsage.organizationId, orgId), sql`${promoUsage.endedAt} IS NULL`));
           const subscriptionValues = {
             promoCodeId: promo.id, freeUntil, billingStartsAt: freeUntil,
-             freeAccessPromo: {
-               code: promo.code, discountType: "free_until" as const, discountValue: 0,
-               freeUntil: freeUntil.toISOString(), linkedOffer: promo.linkedOffer,
-             },
+              freeAccessPromo: grant, promoSnapshot: grant,
              plan: selectedPlan ?? sub!.plan,
              status: "trialing" as const, trialReminderSentAt: null, updatedAt: new Date(),
           };
           if (sub) await tx.update(orgSubscriptions).set(subscriptionValues).where(eq(orgSubscriptions.id, sub.id));
           else await tx.insert(orgSubscriptions).values({ organizationId: orgId, ...subscriptionValues });
-          await tx.update(organizations).set({ pendingPromoCodeId: null }).where(eq(organizations.id, orgId));
+           await tx.update(organizations).set({ pendingPromoCodeId: null, pendingPromoSnapshot: null }).where(eq(organizations.id, orgId));
           if (sub?.promoCodeId !== promo.id) {
             if (sub?.promoCodeId) await tx.update(promoCodes)
               .set({ redemptionCount: sql`greatest(0, ${promoCodes.redemptionCount} - 1)` }).where(eq(promoCodes.id, sub.promoCodeId));
@@ -144,10 +152,10 @@ export async function processFree2027(
             promoCodeId: promo.id, organizationId: orgId, actorUserId: actor.id,
             code: promo.code, organizationName: org.name, actorName: actor.name,
              actorEmail: actor.email, plan: selectedPlan ?? sub!.plan, discountType: "free_until",
-            discountValue: 0, freeUntil, appliedAt: new Date(),
+             discountValue: 0, freeUntil, firstAnnualDiscount, appliedAt: new Date(),
           });
           await attachReferral(tx, org, referral);
-          return { ...base, status: "applied", reason: "Free through July 31, 2027. First full-price annual charge August 1, 2027." };
+           return { ...base, status: "applied", reason: `Free through July 31, 2027. ${firstAnnualTerms(firstAnnualDiscount)}.` };
         });
 }
 for (const action of ["preview", "apply"] as const) {

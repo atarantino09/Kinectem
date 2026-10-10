@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FREE2027_FIRST_CHARGE, promoOfferLabel, type PromoDiscountType } from "@/lib/free-access-promo";
+import { FREE2027_FIRST_CHARGE, promoOfferLabel, firstAnnualChargeLabel, type PromoDiscountType } from "@/lib/free-access-promo";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { AdminLayout } from "@/components/AdminLayout";
@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Pencil, Plus, Tag, Trash2 } from "lucide-react";
+import { PromoFree2027Conversion } from "./PromoFree2027Conversion";
 import { PromoUsageReport } from "./PromoUsageReport";
 import { AdminCompetitionReferrals } from "./AdminCompetitionReferrals";
 
@@ -41,13 +42,14 @@ type PromoCode = {
   expiresAt: string | null;
   createdAt: string;
   updatedAt: string;
+  firstAnnualDiscount?: { discountType: "percent" | "amount"; discountValue: number } | null;
 };
 
-function LinkedOfferTerms() {
+function LinkedOfferTerms({ promo }: { promo?: PromoCode } = {}) {
   return <div className="rounded-md border bg-muted/50 p-3 text-sm space-y-1" data-testid="linked-offer-terms">
     <p className="font-semibold">Linked to FREE2027</p>
-    <p>Free through July 31, 2027; first full-price annual payment August 1, 2027 (midnight Eastern).</p>
-    <p className="text-muted-foreground">Saving a card makes no immediate charge. No discount coupon is applied; annual renewals are full price.</p>
+    <p>Free through July 31, 2027; on August 1, 2027 (midnight Eastern): {firstAnnualChargeLabel(promo)}.</p>
+    <p className="text-muted-foreground">Saving a card makes no immediate charge. Annual renewals are full price.</p>
   </div>;
 }
 export default function AdminPromoCodes() {
@@ -141,6 +143,16 @@ export default function AdminPromoCodes() {
   const [editExpiryMode, setEditExpiryMode] = useState<"lifetime" | "date">("lifetime");
   const [editExpiresAt, setEditExpiresAt] = useState("");
   const [saving, setSaving] = useState(false);
+  const [converting, setConverting] = useState(false);
+  const [convBusy, setConvBusy] = useState(false);
+  const editBusy = saving || convBusy;
+  const closeEdit = () => { setEditRow(null); setConverting(false); setConvBusy(false); };
+  const startConversion = () => {
+    if (editExpiryMode === "date" && !editExpiresAt) {
+      toast({ title: "Pick an expiry date or switch to Lifetime.", variant: "destructive" }); return;
+    }
+    setConverting(true);
+  };
 
   const openEdit = (row: PromoCode) => {
     setEditRow(row);
@@ -192,7 +204,7 @@ export default function AdminPromoCodes() {
         }),
       });
       toast({ title: "Promo code updated." });
-      setEditRow(null);
+      closeEdit();
       refresh();
     } catch (err) {
       toast({
@@ -487,8 +499,26 @@ export default function AdminPromoCodes() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!editRow} onOpenChange={(open) => !open && setEditRow(null)}>
-        <DialogContent>
+      <Dialog open={!!editRow} onOpenChange={(open) => { if (!open && !editBusy) closeEdit(); }}>
+        <DialogContent onInteractOutside={(e) => { if (editBusy) e.preventDefault(); }} onEscapeKeyDown={(e) => { if (editBusy) e.preventDefault(); }}>
+          {editRow && converting ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>Link {editRow.code.toUpperCase()} to FREE2027</DialogTitle>
+                <DialogDescription>Review before anything changes.</DialogDescription>
+              </DialogHeader>
+              <PromoFree2027Conversion
+                promo={editRow}
+                settings={{
+                  description: editDescription.trim() || null,
+                  maxRedemptions: editMaxRedemptions.trim() ? Number(editMaxRedemptions) : null,
+                  expiresAt: editExpiryMode === "date" && editExpiresAt ? new Date(editExpiresAt).toISOString() : null,
+                }}
+                onBusyChange={setConvBusy}
+                onDone={closeEdit}
+              />
+            </>
+          ) : (<>
           <DialogHeader>
             <DialogTitle>
               Edit {editRow?.code.toUpperCase() ?? "promo code"}
@@ -499,7 +529,7 @@ export default function AdminPromoCodes() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            {editRow?.linkedOffer === "free2027" && <LinkedOfferTerms />}
+            {editRow?.linkedOffer === "free2027" && <LinkedOfferTerms promo={editRow} />}
             <div className="space-y-1.5">
               <Label htmlFor="edit-promo-desc">Description (optional)</Label>
               <Input
@@ -590,14 +620,20 @@ export default function AdminPromoCodes() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditRow(null)}>
+            <Button variant="outline" onClick={closeEdit} disabled={editBusy}>
               Cancel
             </Button>
-            <Button onClick={saveEdit} disabled={saving} data-testid="btn-save-edit-promo">
+            {editRow && editRow.code.toLowerCase() !== "free2027" && (
+              <Button variant="outline" onClick={startConversion} disabled={editBusy} data-testid="btn-link-free2027">
+                Link to FREE2027
+              </Button>
+            )}
+            <Button onClick={saveEdit} disabled={editBusy} data-testid="btn-save-edit-promo">
               {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
               Save changes
             </Button>
           </DialogFooter>
+          </>)}
         </DialogContent>
       </Dialog>
     </AdminLayout>

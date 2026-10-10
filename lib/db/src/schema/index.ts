@@ -425,6 +425,7 @@ export const organizations = pgTable("organizations", {
     (): AnyPgColumn => promoCodes.id,
     { onDelete: "set null" },
   ),
+  pendingPromoSnapshot: jsonb("pending_promo_snapshot").$type<PromoGrantSnapshot>(),
   // Task #856 — plan tier staged by the platform operator at org creation
   // (Quick setup or the Org Links inline form). Pre-selected on the new
   // owner's subscribe page; the owner can still pick a different tier. NULL
@@ -1896,6 +1897,7 @@ export const promoCodes = pgTable("promo_codes", {
   code: text("code").notNull().unique(),
   description: text("description"),
   linkedOffer: text("linked_offer"),
+  firstAnnualDiscount: jsonb("first_annual_discount").$type<FirstAnnualDiscount>(),
   discountType: promoDiscountTypeEnum("discount_type").notNull(),
   discountValue: integer("discount_value").notNull(),
   freeUntil: timestamp("free_until", { withTimezone: true }),
@@ -1936,7 +1938,9 @@ export const orgSubscriptions = pgTable("org_subscriptions", {
   freeAccessPromo: jsonb("free_access_promo").$type<{
     code: string; discountType: "free_until"; discountValue: number;
     freeUntil: string; linkedOffer?: string | null;
+    firstAnnualDiscount?: FirstAnnualDiscount | null;
   }>(),
+  promoSnapshot: jsonb("promo_snapshot").$type<PromoGrantSnapshot>(),
   // Stamped when the "your first charge is coming up" reminder email was
   // sent (~14 days before billingStartsAt), so the sweep never re-sends.
   trialReminderSentAt: timestamp("trial_reminder_sent_at"),
@@ -1990,6 +1994,7 @@ export const promoUsage = pgTable("promo_usage", {
   discountType: promoDiscountTypeEnum("discount_type").notNull(),
   discountValue: integer("discount_value").notNull(),
   freeUntil: timestamp("free_until", { withTimezone: true }),
+  firstAnnualDiscount: jsonb("first_annual_discount").$type<FirstAnnualDiscount>(),
   appliedAt: timestamp("applied_at", { withTimezone: true }),
   endedAt: timestamp("ended_at", { withTimezone: true }),
   endReason: text("end_reason"),
@@ -1998,6 +2003,38 @@ export const promoUsage = pgTable("promo_usage", {
   orgIdx: index("promo_usage_org_idx").on(t.organizationId),
   currentIdx: uniqueIndex("promo_usage_current_org_idx").on(t.organizationId).where(sql`${t.endedAt} IS NULL`),
 }));
+
+export type FirstAnnualDiscount = { discountType: "percent" | "amount"; discountValue: number };
+export type FreeAccessGrant = {
+  code: string; discountType: "free_until"; discountValue: number; freeUntil: string;
+  linkedOffer?: string | null; firstAnnualDiscount?: FirstAnnualDiscount | null;
+};
+export type PromoGrantSnapshot = {
+  code: string; discountType: "percent" | "amount" | "free_until"; discountValue: number;
+  freeUntil?: string | null; linkedOffer?: string | null; firstAnnualDiscount?: FirstAnnualDiscount | null;
+};
+
+// Reviewed recipient sets and terms are immutable. Outcomes form the admin
+// audit trail and allow interrupted batches to resume without widening scope.
+export type PromoConversionRecipient = {
+  organizationId: string; organizationName: string; fingerprint: string;
+  status: string; reason: string; currentTerms: string; proposedTerms: string;
+  reviewEligible?: boolean;
+};
+export const promoCodeConversions = pgTable("promo_code_conversions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  promoCodeId: uuid("promo_code_id").references(() => promoCodes.id, { onDelete: "set null" }),
+  actorUserId: uuid("actor_user_id").notNull(),
+  code: text("code").notNull(),
+  codeFingerprint: text("code_fingerprint").notNull(),
+  grant: jsonb("grant").$type<FreeAccessGrant>().notNull(),
+  settings: jsonb("settings").$type<{
+    description: string | null; maxRedemptions: number | null; expiresAt: string | null;
+  }>().notNull(),
+  recipients: jsonb("recipients").$type<PromoConversionRecipient[]>().notNull(),
+  savedAt: timestamp("saved_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
 
 // ---------------------------------------------------------------------------
 // Task #628 — Tournament signup funnel. An operator uploads a pre-made

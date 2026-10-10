@@ -564,8 +564,13 @@ router.get(
           discountValue: p.discountValue,
           freeUntil: p.freeUntil?.toISOString() ?? null,
           linkedOffer: p.linkedOffer,
+          firstAnnualDiscount: p.firstAnnualDiscount,
+          ...(org.pendingPromoSnapshot ?? {}),
         };
       }
+    }
+    if (!promo && org.pendingPromoSnapshot?.discountType === "free_until") {
+      promo = { description: null, ...org.pendingPromoSnapshot };
     }
     res.json({
       organization: {

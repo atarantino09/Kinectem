@@ -32,6 +32,7 @@ export type UsageRow = {
   discountType: string;
   discountValue: number;
   freeUntil?: Date | null;
+  firstAnnualDiscount?: { discountType: "percent" | "amount"; discountValue: number } | null;
   endedAt: Date | null;
   endReason: string | null;
   billingStatus?: string;
@@ -74,5 +75,14 @@ export function usageCsv(rows: UsageRow[], dateFiltered = false): string {
     r.billedAt?.toISOString() ?? "",
     r.actualDiscountCents == null ? "" : (r.actualDiscountCents / 100).toFixed(2),
   ]);
+  headers.push("Free access ends (UTC)", "First annual invoice terms");
+  for (let i = 0; i < data.length; i++) {
+    const row = rows[i]!;
+    const d = row.firstAnnualDiscount;
+    data[i]!.push(row.freeUntil?.toISOString() ?? "",
+      row.discountType === "free_until" ? d
+        ? `${d.discountType === "percent" ? `${d.discountValue}%` : `$${d.discountValue}`} off first annual invoice; later renewals full price`
+        : "Full annual price after free access" : "First-year discount; later renewals full price");
+  }
   return [headers, ...data].map((row) => row.map(csvCell).join(",")).join("\r\n") + "\r\n";
 }

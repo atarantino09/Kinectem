@@ -51,6 +51,11 @@ not proof that a live promo has been provisioned.
   - **Why:** One shared free-access code cannot distinguish which competition referred an org, and switching away from a competition's discount code must not lose that credit.
   - **How to apply:** Keep referral identity independent of the promotion. Count signups separately from collected-payment commissions; free signup is not commission earned. Use one competition per org and preserve the first attribution rather than silently overwriting it.
 
+- **Modern Stripe coupons ignore zero-cost trial invoices.**
+  - **Why:** A deferred first-annual-invoice discount needs to survive the initial $0 trial invoice without also discounting later annual renewals. Stripe documents that coupons are not redeemed against zero-cost invoices under its modern API behavior; the exception is coupons created on pre-2013-10-29 API versions.
+  - **How to apply:** Use a newly created once-only coupon for the deferred first annual invoice, rather than repeating or forever discounts. Do not reuse legacy coupons without checking their behavior. Mocked billing checks are not proof of an actual post-trial invoice; use Stripe test clocks for provider-level confirmation when available.
+  - **Reference:** https://docs.stripe.com/changelog/2013-10-29/coupons-apply-invoice-total-balance
+
 - **The Replit `stripe` connector exposes only `settings.secret` + `settings.publishable` — NO `webhook_secret`.**
   - **Why:** an earlier attempt used `stripe-replit-sync` for managed webhooks; the managed-webhook-secret story was too awkward, so it was removed.
   - **How to apply:** treat the Checkout **return URL → `POST .../billing/reconcile`** flow as the source of truth for persisting `stripeCustomerId`/`stripeSubscriptionId`. The `stripe-webhook.ts` route is belt-and-suspenders only and stays gated behind a `STRIPE_WEBHOOK_SECRET` **env var** (not the connector). Don't assume a webhook secret exists.
