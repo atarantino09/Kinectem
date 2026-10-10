@@ -73,7 +73,9 @@ export async function verifyUnpaidBilling(input: {
         proration_behavior: "none",
       }, { idempotencyKey: `free-access-${input.orgId}-${live.id}-${input.freeUntil.getTime()}` });
       const confirmed = await stripe.subscriptions.retrieve(updated.id);
-      if (confirmed.trial_end !== Math.floor(input.freeUntil.getTime() / 1000) || confirmed.discounts.length) {
+      if (confirmed.status !== "trialing" || confirmed.metadata.orgId !== input.orgId ||
+          (typeof confirmed.customer === "string" ? confirmed.customer : confirmed.customer.id) !== customerId ||
+          confirmed.trial_end !== Math.floor(input.freeUntil.getTime() / 1000) || confirmed.discounts.length) {
         return { status: "blocked", reason: "Stripe did not confirm the full-price billing date. Retry or review billing." };
       }
     }

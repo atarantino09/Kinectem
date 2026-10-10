@@ -247,6 +247,11 @@ export async function createCardOnFileCheckout(
 
     const successUrl = `${orgSubscribeUrl(input.orgId)}?billing=success&session_id={CHECKOUT_SESSION_ID}`;
     const cancelUrl = `${orgSubscribeUrl(input.orgId)}?billing=canceled`;
+    const metadata = {
+      orgId: input.orgId, plan: input.plan,
+      ...(input.promo ? { promoCode: input.promo.code } : {}),
+      ...(input.freeUntil ? { freeUntil: input.freeUntil.toISOString() } : {}),
+    };
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
@@ -258,11 +263,11 @@ export async function createCardOnFileCheckout(
       line_items: [{ price: priceId, quantity: 1 }],
       subscription_data: {
         trial_end: Math.floor(trialEnd.getTime() / 1000),
-        metadata: { orgId: input.orgId, plan: input.plan },
+        metadata,
       },
       ...(discounts ? { discounts } : {}),
       client_reference_id: input.orgId,
-      metadata: { orgId: input.orgId, plan: input.plan },
+      metadata,
       success_url: successUrl,
       cancel_url: cancelUrl,
     });

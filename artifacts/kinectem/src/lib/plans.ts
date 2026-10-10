@@ -76,6 +76,7 @@ export function nextPlan(tier: PlanTier): Plan | null {
 }
 
 export type AppliedPromo = {
+  linkedOffer?: string | null;
   code: string;
   description?: string | null;
   discountType: "percent" | "amount" | "free_until";

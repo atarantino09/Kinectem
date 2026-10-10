@@ -31,6 +31,7 @@ type PromoCode = {
   id: string;
   code: string;
   description: string | null;
+  linkedOffer?: string | null;
   discountType: PromoDiscountType;
   freeUntil?: string | null;
   discountValue: number;
@@ -42,6 +43,13 @@ type PromoCode = {
   updatedAt: string;
 };
 
+function LinkedOfferTerms() {
+  return <div className="rounded-md border bg-muted/50 p-3 text-sm space-y-1" data-testid="linked-offer-terms">
+    <p className="font-semibold">Linked to FREE2027</p>
+    <p>Free through July 31, 2027; first full-price annual payment August 1, 2027 (midnight Eastern).</p>
+    <p className="text-muted-foreground">Saving a card makes no immediate charge. No discount coupon is applied; annual renewals are full price.</p>
+  </div>;
+}
 export default function AdminPromoCodes() {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -61,6 +69,7 @@ export default function AdminPromoCodes() {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [code, setCode] = useState("");
+  const [offerMode, setOfferMode] = useState<"linked" | "standard">("standard");
   const [description, setDescription] = useState("");
   const [discountType, setDiscountType] = useState<PromoDiscountType>("percent");
   const [discountValue, setDiscountValue] = useState("10");
@@ -71,6 +80,7 @@ export default function AdminPromoCodes() {
 
   const resetForm = () => {
     setCode("");
+    setOfferMode("standard");
     setDescription("");
     setDiscountType("percent");
     setDiscountValue("10");
@@ -80,10 +90,13 @@ export default function AdminPromoCodes() {
   };
 
   const create = async () => {
-    const value = discountType === "free_until" ? 0 : Number(discountValue);
-    if (!code.trim() || !Number.isFinite(value) || (discountType !== "free_until" && value < 1)) {
+    const value = offerMode === "linked" || discountType === "free_until" ? 0 : Number(discountValue);
+    if (!code.trim() || !Number.isFinite(value) || (offerMode === "standard" && discountType !== "free_until" && value < 1)) {
       toast({ title: "Enter a code and a discount of at least 1.", variant: "destructive" });
       return;
+    }
+    if (expiryMode === "date" && !expiresAt) {
+      toast({ title: "Pick an expiry date or switch to Lifetime.", variant: "destructive" }); return;
     }
     setCreating(true);
     try {
@@ -92,9 +105,10 @@ export default function AdminPromoCodes() {
         body: JSON.stringify({
           code: code.trim(),
           description: description.trim() || null,
-          discountType,
-          discountValue: value,
-          freeUntil: discountType === "free_until" ? FREE2027_FIRST_CHARGE : null,
+          ...(offerMode === "linked" ? { linkedOffer: "free2027" } : {
+            discountType, discountValue: value,
+            freeUntil: discountType === "free_until" ? FREE2027_FIRST_CHARGE : null,
+          }),
           maxRedemptions: maxRedemptions.trim() ? Number(maxRedemptions) : null,
           expiresAt:
             expiryMode === "date" && expiresAt
@@ -146,8 +160,9 @@ export default function AdminPromoCodes() {
 
   const saveEdit = async () => {
     if (!editRow) return;
-    const value = editDiscountType === "free_until" ? 0 : Number(editDiscountValue);
-    if (!Number.isFinite(value) || (editDiscountType !== "free_until" && value < 1)) {
+    const linked = editRow.linkedOffer === "free2027";
+    const value = linked || editDiscountType === "free_until" ? 0 : Number(editDiscountValue);
+    if (!Number.isFinite(value) || (!linked && editDiscountType !== "free_until" && value < 1)) {
       toast({ title: "Enter a discount of at least 1.", variant: "destructive" });
       return;
     }
@@ -165,9 +180,10 @@ export default function AdminPromoCodes() {
         method: "PATCH",
         body: JSON.stringify({
           description: editDescription.trim() || null,
-          discountType: editDiscountType,
-          discountValue: value,
-          freeUntil: editDiscountType === "free_until" ? (editRow.freeUntil ?? FREE2027_FIRST_CHARGE) : null,
+          ...(!linked ? {
+            discountType: editDiscountType, discountValue: value,
+            freeUntil: editDiscountType === "free_until" ? (editRow.freeUntil ?? FREE2027_FIRST_CHARGE) : null,
+          } : {}),
           maxRedemptions: editMaxRedemptions.trim() ? Number(editMaxRedemptions) : null,
           expiresAt:
             editExpiryMode === "date" && editExpiresAt
@@ -266,6 +282,7 @@ export default function AdminPromoCodes() {
                       <tr key={row.id} className="border-b last:border-0" data-testid={`promo-row-${row.code}`}>
                         <td className="py-3 pr-4">
                           <div className="font-bold uppercase">{row.code}</div>
+                           {row.linkedOffer === "free2027" && <div className="text-xs font-semibold text-primary">Linked to FREE2027</div>}
                           {row.description && (
                             <div className="text-xs text-muted-foreground">{row.description}</div>
                           )}
@@ -344,10 +361,23 @@ export default function AdminPromoCodes() {
           <DialogHeader>
             <DialogTitle>New promo code</DialogTitle>
             <DialogDescription>
-              Create a discount code organizations can apply at checkout.
+              Create a code organizations can apply at checkout.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            <fieldset className="space-y-2" data-testid="promo-offer-mode">
+              <legend className="text-sm font-semibold">Offer</legend>
+              <div className="flex flex-wrap gap-4">
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="radio" name="offer-mode" checked={offerMode === "linked"} onChange={() => setOfferMode("linked")} />
+                  Link to FREE2027
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="radio" name="offer-mode" checked={offerMode === "standard"} onChange={() => setOfferMode("standard")} />
+                  Standard discount code
+                </label>
+              </div>
+            </fieldset>
             <div className="space-y-1.5">
               <Label htmlFor="promo-code">Code</Label>
               <Input
@@ -365,11 +395,11 @@ export default function AdminPromoCodes() {
                 id="promo-desc"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Founding member discount"
+                placeholder="Referring person, club, or campaign"
                 data-testid="input-new-desc"
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            {offerMode === "linked" ? <LinkedOfferTerms /> : <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Type</Label>
                 <Select
@@ -401,7 +431,7 @@ export default function AdminPromoCodes() {
                   data-testid="input-new-value"
                 />
               </div>
-            </div>
+            </div>}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="promo-max">Max redemptions (optional)</Label>
@@ -439,7 +469,7 @@ export default function AdminPromoCodes() {
                   />
                 ) : (
                   <p className="text-xs text-muted-foreground">
-                    The code stays redeemable at checkout. The discount itself only covers the first year — renewals bill at full price.
+                    {offerMode === "linked" ? "The code remains redeemable while active and before the fixed billing date. Full-price annual renewals follow." : "The code stays redeemable at checkout. The discount itself only covers the first year — renewals bill at full price."}
                   </p>
                 )}
               </div>
@@ -469,6 +499,7 @@ export default function AdminPromoCodes() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            {editRow?.linkedOffer === "free2027" && <LinkedOfferTerms />}
             <div className="space-y-1.5">
               <Label htmlFor="edit-promo-desc">Description (optional)</Label>
               <Input
@@ -479,7 +510,7 @@ export default function AdminPromoCodes() {
                 data-testid="input-edit-desc"
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            {editRow?.linkedOffer !== "free2027" && <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Type</Label>
                 <Select
@@ -511,7 +542,7 @@ export default function AdminPromoCodes() {
                   data-testid="input-edit-value"
                 />
               </div>
-            </div>
+            </div>}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="edit-promo-max">Max redemptions (optional)</Label>

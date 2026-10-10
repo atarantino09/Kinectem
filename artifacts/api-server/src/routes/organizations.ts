@@ -562,6 +562,8 @@ router.get(
           description: p.description,
           discountType: p.discountType,
           discountValue: p.discountValue,
+          freeUntil: p.freeUntil?.toISOString() ?? null,
+          linkedOffer: p.linkedOffer,
         };
       }
     }

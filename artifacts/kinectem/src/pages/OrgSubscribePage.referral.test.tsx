@@ -10,12 +10,13 @@ vi.mock("@workspace/api-client-react", async (original) => ({ ...await original<
 vi.mock("wouter", async (original) => ({ ...await original<typeof import("wouter")>(), useParams: () => ({ orgId: "test-org" }), useLocation: () => ["/organizations/test-org/subscribe", navigate] }));
 vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast }) }));
 const code = "ref-1234567890abcdef";
-const promo = { code: "free2027", discountType: "free_until", discountValue: 0, freeUntil: "2027-08-01T04:00:00.000Z" };
+const promo = { code: "free2027", linkedOffer: null as string | null, discountType: "free_until", discountValue: 0, freeUntil: "2027-08-01T04:00:00.000Z" };
 let credited: { referralCode: string; competitionName: string } | null;
 let failSave: boolean;
 let hasCard: boolean;
 beforeEach(() => {
   vi.clearAllMocks(); sessionStorage.clear(); credited = null; failSave = false; hasCard = false;
+  promo.code = "free2027"; promo.linkedOffer = null;
   fetchMock.mockImplementation(async (url: string, options?: { method?: string; body?: string }) => {
     if (url.endsWith("/subscription") && options?.method === "PUT") {
       if (failSave) throw new Error("Competition referral code not found.");
@@ -31,6 +32,18 @@ beforeEach(() => {
   });
 });
 describe("FREE2027 referral plan setup", () => {
+  it("accepts a single custom linked code with a saved card and keeps separate referral credit", async () => {
+    hasCard = true; promo.code = "club-source"; promo.linkedOffer = "free2027";
+    renderWithProviders(<OrgSubscribePage />);
+    await screen.findByTestId("input-promo");
+    const user = userEvent.setup();
+    await user.type(screen.getByTestId("input-promo"), "CLUB-SOURCE");
+    await user.click(screen.getByTestId("btn-apply-promo"));
+    await screen.findByText(/club-source/i, { selector: "span.uppercase" });
+    const save = fetchMock.mock.calls.find(([url, options]) => url.endsWith("/subscription") && options?.method === "PUT");
+    expect(JSON.parse(save![1].body)).toMatchObject({ promoCode: "club-source", plan: "starter" });
+    expect(screen.getByText("Credit a competition")).toBeVisible();
+  });
   it("auto-fills the separate offer and referral, submits both, and clears pending attribution only after success", async () => {
     sessionStorage.setItem(REFERRAL_STORAGE_KEY, code);
     renderWithProviders(<OrgSubscribePage />);

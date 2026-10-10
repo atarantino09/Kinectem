@@ -39,6 +39,10 @@ not proof that a live promo has been provisioned.
 
 ## Key constraints / non-obvious decisions
 
+- **Custom source codes may explicitly inherit FREE2027, but remain independent identities.**
+  - **Why:** The user wants one customer-entered code for the fixed free-access benefit and source-specific usage attribution, not promo stacking. A referring person, club, or campaign is not automatically a competition.
+  - **How to apply:** Preserve custom identity and granted terms after code edits/deletion. Keep each code's activation, expiry and cap independent; never infer commission or competition attribution from a custom code. Use a separate explicit competition referral with first-attribution-wins.
+
 - **Competition attribution is separate from FREE2027.** The user wants competitions to retain referral credit during free access so commission can be calculated when full-price billing starts August 1, 2027.
   - **Why:** One shared free-access code cannot distinguish which competition referred an org, and switching away from a competition's discount code must not lose that credit.
   - **How to apply:** Keep referral identity independent of the promotion. Count signups separately from collected-payment commissions; free signup is not commission earned. Use one competition per org and preserve the first attribution rather than silently overwriting it.

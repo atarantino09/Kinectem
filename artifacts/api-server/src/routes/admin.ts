@@ -62,6 +62,8 @@ import {
   type PlanTier,
 } from "../lib/plan-limits";
 import { findRedeemablePromo } from "./subscriptions";
+import { canReservePromo } from "../lib/promo-reservation";
+import { availableFreeUntil } from "../lib/free-access-promo";
 import {
   splitName,
   toPrivateUser,
@@ -2478,10 +2480,12 @@ router.post(
         expires_at: Date | null;
         max_redemptions: number | null;
         redemption_count: number;
+        discount_type: string;
+        free_until: Date | null;
       };
       if (selectedPromo) {
         const promoResult = await tx.execute<LockedPromo>(
-          sql`SELECT id, active, expires_at, max_redemptions, redemption_count
+          sql`SELECT id, active, expires_at, max_redemptions, redemption_count, discount_type, free_until
               FROM promo_codes
               WHERE id = ${selectedPromo.id}
               FOR UPDATE`,
@@ -2500,6 +2504,9 @@ router.post(
               "That promo code was deactivated or expired while this import was being prepared.",
           } as const;
         }
+        try { availableFreeUntil({ discountType: lockedPromo.discount_type,
+          freeUntil: lockedPromo.free_until ? new Date(lockedPromo.free_until) : null }); }
+        catch { return { promoConflict: "That free-access code has expired or is too close to billing." } as const; }
         if (lockedPromo.max_redemptions != null) {
           const [pending] = await tx
             .select({ count: sql<number>`count(*)` })
@@ -3445,9 +3452,9 @@ router.post(
       adminListId = requestedListId;
     }
     const token = generateToken();
-    const [org] = await db
-      .insert(organizations)
-      .values({
+    const org = await db.transaction(async (tx) => {
+      if (pendingPromoCodeId && !(await canReservePromo(tx, pendingPromoCodeId))) return null;
+      const [created] = await tx.insert(organizations).values({
         name,
         claimToken: token,
         logoUrl: logoUrl ?? undefined,
@@ -3461,6 +3468,9 @@ router.post(
         createdViaQuickSetupAt: new Date(),
       })
       .returning();
+      return created;
+    });
+    if (!org) return res.status(409).json({ error: "That promo code is no longer available or has reached its redemption limit.", code: "INVALID_PROMO_CODE" });
     return res.status(201).json({
       data: {
         id: org.id,
@@ -3706,6 +3716,9 @@ router.post(
       if (existing.length > 0) {
         return { taken: existing[0] } as const;
       }
+      if (pendingPromoCodeId && !(await canReservePromo(tx, pendingPromoCodeId))) {
+        return { promoConflict: true } as const;
+      }
       const [org] = await tx
         .insert(organizations)
         .values({
@@ -3755,6 +3768,9 @@ router.post(
       return { org, createdTeams, stagedCount: staged.length } as const;
     });
 
+    if ("promoConflict" in result) {
+      return res.status(409).json({ error: "That promo code is no longer available or has reached its redemption limit.", code: "INVALID_PROMO_CODE" });
+    }
     if ("taken" in result) {
       return res.status(409).json({
         error: "An organization with this name already exists",

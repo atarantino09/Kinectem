@@ -2,6 +2,19 @@ export const FREE2027_CODE = "free2027";
 export const FREE2027_FIRST_CHARGE = "2027-08-01T04:00:00.000Z";
 export const MIN_CHECKOUT_LEAD_MS = 49 * 60 * 60 * 1000;
 
+export function isFree2027Offer(promo?: { code: string; linkedOffer?: string | null } | null): boolean {
+  return Boolean(promo && (promo.code.toLowerCase() === FREE2027_CODE || promo.linkedOffer === FREE2027_CODE));
+}
+
+export function validateLinkedTerms(input: {
+  linkedOffer?: string | null; discountType?: string; discountValue?: number; freeUntil?: string | null;
+}): boolean {
+  return input.linkedOffer !== FREE2027_CODE ||
+    ((input.discountType === undefined || input.discountType === "free_until") &&
+     (input.discountValue === undefined || input.discountValue === 0) &&
+     (input.freeUntil === undefined || input.freeUntil === FREE2027_FIRST_CHARGE));
+}
+
 export function availableFreeUntil(
   promo: { discountType: string; freeUntil?: Date | null },
   now = new Date(),
@@ -15,6 +28,10 @@ export function availableFreeUntil(
 }
 
 export const FREE_ACCESS_SCHEMA_MIGRATIONS = [
+  { name: "2026-10-10-linked-free2027-offers", sql: `
+    ALTER TABLE promo_codes ADD COLUMN IF NOT EXISTS linked_offer text;
+    ALTER TABLE org_subscriptions ADD COLUMN IF NOT EXISTS free_access_promo jsonb;
+  ` },
   { name: "2026-10-10-free-access-promo-enum",
     sql: "ALTER TYPE promo_discount_type ADD VALUE IF NOT EXISTS 'free_until';" },
   { name: "2026-10-10-free-access-promo-dates", sql: `

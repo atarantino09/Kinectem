@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { freeAccessDate } from "@/lib/free-access-promo";
+import { freeAccessDate, isFree2027Offer } from "@/lib/free-access-promo";
 import { CompetitionReferralField, pendingCompetitionReferral, clearPendingCompetitionReferral } from "@/components/CompetitionReferralField";
 import {
   PLANS,
@@ -87,7 +87,7 @@ export default function OrgSubscribePage() {
       setReferralCode(referralData.referral.referralCode);
       return;
     }
-    if (!referralCode || data.subscription?.promo) return;
+    if (!referralCode || data.subscription?.promo || data.pendingPromo) return;
     customFetch<{ promo: AppliedPromo }>("/api/v1/promo-codes/validate", { method: "POST", body: JSON.stringify({ code: "FREE2027" }) })
       .then((result) => { setPromo(result.promo); setPromoInput("FREE2027"); })
       .catch((err) => setPromoError(err instanceof Error ? err.message : "FREE2027 is unavailable."));
@@ -183,16 +183,6 @@ export default function OrgSubscribePage() {
   const applyPromoCode = async () => {
     const code = promoInput.trim();
     if (!code) return;
-    // Promo is locked once a card is on file — the coupon is already fixed
-    // on the Stripe subscription. Cancel billing first, then re-apply.
-    if (hasCardOnFile && code.toLowerCase() !== "free2027") {
-      toast({
-        title: "Promo locked while billing is scheduled",
-        description:
-          "You already have a card on file. Cancel billing below (free during your trial), then apply a promo code and re-add your card.",
-      });
-      return;
-    }
     setCheckingPromo(true);
     setPromoError(null);
     try {
@@ -200,9 +190,12 @@ export default function OrgSubscribePage() {
         `/api/v1/promo-codes/validate`,
         { method: "POST", body: JSON.stringify({ code }) },
       );
-      if (hasCardOnFile && res.promo.discountType === "free_until") {
+      if (hasCardOnFile && !isFree2027Offer(res.promo)) {
+        throw new Error("You already have a card on file. Cancel billing first, then apply a standard discount and re-add your card.");
+      }
+      if (isFree2027Offer(res.promo)) {
         await customFetch(`/api/v1/organizations/${orgId}/subscription`, {
-          method: "PUT", body: JSON.stringify({ plan: activePlan, promoCode: res.promo.code,
+          method: "PUT", body: JSON.stringify({ plan: hasCardOnFile ? activePlan : selected, promoCode: res.promo.code,
             ...(referralCode.trim() ? { referralCode: referralCode.trim() } : {}) }),
         });
         clearPendingCompetitionReferral();
@@ -223,7 +216,7 @@ export default function OrgSubscribePage() {
   };
 
   const clearPromo = () => {
-    if (hasCardOnFile) {
+    if (hasCardOnFile && !isFree2027Offer(promo)) {
       toast({
         title: "Promo locked while billing is scheduled",
         description:
@@ -243,10 +236,10 @@ export default function OrgSubscribePage() {
       body: JSON.stringify({
         plan: selected,
         promoCode: promo?.code ?? null,
-        ...(referralCode.trim() && promo?.code.toLowerCase() === "free2027" ? { referralCode: referralCode.trim() } : {}),
+        ...(referralCode.trim() && isFree2027Offer(promo) ? { referralCode: referralCode.trim() } : {}),
       }),
     });
-    if (promo?.code.toLowerCase() === "free2027") clearPendingCompetitionReferral();
+    if (isFree2027Offer(promo)) clearPendingCompetitionReferral();
     await queryClient.invalidateQueries({ queryKey: ["org-competition-referral", orgId] });
   };
 
@@ -459,7 +452,7 @@ export default function OrgSubscribePage() {
                 . Renewals bill at full price.
               </div>
               <Button variant="ghost" size="sm" onClick={clearPromo} data-testid="btn-remove-promo">
-                Remove
+                {hasCardOnFile && isFree2027Offer(promo) ? "Change code" : "Remove"}
               </Button>
             </div>
           ) : (
@@ -491,12 +484,12 @@ export default function OrgSubscribePage() {
         </CardContent>
       </Card>
 
-      {(promo?.code.toLowerCase() === "free2027" || referralData?.referral || referralCode) && <Card>
+      {(isFree2027Offer(promo) || referralData?.referral || referralCode) && <Card>
         <CardContent className="p-5 space-y-3">
           <h3 className="font-bold">Credit a competition</h3>
           {referralData?.referral ? <p className="text-sm">Credited to <strong>{referralData.referral.competitionName}</strong>. This referral stays attached to your organization when FREE2027 ends.</p>
             : <CompetitionReferralField value={referralCode} onChange={(value) => { setReferralCode(value); if (!value) clearPendingCompetitionReferral(); }} />}
-          {!referralData?.referral && referralCode && promo?.code.toLowerCase() !== "free2027" && <p className="text-sm text-destructive">Apply FREE2027 above to save this referral with your plan.</p>}
+          {!referralData?.referral && referralCode && !isFree2027Offer(promo) && <p className="text-sm text-destructive">Apply FREE2027 or a linked free-access code above to save this referral with your plan.</p>}
           {!referralData?.referral && <p className="text-xs text-muted-foreground">Your referral is saved when you continue or add a card. You can leave this blank if no competition referred you.</p>}
         </CardContent>
       </Card>}

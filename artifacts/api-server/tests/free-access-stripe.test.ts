@@ -24,7 +24,7 @@ function fixture() {
       list: vi.fn().mockResolvedValue({ data: [], has_more: false }),
       retrieve: vi.fn().mockImplementation(async () => live),
       update: vi.fn().mockImplementation(async (_id, params) => {
-        live.trial_end = params.trial_end; live.discounts = []; return live;
+        live.trial_end = params.trial_end; live.discounts = []; live.status = "trialing"; return live;
       }),
     },
   };
@@ -111,11 +111,12 @@ describe("FREE2027 billing safeguards", () => {
     });
     const result = await createCardOnFileCheckout({
       orgId: input.orgId, plan: "starter", customerEmail: "fixture@example.test", existingCustomerId: null,
-      promo: { code: "free2027", discountType: "free_until", discountValue: 0 },
+      promo: { code: "club-source", discountType: "free_until", discountValue: 0 },
       orgCreatedAt: new Date("2027-06-01T00:00Z"), freeUntil: input.freeUntil,
     });
     expect(result).toEqual({ url: "https://checkout.stripe.test/free2027", trialEnd: input.freeUntil });
     expect(create.mock.calls[0][0].subscription_data.trial_end).toBe(1817092800);
+    expect(create.mock.calls[0][0].subscription_data.metadata.promoCode).toBe("club-source");
     expect(create.mock.calls[0][0]).not.toHaveProperty("discounts");
   });
 });

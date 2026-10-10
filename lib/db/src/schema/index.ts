@@ -1895,6 +1895,7 @@ export const promoCodes = pgTable("promo_codes", {
   id: uuid("id").primaryKey().defaultRandom(),
   code: text("code").notNull().unique(),
   description: text("description"),
+  linkedOffer: text("linked_offer"),
   discountType: promoDiscountTypeEnum("discount_type").notNull(),
   discountValue: integer("discount_value").notNull(),
   freeUntil: timestamp("free_until", { withTimezone: true }),
@@ -1932,6 +1933,10 @@ export const orgSubscriptions = pgTable("org_subscriptions", {
   stripeSubscriptionId: text("stripe_subscription_id"),
   billingStartsAt: timestamp("billing_starts_at"),
   freeUntil: timestamp("free_until", { withTimezone: true }),
+  freeAccessPromo: jsonb("free_access_promo").$type<{
+    code: string; discountType: "free_until"; discountValue: number;
+    freeUntil: string; linkedOffer?: string | null;
+  }>(),
   // Stamped when the "your first charge is coming up" reminder email was
   // sent (~14 days before billingStartsAt), so the sweep never re-sends.
   trialReminderSentAt: timestamp("trial_reminder_sent_at"),

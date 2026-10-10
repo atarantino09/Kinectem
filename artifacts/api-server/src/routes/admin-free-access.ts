@@ -5,7 +5,7 @@ import { z } from "zod";
 import { requireAdmin } from "../lib/auth";
 import { asyncHandler } from "../lib/async-handler";
 import { apiError } from "../lib/spec-helpers";
-import { availableFreeUntil, FREE2027_CODE, FREE2027_FIRST_CHARGE } from "../lib/free-access-promo";
+import { availableFreeUntil, FREE2027_CODE, FREE2027_FIRST_CHARGE, isFree2027Offer } from "../lib/free-access-promo";
 import { verifyUnpaidBilling } from "../lib/free-access-stripe";
 import { rateLimit, ipKey } from "../middlewares/rate-limit";
 import type { PlanTier } from "../lib/stripe-billing";
@@ -41,6 +41,7 @@ type Outcome = { organizationId: string; organizationName: string; status: strin
 export async function processFree2027(
   orgId: string, actor: { id: string; name: string; email: string | null },
   action: "preview" | "apply", selectedPlan?: PlanTier, referralCode?: string,
+  offerCode = FREE2027_CODE,
 ): Promise<Outcome> {
         return db.transaction(async (tx): Promise<Outcome> => {
           // The same org-first lock order is used by owner redemption.
@@ -54,15 +55,17 @@ export async function processFree2027(
             return { ...base, status: "blocked", reason: "Keep your current plan when applying FREE2027 to a saved card." };
           }
           const lockedPromos = await tx.select().from(promoCodes)
-            .where(sub?.promoCodeId ? or(eq(promoCodes.code, FREE2027_CODE), eq(promoCodes.id, sub.promoCodeId)) : eq(promoCodes.code, FREE2027_CODE))
+            .where(sub?.promoCodeId ? or(eq(promoCodes.code, offerCode), eq(promoCodes.id, sub.promoCodeId)) : eq(promoCodes.code, offerCode))
             .orderBy(asc(promoCodes.id)).for("update");
-          const promo = lockedPromos.find((p) => p.code === FREE2027_CODE);
-          if (!promo || !promo.active || promo.discountType !== "free_until" ||
+          const promo = lockedPromos.find((p) => p.code === offerCode);
+          if (!promo || !isFree2027Offer(promo) || !promo.active || promo.discountType !== "free_until" ||
             promo.freeUntil?.toISOString() !== FREE2027_FIRST_CHARGE ||
             (promo.expiresAt && promo.expiresAt.getTime() <= Date.now())) {
             return { ...base, status: "blocked", reason: "FREE2027 is unavailable or its terms have changed." };
           }
-          const freeUntil = availableFreeUntil(promo)!;
+          let freeUntil: Date;
+          try { freeUntil = availableFreeUntil(promo)!; }
+          catch { return { ...base, status: "blocked", reason: "This free-access offer has expired or is too close to billing." }; }
           if (!sub?.stripeSubscriptionId && !sub?.stripeCustomerId && sub &&
             (sub.status === "active" || sub.status === "past_due")) {
             return { ...base, status: "blocked", reason: "An existing billing history needs verification before applying free access." };
@@ -75,12 +78,16 @@ export async function processFree2027(
           const already = sub
             ? sub.promoCodeId === promo.id && sub.freeUntil?.getTime() === freeUntil.getTime()
             : org.pendingPromoCodeId === promo.id;
-          if (already && !sub?.stripeSubscriptionId && (!selectedPlan || selectedPlan === sub?.plan)) {
+          if (already && !sub?.stripeSubscriptionId && (sub || !selectedPlan)) {
+            const planChanged = Boolean(sub && selectedPlan && selectedPlan !== sub.plan);
+            if (action === "apply" && planChanged) {
+              await tx.update(orgSubscriptions).set({ plan: selectedPlan!, updatedAt: new Date() }).where(eq(orgSubscriptions.id, sub!.id));
+            }
             if (referral?.isNew) {
               if (action === "apply") await attachReferral(tx, org, referral);
               return { ...base, status: action === "preview" ? "eligible" : "applied", reason: `FREE2027 already assigned. ${action === "preview" ? "Credit" : "Credited to"} ${referral.competition.name}; billing terms stay unchanged.` };
             }
-            return { ...base, status: "unchanged", reason: "FREE2027 is already assigned." };
+            return { ...base, status: planChanged && action === "apply" ? "applied" : "unchanged", reason: "Free access is already assigned; granted terms and source attribution are unchanged." };
           }
           if (action === "preview") return {
             ...base, status: "eligible", reason: sub
@@ -97,12 +104,12 @@ export async function processFree2027(
               return { ...base, status: "blocked", reason: "The promo redemption limit has been reached." };
             }
           }
-          if (!sub) {
+          if (!sub && !selectedPlan) {
             await tx.update(organizations).set({ pendingPromoCodeId: promo.id }).where(eq(organizations.id, orgId));
             await attachReferral(tx, org, referral);
             return { ...base, status: "staged", reason: "FREE2027 assigned. It will apply when the owner chooses a plan." };
           }
-          if (sub.stripeSubscriptionId) {
+          if (sub?.stripeSubscriptionId) {
             const synced = await verifyUnpaidBilling({
               orgId, subscriptionId: sub.stripeSubscriptionId, customerId: sub.stripeCustomerId,
               plan: sub.plan, freeUntil, apply: true,
@@ -116,21 +123,27 @@ export async function processFree2027(
           // Usage history must be closed before a new snapshot is inserted.
           await tx.update(promoUsage).set({ endedAt: new Date(), endReason: "promo_changed" })
             .where(and(eq(promoUsage.organizationId, orgId), sql`${promoUsage.endedAt} IS NULL`));
-          await tx.update(orgSubscriptions).set({
+          const subscriptionValues = {
             promoCodeId: promo.id, freeUntil, billingStartsAt: freeUntil,
-            plan: selectedPlan ?? sub.plan,
-            status: "trialing", trialReminderSentAt: null, updatedAt: new Date(),
-          }).where(eq(orgSubscriptions.id, sub.id));
+             freeAccessPromo: {
+               code: promo.code, discountType: "free_until" as const, discountValue: 0,
+               freeUntil: freeUntil.toISOString(), linkedOffer: promo.linkedOffer,
+             },
+             plan: selectedPlan ?? sub!.plan,
+             status: "trialing" as const, trialReminderSentAt: null, updatedAt: new Date(),
+          };
+          if (sub) await tx.update(orgSubscriptions).set(subscriptionValues).where(eq(orgSubscriptions.id, sub.id));
+          else await tx.insert(orgSubscriptions).values({ organizationId: orgId, ...subscriptionValues });
           await tx.update(organizations).set({ pendingPromoCodeId: null }).where(eq(organizations.id, orgId));
-          if (sub.promoCodeId !== promo.id) {
-            if (sub.promoCodeId) await tx.update(promoCodes)
+          if (sub?.promoCodeId !== promo.id) {
+            if (sub?.promoCodeId) await tx.update(promoCodes)
               .set({ redemptionCount: sql`greatest(0, ${promoCodes.redemptionCount} - 1)` }).where(eq(promoCodes.id, sub.promoCodeId));
             await tx.update(promoCodes).set({ redemptionCount: sql`${promoCodes.redemptionCount} + 1` }).where(eq(promoCodes.id, promo.id));
           }
           await tx.insert(promoUsage).values({
             promoCodeId: promo.id, organizationId: orgId, actorUserId: actor.id,
             code: promo.code, organizationName: org.name, actorName: actor.name,
-            actorEmail: actor.email, plan: selectedPlan ?? sub.plan, discountType: "free_until",
+             actorEmail: actor.email, plan: selectedPlan ?? sub!.plan, discountType: "free_until",
             discountValue: 0, freeUntil, appliedAt: new Date(),
           });
           await attachReferral(tx, org, referral);
