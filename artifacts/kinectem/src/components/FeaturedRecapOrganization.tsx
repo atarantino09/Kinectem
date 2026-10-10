@@ -1,6 +1,6 @@
 import { FitText } from "@/components/FitText";
 import { useEffect, useState } from "react";
-import { validHex } from "@/lib/recapOrgBrand";
+import { readRecapOrgIdentity, validHex } from "@/lib/recapOrgBrand";
 
 export type FeaturedRecapOrg = {
   id: string;
@@ -20,6 +20,14 @@ export function featuredOrgPalette(org?: FeaturedRecapOrg | null) {
 // the organization whose team wrote the recap. Do not substitute event logos.
 export function FeaturedRecapOrganization({ org, teamName }: { org?: FeaturedRecapOrg | null; teamName: string }) {
   const { primary, secondary } = featuredOrgPalette(org);
+  const identity = readRecapOrgIdentity({
+    type: "organization",
+    id: org?.id,
+    name: org?.name,
+    orgAvatarUrl: org?.logoUrl,
+    orgBrandPrimaryColor: org?.brandPrimaryColor,
+    orgBrandSecondaryColor: org?.brandSecondaryColor,
+  });
   const [logoFailed, setLogoFailed] = useState(false);
   useEffect(() => setLogoFailed(false), [org?.logoUrl]);
   return (
@@ -27,8 +35,11 @@ export function FeaturedRecapOrganization({ org, teamName }: { org?: FeaturedRec
       className="flex min-w-0 items-center gap-2.5 px-3 py-1.5"
       data-testid="featured-recap-organization"
       style={{
+        ...(identity?.style ?? {
+          background: `linear-gradient(120deg, color-mix(in srgb, ${primary} 42%, #ffffff), color-mix(in srgb, ${secondary} 34%, #ffffff))`,
+          color: "#000000",
+        }),
         borderBottom: `3px solid ${primary}`,
-        background: `linear-gradient(120deg, color-mix(in srgb, ${primary} 42%, #ffffff), color-mix(in srgb, ${secondary} 34%, #ffffff))`,
       }}
     >
       {org?.logoUrl && !logoFailed ? (
@@ -46,11 +57,11 @@ export function FeaturedRecapOrganization({ org, teamName }: { org?: FeaturedRec
       )}
       <div className="min-w-0 flex-1 space-y-0.5">
         {org?.name ? (
-          <FitText as="p" max={12} min={11} lineHeight={1.2} className="font-semibold text-black" data-testid="featured-recap-organization-name">
+          <FitText as="p" max={12} min={11} lineHeight={1.2} className="font-semibold text-inherit" data-testid="featured-recap-organization-name">
             {org.name}
           </FitText>
         ) : null}
-        <FitText as="p" max={14} min={12} lineHeight={1.2} className="font-black text-black" data-testid="featured-recap-team-name">
+        <FitText as="p" max={14} min={12} lineHeight={1.2} className="font-black text-inherit" data-testid="featured-recap-team-name">
           {teamName}
         </FitText>
       </div>

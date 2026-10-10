@@ -1,13 +1,14 @@
 import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { FeaturedRecapOrganization, featuredOrgPalette } from "./FeaturedRecapOrganization";
+import { orgInviteHeaderStyle } from "@/lib/orgBrand";
 
 const org = {
   id: "club",
   name: "Legacy Club",
   logoUrl: "/club-logo.png",
   brandPrimaryColor: "#123456",
-  brandSecondaryColor: "#abcdef",
+  brandSecondaryColor: "#234567",
 };
 
 describe("featured recap organization branding", () => {
@@ -18,11 +19,38 @@ describe("featured recap organization branding", () => {
     expect(screen.getByTestId("featured-recap-team-name").textContent?.trim()).toBe("Legacy U12 Boys");
     const style = screen.getByTestId("featured-recap-organization").getAttribute("style");
     expect(style).toContain("#123456");
-    expect(style).toContain("#abcdef");
-    expect(style).toContain("42%");
-    expect(style).toContain("34%");
-    expect(style).toContain("#ffffff");
-    expect(featuredOrgPalette(org)).toEqual({ primary: "#123456", secondary: "#abcdef" });
+    expect(style).toContain("#234567");
+    expect(screen.getByTestId("featured-recap-organization")).toHaveStyle(
+      orgInviteHeaderStyle({ primary: org.brandPrimaryColor, secondary: org.brandSecondaryColor }),
+    );
+    expect(style).not.toContain("color-mix");
+    expect(screen.getByTestId("featured-recap-organization-name").parentElement).toHaveClass("text-inherit");
+    expect(screen.getByTestId("featured-recap-team-name").parentElement).toHaveClass("text-inherit");
+    expect(featuredOrgPalette(org)).toEqual({ primary: "#123456", secondary: "#234567" });
+  });
+  it.each([
+    ["#102030", "#304050", "#ffffff"],
+    ["#ffffff", "#eeeeee", "#000000"],
+    ["#000000", "#ffffff", "#ffffff"],
+  ])("keeps text readable for the %s / %s palette", (primary, secondary, color) => {
+    render(<FeaturedRecapOrganization
+      org={{ ...org, brandPrimaryColor: primary, brandSecondaryColor: secondary }}
+      teamName="Legacy U12 Boys"
+    />);
+    expect(screen.getByTestId("featured-recap-organization")).toHaveStyle({
+      ...orgInviteHeaderStyle({ primary, secondary }),
+      color,
+    });
+  });
+  it("uses the same neutral dark header as other org posts when colors are unset", () => {
+    render(<FeaturedRecapOrganization
+      org={{ ...org, brandPrimaryColor: null, brandSecondaryColor: null }}
+      teamName="Legacy U12 Boys"
+    />);
+    expect(screen.getByTestId("featured-recap-organization")).toHaveStyle({
+      background: "linear-gradient(135deg, #334155, #1e293b)",
+      color: "#ffffff",
+    });
   });
   it("uses organization initials without inventing an event logo when its logo is missing", () => {
     render(<FeaturedRecapOrganization org={{ ...org, logoUrl: null }} teamName="Legacy U12 Boys" />);
