@@ -14,6 +14,7 @@ import { rateLimit, ipKey } from "../middlewares/rate-limit";
 import { requireAuth, requireAdmin } from "../lib/auth";
 import { apiError } from "../lib/spec-helpers";
 import { canManageOrganization } from "../lib/permissions";
+import { checkReferral, attachReferral } from "../lib/competition-referrals";
 import {
   createCardOnFileCheckout,
   readCheckoutSession,
@@ -322,6 +323,7 @@ router.get(
 // PUT /organizations/:orgId/subscription — choose / change plan (+ promo).
 // ---------------------------------------------------------------------------
 const SubscribeBody = z.object({
+  referralCode: z.string().trim().min(1).max(64).optional(),
   plan: z.enum(PLAN_IDS),
   promoCode: z
     .string()
@@ -355,7 +357,11 @@ router.put(
       });
       return;
     }
-    const { plan, promoCode } = parsed.data;
+    const { plan, promoCode, referralCode } = parsed.data;
+    if (referralCode && promoCode?.toLowerCase() !== "free2027") {
+      apiError(res, 400, "Use FREE2027 as the promo code and enter the competition referral tag separately.", { code: "VALIDATION_FAILED" });
+      return;
+    }
 
     const [currentPromo] = await db
       .select({ promoCodeId: orgSubscriptions.promoCodeId })
@@ -407,12 +413,7 @@ router.put(
     // lock edits and direct the user to cancel billing first (free during
     // the trial), then re-pick a plan and re-checkout.
     const [current] = await db
-      .select({
-        stripeSubscriptionId: orgSubscriptions.stripeSubscriptionId,
-        freeUntil: orgSubscriptions.freeUntil,
-        plan: orgSubscriptions.plan,
-        promoCodeId: orgSubscriptions.promoCodeId,
-      })
+      .select()
       .from(orgSubscriptions)
       .where(eq(orgSubscriptions.organizationId, orgId))
       .limit(1);
@@ -436,11 +437,16 @@ router.put(
       return;
     }
     if (current && promoRow?.code === "free2027") {
-      if (current.promoCodeId === newPromoId && current.plan === plan &&
+      if (!referralCode && current.promoCodeId === newPromoId && current.plan === plan &&
         current.freeUntil?.getTime() === promoRow.freeUntil?.getTime()) {
         res.json({ subscription: serializeSubscription(current, publicPromo(promoRow)) }); return;
       }
-      const applied = await processFree2027(orgId as string, me, "apply", plan);
+      let applied;
+      try { applied = await processFree2027(orgId as string, me, "apply", plan, referralCode); }
+      catch (err) {
+        apiError(res, 400, err instanceof Error ? err.message : "Could not save referral attribution.", { code: "REFERRAL_INVALID" });
+        return;
+      }
       if (!["applied", "unchanged"].includes(applied.status)) {
         apiError(res, 409, applied.reason, { code: "FREE_ACCESS_BLOCKED" }); return;
       }
@@ -469,6 +475,11 @@ router.put(
       const lockedOrg = (orgResult.rows ?? orgResult)[0] as
         | { pending_promo_code_id: string | null }
         | undefined;
+      let referral;
+      try { referral = await checkReferral(tx, orgId as string, referralCode); }
+      catch (err) {
+        return { error: err instanceof Error ? err.message : "Invalid competition referral." } as const;
+      }
       const [existing] = await tx
         .select({
           promoCodeId: orgSubscriptions.promoCodeId,
@@ -629,6 +640,10 @@ router.put(
         .update(organizations)
         .set({ pendingPromoCodeId: null })
         .where(eq(organizations.id, orgId as string));
+      if (referral) {
+        const [org] = await tx.select({ id: organizations.id, name: organizations.name }).from(organizations).where(eq(organizations.id, orgId as string));
+        if (org) await attachReferral(tx, org, referral);
+      }
       return row;
     });
     if (

@@ -31,8 +31,8 @@ const STEPS = [
   },
   {
     icon: Gift,
-    title: "Email your teams your promo code",
-    body: "New organizations that sign up with your code get 25% off their first year on Kinectem — and your competition earns a 15% commission on what they pay. A ready-made message is waiting in the Earn with your promo code section below.",
+    title: "Share your FREE2027 referral link",
+    body: "Clubs get free access through July 31, 2027 using FREE2027. Your unique competition referral tag tracks their organization, and you earn 15% after their first full-price annual payment starting August 1, 2027. Copy your link and message in FREE2027 referrals & commissions below.",
   },
   {
     icon: Upload,

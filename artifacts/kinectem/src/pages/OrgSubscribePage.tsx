@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { freeAccessDate } from "@/lib/free-access-promo";
+import { CompetitionReferralField, pendingCompetitionReferral, clearPendingCompetitionReferral } from "@/components/CompetitionReferralField";
 import {
   PLANS,
   applyPromo,
@@ -73,6 +74,24 @@ export default function OrgSubscribePage() {
   const activePlan = data?.subscription?.plan;
 
   const [promoInput, setPromoInput] = useState("");
+  const [referralCode, setReferralCode] = useState(pendingCompetitionReferral);
+  const { data: referralData } = useQuery({
+    queryKey: ["org-competition-referral", orgId],
+    queryFn: () => customFetch<{ referral: { competitionName: string; referralCode: string } | null }>(`/api/v1/organizations/${orgId}/competition-referral`),
+  });
+  const referralOfferSeeded = useRef(false);
+  useEffect(() => {
+    if (!data || !referralData || referralOfferSeeded.current) return;
+    referralOfferSeeded.current = true;
+    if (referralData.referral) {
+      setReferralCode(referralData.referral.referralCode);
+      return;
+    }
+    if (!referralCode || data.subscription?.promo) return;
+    customFetch<{ promo: AppliedPromo }>("/api/v1/promo-codes/validate", { method: "POST", body: JSON.stringify({ code: "FREE2027" }) })
+      .then((result) => { setPromo(result.promo); setPromoInput("FREE2027"); })
+      .catch((err) => setPromoError(err instanceof Error ? err.message : "FREE2027 is unavailable."));
+  }, [data, referralData, referralCode]);
   const [promo, setPromo] = useState<AppliedPromo | null>(null);
   const [checkingPromo, setCheckingPromo] = useState(false);
   const [promoError, setPromoError] = useState<string | null>(null);
@@ -183,8 +202,11 @@ export default function OrgSubscribePage() {
       );
       if (hasCardOnFile && res.promo.discountType === "free_until") {
         await customFetch(`/api/v1/organizations/${orgId}/subscription`, {
-          method: "PUT", body: JSON.stringify({ plan: activePlan, promoCode: res.promo.code }),
+          method: "PUT", body: JSON.stringify({ plan: activePlan, promoCode: res.promo.code,
+            ...(referralCode.trim() ? { referralCode: referralCode.trim() } : {}) }),
         });
+        clearPendingCompetitionReferral();
+        await queryClient.invalidateQueries({ queryKey: ["org-competition-referral", orgId] });
         await queryClient.invalidateQueries({ queryKey: ["org-subscription", orgId] });
       }
       setPromo(res.promo);
@@ -221,8 +243,11 @@ export default function OrgSubscribePage() {
       body: JSON.stringify({
         plan: selected,
         promoCode: promo?.code ?? null,
+        ...(referralCode.trim() && promo?.code.toLowerCase() === "free2027" ? { referralCode: referralCode.trim() } : {}),
       }),
     });
+    if (promo?.code.toLowerCase() === "free2027") clearPendingCompetitionReferral();
+    await queryClient.invalidateQueries({ queryKey: ["org-competition-referral", orgId] });
   };
 
   // Save the plan, then send the admin to Stripe Checkout to add a card on
@@ -465,6 +490,16 @@ export default function OrgSubscribePage() {
           {promoError && <p className="text-sm text-destructive">{promoError}</p>}
         </CardContent>
       </Card>
+
+      {(promo?.code.toLowerCase() === "free2027" || referralData?.referral || referralCode) && <Card>
+        <CardContent className="p-5 space-y-3">
+          <h3 className="font-bold">Credit a competition</h3>
+          {referralData?.referral ? <p className="text-sm">Credited to <strong>{referralData.referral.competitionName}</strong>. This referral stays attached to your organization when FREE2027 ends.</p>
+            : <CompetitionReferralField value={referralCode} onChange={(value) => { setReferralCode(value); if (!value) clearPendingCompetitionReferral(); }} />}
+          {!referralData?.referral && referralCode && promo?.code.toLowerCase() !== "free2027" && <p className="text-sm text-destructive">Apply FREE2027 above to save this referral with your plan.</p>}
+          {!referralData?.referral && <p className="text-xs text-muted-foreground">Your referral is saved when you continue or add a card. You can leave this blank if no competition referred you.</p>}
+        </CardContent>
+      </Card>}
 
       {/* Actions */}
       <div className="flex flex-col sm:flex-row items-center justify-end gap-3">

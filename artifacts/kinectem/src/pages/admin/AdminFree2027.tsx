@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { CompetitionReferralField } from "@/components/CompetitionReferralField";
 
 type Target = { organizationId: string; organizationName: string };
 type Outcome = Target & { status: "eligible" | "applied" | "staged" | "unchanged" | "skipped" | "blocked"; reason: string };
@@ -21,10 +22,14 @@ export function AdminFree2027({ selectedIds, lists }: {
   const [mode, setMode] = useState<"preview" | "finished">("preview");
   const [progress, setProgress] = useState("");
   const [error, setError] = useState("");
+  const [referralCode, setReferralCode] = useState("");
+  const [reviewedReferralCode, setReviewedReferralCode] = useState("");
   const eligible = results.filter((r) => r.status === "eligible");
 
   async function review(scope: Scope) {
     setOpen(true); setBusy(true); setResults([]); setError(""); setMode("preview");
+    const tag = referralCode.trim();
+    setReviewedReferralCode(tag);
     setProgress("Finding organizations…");
     try {
       const targets = await customFetch<{ data: Target[] }>("/api/v1/admin/free2027/targets", {
@@ -34,7 +39,7 @@ export function AdminFree2027({ selectedIds, lists }: {
       for (let offset = 0; offset < targets.data.length; offset += 10) {
         setProgress(`Checking ${Math.min(offset + 10, targets.data.length)} of ${targets.data.length} organizations…`);
         const response = await customFetch<{ data: Outcome[] }>("/api/v1/admin/free2027/preview", {
-          method: "POST", body: JSON.stringify({ organizationIds: targets.data.slice(offset, offset + 10).map((t) => t.organizationId) }),
+          method: "POST", body: JSON.stringify({ organizationIds: targets.data.slice(offset, offset + 10).map((t) => t.organizationId), ...(tag ? { referralCode: tag } : {}) }),
         });
         rows.push(...response.data);
         setResults([...rows]);
@@ -57,7 +62,7 @@ export function AdminFree2027({ selectedIds, lists }: {
         const batch = reviewed.slice(offset, offset + 10);
         try {
           const response = await customFetch<{ data: Outcome[] }>("/api/v1/admin/free2027/apply", {
-            method: "POST", body: JSON.stringify({ organizationIds: batch }),
+            method: "POST", body: JSON.stringify({ organizationIds: batch, ...(reviewedReferralCode ? { referralCode: reviewedReferralCode } : {}) }),
           });
           for (const row of response.data) completed.set(row.organizationId, row);
         } catch (err) {
@@ -86,6 +91,7 @@ export function AdminFree2027({ selectedIds, lists }: {
         <h3 className="font-bold text-foreground">Apply FREE2027 to existing organizations</h3>
         <p className="text-sm text-foreground mt-1">Free through July 31, 2027. First full-price annual charge August 1, 2027. Already-paid organizations are excluded.</p>
       </div>
+      <div className="max-w-xl"><CompetitionReferralField value={referralCode} onChange={setReferralCode} disabled={busy || open} /></div>
       <div className="flex flex-wrap items-end gap-3">
         <Button onClick={() => void review({ organizationIds: selectedIds })} disabled={!selectedIds.length || busy}
           data-testid="btn-free2027-selected">Review selected ({selectedIds.length})</Button>

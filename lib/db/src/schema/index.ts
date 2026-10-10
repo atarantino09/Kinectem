@@ -1942,6 +1942,36 @@ export const orgSubscriptions = pgTable("org_subscriptions", {
 // Historical applications are snapshots, not dependent on the lifetime of a
 // promo, org, or user. A null appliedAt means a pre-tracking application whose
 // exact time cannot be recovered from the mutable subscription row.
+export const competitionReferralCodes = pgTable("competition_referral_codes", {
+  competitionId: uuid("competition_id").primaryKey().references((): AnyPgColumn => tournaments.id, { onDelete: "cascade" }),
+  code: text("code").notNull().unique(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Attribution is independent of discount redemption and survives promo changes.
+export const competitionReferrals = pgTable("competition_referrals", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").notNull().unique().references(() => organizations.id, { onDelete: "cascade" }),
+  competitionId: uuid("competition_id").references((): AnyPgColumn => tournaments.id, { onDelete: "set null" }),
+  competitionName: text("competition_name").notNull(),
+  organizationName: text("organization_name").notNull(),
+  referralCode: text("referral_code").notNull(),
+  commissionBps: integer("commission_bps").notNull().default(1500),
+  billingNotBefore: timestamp("billing_not_before", { withTimezone: true }).notNull().default(sql`'2027-08-01T04:00:00Z'::timestamptz`),
+  attributedAt: timestamp("attributed_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => ({ competitionIdx: index("competition_referrals_competition_idx").on(t.competitionId) }));
+
+// First collected annual payment only. No commission is earned on free access.
+export const competitionReferralPayments = pgTable("competition_referral_payments", {
+  referralId: uuid("referral_id").primaryKey().references(() => competitionReferrals.id, { onDelete: "cascade" }),
+  stripeInvoiceId: text("stripe_invoice_id").notNull().unique(),
+  amountPaidCents: integer("amount_paid_cents").notNull(),
+  commissionCents: integer("commission_cents").notNull(),
+  currency: text("currency").notNull(),
+  paidAt: timestamp("paid_at", { withTimezone: true }).notNull(),
+  verifiedAt: timestamp("verified_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export const promoUsage = pgTable("promo_usage", {
   id: uuid("id").primaryKey().defaultRandom(),
   promoCodeId: uuid("promo_code_id"),

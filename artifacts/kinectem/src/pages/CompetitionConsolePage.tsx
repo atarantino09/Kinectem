@@ -9,6 +9,7 @@ import { BrandImageField } from "@/components/BrandImageField";
 import { CompetitionAdminsPanel } from "@/components/CompetitionAdminsPanel";
 import { CompetitionPartnerPagesPanel } from "@/components/CompetitionPartnerPagesPanel";
 import { CompetitionHowItWorks } from "@/components/CompetitionHowItWorks";
+import { CompetitionReferralReport } from "@/components/CompetitionReferralReport";
 import { readCompetitionScheduleFile } from "@/lib/competition-schedule-file";
 import {
   CompetitionClaimBanner,
@@ -1024,13 +1025,17 @@ function PromoReferralPanel({
     <Card>
       <CollapsibleCardHeader
         icon={<Gift className="w-4 h-4" />}
-        label="Earn with your promo code"
+        label="FREE2027 referrals & commissions"
         open={open}
         onToggle={() => setOpen((v) => !v)}
         testId="btn-toggle-promo-referral"
       />
       {open && (
       <CardContent className="space-y-4">
+        <CompetitionReferralReport competitionId={competitionId} preview={preview} />
+        <details className="rounded-lg border p-3">
+          <summary className="cursor-pointer text-sm font-semibold">Other promo codes — separate 25% discount offer</summary>
+          <div className="space-y-4 mt-4">
         <p className="text-sm text-muted-foreground">
           Share your competition's promo code with the teams and clubs in your
           event. New organizations that sign up with your code get{" "}
@@ -1197,6 +1202,8 @@ function PromoReferralPanel({
           </a>{" "}
           and we'll create a custom code for your competition.
         </p>
+          </div>
+        </details>
       </CardContent>
       )}
     </Card>
@@ -3795,9 +3802,8 @@ export default function CompetitionConsolePage() {
         title: "Earn with your promo code",
         body: (
           <>
-            Email your teams your promo code — new organizations get{" "}
-            <strong>25% off</strong> their first year and your competition
-            earns a <strong>15% commission</strong>. A ready-made message is
+            Share your FREE2027 signup link — unpaid organizations get free access through July 31, 2027 and your competition
+            earns a <strong>15% commission</strong> after their first full-price annual payment. A ready-made message is
             waiting inside.
           </>
         ),

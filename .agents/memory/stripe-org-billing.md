@@ -39,6 +39,10 @@ not proof that a live promo has been provisioned.
 
 ## Key constraints / non-obvious decisions
 
+- **Competition attribution is separate from FREE2027.** The user wants competitions to retain referral credit during free access so commission can be calculated when full-price billing starts August 1, 2027.
+  - **Why:** One shared free-access code cannot distinguish which competition referred an org, and switching away from a competition's discount code must not lose that credit.
+  - **How to apply:** Keep referral identity independent of the promotion. Count signups separately from collected-payment commissions; free signup is not commission earned. Use one competition per org and preserve the first attribution rather than silently overwriting it.
+
 - **The Replit `stripe` connector exposes only `settings.secret` + `settings.publishable` — NO `webhook_secret`.**
   - **Why:** an earlier attempt used `stripe-replit-sync` for managed webhooks; the managed-webhook-secret story was too awkward, so it was removed.
   - **How to apply:** treat the Checkout **return URL → `POST .../billing/reconcile`** flow as the source of truth for persisting `stripeCustomerId`/`stripeSubscriptionId`. The `stripe-webhook.ts` route is belt-and-suspenders only and stays gated behind a `STRIPE_WEBHOOK_SECRET` **env var** (not the connector). Don't assume a webhook secret exists.

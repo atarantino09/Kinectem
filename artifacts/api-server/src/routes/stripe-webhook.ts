@@ -8,6 +8,7 @@ import {
   stripeTrialEndAtOrAfterPolicy,
 } from "../lib/stripe-billing.js";
 import { logger } from "../lib/logger.js";
+import { recordReferralInvoice } from "../lib/competition-referrals";
 
 // Optional Stripe webhook. Only active when STRIPE_WEBHOOK_SECRET is set:
 // create an endpoint in the Stripe dashboard pointing at
@@ -54,6 +55,9 @@ export async function stripeWebhookHandler(
   }
 
   try {
+    if (event.type === "invoice.paid") {
+      await recordReferralInvoice(event.data.object as Stripe.Invoice);
+    }
     if (
       event.type === "customer.subscription.created" ||
       event.type === "customer.subscription.updated" ||
@@ -69,6 +73,7 @@ export async function stripeWebhookHandler(
             .select({
               orgId: orgSubscriptions.organizationId,
               orgCreatedAt: organizations.createdAt,
+              freeUntil: orgSubscriptions.freeUntil,
             })
             .from(orgSubscriptions)
             .innerJoin(
@@ -81,6 +86,7 @@ export async function stripeWebhookHandler(
             .select({
               orgId: orgSubscriptions.organizationId,
               orgCreatedAt: organizations.createdAt,
+              freeUntil: orgSubscriptions.freeUntil,
             })
             .from(orgSubscriptions)
             .innerJoin(
@@ -94,10 +100,21 @@ export async function stripeWebhookHandler(
       let effectiveTrialEnd = sub.trial_end
         ? new Date(sub.trial_end * 1000)
         : null;
+      if (sub.status === "trialing" && knownSub?.freeUntil) {
+        // Fixed-date offers must never be expanded into a rolling 90-day trial.
+        if (effectiveTrialEnd?.getTime() !== knownSub.freeUntil.getTime()) {
+          const fresh = await stripe.subscriptions.retrieve(sub.id);
+          if (fresh.trial_end !== Math.floor(knownSub.freeUntil.getTime() / 1000)) {
+            throw new Error("FREE2027 Stripe billing date is not aligned; reconcile billing before accepting the webhook.");
+          }
+        }
+        effectiveTrialEnd = knownSub.freeUntil;
+      }
       if (
         sub.status === "trialing" &&
         effectiveTrialEnd &&
         knownSub?.orgCreatedAt
+        && !knownSub.freeUntil
       ) {
         const safeTrialEnd = stripeTrialEndAtOrAfterPolicy(
           knownSub.orgCreatedAt,

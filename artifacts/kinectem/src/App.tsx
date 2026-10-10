@@ -15,6 +15,7 @@ const OrganizationsListPage = lazy(
   () => import("@/pages/OrganizationsListPage"),
 );
 const MyOrgsPage = lazy(() => import("@/pages/MyOrgsPage"));
+const CompetitionReferralPage = lazy(() => import("@/pages/CompetitionReferralPage"));
 const OrganizationPage = lazy(() => import("@/pages/OrganizationPage"));
 const MyTeamsPage = lazy(() => import("@/pages/MyTeamsPage"));
 const TeamPage = lazy(() => import("@/pages/TeamPage"));
@@ -116,6 +117,7 @@ function Router() {
   return (
     <Suspense fallback={<PageLoader />}>
       <Switch>
+        <Route path="/referrals/:code" component={CompetitionReferralPage} />
         {/* Fullscreen routes (no layout) */}
         {import.meta.env.DEV && (
           <Route path="/preview/task-1030" component={Task1030PreviewPage} />

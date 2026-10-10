@@ -33,6 +33,7 @@ import aiRouter from "./ai";
 import emailProvidersRouter from "./email-providers";
 import subscriptionsRouter from "./subscriptions";
 import adminFreeAccessRouter from "./admin-free-access";
+import competitionReferralsRouter from "./competition-referrals";
 import announcementsRouter from "./announcements";
 import tournamentsRouter from "./tournaments";
 import teamCompetitionRemovalRouter from "./team-competition-removal";
@@ -53,6 +54,7 @@ import { guardHistoricalClippingAttachments } from "../middlewares/historical-cl
 
 const router: Router = Router();
 router.use(guardHistoricalClippingAttachments);
+router.use(competitionReferralsRouter);
 
 // /admin/* — admin-only operations (gated inside the router by requireAdmin)
 router.use("/admin", adminRouter);

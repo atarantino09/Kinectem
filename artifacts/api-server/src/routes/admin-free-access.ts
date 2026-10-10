@@ -9,11 +9,12 @@ import { availableFreeUntil, FREE2027_CODE, FREE2027_FIRST_CHARGE } from "../lib
 import { verifyUnpaidBilling } from "../lib/free-access-stripe";
 import { rateLimit, ipKey } from "../middlewares/rate-limit";
 import type { PlanTier } from "../lib/stripe-billing";
+import { checkReferral, attachReferral } from "../lib/competition-referrals";
 
 const router: IRouter = Router();
 router.use("/admin/free2027", requireAdmin);
 const limiter = rateLimit({ name: "admin-free2027", windowMs: 60_000, max: 500, keys: (req) => [ipKey(req)] });
-const idsBody = z.object({ organizationIds: z.array(z.string().uuid()).min(1).max(10) });
+const idsBody = z.object({ organizationIds: z.array(z.string().uuid()).min(1).max(10), referralCode: z.string().trim().min(1).max(64).optional() });
 const targetsBody = z.object({
   organizationIds: z.array(z.string().uuid()).min(1).max(2000).optional(),
   listId: z.string().uuid().optional(),
@@ -39,13 +40,14 @@ type Outcome = { organizationId: string; organizationName: string; status: strin
 
 export async function processFree2027(
   orgId: string, actor: { id: string; name: string; email: string | null },
-  action: "preview" | "apply", selectedPlan?: PlanTier,
+  action: "preview" | "apply", selectedPlan?: PlanTier, referralCode?: string,
 ): Promise<Outcome> {
         return db.transaction(async (tx): Promise<Outcome> => {
           // The same org-first lock order is used by owner redemption.
           const [org] = await tx.select().from(organizations).where(eq(organizations.id, orgId)).for("update");
           if (!org) return { organizationId: orgId, organizationName: "Deleted organization", status: "blocked", reason: "Organization no longer exists." };
           const base = { organizationId: org.id, organizationName: org.name };
+          const referral = await checkReferral(tx, org.id, referralCode);
           const [sub] = await tx.select().from(orgSubscriptions)
             .where(eq(orgSubscriptions.organizationId, orgId)).for("update");
           if (sub?.stripeSubscriptionId && selectedPlan && selectedPlan !== sub.plan) {
@@ -73,11 +75,18 @@ export async function processFree2027(
           const already = sub
             ? sub.promoCodeId === promo.id && sub.freeUntil?.getTime() === freeUntil.getTime()
             : org.pendingPromoCodeId === promo.id;
-          if (already && !sub?.stripeSubscriptionId && (!selectedPlan || selectedPlan === sub?.plan)) return { ...base, status: "unchanged", reason: "FREE2027 is already assigned." };
+          if (already && !sub?.stripeSubscriptionId && (!selectedPlan || selectedPlan === sub?.plan)) {
+            if (referral?.isNew) {
+              if (action === "apply") await attachReferral(tx, org, referral);
+              return { ...base, status: action === "preview" ? "eligible" : "applied", reason: `FREE2027 already assigned. ${action === "preview" ? "Credit" : "Credited to"} ${referral.competition.name}; billing terms stay unchanged.` };
+            }
+            return { ...base, status: "unchanged", reason: "FREE2027 is already assigned." };
+          }
           if (action === "preview") return {
             ...base, status: "eligible", reason: sub
               ? `${check.reason} Full-price annual billing starts August 1, 2027.`
               : "Assign FREE2027 now; the owner chooses a plan and adds a card later.",
+            ...(referral ? { reason: `FREE2027 with referral credit to ${referral.competition.name}. First full-price annual billing August 1, 2027; commission only after payment.` } : {}),
           };
           // Unlimited by default, but honor an operator's later cap change.
           if (promo.maxRedemptions != null) {
@@ -90,6 +99,7 @@ export async function processFree2027(
           }
           if (!sub) {
             await tx.update(organizations).set({ pendingPromoCodeId: promo.id }).where(eq(organizations.id, orgId));
+            await attachReferral(tx, org, referral);
             return { ...base, status: "staged", reason: "FREE2027 assigned. It will apply when the owner chooses a plan." };
           }
           if (sub.stripeSubscriptionId) {
@@ -98,7 +108,10 @@ export async function processFree2027(
               plan: sub.plan, freeUntil, apply: true,
             });
             if (synced.status !== "eligible") return { ...base, ...synced };
-            if (already) return { ...base, status: "unchanged", reason: "FREE2027 is already assigned; Stripe billing is aligned." };
+            if (already) {
+              await attachReferral(tx, org, referral);
+              return { ...base, status: referral?.isNew ? "applied" : "unchanged", reason: "FREE2027 is already assigned; Stripe billing is aligned and referral credit is saved." };
+            }
           }
           // Usage history must be closed before a new snapshot is inserted.
           await tx.update(promoUsage).set({ endedAt: new Date(), endReason: "promo_changed" })
@@ -120,6 +133,7 @@ export async function processFree2027(
             actorEmail: actor.email, plan: selectedPlan ?? sub.plan, discountType: "free_until",
             discountValue: 0, freeUntil, appliedAt: new Date(),
           });
+          await attachReferral(tx, org, referral);
           return { ...base, status: "applied", reason: "Free through July 31, 2027. First full-price annual charge August 1, 2027." };
         });
 }
@@ -130,12 +144,13 @@ for (const action of ["preview", "apply"] as const) {
     const results: Outcome[] = [];
     for (const orgId of [...new Set(parsed.data.organizationIds)]) {
       try {
-        const outcome = await processFree2027(orgId, req.sessionUser!, action);
+        const outcome = await processFree2027(orgId, req.sessionUser!, action, undefined, parsed.data.referralCode);
         results.push(outcome);
-      } catch {
+      } catch (err) {
         req.log.error({ organizationId: orgId, action }, "FREE2027 operation failed; safe to retry");
         results.push({ organizationId: orgId, organizationName: "Organization", status: "blocked",
-          reason: "Could not complete this organization. Retry; no successful application was recorded." });
+          reason: err instanceof Error && (err.message.startsWith("This organization is already credited") || err.message.startsWith("Competition referral code not found"))
+            ? err.message : "Could not complete this organization. Retry; no successful application was recorded." });
       }
     }
     res.json({ data: results });
