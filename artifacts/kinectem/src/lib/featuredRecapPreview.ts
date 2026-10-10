@@ -1,12 +1,21 @@
+import { MENTION_TOKEN_RE } from "./mentions";
+
 type FeaturedRecapPreviewSource = {
   body: string | null;
   summary: string | null;
 };
 
+function namesOnly(text: string): string {
+  return text
+    .replace(new RegExp(MENTION_TOKEN_RE.source, "gi"), "$1")
+    // Also clean plain-text mentions without removing @ inside email addresses.
+    .replace(/(^|[^\p{L}\p{N}_@])@(?=\p{L})/gu, "$1");
+}
+
 export function featuredRecapPreviewText(
   recap: FeaturedRecapPreviewSource,
 ): string | null {
-  const body = recap.body?.trim();
+  const body = recap.body ? namesOnly(recap.body).trim() : "";
   if (body) {
     const paragraphs = body
       .split(/\n\s*\n/)
@@ -29,6 +38,6 @@ export function featuredRecapPreviewText(
     return paragraphs[0] ?? body;
   }
 
-  const summary = recap.summary?.trim();
+  const summary = recap.summary ? namesOnly(recap.summary).trim() : "";
   return summary || null;
 }

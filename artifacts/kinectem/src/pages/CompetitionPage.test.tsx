@@ -202,7 +202,7 @@ describe("competition partnership directory", () => {
     mockedFetch.mockResolvedValue({
       ...competitionResponse(),
       featuredRecaps: [{
-        id: "club-recap", title: "A hard-fought victory in the final match of a very busy competition", body: "A hard-fought win.", summary: null,
+        id: "club-recap", title: "A hard-fought victory in the final match of a very busy competition", body: "@[Avery](user:976d5e6f-3e99-4a9f-aef6-43b1034c94e5) delivered a hard-fought win.", summary: null,
         coverImageUrl: null, gameDate: "2026-05-04", opponentName: "Rivals",
         teamScore: 3, opponentScore: 1, teamId: "club-team", teamName: "Club U12",
         publishedAt: "2026-05-05T12:00:00Z",
@@ -218,7 +218,10 @@ describe("competition partnership directory", () => {
     expect(within(card).getByRole("img", { name: "Authoring Club logo" })).toHaveAttribute("src", "/author-club.png");
     expect(within(card).getByTestId("featured-recap-organization-name")).toHaveTextContent("Authoring Club");
     expect(within(card).getByTestId("strip-competition-brand")).toHaveTextContent("Rolling Cup");
-    expect(within(card).getByTestId("featured-recap-organization").getAttribute("style")).toContain("#abcdef");
+    expect(within(card).getByTestId("featured-recap-organization")).toHaveStyle({
+      color: "#ffffff",
+      borderBottom: "3px solid #123456",
+    });
     expect(within(card).getByTestId("featured-recap-team-name")).toHaveTextContent("Club U12");
     expect(within(card).queryByRole("button", { name: /share.*image/i })).not.toBeInTheDocument();
     expect(card.closest("a")).toHaveAttribute("href", "/posts/club-recap");
@@ -234,8 +237,9 @@ describe("competition partnership directory", () => {
     expect(gradient.nextElementSibling).toBe(footer);
     expect(gradient).not.toContainElement(within(card).getByText("Read full recap"));
     expect(footer.style.backgroundColor).not.toContain("gradient");
-    expect(within(card).getByText("A hard-fought win.")).toHaveClass("line-clamp-5");
-    expect(within(card).getByText("A hard-fought win.")).toHaveClass("text-black");
+    expect(within(card).getByText("Avery delivered a hard-fought win.")).toHaveClass("line-clamp-5", "text-black");
+    expect(gradient).not.toHaveTextContent("user:");
+    expect(gradient).not.toHaveTextContent("@[");
     expect(within(card).getByTestId("bracket-featured-recap-club-recap")).toHaveClass("text-muted-foreground");
     const rail = screen.getByTestId("rail-featured-recaps");
     expect(rail.compareDocumentPosition(screen.getByTestId("section-competition-album")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
