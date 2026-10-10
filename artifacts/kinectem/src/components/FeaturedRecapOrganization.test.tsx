@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { FeaturedRecapOrganization, featuredOrgPalette } from "./FeaturedRecapOrganization";
 
 const org = {
@@ -19,12 +19,19 @@ describe("featured recap organization branding", () => {
     const style = screen.getByTestId("featured-recap-organization").getAttribute("style");
     expect(style).toContain("#123456");
     expect(style).toContain("#abcdef");
-    expect(style).toContain("32%");
-    expect(style).toContain("24%");
+    expect(style).toContain("42%");
+    expect(style).toContain("34%");
+    expect(style).toContain("#ffffff");
     expect(featuredOrgPalette(org)).toEqual({ primary: "#123456", secondary: "#abcdef" });
   });
   it("uses organization initials without inventing an event logo when its logo is missing", () => {
     render(<FeaturedRecapOrganization org={{ ...org, logoUrl: null }} teamName="Legacy U12 Boys" />);
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(screen.getByText("LC")).toBeVisible();
+  });
+  it("falls back when an organization logo fails to load", () => {
+    render(<FeaturedRecapOrganization org={org} teamName="Legacy U12 Boys" />);
+    fireEvent.error(screen.getByRole("img", { name: "Legacy Club logo" }));
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
     expect(screen.getByText("LC")).toBeVisible();
   });

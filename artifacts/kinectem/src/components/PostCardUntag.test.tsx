@@ -110,6 +110,29 @@ function basePost(overrides: Partial<PostResponse> = {}): PostResponse {
   } as PostResponse;
 }
 
+it.each(["regular", "combined"])("features the owning organization on %s recap cards", (kind) => {
+  const post = {
+    ...basePost({
+      gameDate: kind === "regular" ? "2026-10-10T12:00:00Z" : null,
+      context: {
+        type: "team", id: "team-1", name: "Varsity Football",
+        orgId: "org-1", orgName: "Legacy Club", orgAvatarUrl: "/club-logo.png",
+        orgBrandPrimaryColor: "#123456", orgBrandSecondaryColor: "#abcdef",
+      } as PostResponse["context"],
+    }),
+    recapKind: kind === "combined" ? "combined" : null,
+    competition: {
+      id: "competition-1", slug: "cup", name: "Cup",
+      logoUrl: "/cup-logo.png", brandColor: "#fa7800", secondaryColor: null,
+    },
+  };
+  renderWithClient(<PostCard post={post} />);
+  expect(screen.getByTestId("banner-recap-org-article-abc")).toHaveAttribute("href", "/organizations/org-1");
+  expect(screen.getByTestId("img-recap-org-logo-article-abc")).toHaveAttribute("src", "/club-logo.png");
+  expect(screen.getByTestId("banner-post-competition-article-abc")).toHaveAttribute("href", "/competitions/c/cup");
+  expect(screen.getByText("Varsity Football")).toBeVisible();
+});
+
 const userPostsPredicate = (q: { queryKey: unknown }) =>
   Array.isArray(q.queryKey) &&
   typeof q.queryKey[0] === "string" &&

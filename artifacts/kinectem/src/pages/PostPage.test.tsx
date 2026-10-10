@@ -89,6 +89,41 @@ const postFixture = (
   }) as never;
 
 describe("PostPage delete permissions", () => {
+  it("uses the stronger organization banner for a combined recap without a game date", async () => {
+    customFetchMock.mockResolvedValue({
+      ...(postFixture({ canEdit: false, canDelete: false }) as object),
+      postType: "long",
+      recapKind: "combined",
+      gameDate: null,
+      context: {
+        type: "team", id: "team-1", name: "Varsity Football",
+        orgId: "org-1", orgName: "Legacy Club", orgAvatarUrl: "/club-logo.png",
+        orgBrandPrimaryColor: "#123456", orgBrandSecondaryColor: "#abcdef",
+      },
+    });
+    renderWithProviders(<PostPage />);
+    // This suite's Link stub renders only children; the banner link itself is
+    // checked with the real Link in RecapOrgBanner.test.tsx.
+    expect(await screen.findByTestId(`img-recap-org-logo-${POST_ID}`)).toHaveAttribute("src", "/club-logo.png");
+    expect(screen.getByTestId(`text-recap-org-name-${POST_ID}`)).toHaveTextContent("LEGACY CLUB");
+    expect(screen.getByRole("heading", { name: "Match recap" })).toBeVisible();
+  });
+  it("does not apply new recap branding to private practice plans", async () => {
+    customFetchMock.mockResolvedValue({
+      ...(postFixture({ canEdit: false, canDelete: false }) as object),
+      postType: "long",
+      articleKind: "practice_plan",
+      gameDate: "2026-10-10T12:00:00Z",
+      context: {
+        type: "team", id: "team-1", name: "Varsity Football",
+        orgId: "org-1", orgName: "Legacy Club", orgAvatarUrl: "/club-logo.png",
+        orgBrandPrimaryColor: "#123456", orgBrandSecondaryColor: "#abcdef",
+      },
+    });
+    renderWithProviders(<PostPage />);
+    await screen.findByRole("heading", { name: "Match recap" });
+    expect(screen.queryByTestId(`img-recap-org-logo-${POST_ID}`)).not.toBeInTheDocument();
+  });
   it("does not imply a team album on a direct school historical recap", async () => {
     customFetchMock.mockResolvedValue({
       ...(postFixture({ canEdit: true, canDelete: true }, "orgpost-history") as object),

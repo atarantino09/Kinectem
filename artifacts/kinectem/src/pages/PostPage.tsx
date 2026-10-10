@@ -72,6 +72,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { TakedownDialog } from "@/components/TakedownDialog";
 import { ShareRecapImageDialog } from "@/components/share-image/ShareRecapImageDialog";
+import { RecapOrgBanner } from "@/components/RecapOrgBanner";
+import { isGameRecapForOrgBranding, readRecapOrgIdentity } from "@/lib/recapOrgBrand";
 import { FitText } from "@/components/FitText";
 import { apiErrorMessage } from "@/lib/api-errors";
 import { ClippingViewer } from "@/components/historical/ClippingViewer";
@@ -380,6 +382,8 @@ export default function PostPage() {
           ).orgBrandSecondaryColor,
         })
       : null;
+  const recapOrgIdentity =
+    isGameRecapForOrgBranding(post) && !isHistorical ? readRecapOrgIdentity(post.context) : null;
   const contextAvatarUrl =
     post.context.type === "team"
       ? ((post.context as { avatarUrl?: string | null }).avatarUrl ??
@@ -569,7 +573,9 @@ export default function PostPage() {
           </div>
         </div>
       )}
-      {recapOrgBrand && (
+      {recapOrgIdentity ? (
+        <RecapOrgBanner org={recapOrgIdentity} postId={post.id} size="page" />
+      ) : recapOrgBrand && (
         <div
           className="h-1.5 rounded-full"
           style={{ background: orgStripGradient(recapOrgBrand) }}

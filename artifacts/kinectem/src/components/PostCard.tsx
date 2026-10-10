@@ -23,6 +23,8 @@ import {
 } from "@workspace/api-client-react";
 import { timeAgo, formatDate, formatDateUTC, formatOrgName } from "@/lib/format";
 import { readOrgBrandColors, orgStripGradient } from "@/lib/orgBrand";
+import { RecapOrgBanner } from "@/components/RecapOrgBanner";
+import { isGameRecapForOrgBranding, readRecapOrgIdentity } from "@/lib/recapOrgBrand";
 import { linkify } from "@/lib/linkify";
 import {
   renderBodyWithMentions,
@@ -441,10 +443,7 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
   // beyond the locked spec (`orgBrandPrimaryColor` / `orgBrandSecondaryColor`,
   // recapKind precedent). Only article-backed recap posts get the strip;
   // solo teams / unbranded orgs have no colors and render nothing.
-  const isRecapArticle =
-    reportTarget.contentType === "article" &&
-    post.postType === "long" &&
-    (!!post.gameDate || isCombinedRecap);
+  const isRecapArticle = isGameRecapForOrgBranding(post);
   // News cards get the same strip — their team context carries the same
   // org brand color fields.
   const recapOrgBrand = isRecapArticle || isNews
@@ -456,6 +455,10 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
           post.context as { orgBrandSecondaryColor?: string | null }
         ).orgBrandSecondaryColor,
       })
+    : null;
+
+  const recapOrgIdentity = isRecapArticle && !isHistorical
+    ? readRecapOrgIdentity(post.context)
     : null;
 
   if (historicalDeleted) return null;
@@ -475,7 +478,9 @@ function PostCardImpl({ post }: { post: PostResponse | FeedPost }) {
       )}
     >
       <CardContent className="p-0">
-        {recapOrgBrand && (
+        {recapOrgIdentity ? (
+          <RecapOrgBanner org={recapOrgIdentity} postId={post.id} />
+        ) : recapOrgBrand && (
           <div
             className="h-1.5"
             style={{ background: orgStripGradient(recapOrgBrand) }}
