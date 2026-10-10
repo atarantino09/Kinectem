@@ -11,8 +11,9 @@ type Outcome = Target & { status: "eligible" | "applied" | "staged" | "unchanged
 type Scope = { organizationIds: string[] } | { listId: string };
 const successStatuses = new Set(["applied", "staged", "unchanged"]);
 
-export function AdminFree2027({ selectedIds, lists }: {
+export function AdminFree2027({ selectedIds, lists, presetReferral }: {
   selectedIds: string[]; lists: Array<{ id: string; name: string; orgCount: number }>;
+  presetReferral?: { code: string; competitionName: string };
 }) {
   const queryClient = useQueryClient();
   const [listId, setListId] = useState("");
@@ -28,7 +29,7 @@ export function AdminFree2027({ selectedIds, lists }: {
 
   async function review(scope: Scope) {
     setOpen(true); setBusy(true); setResults([]); setError(""); setMode("preview");
-    const tag = referralCode.trim();
+    const tag = (presetReferral?.code ?? referralCode).trim();
     setReviewedReferralCode(tag);
     setProgress("Finding organizations…");
     try {
@@ -82,6 +83,7 @@ export function AdminFree2027({ selectedIds, lists }: {
         queryClient.invalidateQueries({ queryKey: ["admin", "org-claim-links"] }),
         queryClient.invalidateQueries({ queryKey: ["admin", "promo-usage"] }),
         queryClient.invalidateQueries({ queryKey: ["org-subscription"] }),
+        queryClient.invalidateQueries({ queryKey: ["competition-referrals"] }),
       ]);
     }
   }
@@ -91,7 +93,8 @@ export function AdminFree2027({ selectedIds, lists }: {
         <h3 className="font-bold text-foreground">Apply FREE2027 to existing organizations</h3>
         <p className="text-sm text-foreground mt-1">Free through July 31, 2027. First full-price annual charge August 1, 2027. Already-paid organizations are excluded.</p>
       </div>
-      <div className="max-w-xl"><CompetitionReferralField value={referralCode} onChange={setReferralCode} disabled={busy || open} /></div>
+      {presetReferral ? <p className="text-sm" data-testid="free2027-preset-referral">Referral credit goes to <strong>{presetReferral.competitionName}</strong>. No tag to type or paste.</p>
+        : <div className="max-w-xl"><CompetitionReferralField value={referralCode} onChange={setReferralCode} disabled={busy || open} /></div>}
       <div className="flex flex-wrap items-end gap-3">
         <Button onClick={() => void review({ organizationIds: selectedIds })} disabled={!selectedIds.length || busy}
           data-testid="btn-free2027-selected">Review selected ({selectedIds.length})</Button>
