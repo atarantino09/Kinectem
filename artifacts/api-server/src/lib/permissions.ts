@@ -23,9 +23,12 @@ export function isSoloTeam(team: Team): boolean {
 }
 
 // A standalone team may author recaps while any competition it participates in
-// is active. Dates are UTC calendar dates and both boundaries are inclusive.
+// is within one day of starting or active. Dates are UTC calendar dates and
+// access runs from the day before start through end, inclusive.
 export async function soloTeamRecapWindowOpen(teamId: string): Promise<boolean> {
   const today = new Date().toISOString().slice(0, 10);
+  const tomorrow = new Date(`${today}T00:00:00Z`);
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
   const [row] = await db
     .select({ id: tournaments.id })
     .from(tournamentParticipants)
@@ -36,7 +39,7 @@ export async function soloTeamRecapWindowOpen(teamId: string): Promise<boolean> 
     .where(
       and(
         eq(tournamentParticipants.teamId, teamId),
-        lte(tournaments.startDate, today),
+        lte(tournaments.startDate, tomorrow.toISOString().slice(0, 10)),
         gte(tournaments.endDate, today),
       ),
     )

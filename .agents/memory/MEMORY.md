@@ -29,7 +29,7 @@
 - [Per-tier team cap enforcement](team-cap-enforcement.md) — caps live in plan-limits.ts; enforce INSIDE insert tx behind pg_advisory_xact_lock(orgId) + recount, not a pre-check (TOCTOU).
 - [Production data seeding after publish](prod-data-seeding.md) — publish syncs schema NOT rows; reseed prod via Scheduled Deployment; secret tokens are per-env so export invite links from the prod run only.
 - [Broadcast/announcement attachments](broadcast-attachments.md) — org announcements attach flyers via shared asset pipeline; MUST enforce type allowlist server-side (id-attach bypasses client picker); list=count only, detail=data-URLs.
-- [Solo-team free recap window](solo-team-recap-window.md) — solo teams author recaps free only for start..start+7d of a tournament; gate uses UTC date strings, so client countdown must use UTC instants to match.
+- [Solo-team free recap window](solo-team-recap-window.md) — access opens one day before competition start through end; UTC permissions/countdown and viewer-local action availability remain distinct.
 - [Schedule event status writes](schedule-status-writes.md) — guard status UPDATEs on read-status (WHERE id AND status=read) → 409 not clobber; scoreable = game-type & (completed OR past-scheduled).
 - [Combined recap pill](combined-recap-pill.md) — articles.recap_kind="combined" marks multi-game recaps; serialized as extra PostResponse field via shared articleToPost (openapi locked); forgeable, label-only.
 - [Combined recap article context](combined-recap-article-context.md) — selected news is re-fetched server-side only at generation; bounded excerpts, metadata fallback, and untrusted AI treatment are mandatory.

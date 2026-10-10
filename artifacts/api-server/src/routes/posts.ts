@@ -3045,7 +3045,7 @@ router.post(
           return apiError(
             res,
             403,
-            "Game recaps are available to standalone teams while a competition is active. Create or join an organization (organizations get 90 days free) to keep posting outside a competition's dates.",
+            "Game recaps are available to standalone teams from one day before a competition starts through its end date. Create or join an organization (organizations get 90 days free) to keep posting outside that window.",
             { code: "tournament_window_closed" },
           );
         }

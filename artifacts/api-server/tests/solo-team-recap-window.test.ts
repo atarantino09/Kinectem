@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { eq, inArray } from "drizzle-orm";
 import {
   db,
@@ -79,6 +79,7 @@ async function makeOrganizationTeam() {
 }
 
 afterEach(async () => {
+  vi.useRealTimers();
   if (createdCompetitionIds.length > 0) {
     await db
       .delete(tournaments)
@@ -92,10 +93,26 @@ afterEach(async () => {
 });
 
 describe("standalone-team competition recap window", () => {
-  it("denies before start, allows both inclusive boundaries, and denies after end", async () => {
+  it("opens exactly at UTC midnight on the day before competition start", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-06-10T23:59:59.999Z"));
     const team = await makeSoloTeam();
-    const { competition } = await addCompetition(team.id, 1, 2);
+    await addCompetition(team.id, 2, 4);
     expect(await soloTeamRecapWindowOpen(team.id)).toBe(false);
+    vi.setSystemTime(new Date("2026-06-11T00:00:00.000Z"));
+    expect(await soloTeamRecapWindowOpen(team.id)).toBe(true);
+  });
+
+  it("denies two days before start, opens the day before, and denies after end", async () => {
+    const team = await makeSoloTeam();
+    const { competition } = await addCompetition(team.id, 2, 3);
+    expect(await soloTeamRecapWindowOpen(team.id)).toBe(false);
+
+    await db
+      .update(tournaments)
+      .set({ startDate: dateOffset(1), endDate: dateOffset(2) })
+      .where(eq(tournaments.id, competition.id));
+    expect(await soloTeamRecapWindowOpen(team.id)).toBe(true);
 
     await db
       .update(tournaments)

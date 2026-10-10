@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { screen } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { renderWithProviders } from "@/test/renderWithProviders";
+import { createTestQueryClient, renderWithProviders } from "@/test/renderWithProviders";
 
 const customFetchMock = vi.fn<
   (url: string, options?: RequestInit) => Promise<unknown>
@@ -9,6 +9,7 @@ const customFetchMock = vi.fn<
 const toastMock = vi.fn();
 
 vi.mock("@workspace/api-client-react", () => ({
+  getGetTeamByIdQueryKey: (teamId: string) => [`/api/v1/teams/${teamId}`],
   customFetch: (...args: unknown[]) =>
     (customFetchMock as unknown as (...a: unknown[]) => Promise<unknown>)(
       ...args,
@@ -74,10 +75,143 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
+type MatchFixture = Omit<typeof competitions[0]["matches"][number], "matchDate" | "startTime" | "opponentName"> & {
+  matchDate: string | null;
+  startTime: string | null;
+  opponentName: string | null;
+  recapPostId?: string | null;
+};
+
+async function renderClockCard(
+  now: Date,
+  match: Partial<MatchFixture> = {},
+  canPostRecap = true,
+  canManage = false,
+  startDate = "2026-06-12",
+) {
+  vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+  vi.setSystemTime(now);
+  const data = { data: [{
+    ...competitions[0], startDate,
+    matches: [{ ...competitions[0].matches[0], ...match }],
+  }] };
+  customFetchMock.mockResolvedValue(data);
+  const queryClient = createTestQueryClient();
+  queryClient.setQueryData(
+    ["team", "team-1", "tournament-schedule", "current", canManage], data,
+  );
+  let result!: ReturnType<typeof renderWithProviders>;
+  await act(async () => {
+    result = renderWithProviders(
+      <TournamentScheduleCard teamId="team-1" canPostRecap={canPostRecap} canManage={canManage} />,
+      { queryClient },
+    );
+  });
+  fireEvent.click(screen.getByTestId("toggle-tournament-competition-1"));
+  return result;
+}
+
 describe("TournamentScheduleCard", () => {
+  it.each([
+    ["two days before", new Date(2026, 5, 10, 12), false],
+    ["just before the prior day", new Date(2026, 5, 10, 23, 59, 59, 999), false],
+    ["midnight the prior day", new Date(2026, 5, 11, 0, 0), true],
+    ["12:00:59 the prior day", new Date(2026, 5, 11, 0, 0, 59, 999), true],
+    ["12:01 the prior day", new Date(2026, 5, 11, 0, 1), true],
+    ["later before kickoff", new Date(2026, 5, 12, 8), true],
+    ["past competition", new Date(2026, 5, 20), true],
+  ])("unlocks both recap actions %s using the local competition date", async (_label, now, available) => {
+    await renderClockCard(now as Date);
+    expect(!!screen.queryByTestId("btn-write-recap-match-1")).toBe(available);
+    expect(!!screen.queryByTestId("button-competition-recap-competition-1")).toBe(available);
+  });
+
+  it.each([
+    ["later game", { matchDate: "2026-06-14", startTime: "23:00" }, true],
+    ["past game", { matchDate: "2026-06-10" }, true],
+    ["missing kickoff", { startTime: null }, true],
+    ["undated game", { matchDate: null }, false],
+    ["unknown opponent", { opponentName: null }, false],
+    ["empty opponent", { opponentName: "" }, false],
+  ])("retains game requirements but ignores kickoff for a %s", async (_label, match, available) => {
+    await renderClockCard(new Date(2026, 5, 11), match);
+    expect(!!screen.queryByTestId("btn-write-recap-match-1")).toBe(available);
+    expect(screen.getByTestId("button-competition-recap-competition-1")).toBeVisible();
+  });
+
+  it("hides authoring from unauthorized managers after the opening boundary", async () => {
+    await renderClockCard(new Date(2026, 5, 11), {}, false, true);
+    expect(screen.queryByTestId("btn-write-recap-match-1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("button-competition-recap-competition-1")).not.toBeInTheDocument();
+    expect(screen.getByTestId("btn-hide-game-match-1")).toBeVisible();
+  });
+
+  it("keeps published recaps visible before opening without duplicate authoring", async () => {
+    await renderClockCard(new Date(2026, 5, 10), { recapPostId: "article-recap-1" });
+    expect(screen.getByTestId("pill-game-recap-match-1").closest("a"))
+      .toHaveAttribute("href", "/posts/article-recap-1");
+    expect(screen.queryByTestId("btn-write-recap-match-1")).not.toBeInTheDocument();
+  });
+
+  it("preserves every prefilled composer parameter for a future game", async () => {
+    await renderClockCard(new Date(2026, 5, 11), { matchDate: "2026-06-14", opponentName: "Rovers & United" });
+    const link = screen.getByTestId("btn-write-recap-match-1").closest("a")!;
+    const url = new URL(link.getAttribute("href")!, "https://example.test");
+    expect(url.pathname).toBe("/posts/new");
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      type: "long", teamId: "team-1", opponent: "Rovers & United",
+      gameDate: "2026-06-14", competitionId: "competition-1",
+      matchId: "match-1", from: "/teams/team-1",
+    });
+  });
+
+  it("unlocks an open page exactly at midnight without new schedule data", async () => {
+    await renderClockCard(new Date(2026, 5, 10, 23, 59, 59, 999));
+    customFetchMock.mockClear();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(screen.getByTestId("btn-write-recap-match-1")).toBeVisible();
+    expect(screen.getByTestId("button-competition-recap-competition-1")).toBeVisible();
+    expect(customFetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each(["focus", "visibilitychange"])("catches up after a background tab resumes via %s", async (event) => {
+    await renderClockCard(new Date(2026, 5, 10, 23, 55));
+    vi.setSystemTime(new Date(2026, 5, 11, 0, 5));
+    if (event === "visibilitychange") {
+      vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+      fireEvent(document, new Event(event));
+    } else {
+      fireEvent(window, new Event(event));
+    }
+    expect(screen.getByTestId("btn-write-recap-match-1")).toBeVisible();
+  });
+
+  it("cleans up the boundary timer and resume listeners when unmounted", async () => {
+    const windowRemove = vi.spyOn(window, "removeEventListener");
+    const documentRemove = vi.spyOn(document, "removeEventListener");
+    const { unmount } = await renderClockCard(new Date(2026, 5, 10));
+    const count = vi.getTimerCount();
+    unmount();
+    expect(vi.getTimerCount()).toBeLessThan(count);
+    expect(windowRemove).toHaveBeenCalledWith("focus", expect.any(Function));
+    expect(documentRemove).toHaveBeenCalledWith("visibilitychange", expect.any(Function));
+  });
+
+  it("handles a prior-day boundary in the previous year", async () => {
+    await renderClockCard(new Date(2025, 11, 31), {}, true, false, "2026-01-01");
+    expect(screen.getByTestId("btn-write-recap-match-1")).toBeVisible();
+  });
+
+  it("does not infer an opening date for an undated competition", async () => {
+    await renderClockCard(new Date(2026, 5, 11), {}, true, false, "");
+    expect(screen.queryByTestId("btn-write-recap-match-1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("button-competition-recap-competition-1")).not.toBeInTheDocument();
+  });
+
   it("shows competition removal only inside that competition's expanded section", async () => {
     customFetchMock.mockResolvedValue({ data: competitions.map((competition) => ({
       ...competition,
@@ -283,7 +417,7 @@ describe("TournamentScheduleCard", () => {
     await renderCard();
 
     const notice = screen.getByTestId("free-recap-notice");
-    expect(notice).toHaveTextContent("while this competition is active");
+    expect(notice).toHaveTextContent("from the day before this competition starts through its end");
     expect(notice).toHaveTextContent("Access ends Oct 5");
     expect(screen.getByTestId("free-recap-countdown")).toHaveTextContent(
       "15d 12h 0m",
@@ -315,7 +449,7 @@ describe("TournamentScheduleCard", () => {
     await renderCard();
 
     expect(screen.getByTestId("free-recap-notice")).toHaveTextContent(
-      "starts on Oct 10 and remain available through Oct 12",
+      "on Oct 9 and remain available through Oct 12",
     );
   });
 

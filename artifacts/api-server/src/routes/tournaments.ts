@@ -1265,8 +1265,8 @@ const publicCompetitionRead = asyncHandler(async (req, res) => {
       .from(tournamentMatches)
       .where(eq(tournamentMatches.tournamentId, tournament.id));
 
-    // Active window: today's date (UTC calendar) within [startDate, endDate]
-    // inclusive — same comparison the recap gate uses.
+    // Active competition window: today's date (UTC calendar) within
+    // [startDate, endDate] inclusive. Recap access opens one day earlier.
     const today = new Date().toISOString().slice(0, 10);
     const isActive = today >= tournament.startDate && today <= tournament.endDate;
 

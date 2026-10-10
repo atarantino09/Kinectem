@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { customFetch } from "@workspace/api-client-react";
+import { customFetch, getGetTeamByIdQueryKey } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -118,12 +118,54 @@ function todayKey(): string {
   return `${y}-${m}-${d}`;
 }
 
-// A match is worth recapping once it's actually been played: its date is in
-// the past. Same-day, future, and TBD matches don't get the "Write recap"
-// affordance.
-function isRecappable(m: TournamentMatch): boolean {
-  if (!m.opponentName) return false;
-  return !!m.matchDate && m.matchDate < todayKey();
+// All games unlock together one calendar day before the competition starts.
+// Use the viewer-local calendar, never the imported game date/kickoff time.
+function competitionRecapsOpen(g: TournamentGroup, now: number): boolean {
+  if (!g.startDate) return false;
+  const [year, month, day] = g.startDate.split("-").map(Number);
+  return now >= new Date(year, month - 1, day - 1).getTime();
+}
+
+function isRecappable(m: TournamentMatch, g: TournamentGroup, now: number): boolean {
+  return !!m.opponentName && !!m.matchDate && competitionRecapsOpen(g, now);
+}
+
+function useRecapClock(teamId: string): number {
+  const [now, setNow] = useState(() => Date.now());
+  const qc = useQueryClient();
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const refresh = (refreshPermissions = true) => {
+      clearTimeout(timer);
+      const current = Date.now();
+      setNow(current);
+      const local = new Date(current);
+      const next = new Date(
+        local.getFullYear(), local.getMonth(), local.getDate() + 1,
+      );
+      // Standalone-team permissions use UTC days; refresh those too even when
+      // the viewer's local midnight occurs at a different instant.
+      const nextUtc = new Date(current);
+      nextUtc.setUTCHours(24, 0, 0, 0);
+      timer = setTimeout(() => refresh(), Math.min(next.getTime(), nextUtc.getTime()) - current);
+      if (refreshPermissions) {
+        void qc.invalidateQueries({ queryKey: getGetTeamByIdQueryKey(teamId) });
+      }
+    };
+    const onFocus = () => refresh();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    refresh(false);
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [qc, teamId]);
+  return now;
 }
 
 // Prefilled recap composer deep-link for a tournament match. These aren't
@@ -155,12 +197,12 @@ function competitionRecapHref(teamId: string, competitionId: string): string {
   return `/posts/new?${params}`;
 }
 
-// The free recap window for a tournament is, in UTC, [startDate 00:00,
+// The free recap window for a tournament is, in UTC, [(startDate - 1 day) 00:00,
 // (recapFreeUntil + 1 day) 00:00) — i.e. through the end of the recapFreeUntil
 // calendar day. We work in exact UTC instants so the countdown matches the
 // server-side gate (which compares UTC calendar dates) regardless of viewer TZ.
 function windowBounds(g: TournamentGroup): { start: number; end: number } {
-  const start = Date.parse(`${g.startDate}T00:00:00Z`);
+  const start = Date.parse(`${g.startDate}T00:00:00Z`) - 86_400_000;
   const end = Date.parse(`${g.recapFreeUntil!}T00:00:00Z`) + 86_400_000;
   return { start, end };
 }
@@ -208,8 +250,8 @@ function FreeRecapNotice({ groups }: { groups: TournamentGroup[] }) {
     body = (
       <p className="mt-0.5 flex items-center gap-1.5 text-xs">
         <Clock className="w-3 h-3 shrink-0" />
-        Your standalone team can publish game recaps while this competition is
-        active. Access ends{" "}
+        Your standalone team can publish game recaps from the day before this
+        competition starts through its end. Access ends{" "}
         {dayLabel(end - 1)} —{" "}
         <span
           className="font-black tabular-nums"
@@ -227,9 +269,9 @@ function FreeRecapNotice({ groups }: { groups: TournamentGroup[] }) {
     tone = "open";
     body = (
       <p className="mt-0.5 text-xs">
-        Free game recaps unlock when the next competition starts on{" "}
+        Free game recaps unlock one day before the next competition, on{" "}
         {dayLabel(next.start)} and remain available through{" "}
-        {dayLabel(next.end - 1)}. Outside an active competition, your standalone
+        {dayLabel(next.end - 1)}. Outside this window, your standalone
         team must join or create an organization to keep publishing.
       </p>
     );
@@ -350,8 +392,8 @@ export function TournamentScheduleCard({
   teamName = "This team",
 }: {
   teamId: string;
-  // When true (the viewer can author recaps for this team), played matches
-  // expose a "Write recap" link into the prefilled composer.
+  // When true (the viewer can author recaps for this team), dated matches
+  // expose a prefilled "Write recap" link from the day before competition start.
   canPostRecap?: boolean;
   // Task #746 — when true (team admin), games expose Hide/Unhide
   // controls and hidden games render greyed-out with a "Hidden"
@@ -360,6 +402,7 @@ export function TournamentScheduleCard({
   viewerId?: string;
   teamName?: string;
 }) {
+  const recapNow = useRecapClock(teamId);
   const [showAll, setShowAll] = useState(false);
   // Keep the panel open by default so this adds a way to declutter the team
   // page without changing what existing visitors see on first load.
@@ -564,7 +607,7 @@ export function TournamentScheduleCard({
                               {m.bracket}
                             </Badge>
                           ) : <span aria-hidden="true" />}
-                          {(m.recapPostId || (canPostRecap && isRecappable(m)) || canManage || !!g.assignmentSnapshot?.length) && (
+                          {(m.recapPostId || (canPostRecap && isRecappable(m, g, recapNow)) || canManage || !!g.assignmentSnapshot?.length) && (
                           <div className="col-span-2 flex flex-wrap items-center justify-end gap-1.5" data-testid={`tournament-match-actions-${m.id}`}>
                           {/* Task #746 — published recap linked to this game.
                               Takes the place of "Write recap" (the game already
@@ -581,7 +624,7 @@ export function TournamentScheduleCard({
                             </Link>
                           ) : (
                             canPostRecap &&
-                            isRecappable(m) && (
+                            isRecappable(m, g, recapNow) && (
                               <Link href={recapHrefFor(teamId, g.tournamentId, m)}>
                                 <span
                                   className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700 hover:bg-blue-100 cursor-pointer"
@@ -646,7 +689,7 @@ export function TournamentScheduleCard({
                       </li>
                     ))}
                   </ul>
-                  {canPostRecap && (
+                  {canPostRecap && competitionRecapsOpen(g, recapNow) && (
                     <div
                       className="min-w-0 space-y-1.5 rounded-lg border border-purple-200/70 bg-gradient-to-br from-purple-50 via-violet-50 to-purple-100/70 px-3 py-2 dark:border-purple-800/50 dark:from-purple-950/30 dark:via-violet-950/20 dark:to-purple-900/30"
                       data-testid={`competition-recap-box-${g.tournamentId}`}

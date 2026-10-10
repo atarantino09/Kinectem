@@ -482,7 +482,7 @@ export default function TeamPage() {
             <p>
               <span className="font-bold">Standalone competition team.</span>{" "}
               This team was created for a competition and has no organization
-              yet. Game recaps can be posted while a competition is active. To
+              yet. Game recaps can be posted from the day before a competition starts through its end. To
               keep posting outside competition dates, adopt this team into an
               organization.
             </p>
