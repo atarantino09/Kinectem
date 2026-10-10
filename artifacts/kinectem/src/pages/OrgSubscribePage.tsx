@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { freeAccessDate } from "@/lib/free-access-promo";
 import {
   PLANS,
   applyPromo,
@@ -29,6 +30,7 @@ type SubscriptionResponse = {
     plan: PlanTier;
     promo: AppliedPromo | null;
     hasCardOnFile?: boolean;
+    freeUntil?: string | null;
   } | null;
   // Staged promo / plan tier from admin creation — auto-applied /
   // pre-selected when the org hasn't picked its own yet.
@@ -78,7 +80,9 @@ export default function OrgSubscribePage() {
   const [startingCheckout, setStartingCheckout] = useState(false);
   const [canceling, setCanceling] = useState(false);
   const hasCardOnFile = Boolean(data?.subscription?.hasCardOnFile);
-  const billingDateLabel = formatBillingDate(data?.billingStartsAt);
+  const billingDateLabel = promo?.discountType === "free_until" || data?.subscription?.freeUntil
+    ? freeAccessDate(promo?.freeUntil ?? data?.subscription?.freeUntil)
+    : formatBillingDate(data?.billingStartsAt);
 
   // Seed the selected plan + applied promo from the org's existing
   // subscription (once), so reopening this page doesn't silently reset a
@@ -162,7 +166,7 @@ export default function OrgSubscribePage() {
     if (!code) return;
     // Promo is locked once a card is on file — the coupon is already fixed
     // on the Stripe subscription. Cancel billing first, then re-apply.
-    if (hasCardOnFile) {
+    if (hasCardOnFile && code.toLowerCase() !== "free2027") {
       toast({
         title: "Promo locked while billing is scheduled",
         description:
@@ -177,14 +181,20 @@ export default function OrgSubscribePage() {
         `/api/v1/promo-codes/validate`,
         { method: "POST", body: JSON.stringify({ code }) },
       );
+      if (hasCardOnFile && res.promo.discountType === "free_until") {
+        await customFetch(`/api/v1/organizations/${orgId}/subscription`, {
+          method: "PUT", body: JSON.stringify({ plan: activePlan, promoCode: res.promo.code }),
+        });
+        await queryClient.invalidateQueries({ queryKey: ["org-subscription", orgId] });
+      }
       setPromo(res.promo);
       toast({
         title: "Promo code applied!",
         description: res.promo.description ?? `Code ${res.promo.code} is active.`,
       });
-    } catch {
+    } catch (err) {
       setPromo(null);
-      setPromoError("That promo code isn't valid.");
+      setPromoError(err instanceof Error ? err.message : "That promo code isn't valid.");
     } finally {
       setCheckingPromo(false);
     }
@@ -416,7 +426,9 @@ export default function OrgSubscribePage() {
             <div className="flex items-center justify-between rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3">
               <div className="text-sm">
                 <span className="font-bold uppercase">{promo.code}</span> applied —{" "}
-                {promo.discountType === "percent"
+                {promo.discountType === "free_until"
+                  ? `free access until ${freeAccessDate(promo.freeUntil)}. The first annual charge on that date is full price`
+                  : promo.discountType === "percent"
                   ? `${promo.discountValue}% off your first year`
                   : `${formatUsd(promo.discountValue)} off your first year`}
                 . Renewals bill at full price.

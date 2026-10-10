@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { FREE2027_FIRST_CHARGE, promoOfferLabel, type PromoDiscountType } from "@/lib/free-access-promo";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { AdminLayout } from "@/components/AdminLayout";
@@ -29,7 +30,8 @@ type PromoCode = {
   id: string;
   code: string;
   description: string | null;
-  discountType: "percent" | "amount";
+  discountType: PromoDiscountType;
+  freeUntil?: string | null;
   discountValue: number;
   active: boolean;
   maxRedemptions: number | null;
@@ -59,7 +61,7 @@ export default function AdminPromoCodes() {
   const [createOpen, setCreateOpen] = useState(false);
   const [code, setCode] = useState("");
   const [description, setDescription] = useState("");
-  const [discountType, setDiscountType] = useState<"percent" | "amount">("percent");
+  const [discountType, setDiscountType] = useState<PromoDiscountType>("percent");
   const [discountValue, setDiscountValue] = useState("10");
   const [maxRedemptions, setMaxRedemptions] = useState("");
   const [expiryMode, setExpiryMode] = useState<"lifetime" | "date">("lifetime");
@@ -77,8 +79,8 @@ export default function AdminPromoCodes() {
   };
 
   const create = async () => {
-    const value = Number(discountValue);
-    if (!code.trim() || !Number.isFinite(value) || value < 1) {
+    const value = discountType === "free_until" ? 0 : Number(discountValue);
+    if (!code.trim() || !Number.isFinite(value) || (discountType !== "free_until" && value < 1)) {
       toast({ title: "Enter a code and a discount of at least 1.", variant: "destructive" });
       return;
     }
@@ -91,6 +93,7 @@ export default function AdminPromoCodes() {
           description: description.trim() || null,
           discountType,
           discountValue: value,
+          freeUntil: discountType === "free_until" ? FREE2027_FIRST_CHARGE : null,
           maxRedemptions: maxRedemptions.trim() ? Number(maxRedemptions) : null,
           expiresAt:
             expiryMode === "date" && expiresAt
@@ -117,7 +120,7 @@ export default function AdminPromoCodes() {
   // (description, discount, max redemptions, expiry) can be changed.
   const [editRow, setEditRow] = useState<PromoCode | null>(null);
   const [editDescription, setEditDescription] = useState("");
-  const [editDiscountType, setEditDiscountType] = useState<"percent" | "amount">("percent");
+  const [editDiscountType, setEditDiscountType] = useState<PromoDiscountType>("percent");
   const [editDiscountValue, setEditDiscountValue] = useState("10");
   const [editMaxRedemptions, setEditMaxRedemptions] = useState("");
   const [editExpiryMode, setEditExpiryMode] = useState<"lifetime" | "date">("lifetime");
@@ -142,8 +145,8 @@ export default function AdminPromoCodes() {
 
   const saveEdit = async () => {
     if (!editRow) return;
-    const value = Number(editDiscountValue);
-    if (!Number.isFinite(value) || value < 1) {
+    const value = editDiscountType === "free_until" ? 0 : Number(editDiscountValue);
+    if (!Number.isFinite(value) || (editDiscountType !== "free_until" && value < 1)) {
       toast({ title: "Enter a discount of at least 1.", variant: "destructive" });
       return;
     }
@@ -163,6 +166,7 @@ export default function AdminPromoCodes() {
           description: editDescription.trim() || null,
           discountType: editDiscountType,
           discountValue: value,
+          freeUntil: editDiscountType === "free_until" ? (editRow.freeUntil ?? FREE2027_FIRST_CHARGE) : null,
           maxRedemptions: editMaxRedemptions.trim() ? Number(editMaxRedemptions) : null,
           expiresAt:
             editExpiryMode === "date" && editExpiresAt
@@ -264,7 +268,7 @@ export default function AdminPromoCodes() {
                           )}
                         </td>
                         <td className="py-3 pr-4">
-                          {row.discountType === "percent"
+                          {row.discountType === "free_until" ? promoOfferLabel(row) : row.discountType === "percent"
                             ? `${row.discountValue}%`
                             : `$${row.discountValue.toLocaleString("en-US")}`}
                         </td>
@@ -367,7 +371,7 @@ export default function AdminPromoCodes() {
                 <Label>Type</Label>
                 <Select
                   value={discountType}
-                  onValueChange={(v) => setDiscountType(v as "percent" | "amount")}
+                  onValueChange={(v) => setDiscountType(v as PromoDiscountType)}
                 >
                   <SelectTrigger data-testid="select-discount-type">
                     <SelectValue />
@@ -375,15 +379,18 @@ export default function AdminPromoCodes() {
                   <SelectContent>
                     <SelectItem value="percent">Percent off</SelectItem>
                     <SelectItem value="amount">Dollars off</SelectItem>
+                    <SelectItem value="free_until">Free until August 1, 2027</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="promo-value">
-                  {discountType === "percent" ? "Percent (1–100)" : "Dollars off"}
+                  {discountType === "free_until" ? "Full annual price starts August 1, 2027" : discountType === "percent" ? "Percent (1–100)" : "Dollars off"}
                 </Label>
                 <Input
                   id="promo-value"
+                  disabled={discountType === "free_until"}
+                  hidden={discountType === "free_until"}
                   type="number"
                   min={1}
                   value={discountValue}
@@ -474,7 +481,7 @@ export default function AdminPromoCodes() {
                 <Label>Type</Label>
                 <Select
                   value={editDiscountType}
-                  onValueChange={(v) => setEditDiscountType(v as "percent" | "amount")}
+                  onValueChange={(v) => setEditDiscountType(v as PromoDiscountType)}
                 >
                   <SelectTrigger data-testid="select-edit-discount-type">
                     <SelectValue />
@@ -482,15 +489,18 @@ export default function AdminPromoCodes() {
                   <SelectContent>
                     <SelectItem value="percent">Percent off</SelectItem>
                     <SelectItem value="amount">Dollars off</SelectItem>
+                    <SelectItem value="free_until">Free until August 1, 2027</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="edit-promo-value">
-                  {editDiscountType === "percent" ? "Percent (1–100)" : "Dollars off"}
+                  {editDiscountType === "free_until" ? "Full annual price starts August 1, 2027" : editDiscountType === "percent" ? "Percent (1–100)" : "Dollars off"}
                 </Label>
                 <Input
                   id="edit-promo-value"
+                  disabled={editDiscountType === "free_until"}
+                  hidden={editDiscountType === "free_until"}
                   type="number"
                   min={1}
                   value={editDiscountValue}

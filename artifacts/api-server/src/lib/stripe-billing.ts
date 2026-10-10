@@ -1,5 +1,6 @@
 import type Stripe from "stripe";
 import { getStripeClient } from "./stripeClient.js";
+import { MIN_CHECKOUT_LEAD_MS } from "./free-access-promo.js";
 
 export type PlanTier = "starter" | "pro" | "elite";
 
@@ -133,7 +134,7 @@ async function ensurePlanPriceId(
 
 type PromoInput = {
   code: string;
-  discountType: "percent" | "amount";
+  discountType: "percent" | "amount" | "free_until";
   discountValue: number;
 };
 
@@ -197,12 +198,19 @@ export type CheckoutInput = {
   // set, it is the source of truth for trial_end so Stripe matches what the
   // UI and reminder emails display. Falls back to the computed date.
   billingStartsAt?: Date | null;
+  freeUntil?: Date | null;
 };
 
 // The trial_end sent to Stripe: the persisted charge date when one exists,
 // never earlier than the policy target, and always floored at Stripe's
 // minimum from now.
 export function checkoutTrialEnd(input: CheckoutInput, now = new Date()): Date {
+  if (input.freeUntil) {
+    if (input.freeUntil.getTime() <= now.getTime() + MIN_CHECKOUT_LEAD_MS) {
+      throw new Error("The free-access billing date is too close or has passed.");
+    }
+    return input.freeUntil;
+  }
   const candidate =
     input.billingStartsAt ?? policyBillingStartDate(input.orgCreatedAt);
   const policySafeCandidate = billingStartAtOrAfterPolicy(
@@ -232,7 +240,7 @@ export async function createCardOnFileCheckout(
     );
 
     let discounts: Stripe.Checkout.SessionCreateParams.Discount[] | undefined;
-    if (input.promo) {
+    if (input.promo && input.promo.discountType !== "free_until" && !input.freeUntil) {
       const couponId = await ensurePromoCouponId(stripe, input.promo);
       if (couponId) discounts = [{ coupon: couponId }];
     }
@@ -277,8 +285,13 @@ export async function ensureStripeTrialEndAtPolicy(input: {
   status: "trialing" | "active" | "past_due" | "canceled";
   trialEnd: Date;
   orgCreatedAt: Date;
+  freeUntil?: Date | null;
 }): Promise<{ trialEnd: Date } | { error: string }> {
   if (input.status !== "trialing") return { trialEnd: input.trialEnd };
+  if (input.freeUntil) {
+    if (input.trialEnd.getTime() === input.freeUntil.getTime()) return { trialEnd: input.trialEnd };
+    return { error: "FREE_ACCESS_DATE_MISMATCH" };
+  }
 
   const safeTrialEnd = stripeTrialEndAtOrAfterPolicy(
     input.orgCreatedAt,

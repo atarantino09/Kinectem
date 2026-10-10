@@ -6,6 +6,9 @@ import { AdminLayout } from "@/components/AdminLayout";
 import { OrgClaimLinksContent } from "./AdminOrgClaimLinks";
 import { AdminPartnerLanding } from "./AdminPartnerLanding";
 import { AdminAddTeam } from "./AdminAddTeam";
+import { AdminFree2027 } from "./AdminFree2027";
+import { promoOfferLabel, type PromoDiscountType } from "@/lib/free-access-promo";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -55,7 +58,8 @@ type AdminOrg = {
   subscribedAt: string | null;
   promoCode: string | null;
   pendingPromoCode: string | null;
-  promoDiscountType: "percent" | "amount" | null;
+  promoDiscountType: PromoDiscountType | null;
+  promoFreeUntil?: string | null;
   promoDiscountValue: number | null;
   promoExpiresAt: string | null;
 };
@@ -65,7 +69,8 @@ type PromoCode = {
   id: string;
   code: string;
   description: string | null;
-  discountType: "percent" | "amount";
+  discountType: PromoDiscountType;
+  freeUntil?: string | null;
   discountValue: number;
   active: boolean;
   maxRedemptions: number | null;
@@ -127,6 +132,7 @@ const STATUS_STYLES: Record<NonNullable<AdminOrg["status"]>, string> = {
 };
 
 function formatDiscount(row: AdminOrg): string {
+  if (row.promoDiscountType === "free_until") return promoOfferLabel({ discountType: row.promoDiscountType, discountValue: 0, freeUntil: row.promoFreeUntil });
   if (!row.promoDiscountType || row.promoDiscountValue == null) return "—";
   return row.promoDiscountType === "percent"
     ? `${row.promoDiscountValue}%`
@@ -192,6 +198,7 @@ export default function AdminOrganizations() {
         ? "partner"
         : "overview";
   const [promoOnly, setPromoOnly] = useState(false);
+  const [selectedOrgIds, setSelectedOrgIds] = useState<string[]>([]);
   const [parseResult, setParseResult] = useState<OrgImportParseResult | null>(
     null,
   );
@@ -564,9 +571,7 @@ export default function AdminOrganizations() {
                           {availablePromos.map((promo) => (
                             <SelectItem key={promo.id} value={promo.code}>
                               {promo.code.toUpperCase()} ·{" "}
-                              {promo.discountType === "percent"
-                                ? `${promo.discountValue}% off`
-                                : `$${promo.discountValue} off`}
+                              {promoOfferLabel(promo)}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -848,9 +853,19 @@ export default function AdminOrganizations() {
             </div>
 
             <div className="overflow-x-auto rounded-lg border">
+              <div className="p-3">
+                <AdminFree2027 selectedIds={selectedOrgIds} lists={listData?.data ?? []} />
+              </div>
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>
+                      <Checkbox aria-label="Select all visible organizations"
+                        checked={rows.length > 0 && rows.every((row) => selectedOrgIds.includes(row.organizationId))}
+                        onCheckedChange={(checked) => setSelectedOrgIds(checked
+                          ? [...new Set([...selectedOrgIds, ...rows.map((row) => row.organizationId)])]
+                          : selectedOrgIds.filter((id) => !rows.some((row) => row.organizationId === id)))} />
+                    </TableHead>
                     <TableHead>Organization</TableHead>
                     <TableHead>Plan</TableHead>
                     <TableHead>Status</TableHead>
@@ -864,7 +879,7 @@ export default function AdminOrganizations() {
                   {isLoading ? (
                     <TableRow>
                       <TableCell
-                        colSpan={7}
+                        colSpan={8}
                         className="text-center py-6 text-muted-foreground"
                       >
                         Loading…
@@ -873,7 +888,7 @@ export default function AdminOrganizations() {
                   ) : rows.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={7}
+                        colSpan={8}
                         className="text-center py-6 text-muted-foreground"
                       >
                         {promoOnly
@@ -887,6 +902,10 @@ export default function AdminOrganizations() {
                         key={row.organizationId}
                         data-testid={`row-org-${row.organizationId}`}
                       >
+                        <TableCell><Checkbox aria-label={`Select ${row.organizationName}`}
+                          checked={selectedOrgIds.includes(row.organizationId)}
+                          onCheckedChange={(checked) => setSelectedOrgIds((ids) => checked
+                            ? [...new Set([...ids, row.organizationId])] : ids.filter((id) => id !== row.organizationId))} /></TableCell>
                         <TableCell className="font-medium">
                           {formatOrgName(row.organizationName)}
                            <AdminAddTeam

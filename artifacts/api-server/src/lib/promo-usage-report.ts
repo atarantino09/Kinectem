@@ -31,6 +31,7 @@ export type UsageRow = {
   plan: string;
   discountType: string;
   discountValue: number;
+  freeUntil?: Date | null;
   endedAt: Date | null;
   endReason: string | null;
   billingStatus?: string;
@@ -46,6 +47,8 @@ export function csvCell(input: string): string {
 }
 
 const billingLabels: Record<string, string> = {
+  free_access_not_billed: "Free-access period; no paid invoice yet",
+  full_price_after_free_access: "Paid after free-access period (no promo discount)",
   not_billed: "Not billed yet",
   discounted_paid: "Yes — discount applied to paid invoice",
   discounted_no_charge: "Applied to invoice — no payment due",

@@ -1885,7 +1885,7 @@ export const subscriptionStatusEnum = pgEnum("subscription_status", [
   "past_due",
   "canceled",
 ]);
-export const promoDiscountTypeEnum = pgEnum("promo_discount_type", ["percent", "amount"]);
+export const promoDiscountTypeEnum = pgEnum("promo_discount_type", ["percent", "amount", "free_until"]);
 
 // Admin-managed discount codes. `discountValue` is interpreted by
 // `discountType`: a percent (0–100) for "percent", or a number of whole US
@@ -1897,6 +1897,7 @@ export const promoCodes = pgTable("promo_codes", {
   description: text("description"),
   discountType: promoDiscountTypeEnum("discount_type").notNull(),
   discountValue: integer("discount_value").notNull(),
+  freeUntil: timestamp("free_until", { withTimezone: true }),
   active: boolean("active").notNull().default(true),
   // Optional redemption cap. Null = unlimited. `redemptionCount` tracks how
   // many times the code has been applied to a subscription.
@@ -1930,6 +1931,7 @@ export const orgSubscriptions = pgTable("org_subscriptions", {
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
   billingStartsAt: timestamp("billing_starts_at"),
+  freeUntil: timestamp("free_until", { withTimezone: true }),
   // Stamped when the "your first charge is coming up" reminder email was
   // sent (~14 days before billingStartsAt), so the sweep never re-sends.
   trialReminderSentAt: timestamp("trial_reminder_sent_at"),
@@ -1952,6 +1954,7 @@ export const promoUsage = pgTable("promo_usage", {
   plan: planTierEnum("plan").notNull(),
   discountType: promoDiscountTypeEnum("discount_type").notNull(),
   discountValue: integer("discount_value").notNull(),
+  freeUntil: timestamp("free_until", { withTimezone: true }),
   appliedAt: timestamp("applied_at", { withTimezone: true }),
   endedAt: timestamp("ended_at", { withTimezone: true }),
   endReason: text("end_reason"),

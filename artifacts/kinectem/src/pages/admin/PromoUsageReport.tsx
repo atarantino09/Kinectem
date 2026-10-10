@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Download, Loader2 } from "lucide-react";
+import { promoOfferLabel, type PromoDiscountType } from "@/lib/free-access-promo";
 
 type Usage = {
   id: string;
@@ -18,7 +19,8 @@ type Usage = {
   appliedAt: string | null;
   datePrecision: "exact" | "estimated" | "unknown";
   plan: string;
-  discountType: "percent" | "amount";
+  discountType: PromoDiscountType;
+  freeUntil?: string | null;
   discountValue: number;
   endedAt: string | null;
   endReason: string | null;
@@ -29,6 +31,8 @@ type Usage = {
 type Report = { data: Usage[]; total: number; pageSize: number; legacyExcluded: boolean; legacy: Usage[]; legacyTotal: number };
 
 const billingLabels: Record<string, string> = {
+  free_access_not_billed: "Free-access period; no paid invoice yet",
+  full_price_after_free_access: "Paid after free-access period (no promo discount)",
   not_billed: "Not billed yet",
   discounted_paid: "Yes — discount on paid invoice",
   discounted_no_charge: "Discount on $0 invoice",
@@ -55,7 +59,7 @@ function UsageTable({ rows }: { rows: Usage[] }) {
             {new Date(row.appliedAt).toLocaleString("en-US", { timeZone: "UTC", dateStyle: "medium", timeStyle: "short" })}
             {row.datePrecision === "estimated" && <div className="text-xs text-muted-foreground">Estimated from subscription creation</div>}
           </> : "Legacy — exact time unknown"}</td>
-          <td className="p-2 capitalize">{row.plan} · {row.discountType === "percent" ? `${row.discountValue}%` : `$${row.discountValue} off`}</td>
+          <td className="p-2 capitalize">{row.plan} · {promoOfferLabel(row)}</td>
           <td className="p-2">{row.endedAt ? (row.endReason === "replaced" ? "Replaced" : "Removed") : "Current"}</td>
           <td className="p-2">{billingLabels[row.billingStatus] ?? "Unknown"}{row.actualDiscountCents != null && <div className="text-xs text-muted-foreground">${(row.actualDiscountCents / 100).toFixed(2)} discount</div>}</td>
           <td className="p-2">{row.billedAt ? new Date(row.billedAt).toLocaleString("en-US", { timeZone: "UTC", dateStyle: "medium", timeStyle: "short" }) : "—"}</td>

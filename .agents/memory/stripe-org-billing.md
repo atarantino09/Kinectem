@@ -16,6 +16,19 @@ The user specified the public promo code **FREE2027**: an organization redeeming
 it gets free access until **August 1, 2027**, when its first annual payment must
 be the selected plan's **full price, with no discount**.
 
+The user also approved applying FREE2027 to existing organizations, individually,
+in selected batches, or through saved lists. Eligibility includes every org that
+has not paid, whether or not it has a card on file; already-paid orgs are excluded.
+The fixed charge instant is midnight America/New_York on August 1, 2027.
+
+**Why:** This is a fixed-date offer, not another rolling 90-day trial. The user
+explicitly chose unpaid organizations with and without saved cards.
+
+**How to apply:** Preserve the granted date independently of later promo edits.
+Verify Stripe payment history before changing saved-card billing; if verification
+fails or conflicting invoices/subscriptions exist, report a blocked org rather
+than claiming its billing was successfully postponed.
+
 **Why:** The requested benefit is free access before a fixed date, not a
 discounted annual invoice or an additional free year starting on that date.
 

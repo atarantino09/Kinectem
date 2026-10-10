@@ -7,7 +7,8 @@ import type { UsageRow } from "./promo-usage-report.js";
 
 export type BillingResult = {
   billingStatus: "not_billed" | "discounted_paid" | "discounted_no_charge" |
-    "paid_without_discount" | "discount_on_unpaid_invoice" | "unknown" | "verification_unavailable";
+    "paid_without_discount" | "discount_on_unpaid_invoice" | "unknown" | "verification_unavailable" |
+    "free_access_not_billed" | "full_price_after_free_access";
   billedAt: Date | null;
   actualDiscountCents: number | null;
 };
@@ -26,6 +27,13 @@ function couponIds(code: string, discountType: string) {
 }
 
 export function billingResultFromInvoices(row: UsageRow, invoices: Stripe.Invoice[]): BillingResult {
+  if (row.discountType === "free_until") {
+    const paid = invoices.find((invoice) => invoice.status === "paid" && invoice.amount_paid > 0 &&
+      (!row.freeUntil || (invoice.status_transitions.paid_at ?? 0) * 1000 >= row.freeUntil.getTime()));
+    if (!paid) return result("free_access_not_billed");
+    const discounted = paid.total_discount_amounts?.some((item) => item.amount > 0);
+    return result(discounted ? "paid_without_discount" : "full_price_after_free_access", paid, 0);
+  }
   const expected = couponIds(row.code, row.discountType);
   let unpaid: { invoice: Stripe.Invoice; amount: number } | undefined;
   let paidWithoutDiscount: Stripe.Invoice | undefined;

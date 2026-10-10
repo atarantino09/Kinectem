@@ -78,14 +78,16 @@ export function nextPlan(tier: PlanTier): Plan | null {
 export type AppliedPromo = {
   code: string;
   description?: string | null;
-  discountType: "percent" | "amount";
+  discountType: "percent" | "amount" | "free_until";
   discountValue: number;
+  freeUntil?: string | null;
 };
 
 // Returns the discounted annual price (in whole dollars) after applying a
 // promo. Mirrors the server's interpretation of discountType.
 export function applyPromo(priceYearly: number, promo: AppliedPromo | null): number {
   if (!promo) return priceYearly;
+  if (promo.discountType === "free_until") return priceYearly;
   if (promo.discountType === "percent") {
     return Math.max(0, Math.round(priceYearly * (1 - promo.discountValue / 100)));
   }

@@ -25,6 +25,9 @@ import {
 } from "../lib/stripe-billing";
 import { parseUsageFilters, usageCsv, type UsageRow } from "../lib/promo-usage-report";
 import { resolvePromoBilling } from "../lib/promo-billing-status";
+import { availableFreeUntil, FREE2027_FIRST_CHARGE } from "../lib/free-access-promo";
+import { processFree2027 } from "./admin-free-access";
+import { verifyUnpaidBilling } from "../lib/free-access-stripe";
 
 const router: IRouter = Router();
 
@@ -134,6 +137,9 @@ export async function findRedeemablePromo(rawCode: string) {
   if (!row) return null;
   if (!row.active) return null;
   if (row.expiresAt && row.expiresAt.getTime() <= Date.now()) return null;
+  if (row.discountType === "free_until") {
+    try { availableFreeUntil(row); } catch { return null; }
+  }
   if (row.maxRedemptions != null && row.redemptionCount >= row.maxRedemptions) {
     return null;
   }
@@ -146,6 +152,7 @@ function publicPromo(row: NonNullable<Awaited<ReturnType<typeof findRedeemablePr
     description: row.description,
     discountType: row.discountType,
     discountValue: row.discountValue,
+    freeUntil: row.freeUntil?.toISOString() ?? null,
   };
 }
 
@@ -184,7 +191,7 @@ router.post(
 // ---------------------------------------------------------------------------
 function serializeSubscription(
   sub: typeof orgSubscriptions.$inferSelect | undefined,
-  promo: { code: string; discountType: string; discountValue: number } | null,
+  promo: { code: string; discountType: string; discountValue: number; freeUntil?: string | null } | null,
 ) {
   if (!sub) return null;
   return {
@@ -195,6 +202,7 @@ function serializeSubscription(
     promo,
     hasCardOnFile: Boolean(sub.stripeSubscriptionId),
     billingStartsAt: sub.billingStartsAt?.toISOString() ?? null,
+    freeUntil: sub.freeUntil?.toISOString() ?? null,
     createdAt: sub.createdAt.toISOString(),
     updatedAt: sub.updatedAt.toISOString(),
   };
@@ -222,7 +230,7 @@ router.get(
       .where(eq(orgSubscriptions.organizationId, orgId))
       .limit(1);
 
-    let promo: { code: string; discountType: string; discountValue: number } | null =
+    let promo: { code: string; discountType: string; discountValue: number; freeUntil?: string | null } | null =
       null;
     if (sub?.promoCodeId) {
       const [row] = await db
@@ -235,6 +243,7 @@ router.get(
           code: row.code,
           discountType: row.discountType,
           discountValue: row.discountValue,
+          freeUntil: row.freeUntil?.toISOString() ?? null,
         };
       }
     }
@@ -283,11 +292,11 @@ router.get(
     // computed fallback only covers orgs that haven't picked a plan yet. The
     // computed value has a rolling now+49h floor, so re-deriving it on every
     // request would let the displayed date drift.
-    const billingStartsAt = createdAt
+    const billingStartsAt = sub?.freeUntil ?? (createdAt
       ? sub?.billingStartsAt
         ? billingStartAtOrAfterPolicy(createdAt, sub.billingStartsAt)
         : billingStartDate(createdAt)
-      : null;
+      : null);
 
     res.json({
       subscription: serializeSubscription(sub, promo),
@@ -400,6 +409,7 @@ router.put(
     const [current] = await db
       .select({
         stripeSubscriptionId: orgSubscriptions.stripeSubscriptionId,
+        freeUntil: orgSubscriptions.freeUntil,
         plan: orgSubscriptions.plan,
         promoCodeId: orgSubscriptions.promoCodeId,
       })
@@ -408,7 +418,8 @@ router.put(
       .limit(1);
     if (
       current?.stripeSubscriptionId &&
-      (current.plan !== plan || (current.promoCodeId ?? null) !== newPromoId)
+      (current.plan !== plan || (current.promoCodeId ?? null) !== newPromoId) &&
+      promoRow?.code !== "free2027"
     ) {
       apiError(
         res,
@@ -424,7 +435,23 @@ router.put(
       apiError(res, 404, "Organization not found.", { code: "NOT_FOUND" });
       return;
     }
-    const startsAt = billingStartDate(createdAt);
+    if (current && promoRow?.code === "free2027") {
+      if (current.promoCodeId === newPromoId && current.plan === plan &&
+        current.freeUntil?.getTime() === promoRow.freeUntil?.getTime()) {
+        res.json({ subscription: serializeSubscription(current, publicPromo(promoRow)) }); return;
+      }
+      const applied = await processFree2027(orgId as string, me, "apply", plan);
+      if (!["applied", "unchanged"].includes(applied.status)) {
+        apiError(res, 409, applied.reason, { code: "FREE_ACCESS_BLOCKED" }); return;
+      }
+      const [updated] = await db.select().from(orgSubscriptions).where(eq(orgSubscriptions.organizationId, orgId as string));
+      res.json({ subscription: serializeSubscription(updated, publicPromo(promoRow)) }); return;
+    }
+    let offerUntil: Date | null;
+    try { offerUntil = promoRow ? availableFreeUntil(promoRow)
+      : !newPromoId && current?.promoCodeId == null ? current?.freeUntil ?? null : null; }
+    catch { apiError(res, 400, "This free-access offer has expired or is too close to billing.", { code: "PROMO_EXPIRED" }); return; }
+    const startsAt = offerUntil ?? billingStartDate(createdAt);
 
     // Upsert the subscription and keep promo redemption counts in lockstep in
     // a single transaction: when the applied promo changes we decrement the
@@ -447,6 +474,7 @@ router.put(
           promoCodeId: orgSubscriptions.promoCodeId,
           plan: orgSubscriptions.plan,
           stripeSubscriptionId: orgSubscriptions.stripeSubscriptionId,
+          freeUntil: orgSubscriptions.freeUntil,
         })
         .from(orgSubscriptions)
         .where(eq(orgSubscriptions.organizationId, orgId))
@@ -461,22 +489,24 @@ router.put(
 
       let appliedPromo: {
         code: string;
-        discount_type: "percent" | "amount";
+        discount_type: "percent" | "amount" | "free_until";
         discount_value: number;
+        free_until: Date | null;
       } | null = null;
       if (newPromoId) {
         type LockedPromo = {
           id: string;
           code: string;
-          discount_type: "percent" | "amount";
+          discount_type: "percent" | "amount" | "free_until";
           discount_value: number;
+          free_until: Date | null;
           active: boolean;
           expires_at: Date | null;
           max_redemptions: number | null;
           redemption_count: number;
         };
         const promoResult = await tx.execute<LockedPromo>(sql`
-          SELECT id, code, discount_type, discount_value,
+          SELECT id, code, discount_type, discount_value, free_until,
                  active, expires_at, max_redemptions, redemption_count
           FROM promo_codes
           WHERE id = ${newPromoId} OR id = ${oldPromoId}
@@ -497,6 +527,12 @@ router.put(
           } as const;
         }
         appliedPromo = lockedPromo;
+        if (lockedPromo.discount_type === "free_until") {
+          const lockedUntil = availableFreeUntil({ discountType: "free_until", freeUntil: lockedPromo.free_until ? new Date(lockedPromo.free_until) : null });
+          if (lockedUntil?.getTime() !== offerUntil?.getTime()) {
+            return { error: "The promo terms changed. Reload and try again." } as const;
+          }
+        }
         if (lockedPromo.max_redemptions != null) {
           const [pending] = await tx
             .select({ count: sql<number>`count(*)` })
@@ -529,6 +565,7 @@ router.put(
           status: "trialing",
           promoCodeId: newPromoId,
           billingStartsAt: startsAt,
+          freeUntil: offerUntil,
         })
         .onConflictDoUpdate({
           target: orgSubscriptions.organizationId,
@@ -538,7 +575,10 @@ router.put(
             // Stamp the charge date exactly once. Existing rows are reconciled
             // by the legacy-floor migration; preserving later stored dates
             // avoids moving the date on repeated plan edits.
-            billingStartsAt: sql`COALESCE(${orgSubscriptions.billingStartsAt}, ${startsAt})`,
+            billingStartsAt: offerUntil || existing?.freeUntil
+              ? startsAt : sql`COALESCE(${orgSubscriptions.billingStartsAt}, ${startsAt})`,
+            freeUntil: offerUntil,
+            trialReminderSentAt: offerUntil ? null : undefined,
             updatedAt: new Date(),
           },
         })
@@ -576,6 +616,7 @@ router.put(
             plan,
             discountType: appliedPromo!.discount_type,
             discountValue: appliedPromo!.discount_value,
+            freeUntil: offerUntil,
             appliedAt: new Date(),
           });
         }
@@ -650,7 +691,7 @@ router.post(
     }
 
     let promo:
-      | { code: string; discountType: "percent" | "amount"; discountValue: number }
+      | { code: string; discountType: "percent" | "amount" | "free_until"; discountValue: number }
       | null = null;
     if (sub.promoCodeId) {
       const [row] = await db
@@ -684,6 +725,7 @@ router.post(
       // trial_end aligned with the date the UI and reminder emails show
       // (matters for legacy orgs whose date was migration-stamped).
       billingStartsAt: sub.billingStartsAt ?? null,
+      freeUntil: sub.freeUntil,
     });
     if ("error" in result) {
       const msg =
@@ -754,6 +796,20 @@ router.post(
 
     const createdAt = await orgCreatedAt(orgId);
     let effectiveTrialEnd = info.trialEnd;
+    const [currentSub] = await db.select().from(orgSubscriptions).where(eq(orgSubscriptions.organizationId, orgId));
+    // An administrator may assign the offer while an older Checkout tab is
+    // still open. Align that verified, unpaid subscription before accepting it.
+    if (currentSub?.freeUntil && info.subscriptionId && info.trialEnd &&
+      info.trialEnd.getTime() !== currentSub.freeUntil.getTime()) {
+      const aligned = await verifyUnpaidBilling({
+        orgId: orgId as string, subscriptionId: info.subscriptionId, customerId: info.customerId,
+        plan: currentSub.plan, freeUntil: currentSub.freeUntil, apply: true,
+      });
+      if (aligned.status !== "eligible") {
+        apiError(res, 409, aligned.reason, { code: "FREE_ACCESS_DATE_MISMATCH" }); return;
+      }
+      effectiveTrialEnd = currentSub.freeUntil;
+    }
     if (
       createdAt &&
       info.subscriptionId &&
@@ -763,8 +819,9 @@ router.post(
       const synced = await ensureStripeTrialEndAtPolicy({
         subscriptionId: info.subscriptionId,
         status: info.status,
-        trialEnd: info.trialEnd,
+        trialEnd: effectiveTrialEnd!,
         orgCreatedAt: createdAt,
+        freeUntil: currentSub?.freeUntil,
       });
       if ("error" in synced) {
         apiError(
@@ -788,7 +845,7 @@ router.post(
     // source of truth, but never let an old/malformed Checkout Session move a
     // legacy organization back below its first-charge floor.
     if (effectiveTrialEnd) {
-      set.billingStartsAt = createdAt
+      set.billingStartsAt = currentSub?.freeUntil ? effectiveTrialEnd : createdAt
         ? billingStartAtOrAfterPolicy(createdAt, effectiveTrialEnd)
         : effectiveTrialEnd;
     }
@@ -892,6 +949,7 @@ function adminPromo(row: typeof promoCodes.$inferSelect) {
     description: row.description,
     discountType: row.discountType,
     discountValue: row.discountValue,
+    freeUntil: row.freeUntil?.toISOString() ?? null,
     active: row.active,
     maxRedemptions: row.maxRedemptions,
     redemptionCount: row.redemptionCount,
@@ -1035,6 +1093,8 @@ type AdminOrgRow = {
   promoDiscountType: (typeof promoCodes.$inferSelect)["discountType"] | null;
   promoDiscountValue: number | null;
   promoExpiresAt: Date | null;
+  promoFreeUntil?: Date | null;
+  pendingPromoFreeUntil?: Date | null;
   pendingPromoDiscountType:
     | (typeof promoCodes.$inferSelect)["discountType"]
     | null;
@@ -1049,6 +1109,7 @@ function adminOrgRow(r: AdminOrgRow) {
     plan: r.plan,
     status: r.status,
     billingStartsAt: r.billingStartsAt?.toISOString() ?? null,
+    promoFreeUntil: (r.promoFreeUntil ?? r.pendingPromoFreeUntil)?.toISOString() ?? null,
     subscribedAt:
       (r.subscriptionUpdatedAt ?? r.subscriptionCreatedAt)?.toISOString() ??
       null,
@@ -1083,6 +1144,8 @@ router.get(
         promoDiscountType: promoCodes.discountType,
         promoDiscountValue: promoCodes.discountValue,
         promoExpiresAt: promoCodes.expiresAt,
+        promoFreeUntil: promoCodes.freeUntil,
+        pendingPromoFreeUntil: pendingPromoCodes.freeUntil,
         pendingPromoDiscountType: pendingPromoCodes.discountType,
         pendingPromoDiscountValue: pendingPromoCodes.discountValue,
         pendingPromoExpiresAt: pendingPromoCodes.expiresAt,
@@ -1118,8 +1181,9 @@ const CreatePromoBody = z.object({
     .max(64)
     .regex(/^[A-Za-z0-9_-]+$/, "Use only letters, numbers, dashes, or underscores"),
   description: z.string().trim().max(280).optional().nullable(),
-  discountType: z.enum(["percent", "amount"]),
-  discountValue: z.number().int().min(1, "Discount must be at least 1"),
+  discountType: z.enum(["percent", "amount", "free_until"]),
+  discountValue: z.number().int().min(0),
+  freeUntil: z.string().datetime().optional().nullable(),
   active: z.boolean().optional(),
   maxRedemptions: z.number().int().min(1).optional().nullable(),
   expiresAt: z.string().datetime().optional().nullable(),
@@ -1138,6 +1202,14 @@ router.post(
       return;
     }
     const b = parsed.data;
+    if (b.discountType !== "free_until" && b.discountValue < 1) {
+      apiError(res, 400, "Enter a positive discount.", { code: "VALIDATION_FAILED" }); return;
+    }
+    const freeUntil = b.discountType === "free_until" ? new Date(b.freeUntil ?? FREE2027_FIRST_CHARGE) : null;
+    if (freeUntil) {
+      try { availableFreeUntil({ discountType: b.discountType, freeUntil }); }
+      catch { apiError(res, 400, "Choose a future free-access billing date.", { code: "VALIDATION_FAILED" }); return; }
+    }
     if (b.discountType === "percent" && b.discountValue > 100) {
       apiError(res, 400, "Percent discount can't exceed 100.", {
         code: "VALIDATION_FAILED",
@@ -1152,7 +1224,8 @@ router.post(
           code: b.code.toLowerCase(),
           description: b.description ?? null,
           discountType: b.discountType,
-          discountValue: b.discountValue,
+          discountValue: b.discountType === "free_until" ? 0 : b.discountValue,
+          freeUntil,
           active: b.active ?? true,
           maxRedemptions: b.maxRedemptions ?? null,
           expiresAt: b.expiresAt ? new Date(b.expiresAt) : null,
@@ -1172,8 +1245,9 @@ router.post(
 
 const UpdatePromoBody = z.object({
   description: z.string().trim().max(280).optional().nullable(),
-  discountType: z.enum(["percent", "amount"]).optional(),
-  discountValue: z.number().int().min(1).optional(),
+  discountType: z.enum(["percent", "amount", "free_until"]).optional(),
+  discountValue: z.number().int().min(0).optional(),
+  freeUntil: z.string().datetime().optional().nullable(),
   active: z.boolean().optional(),
   maxRedemptions: z.number().int().min(1).optional().nullable(),
   expiresAt: z.string().datetime().optional().nullable(),
@@ -1206,6 +1280,15 @@ router.patch(
     // being changed.
     const effectiveType = b.discountType ?? current.discountType;
     const effectiveValue = b.discountValue ?? current.discountValue;
+    const effectiveUntil = effectiveType === "free_until"
+      ? new Date(b.freeUntil ?? current.freeUntil ?? FREE2027_FIRST_CHARGE) : null;
+    if (effectiveType !== "free_until" && effectiveValue < 1) {
+      apiError(res, 400, "Enter a positive discount.", { code: "VALIDATION_FAILED" }); return;
+    }
+    if (effectiveUntil) {
+      try { availableFreeUntil({ discountType: effectiveType, freeUntil: effectiveUntil }); }
+      catch { apiError(res, 400, "The free-access date must be in the future.", { code: "VALIDATION_FAILED" }); return; }
+    }
     if (effectiveType === "percent" && effectiveValue > 100) {
       apiError(res, 400, "Percent discount can't exceed 100.", {
         code: "VALIDATION_FAILED",
@@ -1217,6 +1300,8 @@ router.patch(
     if (b.description !== undefined) set.description = b.description ?? null;
     if (b.discountType !== undefined) set.discountType = b.discountType;
     if (b.discountValue !== undefined) set.discountValue = b.discountValue;
+    set.freeUntil = effectiveUntil;
+    if (effectiveType === "free_until") set.discountValue = 0;
     if (b.active !== undefined) set.active = b.active;
     if (b.maxRedemptions !== undefined) set.maxRedemptions = b.maxRedemptions ?? null;
     if (b.expiresAt !== undefined) {
