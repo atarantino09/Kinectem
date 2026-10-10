@@ -3801,16 +3801,26 @@ router.get(
       .offset(pageInput.data)
       .limit(101);
 
-    const [bracketRows] = await Promise.all([
+    const [bracketRows, counts] = await Promise.all([
       db
         .select({ id: competitionBrackets.id, label: competitionBrackets.label })
         .from(competitionBrackets)
         .where(eq(competitionBrackets.tournamentId, competition.id)),
+      db.execute<{ pendingCount: number; reviewedCount: number; featuredCount: number }>(sql`
+        SELECT
+          count(*) FILTER (WHERE a.competition_reviewed_at IS NULL AND NOT a.featured)::int AS "pendingCount",
+          count(*) FILTER (WHERE a.competition_reviewed_at IS NOT NULL AND NOT a.featured)::int AS "reviewedCount",
+          count(*) FILTER (WHERE a.featured)::int AS "featuredCount"
+        FROM articles a
+        WHERE a.competition_id = ${competition.id} AND ${eligibleRecapConditions()}
+      `),
     ]);
     const bracketLabelById = new Map(bracketRows.map((b) => [b.id, b.label]));
 
     res.json({
-      pendingCount: await pendingRecapCount(competition.id),
+      pendingCount: counts.rows[0].pendingCount,
+      reviewedCount: counts.rows[0].reviewedCount,
+      featuredCount: counts.rows[0].featuredCount,
       nextOffset: rows.length > 100 ? pageInput.data + 100 : null,
       data: rows.slice(0, 100).map(
         ({ article: a, teamName, matchId, matchDate, matchDivision, matchBracket }) => {

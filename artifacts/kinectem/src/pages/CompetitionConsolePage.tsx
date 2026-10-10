@@ -2000,10 +2000,10 @@ export function CurationPanel({
     }
   }, [search]);
 
-  const recapsQ = useQuery<{ data: CurationRecap[]; pendingCount: number; nextOffset: number | null }>({
+  const recapsQ = useQuery<{ data: CurationRecap[]; pendingCount: number; reviewedCount: number; featuredCount: number; nextOffset: number | null }>({
     queryKey: ["competition", competitionId, "recaps", review, offset],
     queryFn: () =>
-      customFetch<{ data: CurationRecap[]; pendingCount: number; nextOffset: number | null }>(
+      customFetch<{ data: CurationRecap[]; pendingCount: number; reviewedCount: number; featuredCount: number; nextOffset: number | null }>(
         `/api/v1/competitions/${competitionId}/recaps?review=${review}&offset=${offset}`,
         { method: "GET" },
       ),
@@ -2128,7 +2128,7 @@ export function CurationPanel({
           {(["pending", "reviewed", "featured"] as const).map(view => (
             <Button key={view} size="sm" variant={review === view ? "brand" : "outline"}
               onClick={() => { setReview(view); setOffset(0); }} data-testid={`recaps-view-${view}`}>
-              {view === "pending" ? `Pending (${recapsQ.data?.pendingCount ?? 0})` : view === "reviewed" ? "Reviewed / not featured" : "Featured"}
+              {view === "pending" ? `Pending (${recapsQ.data?.pendingCount ?? 0})` : view === "reviewed" ? `Reviewed / not featured (${recapsQ.data?.reviewedCount ?? 0})` : `Featured (${recapsQ.data?.featuredCount ?? 0})`}
             </Button>
           ))}
         </div>

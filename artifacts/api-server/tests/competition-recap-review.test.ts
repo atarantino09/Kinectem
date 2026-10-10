@@ -85,12 +85,15 @@ async function fixture() {
 describe("competition recap review", () => {
   it("shows two pending only to operators; typed View works for direct and inherited non-team administrators", async () => {
     const f = await fixture();
+    const empty = await f.owner.agent.get(`/api/v1/competitions/${f.competition.id}/recaps`).expect(200);
+    expect(empty.body).toMatchObject({ pendingCount: 0, reviewedCount: 0, featuredCount: 0, data: [] });
     const a = await f.recap();
     await f.recap({ title: "Second recap" });
     const path = `/api/v1/competitions/${f.competition.id}/recaps`;
     for (const operator of [f.owner, f.direct, f.hub, f.hubOwner]) {
       const queue = await operator.agent.get(path).expect(200);
       expect(queue.body.pendingCount).toBe(2);
+      expect(queue.body).toMatchObject({ reviewedCount: 0, featuredCount: 0 });
       expect(queue.body.data[0].postId).toMatch(/^article-/);
       await operator.agent.get(`/api/v1/posts/article-${a.id}`).expect(200)
         .expect(res => expect(res.body.body).toBe("The complete recap text."));
@@ -112,18 +115,21 @@ describe("competition recap review", () => {
     await f.stranger.agent.post(`${base}/${a.id}/feature`).send({ featured: true }).expect(403);
     await f.direct.agent.post(`${base}/${a.id}/feature`).send({ featured: false }).expect(200);
     let queue = await f.direct.agent.get(`${base}?review=reviewed`).expect(200);
-    expect(queue.body).toMatchObject({ pendingCount: 0, data: [expect.objectContaining({ id: a.id, reviewState: "reviewed", featured: false })] });
+    expect(queue.body).toMatchObject({ pendingCount: 0, reviewedCount: 1, featuredCount: 0, data: [expect.objectContaining({ id: a.id, reviewState: "reviewed", featured: false })] });
     const [ack] = await db.select().from(articles).where(eq(articles.id, a.id));
     expect(ack.status).toBe("published");
     expect(ack.competitionReviewedBy).toBe(f.direct.user.id);
     await f.hub.agent.post(`${base}/${a.id}/feature`).send({ featured: true }).expect(200);
     queue = await f.owner.agent.get(`${base}?review=featured`).expect(200);
     expect(queue.body.data[0].reviewState).toBe("featured");
+    expect(queue.body).toMatchObject({ pendingCount: 0, reviewedCount: 0, featuredCount: 1 });
     await f.owner.agent.post(`${base}/${a.id}/feature`).send({ featured: false }).expect(200);
     const [removed] = await db.select().from(articles).where(eq(articles.id, a.id));
     expect(removed.competitionReviewedAt).toEqual(ack.competitionReviewedAt);
     expect(removed.competitionReviewedBy).toBe(f.direct.user.id);
-    expect((await f.owner.agent.get(`${base}?review=pending`)).body.data).toEqual([]);
+    expect((await f.owner.agent.get(`${base}?review=pending`)).body).toMatchObject({
+      pendingCount: 0, reviewedCount: 1, featuredCount: 0, data: [],
+    });
   });
 
   it("counts and pages queues over 100 and excludes drafts, private plans, historical/combined, archived and takedown content", async () => {
@@ -132,18 +138,36 @@ describe("competition recap review", () => {
       teamId: f.team.id, authorId: f.author.user.id, competitionId: f.competition.id,
       title: `Older recap ${n}`, body: "Game recap", gameDate: new Date("2026-10-10"),
     })));
+    await db.insert(articles).values(Array.from({ length: 207 }, (_, n) => ({
+      teamId: f.team.id, authorId: f.author.user.id, competitionId: f.competition.id,
+      title: `Reviewed recap ${n}`, body: "Game recap", gameDate: new Date("2026-10-10"),
+      competitionReviewedAt: new Date(), featured: n >= 105,
+    })));
     const excluded = [
       await f.recap({ status: "draft" }), await f.recap({ articleKind: "practice_plan" }),
       await f.recap({ recapKind: "combined" }), await f.recap({ recapKind: "historical" }),
-      await f.recap({ hiddenAt: new Date() }),
+      await f.recap({ hiddenAt: new Date(), featured: true }),
+      await f.recap({ status: "draft", competitionReviewedAt: new Date() }),
+      await f.recap({ competitionId: null, featured: true }),
     ];
     const base = `/api/v1/competitions/${f.competition.id}/recaps`;
     const page = await f.owner.agent.get(`${base}?review=pending`).expect(200);
     expect(page.body.pendingCount).toBe(103);
+    expect(page.body).toMatchObject({ reviewedCount: 105, featuredCount: 102 });
     expect(page.body.data).toHaveLength(100);
     const older = await f.owner.agent.get(`${base}?review=pending&offset=${page.body.nextOffset}`).expect(200);
     expect(older.body.data).toHaveLength(3);
     expect(older.body.nextOffset).toBeNull();
+    expect(older.body).toMatchObject({ pendingCount: 103, reviewedCount: 105, featuredCount: 102 });
+    for (const [view, total] of [["reviewed", 105], ["featured", 102]] as const) {
+      const first = await f.owner.agent.get(`${base}?review=${view}`).expect(200);
+      const next = await f.owner.agent.get(`${base}?review=${view}&offset=${first.body.nextOffset}`).expect(200);
+      expect(first.body.data).toHaveLength(100);
+      expect(next.body.data).toHaveLength(total - 100);
+      for (const response of [first, next]) {
+        expect(response.body).toMatchObject({ pendingCount: 103, reviewedCount: 105, featuredCount: 102 });
+      }
+    }
     for (const a of excluded) {
       await f.owner.agent.post(`${base}/${a.id}/feature`).send({ featured: true }).expect(404);
       if (a.status === "draft" || a.articleKind === "practice_plan" || a.hiddenAt) {
@@ -154,7 +178,7 @@ describe("competition recap review", () => {
     expect((await f.owner.agent.get(base)).body.pendingCount).toBe(102);
     await f.owner.agent.post(`${base}/${page.body.data[0].id}/feature`).send({ featured: true }).expect(404);
     await db.update(teams).set({ archivedAt: new Date() }).where(eq(teams.id, f.team.id));
-    expect((await f.owner.agent.get(base)).body.pendingCount).toBe(0);
+    expect((await f.owner.agent.get(base)).body).toMatchObject({ pendingCount: 0, reviewedCount: 0, featuredCount: 0 });
   });
 
   it("backfills legacy featured acknowledgement without mail and never repeats on a later boot", async () => {
