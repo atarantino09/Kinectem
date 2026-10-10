@@ -26,6 +26,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, Pencil, Plus, Tag, Trash2 } from "lucide-react";
 import { PromoFree2027Conversion } from "./PromoFree2027Conversion";
 import { PromoUsageReport } from "./PromoUsageReport";
+import { AdminFree2027Organizations } from "./AdminFree2027Organizations";
 import { AdminCompetitionReferrals } from "./AdminCompetitionReferrals";
 
 type PromoCode = {
@@ -261,6 +262,7 @@ export default function AdminPromoCodes() {
           </Button>
         </div>
 
+        <AdminFree2027Organizations />
         <AdminCompetitionReferrals />
 
         <Card>

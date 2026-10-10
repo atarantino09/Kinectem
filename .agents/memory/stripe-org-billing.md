@@ -21,6 +21,14 @@ in selected batches, or through saved lists. Eligibility includes every org that
 has not paid, whether or not it has a card on file; already-paid orgs are excluded.
 The fixed charge instant is midnight America/New_York on August 1, 2027.
 
+**Platform-admin bulk grants:** Competition attribution is optional. Administrators
+must be able to select organizations directly, ordered claimed first and then by
+the owner's latest sign-in, and apply FREE2027 without choosing a competition.
+An untagged grant must preserve any existing competition referral.
+
+**Why:** The user explicitly requested quick grants from Promo codes without
+requiring competition attachment; referral credit is separate from free access.
+
 **Why:** This is a fixed-date offer, not another rolling 90-day trial. The user
 explicitly chose unpaid organizations with and without saved cards.
 

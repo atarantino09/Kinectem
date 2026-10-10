@@ -17,6 +17,7 @@ beforeEach(() => {
   previews = []; applications = []; blocked = false; failReferral = false;
   vi.stubGlobal("fetch", vi.fn(async (input: string | Request, options?: RequestInit) => {
     const url = String(input);
+    if (url.endsWith("/free2027/organizations")) return json({ data: [] });
     if (url.includes("/admin/promo-codes")) return json({ data: [] });
     if (url.includes("/admin/competitions?")) return json({ data: [
       { id: "comp-a", name: "Fall Cup", startDate: "2026-10-10", endDate: "2026-10-11" },

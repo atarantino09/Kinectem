@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, organizations, orgAdminLists, orgSubscriptions, promoCodes, promoUsage } from "@workspace/db";
+import { db, organizations, organizationAdmins, users, orgAdminLists, orgSubscriptions, promoCodes, promoUsage } from "@workspace/db";
 import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { requireAdmin } from "../lib/auth";
@@ -15,6 +15,37 @@ import { checkReferral, attachReferral } from "../lib/competition-referrals";
 const router: IRouter = Router();
 router.use("/admin/free2027", requireAdmin);
 const limiter = rateLimit({ name: "admin-free2027", windowMs: 60_000, max: 500, keys: (req) => [ipKey(req)] });
+router.get("/admin/free2027/organizations", limiter, asyncHandler(async (_req, res): Promise<void> => {
+  // Organization pages have no soft-archive state. Include every existing
+  // page, including unclaimed pages and organizations without a plan.
+  const rows = await db.select({
+    organizationId: organizations.id,
+    organizationName: organizations.name,
+    ownerUserId: organizationAdmins.userId,
+    ownerName: users.name,
+    ownerLastSignInAt: users.lastSignInAt,
+    hasFree2027: sql<boolean>`CASE WHEN promo_codes.id IS NOT NULL AND
+      (organizations.pending_promo_code_id = promo_codes.id OR org_subscriptions.promo_code_id = promo_codes.id)
+      THEN true ELSE false END`,
+  }).from(organizations)
+    .leftJoin(organizationAdmins, and(
+      eq(organizationAdmins.organizationId, organizations.id),
+      eq(organizationAdmins.role, "owner"),
+    ))
+    .leftJoin(users, eq(users.id, organizationAdmins.userId))
+    .leftJoin(orgSubscriptions, eq(orgSubscriptions.organizationId, organizations.id))
+    .leftJoin(promoCodes, eq(promoCodes.code, FREE2027_CODE))
+    .orderBy(
+      sql`CASE WHEN organization_admins.user_id IS NULL THEN 1 ELSE 0 END`,
+      sql`users.last_sign_in_at DESC NULLS LAST`,
+      asc(organizations.name), asc(organizations.id),
+    );
+  res.json({ data: rows.map(({ ownerUserId, ownerLastSignInAt, ...row }) => ({
+    ...row,
+    claimed: ownerUserId !== null,
+    ownerLastSignInAt: ownerLastSignInAt?.toISOString() ?? null,
+  })) });
+}));
 const idsBody = z.object({ organizationIds: z.array(z.string().uuid()).min(1).max(10), referralCode: z.string().trim().min(1).max(64).optional() });
 const targetsBody = z.object({
   organizationIds: z.array(z.string().uuid()).min(1).max(2000).optional(),
