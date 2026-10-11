@@ -113,3 +113,4 @@
 - [Competition recap curation](competition-recap-curation.md) — review is not publication approval; personal email opt-outs must neither erase outstanding reviews nor replay old backlog.
 - [Org post header intent](org-post-header-intent.md) — one branded original header across post types; team name stays larger than org name and author metadata.
 - [Browser mock runtime logs](browser-mock-runtime-logs.md) — isolated browser fixtures can emit errors into shared dev logs; verify real responses before changing app code.
+- [Combined recap chronology](combined-recap-chronology.md) — coaches batch-write after games; linked schedule dates must ground the story, never posting dates.
