@@ -146,13 +146,13 @@ export default function MyOrgsPage() {
                           {org.description}
                         </p>
                       )}
-                      {org.role && (
+                      {(org.isMember || org.isFollowing) && (
                         <div className="flex items-center gap-2 mt-3">
                           <Badge
                             variant="outline"
                             className="text-[10px] font-bold uppercase tracking-wider"
                           >
-                            {org.role}
+                            {org.isMember ? org.role ?? "Member" : "Follower"}
                           </Badge>
                         </div>
                       )}

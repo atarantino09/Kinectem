@@ -275,12 +275,12 @@ export default function UserProfilePage() {
             <p className="font-bold text-sm truncate">
               {formatOrgName(org.name)}
             </p>
-            {org.role && (
+            {(org.isMember || org.isFollowing) && (
               <Badge
                 variant="outline"
                 className="mt-1 text-[10px] uppercase tracking-wider font-bold"
               >
-                {org.role}
+                {org.isMember ? org.role ?? "Member" : "Follower"}
               </Badge>
             )}
           </div>

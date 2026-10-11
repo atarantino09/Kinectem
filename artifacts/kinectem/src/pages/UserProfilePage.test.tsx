@@ -142,7 +142,22 @@ describe("UserProfilePage organizations", () => {
       name: `Organization ${i + 1}`,
       logoUrl: null,
       role: "member",
+      isMember: true,
+      isFollowing: false,
     }));
+
+  it("labels following-only organizations Follower and real memberships Member", () => {
+    useGetUserByIdMock.mockReturnValue({ data: profileFixture(), isLoading: false });
+    useGetLoggedInUserMock.mockReturnValue({ data: { id: PROFILE_ID, role: "athlete" } });
+    const [memberOrg, followedOrg] = organizations(2);
+    useListUserOrganizationsMock.mockReturnValue({
+      data: { data: [memberOrg, { ...followedOrg, isMember: false, isFollowing: true }] },
+    });
+    renderWithProviders(<UserProfilePage />);
+    const column = screen.getByTestId("affiliation-column-orgs");
+    expect(within(column).getByText("Follower")).toBeInTheDocument();
+    expect(within(column).getAllByText("member")).toHaveLength(1);
+  });
 
   it("shows all seven organizations without a toggle", () => {
     useGetUserByIdMock.mockReturnValue({ data: profileFixture(), isLoading: false });

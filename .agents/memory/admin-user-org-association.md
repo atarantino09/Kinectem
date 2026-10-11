@@ -1,10 +1,21 @@
 ---
-name: Admin user organization association
-description: Meaning of organization membership in the admin Users list
+name: Organization membership versus following
+description: Product-wide affiliation rules and organization associations in the admin Users list
 ---
 
 The admin Users list treats an organization as associated with someone if they have a direct organization membership, an accepted roster spot on one of its teams, or an active guardian link to a child with an accepted roster spot. Show each organization only once even if several of these paths apply. Following an organization alone is not membership; pending team invites and revoked guardian links do not count.
 
-**Why:** Admins need to see which organization each account is actually connected to, including parent accounts, without confusing an ordinary follower with a member.
+This distinction applies throughout the product: someone who only follows a
+team or organization is a **Follower**, not a **Member**. Assigned organization
+roles, accepted players/staff, and active parents or guardians are genuine
+members. Unfollowing must not remove a real membership or its title.
 
-**How to apply:** Keep this distinction when adding filters or exports to the admin Users view. Do not silently reuse the public profile organization endpoint, which also includes followed organizations.
+**Why:** The user explicitly reserves Member for people actually connected to
+the organization or team through a role, roster spot, or their child. Ordinary
+fans who follow later should only be labeled Follower.
+
+**How to apply:** Keep this distinction in profile badges, page metadata, admin
+filters, and exports. Do not silently reuse the public profile organization
+list as a membership list: it also includes followed organizations. Recognition
+of community membership is read-only; it must not grant organization management
+or posting powers reserved for explicitly authorized roles.

@@ -41,6 +41,7 @@ import {
   patchParentIdForViewer,
 } from "../lib/guardian-links";
 import { isActiveFamilyContact } from "../lib/family-contacts";
+import { listUserOrganizationMemberships } from "../lib/organization-membership";
 import { sendGuardianConfirmationEmail, sendGuardianExpiredEmail, sendPasswordResetEmail } from "../lib/email";
 import {
   canCreateRecap,
@@ -1412,17 +1413,7 @@ router.get(
 router.get(
   "/users/:userId/organizations",
   asyncHandler(async (req, res) => {
-    const orgRows = await db
-      .selectDistinct({ org: organizations })
-      .from(rosterEntries)
-      .innerJoin(teams, eq(rosterEntries.teamId, teams.id))
-      .innerJoin(organizations, eq(teams.organizationId, organizations.id))
-      .where(eq(rosterEntries.userId, String(req.params.userId)));
-    const adminRows = await db
-      .select({ org: organizations, role: organizationAdmins.role })
-      .from(organizationAdmins)
-      .innerJoin(organizations, eq(organizationAdmins.organizationId, organizations.id))
-      .where(eq(organizationAdmins.userId, String(req.params.userId)));
+    const memberships = await listUserOrganizationMemberships(String(req.params.userId));
     const followRows = await db
       .select({ org: organizations })
       .from(organizationFollowers)
@@ -1432,23 +1423,17 @@ router.get(
       )
       .where(eq(organizationFollowers.userId, String(req.params.userId)));
     const followedIds = new Set(followRows.map((r) => r.org.id));
-    // The user's stored role per org from organization_admins (owner /
-    // admin / member). Orgs the user is only on via a roster entry — i.e.
-    // not in organization_admins at all — fall back to the implicit
-    // "member" role surfaced by the page-membership UI.
-    const roleByOrg = new Map<string, "owner" | "admin" | "member">(
-      adminRows.map((r) => [r.org.id, r.role]),
-    );
+    const roleByOrg = new Map(memberships.map((r) => [r.org.id, r.role]));
     const seen = new Set<string>();
-    const all = [...orgRows, ...adminRows, ...followRows].filter((r) => {
+    const all = [...memberships, ...followRows].filter((r) => {
       if (seen.has(r.org.id)) return false;
       seen.add(r.org.id);
       return true;
     });
     const data = all.map((r) => {
-      const role: "owner" | "admin" | "member" = roleByOrg.get(r.org.id) ?? "member";
+      const role = roleByOrg.get(r.org.id) ?? null;
       return toOrganization(r.org, {
-        isMember: true,
+        isMember: role !== null,
         role,
         isFollowing: followedIds.has(r.org.id),
       });
@@ -1646,9 +1631,9 @@ router.get(
         joinedAt: r.r.createdAt.toISOString(),
       });
     }
-    // "Via child" teams: surface every team where the target user is a
-    // team_followers row AND is the parentId of at least one user with an
-    // accepted roster entry on that team. Synthesizes a `position: "parent"`
+    // Parents are members through an active guardian link to a rostered
+    // child, independently of whether they follow the team.
+    // Synthesizes a `position: "parent"`
     // membership row so the team appears in the parent's profile Teams
     // section even though the parent isn't on the roster themselves.
     // De-duped against the roster-derived rows above by teamId — a real
@@ -1658,13 +1643,12 @@ router.get(
       .select({
         t: teams,
         org: organizations,
-        followedAt: teamFollowers.createdAt,
+        joinedAt: rosterEntries.createdAt,
       })
-      .from(teamFollowers)
-      .innerJoin(teams, eq(teamFollowers.teamId, teams.id))
-      // Task #628 — leftJoin so a parent following a child's solo team isn't dropped.
+      .from(rosterEntries)
+      .innerJoin(teams, eq(rosterEntries.teamId, teams.id))
+      // Keep parents of players on independent teams too.
       .leftJoin(organizations, eq(teams.organizationId, organizations.id))
-      .innerJoin(rosterEntries, eq(rosterEntries.teamId, teams.id))
       .innerJoin(child, eq(rosterEntries.userId, child.id))
       // Task #755 — "via child" derives from ACTIVE guardian links.
       .innerJoin(
@@ -1677,7 +1661,6 @@ router.get(
       )
       .where(
         and(
-          eq(teamFollowers.userId, targetId),
           eq(rosterEntries.status, "accepted"),
           // Task #472 — synthetic "via child" rows also drop archived teams.
           isNull(teams.archivedAt),
@@ -1714,7 +1697,7 @@ router.get(
         seasonId: r.t.id,
         seasonName: r.t.season ?? null,
         jerseyNumber: null,
-        joinedAt: (r.followedAt ?? new Date(0)).toISOString(),
+        joinedAt: r.joinedAt.toISOString(),
       });
     }
     res.json(paginate(data));

@@ -1,4 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
+import { listUserOrganizationMemberships } from "../lib/organization-membership";
 import { sweepCompetitionRecapMail } from "../lib/competition-recap-scheduler";
 import {
   db,
@@ -185,25 +186,15 @@ router.get(
       .where(inArray(organizations.id, ownedOrgIds))
       .limit(50);
     // Session-aware flags so the client can group "yours" vs "discover":
-    // membership/role from org admin rows, isFollowing from follower rows.
+    // Membership comes from assigned roles, accepted rosters and active
+    // guardians; following remains an independent feed preference.
     const me = _req.sessionUser;
     let roleByOrg = new Map<string, "owner" | "admin" | "member">();
     let followedOrgIds = new Set<string>();
     if (me && rows.length > 0) {
       const orgIds = rows.map((o) => o.id);
-      const [adminRows, followRows] = await Promise.all([
-        db
-          .select({
-            organizationId: organizationAdmins.organizationId,
-            role: organizationAdmins.role,
-          })
-          .from(organizationAdmins)
-          .where(
-            and(
-              eq(organizationAdmins.userId, me.id),
-              inArray(organizationAdmins.organizationId, orgIds),
-            ),
-          ),
+      const [memberships, followRows] = await Promise.all([
+        listUserOrganizationMemberships(me.id),
         db
           .select({ organizationId: organizationFollowers.organizationId })
           .from(organizationFollowers)
@@ -215,10 +206,7 @@ router.get(
           ),
       ]);
       roleByOrg = new Map(
-        adminRows.map((r) => [
-          r.organizationId,
-          r.role as "owner" | "admin" | "member",
-        ]),
+        memberships.map((r) => [r.org.id, r.role]),
       );
       followedOrgIds = new Set(followRows.map((r) => r.organizationId));
     }
@@ -394,18 +382,9 @@ router.get(
     let isMember = false;
     let isFollowing = false;
     if (me) {
-      const [admin] = await db
-        .select({ role: organizationAdmins.role })
-        .from(organizationAdmins)
-        .where(
-          and(
-            eq(organizationAdmins.organizationId, org.id),
-            eq(organizationAdmins.userId, me.id),
-          ),
-        )
-        .limit(1);
-      if (admin) {
-        role = admin.role;
+      const [membership] = await listUserOrganizationMemberships(me.id, org.id);
+      if (membership) {
+        role = membership.role;
         isMember = true;
       }
       const [follow] = await db
