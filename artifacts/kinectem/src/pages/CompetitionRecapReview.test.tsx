@@ -25,6 +25,9 @@ describe("competition review console", () => {
       createdAt: "2026-10-10T12:00:00Z", effectiveGameDate: "2026-10-10", bracketId: null,
     };
     fetchMock.mockImplementation(async (url, init) => {
+      if (String(url).endsWith("/brackets")) {
+        return { data: [{ id: "bracket-id", label: "Demo bracket" }] } as never;
+      }
       if (init?.method === "POST") {
         recap.featured = JSON.parse(String(init.body)).featured;
         recap.reviewState = recap.featured ? "featured" : "reviewed";
@@ -42,6 +45,9 @@ describe("competition review console", () => {
     const user = userEvent.setup();
     renderWithProviders(<CurationPanel competitionId="cup" />);
     expect(await screen.findByText("The complete story")).toBeInTheDocument();
+    expect(screen.getByTestId("recap-actions-recap-id")).toHaveClass("grid", "grid-cols-2", "w-full", "min-w-0");
+    expect(screen.getByTestId("select-recap-bracket-recap-id")).toHaveClass("col-span-2", "w-full");
+    expect(screen.getByTestId("btn-review-recap-id")).toHaveClass("col-span-2", "whitespace-normal");
     expect(screen.getByRole("button", { name: "Pending (1)" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reviewed / not featured (0)" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Featured (0)" })).toBeInTheDocument();

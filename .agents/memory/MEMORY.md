@@ -9,7 +9,7 @@
 - [Signup-walkthrough captions](signup-walkthrough-captions.md) — signup vid is a screen recording w/ live React caption overlay; marketing is static HTML so captions are burned into its mp4 via ffmpeg libass (cue list duplicated — keep in sync).
 - [Standalone admin page when artifact cap is hit](founding-admin-standalone.md) — at 7-artifact cap, serve a self-contained password-gated HTML page from api-server under /api instead of a new artifact; fail closed if SESSION_SECRET missing.
 - [api-server test infra & baseline failures](api-server-test-infra.md) — test DB is pg_dumped from live DB (not schema file); posts.test.ts(17) + tag-emails fail pre-existing; vitest4 dropped --reporter=basic; bg runs get reaped.
-- [Shared browser fixture cleanup](shared-browser-fixture-cleanup.md) — removing test orgs/usage does not restore shared promo counters; subtract only the test's own increments.
+- [Shared browser fixtures](shared-browser-fixture-cleanup.md) — create fixtures atomically with verified schema fields; remove only their own records and counter increments.
 - [Drizzle sql`` unqualified columns](drizzle-sql-template-unqualified.md) — `${table.col}` in raw sql`` renders unqualified; joins on shared column names 500 with "ambiguous"; use literal aliases.
 - [Modal text blur](modal-text-blur.md) — center shadcn Dialog/AlertDialog with flexbox, not `-translate-1/2`; the transform half-pixels odd-sized modals and blurs their text.
 - [FitText production font timing](fit-text-font-timing.md) — fallback-font first paint needs an explicit remeasure; ResizeObserver can miss metric-only font swaps.

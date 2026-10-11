@@ -2102,7 +2102,7 @@ export function CurationPanel({
   }
 
   return (
-    <Card id="recaps" ref={anchorRef} className="scroll-mt-6">
+    <Card id="recaps" ref={anchorRef} className="min-w-0 scroll-mt-6">
       <CollapsibleCardHeader
         icon={<Newspaper className="w-4 h-4" />}
         label="Game recaps"
@@ -2123,10 +2123,10 @@ export function CurationPanel({
           Review coach recaps here. Feature adds a recap to your public page;
           Reviewed — don’t feature leaves the team’s published post unchanged.
         </p>
-        <a href="/app/settings#email-notifications" className="text-sm font-bold underline">Competition recap email settings</a>
+        <a href="/app/settings#email-notifications" className="inline-block max-w-full break-words text-sm font-bold underline">Competition recap email settings</a>
         <div className="flex flex-wrap gap-2" aria-label="Recap review views">
           {(["pending", "reviewed", "featured"] as const).map(view => (
-            <Button key={view} size="sm" variant={review === view ? "brand" : "outline"}
+            <Button key={view} size="sm" variant={review === view ? "brand" : "outline"} className="max-w-full h-auto min-h-9 whitespace-normal text-left"
               onClick={() => { setReview(view); setOffset(0); }} data-testid={`recaps-view-${view}`}>
               {view === "pending" ? `Pending (${recapsQ.data?.pendingCount ?? 0})` : view === "reviewed" ? `Reviewed / not featured (${recapsQ.data?.reviewedCount ?? 0})` : `Featured (${recapsQ.data?.featuredCount ?? 0})`}
             </Button>
@@ -2147,7 +2147,7 @@ export function CurationPanel({
                 className="space-y-3"
                 data-testid={`section-curation-bracket-${section.key}`}
               >
-                <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+                <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground [overflow-wrap:anywhere]">
                   {section.label}{" "}
                   <span className="font-bold normal-case tracking-normal">
                     ({section.recaps.length})
@@ -2168,17 +2168,17 @@ export function CurationPanel({
                       {weekSection.recaps.map((r) => (
                         <div
                           key={r.id}
-                          className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 flex-wrap"
+                          className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-lg border border-border px-3 py-3 sm:py-2"
                           data-testid={`row-recap-${r.id}`}
                         >
-                          <div className="min-w-0">
-                            <p className="text-sm font-bold truncate">
+                          <div className="w-full min-w-0 sm:flex-1 sm:w-auto">
+                            <p className="text-sm font-bold [overflow-wrap:anywhere] sm:truncate">
                               {r.title}
                               {r.featured && (
                                 <Star className="inline w-3.5 h-3.5 ml-1.5 -mt-0.5 fill-amber-400 text-amber-400" />
                               )}
                             </p>
-                            <Badge variant="secondary">{r.reviewState === "pending" ? "Needs review" : r.featured ? "Featured · reviewed" : "Reviewed · not featured"}</Badge>
+                            <Badge variant="secondary" className="max-w-full whitespace-normal">{r.reviewState === "pending" ? "Needs review" : r.featured ? "Featured · reviewed" : "Reviewed · not featured"}</Badge>
                             <p className="text-xs text-muted-foreground truncate">
                               {r.teamName}
                               {r.opponentName ? ` vs ${r.opponentName}` : ""}
@@ -2197,7 +2197,7 @@ export function CurationPanel({
                                   : " · Division unavailable"}
                             </p>
                           </div>
-                          <div className="flex items-center gap-2 shrink-0">
+                          <div className="grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center lg:w-auto" data-testid={`recap-actions-${r.id}`}>
                             {brackets.length > 0 && (
                               <Select
                                 value={r.bracketId ?? "none"}
@@ -2209,7 +2209,7 @@ export function CurationPanel({
                                 }
                               >
                                 <SelectTrigger
-                                  className="h-8 w-36"
+                                  className="col-span-2 h-9 w-full min-w-0 sm:h-8 sm:w-36"
                                   data-testid={`select-recap-bracket-${r.id}`}
                                 >
                                   <SelectValue placeholder="No bracket" />
@@ -2224,8 +2224,8 @@ export function CurationPanel({
                                 </SelectContent>
                               </Select>
                             )}
-                            <a href={`/app/posts/${r.postId ?? `article-${r.id}`}`} target="_blank" rel="noopener noreferrer">
-                              <Button size="sm" variant="ghost" className="font-bold text-muted-foreground">
+                            <a className="min-w-0" href={`/app/posts/${r.postId ?? `article-${r.id}`}`} target="_blank" rel="noopener noreferrer">
+                              <Button size="sm" variant="ghost" className="w-full min-h-9 font-bold text-muted-foreground sm:w-auto sm:min-h-0">
                                 View
                               </Button>
                             </a>
@@ -2233,7 +2233,7 @@ export function CurationPanel({
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="font-bold"
+                                className="h-auto min-h-9 min-w-0 whitespace-normal px-2 py-2 font-bold leading-snug sm:min-h-0 sm:px-3"
                                 disabled={feature.isPending}
                                 onClick={() => feature.mutate({ articleId: r.id, featured: false })}
                                 data-testid={`btn-unfeature-${r.id}`}
@@ -2244,15 +2244,16 @@ export function CurationPanel({
                               <Button
                                 size="sm"
                                 variant="brand"
+                                className="h-auto min-h-9 min-w-0 gap-1 whitespace-normal px-2 py-2 text-xs leading-snug sm:min-h-0 sm:px-3 sm:text-sm"
                                 disabled={feature.isPending}
                                 onClick={() => feature.mutate({ articleId: r.id, featured: true })}
                                 data-testid={`btn-feature-${r.id}`}
                               >
-                                <Star className="w-3.5 h-3.5 mr-1" />
+                                <Star className="w-3.5 h-3.5" />
                                 Feature
                               </Button>
                             )}
-                            {r.reviewState === "pending" && <Button size="sm" variant="outline"
+                            {r.reviewState === "pending" && <Button size="sm" variant="outline" className="col-span-2 h-auto min-h-9 min-w-0 whitespace-normal px-2 py-2 leading-snug sm:min-h-0 sm:px-3"
                               disabled={feature.isPending}
                               onClick={() => feature.mutate({ articleId: r.id, featured: false })}
                               data-testid={`btn-review-${r.id}`}>Reviewed — don’t feature</Button>}
@@ -4138,7 +4139,7 @@ function ConsoleWithTour({
 
   return (
     <OrganizerSidebar>
-      <div className="max-w-3xl mx-auto space-y-6">
+      <div className="w-full min-w-0 max-w-3xl mx-auto space-y-6">
       {preview ? (
         <>
           <CompetitionClaimBanner slug={row.slug} />
@@ -4151,8 +4152,8 @@ function ConsoleWithTour({
           </p>
         </>
       ) : null}
-      <div className="app-page-header p-5 space-y-2">
-        <p className="app-kicker">Competition command center</p>
+      <div className="app-page-header p-4 sm:p-5 space-y-2" data-testid="competition-console-header">
+        <p className="app-kicker max-w-full leading-relaxed">Competition command center</p>
         {!preview ? (
           <Link href="/competitions">
             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:underline cursor-pointer">
@@ -4161,11 +4162,11 @@ function ConsoleWithTour({
           </Link>
         ) : null}
         <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <Link href={`/competitions/c/${row.slug}`}>
+          <div className="w-full min-w-0 sm:w-auto sm:flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <Link href={`/competitions/c/${row.slug}`} className="min-w-0 max-w-full">
                 <h1
-                   className="text-2xl font-black tracking-tight truncate cursor-pointer hover:underline"
+                   className="text-xl sm:text-2xl font-black leading-tight tracking-tight [overflow-wrap:anywhere] cursor-pointer hover:underline"
                   data-testid="link-console-competition-name"
                 >
                   {row.name}
@@ -4180,12 +4181,12 @@ function ConsoleWithTour({
               {row.matchCount} games
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="grid w-full min-w-0 grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
             {!preview ? (
               <Button
                 size="sm"
                 variant="outline"
-                className="font-bold rounded-full"
+                className="w-full sm:w-auto font-bold rounded-full"
                 onClick={() => setTourOpen(true)}
                 data-testid="btn-competition-replay-tour"
               >
@@ -4194,6 +4195,7 @@ function ConsoleWithTour({
               </Button>
             ) : null}
             <a
+              className="min-w-0"
               href={`/app/c/${row.slug}${
                 preview && previewClaimToken
                   ? `?claimToken=${encodeURIComponent(previewClaimToken)}`
@@ -4205,7 +4207,7 @@ function ConsoleWithTour({
               <Button
                 size="sm"
                 variant="outline"
-                className="font-bold rounded-full"
+                className="w-full sm:w-auto font-bold rounded-full"
                 data-testid="btn-view-public"
               >
                 <ExternalLink className="w-3.5 h-3.5 mr-1.5" />

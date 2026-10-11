@@ -254,7 +254,7 @@ export function OrganizerSidebar({ children }: { children: React.ReactNode }) {
     location === `/competitions/${c.id}`;
 
   return (
-    <div className="flex gap-3 sm:gap-5">
+    <div className="flex min-w-0 w-full gap-3 sm:gap-5">
       <aside
         className={`relative shrink-0 transition-[width] duration-200 ${
           expanded ? "w-10 md:w-60" : "w-10"
