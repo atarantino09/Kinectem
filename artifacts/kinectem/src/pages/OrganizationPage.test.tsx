@@ -428,9 +428,8 @@ describe("OrganizationPage — admin control gating", () => {
     expect(communityActions.nextElementSibling).toBe(guidesActions);
     expect(guidesActions.nextElementSibling).toBe(managerActions);
     expect(managerActions.nextElementSibling).toBe(communicationActions);
-    expect(within(communityActions).getByTestId("btn-org-community-menu")).toHaveTextContent(
-      "Community",
-    );
+    expect(within(communityActions).getByTestId("btn-follow-org")).toHaveTextContent("Follow");
+    expect(within(communityActions).getByTestId("btn-follow-org")).toHaveTextContent("0 followers");
     expect(communityActions.innerHTML).toContain("brand-community-trigger");
     expect(within(managerActions).getByTestId("btn-org-manage-menu")).toHaveTextContent(
       "Manage",
@@ -442,13 +441,8 @@ describe("OrganizationPage — admin control gating", () => {
     expect(communicationActions.innerHTML).toContain("bg-blue-700");
     expect(guidesActions.innerHTML).toContain("blue");
 
-    await user.click(screen.getByTestId("btn-org-community-menu"));
-    expect(screen.getByTestId("btn-follow-org")).toBeInTheDocument();
-    expect(
-      screen.getByTestId("btn-view-org-followers"),
-    ).toBeInTheDocument();
-
-    await user.keyboard("{Escape}");
+    expect(screen.queryByTestId("btn-org-community-menu")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("btn-view-org-followers")).not.toBeInTheDocument();
     await user.click(screen.getByTestId("btn-org-manage-menu"));
     const editOrg = screen.getByTestId("btn-edit-org");
     const manageMembers = screen.getByTestId("btn-manage-admins-hero");
@@ -568,12 +562,12 @@ describe("OrganizationPage — admin control gating", () => {
 
     renderWithProviders(<OrganizationPage />);
 
-    // Wait for the org to load (the community menu appears for everyone).
-    await screen.findByTestId("btn-org-community-menu");
+    // The follow control remains visible to non-members.
+    await screen.findByTestId("btn-follow-org");
 
     const communityActions = screen.getByTestId("org-community-actions");
     expect(screen.getByTestId("org-header-action-menus")).toHaveClass("justify-end");
-    expect(within(communityActions).getByTestId("btn-org-community-menu")).toBeInTheDocument();
+    expect(within(communityActions).getByTestId("btn-follow-org")).toBeInTheDocument();
     expect(
       screen.queryByTestId("btn-manage-admins-hero"),
     ).not.toBeInTheDocument();
@@ -652,7 +646,10 @@ describe("OrganizationPage — admin control gating", () => {
       "Your organization claim is approved",
     );
     expect(screen.getByTestId("dialog-owner-approval")).toHaveTextContent(
-      "delete incorrect teams already listed",
+      "archive it first",
+    );
+    expect(screen.getByTestId("dialog-owner-approval")).toHaveTextContent(
+      "Deleting the team page cannot be undone",
     );
     expect(screen.getByTestId("dialog-owner-approval")).toHaveTextContent(
       "edit team names",
@@ -661,7 +658,7 @@ describe("OrganizationPage — admin control gating", () => {
       "create additional teams",
     );
     expect(screen.getByTestId("dialog-owner-approval")).toHaveTextContent(
-      "archive it instead of deleting it",
+      "permanent deletion as a separate step",
     );
     expect(screen.queryByTestId("team-tour")).not.toBeInTheDocument();
     expect(screen.queryByTestId("dialog-org-pre-invite")).not.toBeInTheDocument();

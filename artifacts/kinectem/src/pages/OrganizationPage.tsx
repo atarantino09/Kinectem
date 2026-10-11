@@ -27,6 +27,7 @@ import { useIsLg } from "@/hooks/use-mobile";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { FollowButton } from "@/components/FollowButton";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { usePinnedTeams } from "@/hooks/usePinnedTeams";
@@ -1197,42 +1198,13 @@ export default function OrganizationPage() {
                   data-testid="org-header-action-menus"
                 >
                   <div data-testid="org-community-actions">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="brand-community-trigger rounded-full font-bold focus-visible:ring-[var(--k-magenta)]"
-                          data-testid="btn-org-community-menu"
-                        >
-                          <Users className="w-4 h-4" />
-                          Community
-                          <ChevronDown className="w-3.5 h-3.5" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-56">
-                        <DropdownMenuItem
-                          onClick={onToggleFollow}
-                          disabled={
-                            followOrg.isPending || unfollowOrg.isPending
-                          }
-                          data-testid="btn-follow-org"
-                        >
-                          <Users className="w-4 h-4 mr-2" />
-                          {organization.isFollowing ? "Following" : "Follow"}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => setFollowersOpen(true)}
-                          data-testid="btn-view-org-followers"
-                        >
-                          <Users className="w-4 h-4 mr-2" />
-                          View{" "}
-                          {(organization as { followerCount?: number })
-                            .followerCount ?? 0}{" "}
-                          followers
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <FollowButton
+                      isFollowing={!!organization.isFollowing}
+                      followerCount={(organization as { followerCount?: number }).followerCount ?? 0}
+                      pending={followOrg.isPending || unfollowOrg.isPending}
+                      onToggle={onToggleFollow}
+                      testId="btn-follow-org"
+                    />
                   </div>
 
                   {!!organization.role && (

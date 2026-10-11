@@ -9,6 +9,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { FollowButton } from "@/components/FollowButton";
 import { AvatarLightbox } from "@/components/AvatarLightbox";
 import { PhotoLightbox } from "@/components/PhotoLightbox";
 import {
@@ -114,7 +115,6 @@ export function TeamHeaderCard({
   onSetExpanded,
   onToggleFollow,
   onEdit,
-  onOpenFollowers,
   onInvite,
   onClaimCompetition,
   onMessageTeam,
@@ -447,7 +447,7 @@ export function TeamHeaderCard({
             data-testid="team-header-action-menus"
           >
             <div
-              className="flex flex-col items-end gap-3 sm:flex-row sm:items-center sm:justify-end"
+              className="flex flex-col items-end gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end"
               data-testid="team-header-action-group"
             >
               {onInvite && (
@@ -466,37 +466,13 @@ export function TeamHeaderCard({
                 className="flex items-center"
                 data-testid="team-community-actions"
               >
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="brand-community-trigger rounded-full font-bold focus-visible:ring-[var(--k-magenta)]"
-                      data-testid="btn-team-community-menu"
-                    >
-                      <Users className="w-3.5 h-3.5" />
-                      Community
-                      <ChevronDown className="w-3.5 h-3.5" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="w-56">
-                    <DropdownMenuItem
-                      onClick={onToggleFollow}
-                      disabled={followPending}
-                      data-testid="btn-follow-team"
-                    >
-                      <Users className="w-4 h-4 mr-2" />
-                      {team.isFollowing ? "Following" : "Follow"}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={onOpenFollowers}
-                      data-testid="btn-view-team-followers"
-                    >
-                      <Users className="w-4 h-4 mr-2" />
-                      View {team.followerCount ?? 0} followers
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <FollowButton
+                  isFollowing={!!team.isFollowing}
+                  followerCount={team.followerCount ?? 0}
+                  pending={followPending}
+                  onToggle={onToggleFollow}
+                  testId="btn-follow-team"
+                />
               </div>
 
               {(isAdmin ||

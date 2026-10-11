@@ -247,7 +247,7 @@ describe("TeamHeaderCard action hierarchy", () => {
     expect(mockCustomFetch).not.toHaveBeenCalled();
   });
 
-  it("places a public viewer's community actions in the magenta menu", async () => {
+  it("shows a public viewer's follow control and count directly in the header", async () => {
     const user = userEvent.setup();
     const onToggleFollow = vi.fn();
     const onOpenFollowers = vi.fn();
@@ -261,9 +261,8 @@ describe("TeamHeaderCard action hierarchy", () => {
 
     expect(within(navigation).getByTestId("btn-toggle-posts")).toBeInTheDocument();
     expect(within(navigation).getByTestId("btn-toggle-roster")).toBeInTheDocument();
-    expect(within(community).getByTestId("btn-team-community-menu")).toHaveTextContent(
-      "Community",
-    );
+    expect(within(community).getByTestId("btn-follow-team")).toHaveTextContent("Follow");
+    expect(within(community).getByTestId("btn-follow-team")).toHaveTextContent("18 followers");
     expect(community.innerHTML).toContain("brand-community-trigger");
     expect(
       actionMenus.compareDocumentPosition(navigation) &
@@ -271,15 +270,13 @@ describe("TeamHeaderCard action hierarchy", () => {
     ).toBeTruthy();
     expect(actionGroup).toHaveClass("items-end", "sm:justify-end");
     expect(actionGroup.firstElementChild).toBe(community);
-    expect(screen.queryByTestId("btn-follow-team")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("btn-team-community-menu")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("btn-view-team-followers")).not.toBeInTheDocument();
     expect(screen.queryByTestId("team-contextual-tools")).not.toBeInTheDocument();
 
-    await user.click(screen.getByTestId("btn-team-community-menu"));
     await user.click(screen.getByTestId("btn-follow-team"));
     expect(onToggleFollow).toHaveBeenCalledOnce();
-    await user.click(screen.getByTestId("btn-team-community-menu"));
-    await user.click(screen.getByTestId("btn-view-team-followers"));
-    expect(onOpenFollowers).toHaveBeenCalledOnce();
+    expect(onOpenFollowers).not.toHaveBeenCalled();
   });
 
   it("separates manager controls from guides for a manager", async () => {
