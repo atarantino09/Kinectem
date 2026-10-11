@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
 import { AdminLayout } from "@/components/AdminLayout";
 import { Button } from "@/components/ui/button";
@@ -295,7 +295,7 @@ export default function AdminUsers() {
           >
             <div className="flex min-w-0 items-start justify-between gap-3">
               <div className="min-w-0">
-                <h2 className="break-words font-semibold leading-snug [overflow-wrap:anywhere]">{u.displayName}</h2>
+                <h2 className="break-words font-semibold leading-snug [overflow-wrap:anywhere]"><Link href={`/users/${u.id}`} className="hover:underline focus-visible:underline" data-testid={`link-user-${u.id}`}>{u.displayName}</Link></h2>
                 <p className="mt-1 break-all text-sm text-muted-foreground">{u.email ?? "No email address"}</p>
               </div>
               <div className="shrink-0">
@@ -352,7 +352,7 @@ export default function AdminUsers() {
           ) : (
             (data?.data ?? []).map((u) => (
               <TableRow key={u.id} data-testid={`row-user-${u.email ?? u.id}`}>
-                <TableCell className="max-w-32 truncate font-medium" title={u.displayName}>{u.displayName}</TableCell>
+                <TableCell className="max-w-32 truncate font-medium" title={u.displayName}><Link href={`/users/${u.id}`} className="hover:underline focus-visible:underline" data-testid={`link-user-${u.id}`}>{u.displayName}</Link></TableCell>
                 <TableCell className="max-w-48 truncate text-sm text-muted-foreground" title={u.email ?? undefined}>{u.email}</TableCell>
                 <TableCell>
                   <Select value={u.role} onValueChange={(v) => updateRole(u.id, v)}>

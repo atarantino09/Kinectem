@@ -18,6 +18,7 @@ import {
   ChevronDown,
   Lock,
   ClipboardCheck,
+  FileText,
   Handshake,
 } from "lucide-react";
 import { useWhoami } from "@/hooks/useWhoami";
@@ -30,6 +31,7 @@ import { Card, CardContent } from "@/components/ui/card";
 const NAV = [
   { href: "/admin", label: "Dashboard", icon: BarChart3 },
   { href: "/admin/users", label: "Users", icon: Users },
+  { href: "/admin/posts", label: "Posts", icon: FileText },
   { href: "/admin/moderation", label: "Moderation", icon: ShieldAlert },
   { href: "/admin/activity", label: "Activity log", icon: History },
   {

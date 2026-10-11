@@ -1,5 +1,6 @@
 import { Router } from "express";
 import adminRouter from "./admin";
+import adminPostsRouter from "./admin-posts";
 import authRouter from "./auth";
 import consentRouter from "./consent";
 import currentUserRouter from "./current-user";
@@ -58,6 +59,7 @@ router.use(competitionReferralsRouter);
 
 // /admin/* — admin-only operations (gated inside the router by requireAdmin)
 router.use("/admin", adminRouter);
+router.use("/admin", adminPostsRouter);
 
 // All other domain routers register absolute paths (e.g. "/users/...")
 // and therefore mount on the same root. Order does not matter for

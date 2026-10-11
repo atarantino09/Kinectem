@@ -67,6 +67,7 @@ const PrivacyPolicyPage = lazy(() => import("@/pages/PrivacyPolicyPage"));
 const CoppaNoticePage = lazy(() => import("@/pages/CoppaNoticePage"));
 const AdminDashboard = lazy(() => import("@/pages/admin/AdminDashboard"));
 const AdminUsers = lazy(() => import("@/pages/admin/AdminUsers"));
+const AdminPosts = lazy(() => import("@/pages/admin/AdminPosts"));
 const AdminModeration = lazy(() => import("@/pages/admin/AdminModeration"));
 const AdminActivity = lazy(() => import("@/pages/admin/AdminActivity"));
 const AdminOrgQuickSetup = lazy(
@@ -252,6 +253,7 @@ function Router() {
                 <Route path="/posts/:postId" component={PostPage} />
                 <Route path="/admin" component={AdminDashboard} />
                 <Route path="/admin/users" component={AdminUsers} />
+                <Route path="/admin/posts" component={AdminPosts} />
                 <Route path="/admin/moderation" component={AdminModeration} />
                 <Route path="/admin/activity" component={AdminActivity} />
                 {/* The in-app Founding 100 destination is retired. Old bookmarks
