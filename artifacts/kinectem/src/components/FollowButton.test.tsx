@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { FollowButton } from "./FollowButton";
 
 describe("visible follow button", () => {
-  it("combines the action and count and switches to unfollow after the state updates", async () => {
+  it("combines the action and count and switches to Following after the state updates", async () => {
     const user = userEvent.setup();
     const onToggle = vi.fn();
     const props = { pending: false, onToggle, testId: "follow-control" };
@@ -14,7 +14,8 @@ describe("visible follow button", () => {
     await user.click(button);
     expect(onToggle).toHaveBeenCalledTimes(1);
     rerender(<FollowButton {...props} isFollowing followerCount={1} />);
-    expect(button).toHaveAccessibleName("Unfollow · 1 follower");
+    expect(button).toHaveAccessibleName("Following · 1 follower");
+    expect(button).toHaveTextContent("Following");
     expect(button).toHaveAttribute("aria-pressed", "true");
     await user.click(button);
     expect(onToggle).toHaveBeenCalledTimes(2);

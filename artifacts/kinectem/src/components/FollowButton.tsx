@@ -24,13 +24,13 @@ export function FollowButton({
       variant="outline"
       className="brand-community-trigger max-w-full gap-2 rounded-full font-bold focus-visible:ring-[var(--k-magenta)]"
       aria-pressed={isFollowing}
-      aria-label={`${isFollowing ? "Unfollow" : "Follow"} · ${countLabel}`}
+      aria-label={`${isFollowing ? "Following" : "Follow"} · ${countLabel}`}
       disabled={pending}
       onClick={onToggle}
       data-testid={testId}
     >
       <Icon className="h-4 w-4" aria-hidden="true" />
-      <span>{isFollowing ? "Unfollow" : "Follow"}</span>
+      <span>{isFollowing ? "Following" : "Follow"}</span>
       <span className="border-l border-current/20 pl-2 text-xs">{countLabel}</span>
     </Button>
   );
