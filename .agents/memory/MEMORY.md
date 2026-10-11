@@ -85,6 +85,7 @@
 - [Email dark-mode branding](email-dark-mode-branding.md) — use the dark-backed banner masthead so logo contrast survives client dark mode; serve it from both root and `/app` artifact paths.
 - [Email header wordmark](email-header-wordmark.md) — render the masthead wordmark as centered HTML; blocked remote images otherwise leave a large banner with tiny upper-left alt text.
 - [Organization handoff prompt queue](organization-handoff-prompt-queue.md) — one-shot create/claim prompts must be consumed in priority order without deleting later onboarding signals.
+- [Ownership transfer instructions](ownership-transfer-instructions.md) — claimed-org handoff is invite as admin, accept, then explicitly transfer; an admin invitation alone never transfers ownership.
 - [Claimed partner club access](claimed-partner-club-access.md) — partner-directory visitors see a safe owner identity once and can request admin access without changing ordinary org visits.
 - [Moderation scope and audit atomicity](moderation-scope-audit.md) — derive scope from persisted targets; destructive moderation and its audit record commit or roll back together.
 - [Private practice plans](private-practice-plans.md) — explicit private article kind; server-gate every read path to team members, active guardians, team staff, and org admins.

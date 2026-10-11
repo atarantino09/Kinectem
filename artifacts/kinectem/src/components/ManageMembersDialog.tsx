@@ -344,6 +344,40 @@ export function ManageMembersDialog({
             </DialogDescription>
           </DialogHeader>
 
+          {isOwner && (
+            <section
+              aria-label="Ownership transfer steps"
+              className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm leading-relaxed"
+              data-testid="ownership-transfer-guide"
+            >
+              <h3 className="mb-2 font-bold">How to transfer ownership</h3>
+              <ol className="list-decimal space-y-2 pl-5">
+                <li>
+                  <strong>Invite the new owner as an admin.</strong> Click{" "}
+                  <strong>Add admin</strong>, choose{" "}
+                  <strong>Invite by email</strong>, and send them an invitation.
+                </li>
+                <li>
+                  <strong>Wait for them to accept.</strong> They must accept
+                  the invitation before you can transfer ownership. Accepting
+                  makes them an admin—not the owner.
+                </li>
+                <li>
+                  <strong>Transfer ownership.</strong> Once they appear in the
+                  members list, click <strong>Transfer ownership</strong> next
+                  to their name and confirm.
+                </li>
+              </ol>
+              <p className="mt-3">
+                Already listed as a member or admin? Skip to step 3.
+              </p>
+              <p className="mt-2 text-muted-foreground">
+                Ownership changes only after you confirm the transfer. You’ll
+                remain an admin afterward.
+              </p>
+            </section>
+          )}
+
           {canInviteOwner && !isLoading && !members.some((m) => m.role === "owner") && (
             <OrgOwnerEmailInvite key={orgId} orgId={orgId} orgName={formatOrgName(orgName)} />
           )}
