@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSeasonRecapPrompt } from "../src/lib/ai";
+import { buildSeasonRecapPrompt, assertSeasonRecapChronology, UnsupportedSeasonChronologyError } from "../src/lib/ai";
 
 describe("combined recap news references", () => {
   it("adds bounded news metadata as untrusted context without changing recap-only prompts", () => {
@@ -103,5 +103,23 @@ describe("combined recap news references", () => {
     });
 
     expect(user).toContain("Article body was unavailable; use the metadata above only.");
+  });
+});
+
+describe("combined recap chronology guard", () => {
+  it("rejects day-specific ordinals and posting-day assumptions", () => {
+    for (const text of [
+      "In our third game of the day we fought back.",
+      "We played four games in one day.",
+      "Yesterday we faced Tigers.",
+      "Today we played four matches.",
+      "Our 3rd match of the day was tough.",
+    ]) expect(() => assertSeasonRecapChronology(text)).toThrow(UnsupportedSeasonChronologyError);
+  });
+  it("permits date-grounded and neutral wording", () => {
+    for (const text of [
+      "On October 3 the team played two games, followed by two on October 4.",
+      "Across these matches the team showed determination.",
+    ]) expect(() => assertSeasonRecapChronology(text)).not.toThrow();
   });
 });

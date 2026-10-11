@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   customFetch,
@@ -23,6 +23,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Sparkles, Loader2, Trophy, FileText, Newspaper } from "lucide-react";
 import { formatDateUTC } from "@/lib/format";
+import { CompetitionMatchSources, type RecapCompetition, type RecapCompetitionMatch } from "./CompetitionMatchSources";
 
 interface SeasonRecap {
   id: string;
@@ -105,8 +106,96 @@ export function SeasonRecapDialog({
   const [generating, setGenerating] = useState(false);
   const [title, setTitle] = useState("");
   const [draft, setDraft] = useState("");
+  const [draftReady, setDraftReady] = useState(false);
+  const [sourceMode, setSourceMode] = useState<"recaps" | "competition">("recaps");
+  const [competitions, setCompetitions] = useState<RecapCompetition[]>([]);
+  const [competitionId, setCompetitionId] = useState("");
+  const [matches, setMatches] = useState<RecapCompetitionMatch[]>([]);
+  const [selectedMatches, setSelectedMatches] = useState<Set<string>>(new Set());
+  const [confirmedPlayed, setConfirmedPlayed] = useState(false);
+  const [competitionError, setCompetitionError] = useState<string | null>(null);
+  const [generatedCompetitionId, setGeneratedCompetitionId] = useState<string | null>(null);
+  const [generatedBracketId, setGeneratedBracketId] = useState<string | null>(null);
+  const [draftStale, setDraftStale] = useState(false);
+  const epoch = useRef(0);
+  const previousTeamId = useRef(teamId);
+  const sourcesChanged = () => {
+    epoch.current++;
+    setDraftStale(true);
+  };
+  const changeDate = (value: string, isStart: boolean) => {
+    sourcesChanged();
+    if (isStart) setStart(value); else setEnd(value);
+    setSearched(false);
+    setSelected(new Set());
+    setSelectedNews(new Set());
+    setLoadingRecaps(false);
+  };
+  const selectCompetition = async (id: string) => {
+    sourcesChanged();
+    const current = epoch.current;
+    setCompetitionId(id);
+    setMatches([]);
+    setSelectedMatches(new Set());
+    setConfirmedPlayed(false);
+    setCompetitionError(null);
+    setSearched(false);
+    setLoadingRecaps(false);
+    if (!id) return;
+    setLoadingRecaps(true);
+    try {
+      const result = await customFetch<{ matches: RecapCompetitionMatch[] }>(
+        `/api/v1/teams/${teamId}/season-recap/recaps?competitionId=${encodeURIComponent(id)}`,
+      );
+      if (current !== epoch.current) return;
+      setMatches(result.matches);
+      setSearched(true);
+    } catch (err) {
+      if (current === epoch.current) setCompetitionError(err instanceof Error ? err.message : "Couldn't load matches.");
+    } finally {
+      if (current === epoch.current) setLoadingRecaps(false);
+    }
+  };
+  const changeSourceMode = async (mode: "recaps" | "competition") => {
+    sourcesChanged();
+    const current = epoch.current;
+    setSourceMode(mode);
+    setCompetitionId("");
+    setMatches([]);
+    setSelectedMatches(new Set());
+    setRecaps([]);
+    setSelected(new Set());
+    setNews([]);
+    setSelectedNews(new Set());
+    setSearched(false);
+    setCompetitionError(null);
+    setLoadingRecaps(false);
+    if (mode === "recaps") return;
+    setLoadingRecaps(true);
+    try {
+      const result = await customFetch<{ data: RecapCompetition[] }>(
+        `/api/v1/teams/${teamId}/season-recap/competitions`,
+      );
+      if (current === epoch.current) setCompetitions(result.data);
+    } catch (err) {
+      if (current === epoch.current) setCompetitionError(err instanceof Error ? err.message : "Couldn't load competitions.");
+    } finally {
+      if (current === epoch.current) setLoadingRecaps(false);
+    }
+  };
 
   const reset = () => {
+    epoch.current++;
+    setSourceMode("recaps");
+    setCompetitions([]);
+    setCompetitionId("");
+    setMatches([]);
+    setSelectedMatches(new Set());
+    setConfirmedPlayed(false);
+    setCompetitionError(null);
+    setGeneratedCompetitionId(null);
+    setGeneratedBracketId(null);
+    setDraftStale(false);
     const r = defaultRange();
     setStart(r.start);
     setEnd(r.end);
@@ -121,14 +210,22 @@ export function SeasonRecapDialog({
     setGenerating(false);
     setTitle("");
     setDraft("");
+    setDraftReady(false);
   };
 
   const handleClose = (next: boolean) => {
     if (!next) reset();
     onOpenChange(next);
   };
+  useEffect(() => {
+    if (!open || previousTeamId.current !== teamId) reset();
+    previousTeamId.current = teamId;
+    return () => { epoch.current++; };
+  }, [open, teamId]);
 
   const findRecaps = async () => {
+    sourcesChanged();
+    const current = epoch.current;
     setLoadingRecaps(true);
     try {
       const params = new URLSearchParams();
@@ -141,6 +238,7 @@ export function SeasonRecapDialog({
       }>(
         `/api/v1/teams/${teamId}/season-recap/recaps?${params.toString()}`,
       );
+      if (current !== epoch.current) return;
       setRecaps(res.data);
       // Default to "keep all" — coach can deselect a subset.
       setSelected(new Set(res.data.map((r) => r.id)));
@@ -150,17 +248,19 @@ export function SeasonRecapDialog({
       setNewsAvailability(res.newsAvailability ?? null);
       setSearched(true);
     } catch (err) {
+      if (current !== epoch.current) return;
       toast({
         title: "Couldn't load recaps",
         description: err instanceof Error ? err.message : "Something went wrong.",
         variant: "destructive",
       });
     } finally {
-      setLoadingRecaps(false);
+      if (current === epoch.current) setLoadingRecaps(false);
     }
   };
 
   const toggle = (id: string) => {
+    sourcesChanged();
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -171,11 +271,13 @@ export function SeasonRecapDialog({
 
   const allSelected = recaps.length > 0 && selected.size === recaps.length;
   const toggleAll = () => {
+    sourcesChanged();
     if (allSelected) setSelected(new Set());
     else setSelected(new Set(recaps.map((r) => r.id)));
   };
 
   const toggleNews = (id: string) => {
+    sourcesChanged();
     setSelectedNews((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -187,16 +289,25 @@ export function SeasonRecapDialog({
   const allNewsSelected =
     news.length > 0 && selectedNews.size === news.length;
   const toggleAllNews = () => {
+    sourcesChanged();
     if (allNewsSelected) setSelectedNews(new Set());
     else setSelectedNews(new Set(news.map((n) => n.id)));
   };
 
   const generate = async () => {
-    if (selected.size === 0 && selectedNews.size === 0) {
+    if (selected.size === 0 && selectedNews.size === 0 && selectedMatches.size === 0) {
       toast({
         title: "Select at least one source",
         description: "Pick a game recap or news story to include.",
       });
+      return;
+    }
+    if (selectedMatches.size > 25) {
+      toast({ title: "Choose 25 or fewer matches", variant: "destructive" });
+      return;
+    }
+    if (sourceMode === "competition" && matches.some((m) => selectedMatches.has(m.id) && m.requiresConfirmation) && !confirmedPlayed) {
+      toast({ title: "Confirm the selected matches were played", variant: "destructive" });
       return;
     }
     if (selectedNews.size > MAX_NEWS_CONTEXT_SOURCES) {
@@ -208,41 +319,59 @@ export function SeasonRecapDialog({
       return;
     }
     setGenerating(true);
+    const current = epoch.current;
     try {
       const res = await customFetch<{
         text: string;
         recapCount: number;
         newsCount?: number;
         newsContext?: NewsContextResult[];
+        competitionId?: string | null;
+        bracketId?: string | null;
       }>(
         `/api/v1/teams/${teamId}/season-recap/generate`,
         {
           method: "POST",
           body: JSON.stringify({
-            startDate: start || undefined,
-            endDate: end || undefined,
+            startDate: sourceMode === "recaps" ? start || undefined : undefined,
+            endDate: sourceMode === "recaps" ? end || undefined : undefined,
             recapIds: Array.from(selected),
             newsIds: Array.from(selectedNews),
+            ...(sourceMode === "competition" ? {
+              competitionId,
+              matchIds: Array.from(selectedMatches),
+              confirmedPlayedMatchIds: confirmedPlayed
+                ? matches.filter((m) => selectedMatches.has(m.id) && m.requiresConfirmation).map((m) => m.id)
+                : [],
+            } : {}),
           }),
         },
       );
+      if (current !== epoch.current) return;
       setDraft(res.text);
+      setDraftReady(true);
+      setGeneratedCompetitionId(res.competitionId ?? null);
+      setGeneratedBracketId(res.bracketId ?? null);
+      setDraftStale(false);
       setNewsContext(res.newsContext ?? []);
-      if (!title.trim()) {
-        setTitle(`${teamName} Season Recap`);
+      const previousDefaultTitle = `${teamName} ${competitions.find((c) => c.id === generatedCompetitionId)?.name ?? "Season"} Recap`;
+      if (!title.trim() || title === previousDefaultTitle) {
+        setTitle(`${teamName} ${competitions.find((c) => c.id === competitionId)?.name ?? "Season"} Recap`);
       }
     } catch (err) {
+      if (current !== epoch.current) return;
       toast({
         title: "Recap generation failed",
         description: err instanceof Error ? err.message : "Something went wrong.",
         variant: "destructive",
       });
     } finally {
-      setGenerating(false);
+      if (current === epoch.current) setGenerating(false);
     }
   };
 
   const publish = async () => {
+    if (draftStale || generating) return;
     const trimmedTitle = title.trim();
     if (!trimmedTitle) {
       toast({ title: "Title is required", variant: "destructive" });
@@ -266,6 +395,9 @@ export function SeasonRecapDialog({
           ...({
             context: { type: "team", id: teamId },
             recapKind: "combined",
+            competitionId: generatedCompetitionId,
+            competitionGameId: null,
+            ...(generatedCompetitionId ? { bracketId: generatedBracketId } : {}),
           } as object),
         },
       });
@@ -301,13 +433,29 @@ export function SeasonRecapDialog({
             recap
           </DialogTitle>
           <DialogDescription>
-            Generate one AI draft from {teamName}'s published game recaps and
-            related news coverage over a date range — perfect for a tournament
-            run or a whole season — then post it as a team recap.
+            Combine {teamName}'s competition matches or published game recaps
+            into one story. Actual game dates keep multi-day tournaments in
+            order. Review and edit the AI draft before posting.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
+          <fieldset disabled={generating || createPost.isPending} className="space-y-4 min-w-0">
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" variant={sourceMode === "recaps" ? "default" : "outline"}
+              onClick={() => void changeSourceMode("recaps")}>Recap posts & news</Button>
+            <Button type="button" size="sm" variant={sourceMode === "competition" ? "default" : "outline"}
+              onClick={() => void changeSourceMode("competition")}
+              data-testid="button-season-recap-competition-mode">Competition matches</Button>
+          </div>
+          {sourceMode === "competition" && <CompetitionMatchSources
+            competitions={competitions} competitionId={competitionId} matches={matches}
+            selected={selectedMatches} loading={loadingRecaps} error={competitionError}
+            confirmedPlayed={confirmedPlayed} onCompetitionChange={(id) => void selectCompetition(id)}
+            onSelectionChange={(ids) => { sourcesChanged(); setSelectedMatches(ids); setConfirmedPlayed(false); }}
+            onConfirmPlayed={(value) => { sourcesChanged(); setConfirmedPlayed(value); }}
+          />}
+          {sourceMode === "recaps" && <>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label
@@ -321,7 +469,7 @@ export function SeasonRecapDialog({
                 type="date"
                 value={start}
                 max={end || undefined}
-                onChange={(e) => setStart(e.target.value)}
+                onChange={(e) => changeDate(e.target.value, true)}
                 className="mt-2"
                 data-testid="input-season-recap-start"
               />
@@ -338,7 +486,7 @@ export function SeasonRecapDialog({
                 type="date"
                 value={end}
                 min={start || undefined}
-                onChange={(e) => setEnd(e.target.value)}
+                onChange={(e) => changeDate(e.target.value, false)}
                 className="mt-2"
                 data-testid="input-season-recap-end"
               />
@@ -360,9 +508,12 @@ export function SeasonRecapDialog({
             )}
             Find sources
           </Button>
+          <p className="text-xs text-muted-foreground">Game dates come from the linked schedule when available. Undated recaps are included as “Game date unknown”; posting dates are never used as game dates.</p>
+          </>}
 
           {searched && (
             <div className="space-y-4">
+              {sourceMode === "recaps" && <>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-black uppercase tracking-widest text-muted-foreground">
@@ -390,6 +541,9 @@ export function SeasonRecapDialog({
                     <p className="text-xs text-muted-foreground">
                       {selected.size} of {recaps.length} selected
                     </p>
+                    {selected.size > 25 && <p role="alert" className="text-sm text-destructive">
+                      Select 25 or fewer recap posts before generating. None have been discarded.
+                    </p>}
                     <div className="max-h-52 overflow-y-auto rounded-lg border border-border divide-y divide-border">
                       {recaps.map((r) => {
                         const score =
@@ -397,7 +551,7 @@ export function SeasonRecapDialog({
                             ? `${r.teamScore}-${r.opponentScore}`
                             : null;
                         const meta = [
-                          formatGameDate(r.gameDate),
+                          r.gameDate ? formatGameDate(r.gameDate) : "Game date unknown",
                           r.opponentName ? `vs ${r.opponentName}` : null,
                           score,
                         ]
@@ -522,13 +676,17 @@ export function SeasonRecapDialog({
                 )}
               </div>
 
+              </>}
               <Button
                 type="button"
                 variant="brand"
                 onClick={generate}
                 disabled={
                   generating ||
-                  (selected.size === 0 && selectedNews.size === 0)
+                  (selected.size === 0 && selectedNews.size === 0 && selectedMatches.size === 0) ||
+                  selectedMatches.size > 25 ||
+                  selected.size > 25 ||
+                  (!confirmedPlayed && matches.some((m) => selectedMatches.has(m.id) && m.requiresConfirmation))
                 }
                 className="w-full font-bold"
                 data-testid="button-season-recap-generate"
@@ -538,13 +696,17 @@ export function SeasonRecapDialog({
                 ) : (
                   <Sparkles className="w-4 h-4 mr-1.5" />
                 )}
-                {draft ? "Regenerate draft" : "Generate recap"}
+                {draftReady ? "Regenerate draft" : "Generate recap"}
               </Button>
             </div>
           )}
+          </fieldset>
 
-          {draft && (
+          {draftReady && (
             <div className="space-y-4 pt-2 border-t border-border">
+              {draftStale && <p role="status" className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">
+                Sources changed. Your text is preserved, but regenerate the draft before posting so it matches the selected games and competition.
+              </p>}
               {newsContext.length > 0 && (
                 <p
                   className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground"
@@ -621,7 +783,7 @@ export function SeasonRecapDialog({
           <Button
             variant="brand"
             onClick={publish}
-            disabled={createPost.isPending || !draft.trim()}
+            disabled={createPost.isPending || generating || draftStale || !draft.trim()}
             data-testid="button-season-recap-publish"
           >
             {createPost.isPending ? "Posting…" : "Post recap"}

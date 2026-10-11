@@ -12,6 +12,7 @@ import {
   adminActivityLog,
   articles,
   teamNewsLinks,
+  tournamentMatches,
 } from "@workspace/db";
 import {
   and,
@@ -55,7 +56,7 @@ import {
   getOrgRole,
   isPlatformAdmin,
 } from "../lib/permissions";
-import { generateSeasonRecapText, AiNotConfiguredError } from "../lib/ai";
+import { generateSeasonRecapText, AiNotConfiguredError, UnsupportedSeasonChronologyError } from "../lib/ai";
 import { getOrgPlan, teamLimitForPlan } from "../lib/plan-limits";
 import {
   createSession,
@@ -95,6 +96,7 @@ import { notifyTeamArchived, notifyTeamUnarchived } from "../lib/notifications";
 import { normalizeWebsite } from "../lib/normalize-website";
 import { normalizeNewsGameDate } from "../lib/news-game-date";
 import { fetchNewsArticleContext } from "../lib/news-article-content";
+import { loadSeasonCompetitions, loadSeasonCompetitionMatches, MAX_COMBINED_MATCHES, UUID_SHAPE } from "../lib/season-competition-sources";
 
 const router: IRouter = Router();
 
@@ -1943,17 +1945,26 @@ async function loadTeamSeasonRecaps(
     teamScore: number | null;
     opponentScore: number | null;
     summary: string | null;
+    competitionGameId: string | null;
   }>
 > {
-  const effDate = sql<Date>`coalesce(${articles.gameDate}, ${articles.publishedAt}, ${articles.createdAt})`;
+  // Publication timestamps describe authoring, never when a game was played.
+  const effDate = sql<Date>`coalesce("tournament_matches"."match_date"::timestamp, "articles"."game_date")`
+    .mapWith((value: string | Date | null) => value == null ? null : new Date(value));
   const conds = [
     eq(articles.teamId, teamId),
     eq(articles.status, "published"),
     or(isNull(articles.articleKind), eq(articles.articleKind, "recap")),
     isNull(articles.hiddenAt),
+    or(isNull(articles.recapKind), sql`"articles"."recap_kind" <> 'combined'`),
+    or(isNull(effDate), sql`(${effDate})::date <= ${new Date().toISOString().slice(0, 10)}`),
+    or(isNull(tournamentMatches.id), and(
+      sql`"tournament_matches"."status" not in ('canceled', 'postponed')`,
+      or(isNull(tournamentMatches.matchDate), sql`"tournament_matches"."match_date" <= ${new Date().toISOString().slice(0, 10)}`),
+    )),
   ];
-  if (startMs != null) conds.push(sql`${effDate} >= ${new Date(startMs)}`);
-  if (endMs != null) conds.push(sql`${effDate} <= ${new Date(endMs)}`);
+  if (startMs != null) conds.push(or(isNull(effDate), sql`${effDate} >= ${new Date(startMs)}`)!);
+  if (endMs != null) conds.push(or(isNull(effDate), sql`${effDate} <= ${new Date(endMs)}`)!);
   if (recapIds != null) {
     if (recapIds.length === 0) return [];
     conds.push(inArray(articles.id, recapIds));
@@ -1962,16 +1973,35 @@ async function loadTeamSeasonRecaps(
     .select({
       id: articles.id,
       title: articles.title,
-      gameDate: articles.gameDate,
+      gameDate: effDate,
       opponentName: articles.opponentName,
-      teamScore: articles.teamScore,
-      opponentScore: articles.opponentScore,
-      summary: articles.summary,
+      teamScore: sql<number | null>`case when "tournament_matches"."home_score_official" is not null
+        and "tournament_matches"."away_score_official" is not null
+        then case when exists (select 1 from tournament_participants p
+          where p.id = "tournament_matches"."home_participant_id" and p.team_id = "articles"."team_id")
+          then "tournament_matches"."home_score_official" else "tournament_matches"."away_score_official" end
+        else "articles"."team_score" end`,
+      opponentScore: sql<number | null>`case when "tournament_matches"."home_score_official" is not null
+        and "tournament_matches"."away_score_official" is not null
+        then case when exists (select 1 from tournament_participants p
+          where p.id = "tournament_matches"."home_participant_id" and p.team_id = "articles"."team_id")
+          then "tournament_matches"."away_score_official" else "tournament_matches"."home_score_official" end
+        else "articles"."opponent_score" end`,
+      summary: sql<string | null>`coalesce("articles"."summary", left("articles"."body", 4000))`,
+      competitionGameId: articles.competitionGameId,
     })
     .from(articles)
+    .leftJoin(tournamentMatches, and(
+      eq(tournamentMatches.id, articles.competitionGameId),
+      eq(tournamentMatches.tournamentId, articles.competitionId),
+      sql`exists (select 1 from tournament_participants p
+        where p.team_id = "articles"."team_id"
+        and p.tournament_id = "tournament_matches"."tournament_id"
+        and p.id in ("tournament_matches"."home_participant_id", "tournament_matches"."away_participant_id"))`,
+    ))
     .where(and(...conds))
-    .orderBy(asc(effDate))
-    .limit(200);
+    .orderBy(sql`${effDate} asc nulls last`, asc(articles.publishedAt), asc(articles.id))
+    .limit(201);
 }
 
 // Resolve dated "In the News" links for the same team-scoped period as the
@@ -2057,6 +2087,20 @@ const teamSeasonRecapLimiter = rateLimit({
 });
 
 router.get(
+  "/teams/:teamId/season-recap/competitions",
+  asyncHandler(async (req, res) => {
+    const me = req.sessionUser;
+    if (!me) return apiError(res, 401, "Not authenticated");
+    const teamId = String(req.params.teamId);
+    if (!UUID_SHAPE.test(teamId)) return apiError(res, 400, "Invalid team ID");
+    const [team] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
+    if (!team) return notFound(res);
+    if (!(await canCreateRecap(me.id, team))) return apiError(res, 403, "You don't have permission to author recaps for this team.");
+    return res.json({ data: await loadSeasonCompetitions(teamId), maxMatches: MAX_COMBINED_MATCHES });
+  }),
+);
+
+router.get(
   "/teams/:teamId/season-recap/recaps",
   asyncHandler(async (req, res) => {
     const me = req.sessionUser;
@@ -2077,6 +2121,15 @@ router.get(
         "You don't have permission to author recaps for this team.",
       );
     }
+    if (req.query.competitionId !== undefined) {
+      const competitionId = req.query.competitionId;
+      if (typeof competitionId !== "string" || !UUID_SHAPE.test(competitionId)) {
+        return apiError(res, 400, "Invalid competition ID");
+      }
+      const matches = await loadSeasonCompetitionMatches(teamId, competitionId);
+      if (!matches) return apiError(res, 403, "That competition is not linked to this team.");
+      return res.json({ data: [], matches, maxMatches: MAX_COMBINED_MATCHES });
+    }
     const startQuery =
       typeof req.query.start === "string" ? req.query.start : undefined;
     const endQuery =
@@ -2095,7 +2148,8 @@ router.get(
       ),
       loadTeamSeasonNewsAvailability(teamId),
     ]);
-    res.json({
+    if (recaps.length > 200) return apiError(res, 400, "More than 200 sources match. Narrow the game-date range or choose a competition.");
+    return res.json({
       data: recaps.map((r) => ({
         id: r.id,
         title: r.title,
@@ -2168,7 +2222,7 @@ router.post(
     }
     let recapIds: string[] | null = null;
     if (body.recapIds != null) {
-      if (!Array.isArray(body.recapIds)) {
+      if (!Array.isArray(body.recapIds) || body.recapIds.some((id: unknown) => typeof id !== "string" || !UUID_SHAPE.test(id))) {
         return apiError(res, 400, "recapIds must be a list.", {
           code: "VALIDATION_FAILED",
         });
@@ -2180,6 +2234,7 @@ router.post(
           ),
         ),
       );
+      if (recapIds.length > TEAM_SEASON_RECAP_MAX) return apiError(res, 400, `Choose ${TEAM_SEASON_RECAP_MAX} or fewer recap posts.`);
     }
 
     let newsIds: string[] | null = null;
@@ -2216,7 +2271,42 @@ router.post(
       }
     }
 
-    const recaps = await loadTeamSeasonRecaps(teamId, startMs, endMs, recapIds);
+    let matches: Awaited<ReturnType<typeof loadSeasonCompetitionMatches>> = null;
+    if (body.competitionId != null) {
+      if (typeof body.competitionId !== "string" || !UUID_SHAPE.test(body.competitionId)) {
+        return apiError(res, 400, "Invalid competition ID");
+      }
+      if (!Array.isArray(body.matchIds) || !body.matchIds.length ||
+          body.matchIds.some((id: unknown) => typeof id !== "string" || !UUID_SHAPE.test(id))) {
+        return apiError(res, 400, "Select valid competition matches.");
+      }
+      const matchIds: string[] = Array.from(new Set(body.matchIds as string[]));
+      if (matchIds.length > MAX_COMBINED_MATCHES) {
+        return apiError(res, 400, `Select ${MAX_COMBINED_MATCHES} or fewer matches. None have been discarded.`);
+      }
+      if (recapIds?.length) return apiError(res, 400, "Select competition matches or recap posts, not both.");
+      const available = await loadSeasonCompetitionMatches(teamId, body.competitionId);
+      if (!available) return apiError(res, 403, "That competition is not linked to this team.");
+      matches = available.filter((m) => matchIds.includes(m.id));
+      if (matches.length !== matchIds.length || matches.some((m) => !m.eligible)) {
+        return apiError(res, 400, "A selected match is unavailable, unplayed, canceled, postponed, or does not belong to this team's competition.");
+      }
+      const confirmed: unknown = body.confirmedPlayedMatchIds ?? [];
+      if (!Array.isArray(confirmed) || confirmed.some((id) => typeof id !== "string" || !matchIds.includes(id))) {
+        return apiError(res, 400, "Invalid played-match confirmation.");
+      }
+      if (matches.some((m) => m.requiresConfirmation && !confirmed.includes(m.id))) {
+        return apiError(res, 400, "Confirm that selected scheduled matches were played before generating.");
+      }
+    } else if (body.matchIds?.length) {
+      return apiError(res, 400, "Choose the competition for these matches.");
+    }
+    const recaps = matches
+      ? matches.map((m) => ({ ...m, competitionGameId: m.id, gameDate: m.gameDate ? new Date(`${m.gameDate}T00:00:00Z`) : null }))
+      : await loadTeamSeasonRecaps(teamId, startMs, endMs, recapIds);
+    if (!matches && recapIds && recaps.length !== recapIds.length) {
+      return apiError(res, 400, "A selected recap is unavailable or outside the game-date range. Find sources again.");
+    }
     const news = await loadTeamSeasonNews(
       teamId,
       startNewsDate,
@@ -2258,13 +2348,14 @@ router.post(
 
     const fmtDate = (d: Date | null) =>
       d ? d.toISOString().slice(0, 10) : null;
-    const recapInputs = recaps.map((r) => ({
+    const uniqueRecaps = Array.from(new Map(recaps.map((r) => [r.competitionGameId ?? r.id, r])).values());
+    const recapInputs = uniqueRecaps.map((r) => ({
       title: r.title,
       gameDate: fmtDate(r.gameDate),
       opponentName: r.opponentName,
       teamScore: r.teamScore,
       opponentScore: r.opponentScore,
-      summary: r.summary,
+      summary: r.summary?.slice(0, 4000) ?? null,
     }));
     const newsInputs = await Promise.all(
       news.map(async (n) => {
@@ -2305,9 +2396,14 @@ router.post(
           { code: "AI_EMPTY" },
         );
       }
-      res.json({
+      return res.json({
         text,
-        recapCount: recaps.length,
+        recapCount: uniqueRecaps.length,
+        competitionId: matches ? body.competitionId : null,
+        bracketId: matches
+          ? (matches[0]?.bracketId && matches.every((m) => m.bracketId === matches![0].bracketId) ? matches[0].bracketId : null)
+          : undefined,
+        matchCount: matches?.length ?? 0,
         newsCount: news.length,
         newsContext: newsInputs.map((n) => ({
           id: n.id,
@@ -2316,11 +2412,14 @@ router.post(
         })),
       });
     } catch (err) {
+      if (err instanceof UnsupportedSeasonChronologyError) {
+        return apiError(res, 502, err.message, { code: "AI_UNSUPPORTED_CHRONOLOGY" });
+      }
       if (err instanceof AiNotConfiguredError) {
         return apiError(res, 503, err.message, { code: "AI_NOT_CONFIGURED" });
       }
       req.log.error({ err }, "Season recap generation failed");
-      apiError(
+      return apiError(
         res,
         502,
         "AI request failed. An admin may need to check the API key in admin settings.",
