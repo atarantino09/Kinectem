@@ -189,6 +189,7 @@ export function PostFormFields({
     null;
   return (
     <form id="new-post-form" onSubmit={onSubmit} className="space-y-5">
+      <fieldset disabled={publishing} className="space-y-5 min-w-0">
       {isEditingPublished && !canDelete && (
         // Co-authors, coaches, and org admins can also land on this
         // edit screen but only the original author gets the in-editor
@@ -893,7 +894,7 @@ export function PostFormFields({
             type="button"
             variant="outline"
             onClick={onSaveDraft}
-            disabled={saving}
+            disabled={saving || publishing}
             className="font-bold rounded-full"
             data-testid="button-save-draft-bottom"
           >
@@ -904,11 +905,13 @@ export function PostFormFields({
         <Button
           type="submit"
           variant="brand"
-          disabled={publishing || publishDisabled}
+          disabled={saving || publishing || publishDisabled}
           data-testid="button-publish-bottom"
         >
           {publishing
             ? "Posting…"
+            : saving
+              ? "Saving…"
             : isEditingPublished
               ? "Save"
               : draftId
@@ -916,6 +919,7 @@ export function PostFormFields({
                 : "Post"}
         </Button>
       </div>
+      </fieldset>
     </form>
   );
 }

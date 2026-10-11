@@ -1,18 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { renderWithProviders } from "@/test";
 
-const { customFetchMock, toastMock, publishMock } = vi.hoisted(() => ({
+const { customFetchMock, toastMock, publishMock, createOptions } = vi.hoisted(() => ({
   customFetchMock: vi.fn(),
   toastMock: vi.fn(),
   publishMock: vi.fn(),
+  createOptions: vi.fn(),
 }));
 
 vi.mock("@workspace/api-client-react", () => ({
   customFetch: customFetchMock,
-  useCreatePost: () => ({ mutateAsync: publishMock, isPending: false }),
+  useCreatePost: (options: unknown) => { createOptions(options); return { mutateAsync: publishMock, isPending: false }; },
   getListTeamPostsQueryKey: () => ["team-posts"],
   getListTeamPendingPostsQueryKey: () => ["team-pending-posts"],
   getListFeedQueryKey: () => ["feed"],
@@ -256,6 +257,45 @@ describe("Combined Recap competition matches", () => {
     await screen.findByTestId("button-select-all-competition-matches");
     return user;
   }
+  it("blocks duplicate publication synchronously and stays busy through post-create work", async () => {
+    const user = await openPicker([match("A")]);
+    await user.click(screen.getByTestId("button-select-all-competition-matches"));
+    customFetchMock.mockResolvedValueOnce({ text: "Weekend review.", competitionId: "cup" });
+    await user.click(screen.getByTestId("button-season-recap-generate"));
+    let resolve!: (value: { id: string; warnings: string[] }) => void;
+    publishMock.mockReturnValueOnce(new Promise((yes) => { resolve = yes; }));
+    const publish = screen.getByTestId("button-season-recap-publish");
+    act(() => { publish.click(); publish.click(); publish.click(); });
+    await waitFor(() => expect(publishMock).toHaveBeenCalledTimes(1));
+    expect(publish).toBeDisabled();
+    expect(screen.getByTestId("textarea-season-recap-body")).toBeDisabled();
+    await act(async () => { resolve({ id: "article-one", warnings: ["Roster tagging delayed."] }); });
+    expect(toastMock).toHaveBeenCalledWith(expect.objectContaining({ title: "Season recap posted" }));
+    expect(toastMock).toHaveBeenCalledWith(expect.objectContaining({ title: "Recap saved" }));
+  });
+
+  it("retries an uncertain combined create with the same key and payload, then patches changed text", async () => {
+    const user = await openPicker([match("A")]);
+    await user.click(screen.getByTestId("button-select-all-competition-matches"));
+    customFetchMock.mockResolvedValueOnce({ text: "Initial review.", competitionId: "cup" });
+    await user.click(screen.getByTestId("button-season-recap-generate"));
+    publishMock.mockRejectedValueOnce(new Error("lost response"));
+    await user.click(screen.getByTestId("button-season-recap-publish"));
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith(expect.objectContaining({ title: "Couldn't confirm your recap" })));
+    const original = publishMock.mock.calls[0][0];
+    const key = createOptions.mock.lastCall![0].request.headers["Idempotency-Key"];
+    await user.clear(screen.getByTestId("textarea-season-recap-body"));
+    await user.type(screen.getByTestId("textarea-season-recap-body"), "Final review.");
+    customFetchMock.mockResolvedValueOnce({ id: "article-new" });
+    await user.click(screen.getByTestId("button-season-recap-publish"));
+    await waitFor(() => expect(publishMock).toHaveBeenCalledTimes(2));
+    expect(publishMock.mock.calls[1][0]).toEqual(original);
+    // Options at the render immediately before the successful submit retain the key.
+    expect(createOptions.mock.calls.some(([o]) => o.request.headers["Idempotency-Key"] === key)).toBe(true);
+    expect(customFetchMock).toHaveBeenLastCalledWith("/api/v1/posts/article-new", expect.objectContaining({
+      method: "PATCH", body: JSON.stringify({ title: "Wolves Weekend Cup Recap", body: "Final review." }),
+    }));
+  });
   it("selects the competition's available games in one click, supports deselection, and publishes the generated competition identity", async () => {
     const user = await openPicker([
       match("A"), match("B", { gameDate: "2026-10-04" }),

@@ -152,7 +152,17 @@ export function useNewPostForm({
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const qc = useQueryClient();
-  const createPost = useCreatePost();
+  const [creationKey, setCreationKey] = useState(() => crypto.randomUUID());
+  const createPost = useCreatePost({ request: { headers: { "Idempotency-Key": creationKey } } });
+  const canonicalId = useRef<string | null>(initialDraftId);
+  const creationPayload = useRef<(CreatePostRequest & { status?: "draft" }) | null>(null);
+  const creationSnapshot = useRef<string | null>(null);
+  const creationResult = useRef<Awaited<ReturnType<typeof createPost.mutateAsync>> | null>(null);
+  const publishedRef = useRef(false);
+  const manualIntent = useRef<"save" | "publish" | null>(null);
+  const persistenceTail = useRef<Promise<void>>(Promise.resolve());
+  const pendingWrites = useRef(0);
+  const [publishing, setPublishing] = useState(false);
   const createPostTags = useCreatePostTags();
   const deletePost = useDeletePost();
   const { data: me } = useGetLoggedInUser();
@@ -257,7 +267,8 @@ export function useNewPostForm({
         }),
       );
     }
-    await Promise.all(promises);
+    // A cache refresh failing cannot undo a committed save.
+    await Promise.allSettled(promises);
   };
 
   const [postType, setPostType] = useState<"short" | "long">(
@@ -481,6 +492,21 @@ export function useNewPostForm({
 
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [saving, setSaving] = useState(false);
+  const serialize = (work: () => Promise<void>) => {
+    pendingWrites.current += 1;
+    setSaving(true);
+    const next = persistenceTail.current.then(work);
+    persistenceTail.current = next.catch(() => {});
+    return next.finally(() => {
+      pendingWrites.current -= 1;
+      if (!pendingWrites.current) setSaving(false);
+    });
+  };
+  const latest = useRef({
+    patch: async (_id: string) => {},
+    save: async () => {},
+    publish: async (_e: React.FormEvent) => {},
+  });
   // Per-viewer flag captured from the post we loaded into the editor.
   // True only when the requester is the original author of an
   // already-published article — drives the editor-header Delete
@@ -912,29 +938,33 @@ export function useNewPostForm({
   // those changes only land when the coach hits Save explicitly,
   // so a stray keystroke doesn't silently mutate a live post.
   const debouncedRef = useRef<number | null>(null);
+  const autoFailureSnapshot = useRef<string | null>(null);
   useEffect(() => {
-    if (!draftId || isEditingPublished) return;
+    if (!draftId || isEditingPublished || saving || publishing || publishedRef.current || !isDirty) return;
+    // A failed save stays dirty, but must not retry the same failing payload
+    // forever just because the busy flag returned to false. An edit or an
+    // explicit Save/Publish starts another attempt.
+    if (autoFailureSnapshot.current === snapshotRef.current) return;
     if (debouncedRef.current) window.clearTimeout(debouncedRef.current);
     debouncedRef.current = window.setTimeout(async () => {
       // Capture the snapshot we're about to persist BEFORE the await
       // so any keystrokes that land while the PATCH is in flight
       // correctly leave the form dirty (we shouldn't credit the user
       // for changes we didn't actually save).
-      const sentSnapshot = snapshotRef.current;
-      try {
-        setSaving(true);
-        await customFetch(`/api/v1/posts/${draftId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: buildPatchBody(),
-        });
-        setSavedAt(new Date());
-        setBaseline(sentSnapshot);
-      } catch {
-        // ignore
-      } finally {
-        setSaving(false);
-      }
+      if (manualIntent.current || publishedRef.current) return;
+      await serialize(async () => {
+        if (publishedRef.current) return;
+        const sentSnapshot = snapshotRef.current;
+        try {
+          await latest.current.patch(canonicalId.current!);
+          autoFailureSnapshot.current = null;
+          setSavedAt(new Date());
+          setBaseline(sentSnapshot);
+        } catch {
+          autoFailureSnapshot.current = sentSnapshot;
+          // Keep the unsaved baseline; the next manual save can retry.
+        }
+      });
     }, 1200);
     return () => {
       if (debouncedRef.current) window.clearTimeout(debouncedRef.current);
@@ -955,6 +985,9 @@ export function useNewPostForm({
     bracketTouched,
     draftId,
     isEditingPublished,
+    saving,
+    publishing,
+    isDirty,
   ]);
 
   const isShort = postType === "short";
@@ -1031,7 +1064,7 @@ export function useNewPostForm({
         },
       );
     } catch {
-      // Intentionally swallowed — see note above.
+      toast({ title: "Recap saved", description: "Couldn't link it to the schedule. You can link the existing recap later." });
     }
   };
 
@@ -1042,7 +1075,49 @@ export function useNewPostForm({
       body: buildPatchBody(),
     });
 
-  const onPublish = async (e: React.FormEvent) => {
+  const createCanonical = async (status?: "draft") => {
+    // Freeze an uncertain first request. Edited content goes through PATCH
+    // after recovery; reusing the key must never describe another operation.
+    if (!creationPayload.current) {
+      creationPayload.current = buildPayload(status);
+      creationSnapshot.current = snapshotRef.current;
+    }
+    let result;
+    try {
+      result = creationResult.current ?? await createPost.mutateAsync({ data: creationPayload.current });
+    } catch (err) {
+      // A 413 rejects this exact payload before the article insert. Let the
+      // coach shrink/remove the photo and start a corrected request. Do NOT
+      // reset for network/5xx failures: those may have committed already.
+      // Other validation errors may depend on state changed since an earlier
+      // uncertain attempt, so they are not treated as proof of no insert.
+      if (!canonicalId.current && !creationResult.current &&
+          err && typeof err === "object" && "status" in err && err.status === 413) {
+        creationPayload.current = null;
+        creationSnapshot.current = null;
+        setCreationKey(crypto.randomUUID());
+      }
+      throw err;
+    }
+    canonicalId.current = result.id;
+    creationResult.current = result;
+    if (creationPayload.current.status === "draft") setDraftId(result.id);
+    return result;
+  };
+  const showWarnings = (result: unknown) => {
+    const warnings = (result as { warnings?: string[] })?.warnings;
+    if (warnings?.length) toast({ title: "Recap saved", description: warnings.join(" ") });
+  };
+  const flushLatest = async (id: string) => {
+    let sent: string;
+    do {
+      sent = snapshotRef.current;
+      await latest.current.patch(id);
+      setBaseline(sent);
+    } while (snapshotRef.current !== sent);
+    return sent;
+  };
+  const performPublish = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
       toast({ title: "Add a title", variant: "destructive" });
@@ -1050,7 +1125,7 @@ export function useNewPostForm({
     }
     // Capture the snapshot we're about to persist BEFORE awaits so a
     // mid-flight keystroke correctly leaves the form dirty.
-    const sentSnapshot = snapshotRef.current;
+    let sentSnapshot = snapshotRef.current;
     try {
       if (isEditingPublished && editId) {
         // Editing an already-published post: PATCH only — do NOT
@@ -1177,11 +1252,14 @@ export function useNewPostForm({
         // value isn't a same-app relative path.
         const back = safeInternalPath(initialFrom);
         setLocation(back ?? `/posts/${editId}`);
-      } else if (draftId) {
-        await patchAt(draftId);
-        await customFetch(`/api/v1/posts/${draftId}/publish`, {
+      } else if (canonicalId.current && (!creationPayload.current || creationPayload.current.status === "draft")) {
+        const id = canonicalId.current;
+        sentSnapshot = await flushLatest(id);
+        const published = await customFetch<{ requiresApproval?: boolean; warnings?: string[] }>(`/api/v1/posts/${id}/publish`, {
           method: "POST",
         });
+        publishedRef.current = true;
+        showWarnings(published);
         // The just-published post will appear on the home feed, the
         // author's profile, and (when team-scoped) the team page.
         // Prefer ids captured from the loaded draft, then fall back
@@ -1191,15 +1269,36 @@ export function useNewPostForm({
           authorId: loadedAuthorId ?? me?.id ?? null,
           teamId: loadedTeamId ?? initialTeamId ?? null,
         });
-        await linkScheduleRecap(draftId);
+        await linkScheduleRecap(id);
+        if (published.requiresApproval) {
+          setBaseline(sentSnapshot);
+          setPendingApprovalNavTo(safeInternalPath(initialFrom) ?? `/teams/${composerTeamId}`);
+          setPendingApprovalOpen(true);
+          return;
+        }
         toast({ title: "Published!" });
         setBaseline(sentSnapshot);
         setLocation(
           safeInternalPath(initialFrom) ??
-          (initialTeamId ? `/teams/${initialTeamId}` : `/posts/${draftId}`),
+          (initialTeamId ? `/teams/${initialTeamId}` : `/posts/${id}`),
         );
       } else {
-        const result = await createPost.mutateAsync({ data: buildPayload() });
+        const result = await createCanonical();
+        // Recovery may return a draft created by a failed Save Draft response.
+        // Finish on its canonical ID, with current content, never create again.
+        if (creationPayload.current?.status === "draft") {
+          sentSnapshot = await flushLatest(result.id);
+          const published = await customFetch<{ requiresApproval?: boolean; warnings?: string[] }>(
+            `/api/v1/posts/${result.id}/publish`, { method: "POST" },
+          );
+          Object.assign(result, published);
+        } else if (snapshotRef.current !== creationSnapshot.current) {
+          // Always refresh a recovered/new recap with the latest form. This also
+          // retains edits made while the initial creation response was delayed.
+          sentSnapshot = await flushLatest(result.id);
+        }
+        publishedRef.current = true;
+        showWarnings(result);
         // Highlight composer only — submit any roster players the
         // author hand-picked via the Tag Players dropdown so each
         // selected player gets a manual tag (task #313). Run after
@@ -1296,7 +1395,8 @@ export function useNewPostForm({
           : undefined;
       if (status === 413) {
         const detail = apiErrorMessage(err) ?? "That photo is too large.";
-        if (isEditingPublished && editId) {
+        if ((isEditingPublished && editId) ||
+            (creationResult.current && creationPayload.current?.status !== "draft")) {
           toast({
             title: "Couldn't save your photo",
             description: `${detail} Your recap is still posted — your latest changes weren't saved.`,
@@ -1311,11 +1411,17 @@ export function useNewPostForm({
         }
         return;
       }
-      toast({ title: "Failed to post", variant: "destructive" });
+      toast({
+        title: publishedRef.current ? "Recap posted" : canonicalId.current ? "Recap saved; couldn't finish updates" : "Couldn't confirm your recap",
+        description: publishedRef.current
+          ? "Your recap is posted, but some follow-up work failed."
+          : "Retry here to finish the same recap — don't start a replacement.",
+        variant: publishedRef.current ? undefined : "destructive",
+      });
     }
   };
 
-  const onSaveDraft = async () => {
+  const performSaveDraft = async () => {
     if (
       !title.trim() &&
       !body.trim() &&
@@ -1325,25 +1431,47 @@ export function useNewPostForm({
       toast({ title: "Nothing to save yet", variant: "destructive" });
       return;
     }
-    const sentSnapshot = snapshotRef.current;
+    let sentSnapshot = snapshotRef.current;
     try {
-      setSaving(true);
-      if (draftId) {
-        await patchAt(draftId);
+      if (canonicalId.current) {
+        await latest.current.patch(canonicalId.current);
       } else {
-        const result = await createPost.mutateAsync({
-          data: buildPayload("draft"),
-        });
-        setDraftId(result.id);
+        const result = await createCanonical("draft");
+        showWarnings(result);
+        if (creationSnapshot.current !== sentSnapshot) {
+          sentSnapshot = await flushLatest(result.id);
+        } else {
+          sentSnapshot = creationSnapshot.current!;
+        }
       }
       setSavedAt(new Date());
       setBaseline(sentSnapshot);
-      toast({ title: "Draft saved" });
+      autoFailureSnapshot.current = null;
+      toast({ title: creationPayload.current && creationPayload.current.status !== "draft" ? "Recap saved" : "Draft saved" });
     } catch {
-      toast({ title: "Couldn't save draft", variant: "destructive" });
-    } finally {
-      setSaving(false);
+      toast({
+        title: canonicalId.current ? "Couldn't confirm your latest changes" : "Couldn't confirm your draft",
+        description: "Retry Save Draft here to recover the same recap.",
+        variant: "destructive",
+      });
     }
+  };
+  latest.current = { patch: async (id) => { showWarnings(await patchAt(id)); }, save: performSaveDraft, publish: performPublish };
+  const onSaveDraft = async () => {
+    if (manualIntent.current || publishedRef.current) return;
+    manualIntent.current = "save";
+    if (debouncedRef.current) window.clearTimeout(debouncedRef.current);
+    try { await serialize(() => latest.current.save()); }
+    finally { if (manualIntent.current === "save") manualIntent.current = null; }
+  };
+  const onPublish = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (manualIntent.current === "publish" || publishedRef.current) return;
+    manualIntent.current = "publish";
+    setPublishing(true);
+    if (debouncedRef.current) window.clearTimeout(debouncedRef.current);
+    try { await serialize(() => latest.current.publish(e)); }
+    finally { manualIntent.current = null; setPublishing(false); }
   };
 
   // Delete the article currently loaded in the editor. Mirrors the
@@ -1474,7 +1602,7 @@ export function useNewPostForm({
     loadedOrgName,
     loadedOrgSlug,
     loadedOrgAvatarUrl,
-    publishing: createPost.isPending,
+    publishing,
     // delete-from-editor surface
     canDelete,
     confirmDeleteOpen,

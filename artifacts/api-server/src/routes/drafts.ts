@@ -559,6 +559,8 @@ router.patch(
       .set(updates)
       .where(eq(articles.id, a.id))
       .returning();
+    const warnings: string[] = [];
+    try {
     // Task #739 — @-mention tags for body edits. Drafts defer to the
     // publish handler (which re-parses the whole body then); published
     // and pending-approval articles upsert here so a mention added on
@@ -672,31 +674,32 @@ router.patch(
         }
       }
     }
-    const [org] = await db
-      .select()
-      .from(organizations)
-      .where(eq(organizations.id, team.organizationId))
-      .limit(1);
+    } catch (err) {
+      req.log.warn({ err, articleId: updated.id }, "Recap edits persisted; optional follow-up failed");
+      warnings.push("Your changes were saved, but some tagging or notifications could not be completed.");
+    }
+    const [org] = team.organizationId
+      ? await db.select().from(organizations).where(eq(organizations.id, team.organizationId)).limit(1)
+      : [null];
     const [author] = updated.authorId
       ? await db.select().from(users).where(eq(users.id, updated.authorId)).limit(1)
       : [null];
-    if (!org) return notFound(res);
     const authorRoleMap = await computeArticleAuthorRoleMap([
       {
         articleId: updated.id,
         authorId: updated.authorId,
         teamId: team.id,
-        orgId: org.id,
+        orgId: org?.id ?? null,
       },
-    ]);
+    ]).catch(() => new Map());
     const canDelete =
       updated.authorId === me.id ||
       (await canModerateScope(me.id, {
-        organizationId: org.id,
+        organizationId: org?.id ?? null,
         team,
       }));
-    res.json(
-      articleToPost(updated, {
+    res.json({
+      ...articleToPost(updated, {
         team,
         org,
         author,
@@ -709,7 +712,8 @@ router.patch(
         // admin (both privileged), so bypass minor-name masking.
         minorNameCtx: TRUSTED_MINOR_NAME_CONTEXT,
       }),
-    );
+      warnings,
+    });
   }),
 );
 
@@ -758,15 +762,20 @@ router.post(
     const requireApproval = orgSetting?.requireRecapApproval === true;
     const newStatus =
       isAdmin || !requireApproval ? "published" : "pending_approval";
-    const [updated] = await db
+    const [claimed] = await db
       .update(articles)
       .set({
         status: newStatus,
         publishedAt: newStatus === "published" ? new Date() : null,
         publishedById: newStatus === "published" ? me.id : null,
       })
-      .where(eq(articles.id, a.id))
+      .where(and(eq(articles.id, a.id), eq(articles.status, "draft")))
       .returning();
+    const updated = claimed ?? (await db.select().from(articles).where(eq(articles.id, a.id)))[0];
+    if (!updated) return notFound(res);
+    const warnings: string[] = [];
+    if (claimed) {
+    try {
     if (newStatus === "published") void sweepCompetitionRecapMail();
     // Task #739 — upsert @-mention tags from the draft's body before
     // the roster fan-out so mention rows land as `source: "manual"`
@@ -833,11 +842,6 @@ router.post(
         actorUserId: me.id,
       });
     }
-    const [team] = await db.select().from(teams).where(eq(teams.id, updated.teamId)).limit(1);
-    const [org] = team
-      ? await db.select().from(organizations).where(eq(organizations.id, team.organizationId)).limit(1)
-      : [null];
-    if (!team || !org) return notFound(res);
     // Task #455 — fan out a bell to every org owner/admin when this
     // publish flips the article into pending_approval. Admin-authored
     // publishes go straight to "published" and are skipped. We also
@@ -846,10 +850,10 @@ router.post(
     // co-author hitting publish again) doesn't fan out a duplicate
     // bell — the task spec explicitly forbids duplicate "pending"
     // notifications on subsequent edits.
-    if (newStatus === "pending_approval" && a.status !== "pending_approval") {
+    if (newStatus === "pending_approval" && orgSetting) {
       await notifyAdminsOfPendingPostApproval({
-        organizationId: org.id,
-        teamName: team.name,
+        organizationId: teamRow.organizationId!,
+        teamName: teamRow.name,
         articleId: updated.id,
         articleTitle: updated.title,
         actorUserId: me.id,
@@ -858,24 +862,35 @@ router.post(
           : displayName(me),
       });
     }
+    } catch (err) {
+      req.log.warn({ err, articleId: updated.id }, "Recap published; optional follow-up failed");
+      warnings.push("Your recap was saved, but some tagging or notifications could not be completed.");
+    }
+    }
+    const team = teamRow;
+    const [org] = team.organizationId
+      ? await db.select().from(organizations).where(eq(organizations.id, team.organizationId)).limit(1)
+      : [null];
     const publishRoleMap = await computeArticleAuthorRoleMap([
       {
         articleId: updated.id,
         authorId: updated.authorId,
         teamId: team.id,
-        orgId: org.id,
+        orgId: org?.id ?? null,
       },
-    ]);
+    ]).catch(() => new Map());
     // Task #414 — publish echo: author = me. Bypass.
-    res.json(
-      articleToPost(updated, {
+    res.json({
+      ...articleToPost(updated, {
         team,
         org,
         author: me,
         authorRole: publishRoleMap.get(updated.id) ?? null,
         minorNameCtx: TRUSTED_MINOR_NAME_CONTEXT,
       }),
-    );
+      requiresApproval: updated.status === "pending_approval",
+      warnings,
+    });
   }),
 );
 

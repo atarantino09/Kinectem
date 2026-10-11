@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   customFetch,
+  type CreatePostRequest,
   useCreatePost,
   getListTeamPostsQueryKey,
   getListTeamPendingPostsQueryKey,
@@ -90,7 +91,12 @@ export function SeasonRecapDialog({
 }) {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const createPost = useCreatePost();
+  const [creationKey, setCreationKey] = useState(() => crypto.randomUUID());
+  const createPost = useCreatePost({ request: { headers: { "Idempotency-Key": creationKey } } });
+  const createPayload = useRef<CreatePostRequest | null>(null);
+  const canonicalResult = useRef<Awaited<ReturnType<typeof createPost.mutateAsync>> | null>(null);
+  const publishingRef = useRef(false);
+  const [publishing, setPublishing] = useState(false);
   const initial = defaultRange();
   const [start, setStart] = useState(initial.start);
   const [end, setEnd] = useState(initial.end);
@@ -185,6 +191,9 @@ export function SeasonRecapDialog({
   };
 
   const reset = () => {
+    createPayload.current = null;
+    canonicalResult.current = null;
+    setCreationKey(crypto.randomUUID());
     epoch.current++;
     setSourceMode("recaps");
     setCompetitions([]);
@@ -214,6 +223,7 @@ export function SeasonRecapDialog({
   };
 
   const handleClose = (next: boolean) => {
+    if (publishingRef.current) return;
     if (!next) reset();
     onOpenChange(next);
   };
@@ -371,7 +381,7 @@ export function SeasonRecapDialog({
   };
 
   const publish = async () => {
-    if (draftStale || generating) return;
+    if (publishingRef.current || draftStale || generating) return;
     const trimmedTitle = title.trim();
     if (!trimmedTitle) {
       toast({ title: "Title is required", variant: "destructive" });
@@ -381,9 +391,10 @@ export function SeasonRecapDialog({
       toast({ title: "Nothing to post yet", variant: "destructive" });
       return;
     }
+    publishingRef.current = true;
+    setPublishing(true);
     try {
-      const result = await createPost.mutateAsync({
-        data: {
+      createPayload.current ??= {
           postType: "long",
           title: trimmedTitle,
           body: draft.trim(),
@@ -399,13 +410,31 @@ export function SeasonRecapDialog({
             competitionGameId: null,
             ...(generatedCompetitionId ? { bracketId: generatedBracketId } : {}),
           } as object),
-        },
-      });
+        };
+      let result;
+      try {
+        result = canonicalResult.current ?? await createPost.mutateAsync({ data: createPayload.current });
+      } catch (err) {
+        if (!canonicalResult.current &&
+            err && typeof err === "object" && "status" in err && err.status === 413) {
+          createPayload.current = null;
+          setCreationKey(crypto.randomUUID());
+        }
+        throw err;
+      }
+      // Retain the ID before any post-create work. An uncertain response retries
+      // the frozen request; recovered content edits update only this article.
+      canonicalResult.current = result;
+      if (createPayload.current.title !== trimmedTitle || createPayload.current.body !== draft.trim()) {
+        await customFetch(`/api/v1/posts/${result.id}`, {
+          method: "PATCH", body: JSON.stringify({ title: trimmedTitle, body: draft.trim() }),
+        });
+      }
       // Non-admin authors have recaps held for approval; the create
       // response echoes `requiresApproval`. Reflect that in the toast.
       const requiresApproval =
         (result as { requiresApproval?: boolean }).requiresApproval === true;
-      await Promise.all([
+      await Promise.allSettled([
         qc.invalidateQueries({ queryKey: getListTeamPostsQueryKey(teamId) }),
         qc.invalidateQueries({
           queryKey: getListTeamPendingPostsQueryKey(teamId),
@@ -417,10 +446,19 @@ export function SeasonRecapDialog({
           ? "Recap submitted for approval"
           : "Season recap posted",
       });
+      const warnings = (result as { warnings?: string[] }).warnings;
+      if (warnings?.length) toast({ title: "Recap saved", description: warnings.join(" ") });
       reset();
       onOpenChange(false);
     } catch {
-      toast({ title: "Couldn't publish recap", variant: "destructive" });
+      toast({
+        title: canonicalResult.current ? "Recap saved; couldn't finish updates" : "Couldn't confirm your recap",
+        description: "Retry here to finish the same recap — don't start a replacement.",
+        variant: "destructive",
+      });
+    } finally {
+      publishingRef.current = false;
+      setPublishing(false);
     }
   };
 
@@ -440,7 +478,7 @@ export function SeasonRecapDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          <fieldset disabled={generating || createPost.isPending} className="space-y-4 min-w-0">
+          <fieldset disabled={generating || publishing} className="space-y-4 min-w-0">
           <div className="flex flex-wrap gap-2">
             <Button type="button" size="sm" variant={sourceMode === "recaps" ? "default" : "outline"}
               onClick={() => void changeSourceMode("recaps")}>Recap posts & news</Button>
@@ -745,6 +783,7 @@ export function SeasonRecapDialog({
                 </Label>
                 <Input
                   id="seasonRecapTitle"
+                  disabled={publishing}
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="Recap title"
@@ -761,6 +800,7 @@ export function SeasonRecapDialog({
                 </Label>
                 <Textarea
                   id="seasonRecapBody"
+                  disabled={publishing}
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
                   className="mt-2 min-h-64"
@@ -775,7 +815,7 @@ export function SeasonRecapDialog({
           <Button
             variant="outline"
             onClick={() => handleClose(false)}
-            disabled={createPost.isPending}
+            disabled={publishing}
             className="font-bold rounded-full"
           >
             Cancel
@@ -783,10 +823,10 @@ export function SeasonRecapDialog({
           <Button
             variant="brand"
             onClick={publish}
-            disabled={createPost.isPending || generating || draftStale || !draft.trim()}
+            disabled={publishing || generating || draftStale || !draft.trim()}
             data-testid="button-season-recap-publish"
           >
-            {createPost.isPending ? "Posting…" : "Post recap"}
+            {publishing ? "Posting…" : "Post recap"}
           </Button>
         </DialogFooter>
       </DialogContent>

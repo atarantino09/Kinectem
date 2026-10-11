@@ -62,6 +62,7 @@ export function PostHeaderBar({
           variant="ghost"
           size="sm"
           onClick={onCancel}
+          disabled={saving || publishing}
           className="font-bold"
           data-testid="button-cancel-post-editor"
         >
@@ -99,7 +100,7 @@ export function PostHeaderBar({
               variant="outline"
               size="sm"
               onClick={onSaveDraft}
-              disabled={saving}
+              disabled={saving || publishing}
               className="font-bold rounded-full"
               data-testid="button-save-draft"
             >
@@ -111,12 +112,14 @@ export function PostHeaderBar({
             type="submit"
             form="new-post-form"
             variant="brand"
-            disabled={publishing || publishDisabled}
+            disabled={saving || publishing || publishDisabled}
             className="px-3 text-xs sm:px-6 sm:text-sm"
             data-testid="button-publish"
           >
             {publishing
               ? "Posting…"
+              : saving
+                ? "Saving…"
               : isEditingPublished
                 ? "Save"
                 : draftId

@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   toast: vi.fn(),
   navigate: vi.fn(),
+  createOptions: vi.fn(),
 }));
 
 vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: mocks.toast }) }));
@@ -16,7 +17,7 @@ vi.mock("wouter", () => ({ useLocation: () => ["/posts/new", mocks.navigate] }))
 vi.mock("@workspace/api-client-react", async (importOriginal) => ({
   ...await importOriginal<typeof import("@workspace/api-client-react")>(),
   customFetch: mocks.fetch,
-  useCreatePost: () => ({ mutateAsync: mocks.create }),
+  useCreatePost: (options: unknown) => { mocks.createOptions(options); return { mutateAsync: mocks.create }; },
   useCreatePostTags: () => ({ mutateAsync: vi.fn() }),
   useDeletePost: () => ({ mutateAsync: vi.fn() }),
   useGetLoggedInUser: () => ({ data: { id: "author-1" } }),
@@ -50,6 +51,139 @@ beforeEach(() => {
         gameDate: "2026-06-12T12:00:00.000Z", context: { type: "team", id: "team-1" }, competition: { id: "cup-2" } };
     }
     return { id: "article-draft", status: "published" };
+  });
+});
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+}
+const submitEvent = () => ({ preventDefault: vi.fn() } as unknown as React.FormEvent);
+
+describe("serialized recap persistence", () => {
+  it("coalesces rapid first saves and queues Enter publication on the canonical draft with latest edits", async () => {
+    const first = deferred<{ id: string }>();
+    mocks.create.mockReturnValueOnce(first.promise);
+    const { result } = renderForm();
+    act(() => { result.current.setTitle("Review"); result.current.setBody("First version"); });
+    let save!: Promise<void>;
+    let publish!: Promise<void>;
+    act(() => {
+      save = result.current.onSaveDraft();
+      void result.current.onSaveDraft();
+      publish = result.current.onPublish(submitEvent());
+      void result.current.onPublish(submitEvent());
+    });
+    await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(1));
+    expect(result.current.saving).toBe(true);
+    expect(result.current.publishing).toBe(true);
+    act(() => result.current.setBody("Latest version"));
+    await act(async () => { first.resolve({ id: "article-draft" }); await Promise.all([save, publish]); });
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+    const patches = mocks.fetch.mock.calls.filter(([, options]) => options?.method === "PATCH");
+    expect(JSON.parse(patches.at(-1)![1].body).body).toBe("Latest version");
+    expect(mocks.fetch.mock.calls.filter(([url]) => url.endsWith("/publish"))).toHaveLength(1);
+    expect(result.current.saving).toBe(false);
+    expect(result.current.publishing).toBe(false);
+  });
+
+  it("reuses the exact creation key and payload after an uncertain response, then saves edited content", async () => {
+    mocks.create.mockRejectedValueOnce(new Error("lost response"));
+    const { result } = renderForm();
+    act(() => { result.current.setTitle("Review"); result.current.setBody("Original"); });
+    await act(() => result.current.onPublish(submitEvent()));
+    const original = mocks.create.mock.calls[0][0];
+    const key = mocks.createOptions.mock.calls[0][0].request.headers["Idempotency-Key"];
+    act(() => result.current.setBody("Edited while retrying"));
+    await act(() => result.current.onPublish(submitEvent()));
+    expect(mocks.create.mock.calls[1][0]).toEqual(original);
+    expect(mocks.createOptions.mock.calls.every(([o]) => o.request.headers["Idempotency-Key"] === key)).toBe(true);
+    const patch = mocks.fetch.mock.calls.find(([, options]) => options?.method === "PATCH")!;
+    expect(JSON.parse(patch[1].body).body).toBe("Edited while retrying");
+    await act(() => result.current.onPublish(submitEvent()));
+    expect(mocks.create).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["publish", "save"] as const)("allows a corrected first %s after a definitive 413, with a fresh request key", async (intent) => {
+    mocks.create.mockRejectedValueOnce(Object.assign(new Error("Photo too large"), { status: 413 }));
+    const { result } = renderForm();
+    act(() => {
+      result.current.setTitle("Photo recap");
+      result.current.setBody("A tournament review.");
+      result.current.setPhotos(["data:image/png;base64,oversized"]);
+    });
+    const key = mocks.createOptions.mock.lastCall![0].request.headers["Idempotency-Key"];
+    await act(() => intent === "publish" ? result.current.onPublish(submitEvent()) : result.current.onSaveDraft());
+    expect(mocks.create.mock.calls[0][0].data.photoUrls).toEqual(["data:image/png;base64,oversized"]);
+    act(() => result.current.setPhotos([]));
+    await act(() => intent === "publish" ? result.current.onPublish(submitEvent()) : result.current.onSaveDraft());
+    expect(mocks.create).toHaveBeenCalledTimes(2);
+    expect(mocks.create.mock.calls[1][0].data.photoUrls ?? []).toEqual([]);
+    expect(mocks.createOptions.mock.lastCall![0].request.headers["Idempotency-Key"]).not.toBe(key);
+  });
+
+  it("drains a delayed autosave before publishing and prevents it from overwriting newer edits", async () => {
+    const patch = deferred<{ id: string }>();
+    const fallback = mocks.fetch.getMockImplementation()!;
+    let intercepted = false;
+    mocks.fetch.mockImplementation((url: string, options?: RequestInit) => {
+      if (options?.method === "PATCH" && !intercepted) { intercepted = true; return patch.promise; }
+      return fallback(url, options);
+    });
+    const { result } = renderForm({ initialDraftId: "article-draft" });
+    await waitFor(() => expect(result.current.title).toBe("Playoff win"));
+    act(() => result.current.setBody("Autosave version"));
+    await waitFor(() => expect(intercepted).toBe(true), { timeout: 2500 });
+    act(() => result.current.setBody("Final version"));
+    let publishing!: Promise<void>;
+    act(() => { publishing = result.current.onPublish(submitEvent()); });
+    expect(mocks.fetch.mock.calls.filter(([url]) => url.endsWith("/publish"))).toHaveLength(0);
+    await act(async () => { patch.resolve({ id: "article-draft" }); await publishing; });
+    const writes = mocks.fetch.mock.calls.filter(([, options]) => options?.method === "PATCH");
+    expect(writes.map(([, o]) => JSON.parse(o.body).body)).toEqual(["Autosave version", "Final version"]);
+    await new Promise((resolve) => setTimeout(resolve, 1300));
+    expect(mocks.fetch.mock.calls.filter(([, options]) => options?.method === "PATCH")).toHaveLength(2);
+  });
+
+  it("keeps busy through publication and handles schedule failure as saved, not failed", async () => {
+    const publish = deferred<{ id: string }>();
+    const fallback = mocks.fetch.getMockImplementation()!;
+    mocks.fetch.mockImplementation((url: string, options?: RequestInit) => {
+      if (url.endsWith("/publish")) return publish.promise;
+      if (url.endsWith("/link-recap")) return Promise.reject(new Error("schedule unavailable"));
+      return fallback(url, options);
+    });
+    const { result } = renderForm({ initialDraftId: "article-draft", initialScheduleEventId: "event-1" });
+    await waitFor(() => expect(result.current.title).toBe("Playoff win"));
+    let operation!: Promise<void>;
+    act(() => { operation = result.current.onPublish(submitEvent()); });
+    await waitFor(() => expect(mocks.fetch.mock.calls.some(([url]) => url.endsWith("/publish"))).toBe(true));
+    expect(result.current.saving).toBe(true);
+    expect(result.current.publishing).toBe(true);
+    await act(async () => { publish.resolve({ id: "article-draft" }); await operation; });
+    expect(mocks.toast).toHaveBeenCalledWith(expect.objectContaining({ title: "Recap saved" }));
+    expect(mocks.toast).not.toHaveBeenCalledWith(expect.objectContaining({ title: "Failed to post" }));
+  });
+
+  it("keeps failed autosaves dirty without an automatic retry loop, while allowing manual retry", async () => {
+    const fallback = mocks.fetch.getMockImplementation()!;
+    let failed = false;
+    mocks.fetch.mockImplementation((url: string, options?: RequestInit) => {
+      if (options?.method === "PATCH" && !failed) { failed = true; return Promise.reject(new Error("offline")); }
+      return fallback(url, options);
+    });
+    const { result } = renderForm({ initialDraftId: "article-draft" });
+    await waitFor(() => expect(result.current.title).toBe("Playoff win"));
+    act(() => result.current.setBody("Unsaved changes"));
+    await waitFor(() => expect(failed).toBe(true), { timeout: 2500 });
+    await new Promise((resolve) => setTimeout(resolve, 1400));
+    expect(mocks.fetch.mock.calls.filter(([, o]) => o?.method === "PATCH")).toHaveLength(1);
+    expect(result.current.isDirty).toBe(true);
+    await act(() => result.current.onSaveDraft());
+    expect(mocks.fetch.mock.calls.filter(([, o]) => o?.method === "PATCH")).toHaveLength(2);
+    expect(result.current.isDirty).toBe(false);
   });
 });
 

@@ -1,6 +1,7 @@
 import { pgTable, text, integer, timestamp, date, uuid, pgEnum, boolean, primaryKey, uniqueIndex, index, jsonb, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import type { ResultGroup, TournamentStoryContent } from "./competition-results-types";
+export { recapCreationRequests } from "./recap-creation-requests";
 export type { ResultGroup, ResultGame, ResultStanding, TournamentStoryContent } from "./competition-results-types";
 
 export const userRoleEnum = pgEnum("user_role", ["athlete", "coach", "admin", "parent", "fan"]);

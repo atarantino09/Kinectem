@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { RECAP_CREATION_MIGRATION } from "./recap-creation";
 import { db } from "@workspace/db";
 import { logger } from "./logger";
 import { COMPETITION_RESULTS_MIGRATION } from "./competition-results-migration";
@@ -1451,6 +1452,7 @@ const COMPETITION_PHOTO_ALBUMS_MIGRATION = {
 
 // Run after the historical migrations that create tournaments/users/teams.
 const MIGRATIONS: Array<{ name: string; sql: string }> = [
+  { name: "recap-creation-idempotency", sql: RECAP_CREATION_MIGRATION },
   {
     name: "historical-recap-metadata",
     sql: `

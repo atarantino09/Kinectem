@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { createRecapOnce, RecapCreationConflict } from "../lib/recap-creation";
 import { sweepCompetitionRecapMail } from "../lib/competition-recap-scheduler";
 import {
   db,
@@ -3211,9 +3212,13 @@ router.post(
           );
         bracketId = body.bracketId;
       }
-      const [a] = await db
-        .insert(articles)
-        .values({
+      const requestKey = req.get("Idempotency-Key");
+      if (requestKey !== undefined && !/^[A-Za-z0-9_-]{16,128}$/.test(requestKey)) {
+        return apiError(res, 400, "Invalid Idempotency-Key");
+      }
+      let creation;
+      try {
+        creation = await createRecapOnce(me.id, requestKey, { teamId, body }, {
           teamId,
           authorId: me.id,
           title: body.title ?? "Untitled",
@@ -3233,8 +3238,15 @@ router.post(
           status,
           publishedAt: status === "published" ? new Date() : null,
           publishedById: status === "published" ? me.id : null,
-        })
-        .returning();
+        });
+      } catch (err) {
+        if (err instanceof RecapCreationConflict) return apiError(res, 409, err.message);
+        throw err;
+      }
+      const { article: a, replayed } = creation;
+      const warnings: string[] = [];
+      if (!replayed) {
+      try {
 
       // @-mention tags run BEFORE the roster fan-out so a mentioned
       // player's row lands with `source: "manual"` — the fan-out's
@@ -3340,11 +3352,16 @@ router.post(
         });
       }
 
+      } catch (err) {
+        req.log.warn({ err, articleId: a.id }, "Recap persisted; optional follow-up failed");
+        warnings.push("Your recap was saved, but some tagging or notifications could not be completed.");
+      }
+      }
       // Compute the role label so the response carries the same
       // header data the client will need when it opens the recap.
       const authorRoleMap = await computeArticleAuthorRoleMap([
         { articleId: a.id, authorId: a.authorId, teamId: team.id, orgId: org?.id ?? null },
-      ]);
+      ]).catch(() => new Map());
       // Task #414 — write-time POST echo: article author = me. Bypass.
       res.status(201).json({
         ...articleToPost(a, {
@@ -3354,8 +3371,9 @@ router.post(
           authorRole: authorRoleMap.get(a.id) ?? null,
           minorNameCtx: TRUSTED_MINOR_NAME_CONTEXT,
         }),
-        approvalStatus: status,
-        requiresApproval: status === "pending_approval",
+        approvalStatus: a.status,
+        requiresApproval: a.status === "pending_approval",
+        warnings,
       });
       return;
     }
