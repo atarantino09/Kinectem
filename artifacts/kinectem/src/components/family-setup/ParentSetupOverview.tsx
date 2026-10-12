@@ -1,5 +1,6 @@
 import { AlertTriangle } from "lucide-react";
 import { NumericBadge } from "@/components/ui/numeric-badge";
+import { TeamSetupContext } from "./TeamSetupGuidance";
 
 const steps = [
   { title: "Create your parent account", detail: "Use your own name and details." },
@@ -8,11 +9,11 @@ const steps = [
 ];
 
 /** The same plain-language roadmap at both parent entry points. */
-export function ParentSetupOverview({ teamName }: { teamName?: string }) {
+export function ParentSetupOverview({ teamName, organizationName, teamInvite = false }: { teamName?: string; organizationName?: string | null; teamInvite?: boolean }) {
   return (
-    <section className="rounded-xl border border-violet-200 bg-violet-50/80 p-4" aria-label="Family setup steps" data-testid="parent-setup-overview">
+    <section className="min-w-0 rounded-xl border border-violet-200 bg-violet-50/80 p-4 [overflow-wrap:anywhere]" aria-label="Family setup steps" data-testid="parent-setup-overview">
       <p className="text-sm font-bold text-slate-950">Set up your family in 3 steps</p>
-      {teamName && <p className="mt-1 text-sm text-slate-900">Your child is invited to <strong>{teamName}</strong>.</p>}
+      {(teamName || teamInvite) && <div className="mt-2"><TeamSetupContext teamName={teamName} organizationName={organizationName} /></div>}
       <ol className="mt-3 space-y-3" data-testid="text-parent-steps">
         {steps.map((step, index) => (
           <li key={step.title} className="flex items-start gap-3">
@@ -35,6 +36,7 @@ export function ParentSetupOverview({ teamName }: { teamName?: string }) {
         Step 2 saves the other parent’s name and email. After you finish your child’s account in Step 3, we email the parent you added in Step 2 a family invitation. They sign in or create their own parent account and accept it to connect to the same child. Ask them to wait for that email—not create your child again from the team invite.
       </p>
       {teamName && <p className="mt-2 text-xs font-semibold leading-5 text-violet-900">When you finish setup, your child will automatically be added to {teamName}’s roster.</p>}
+      {!teamName && !teamInvite && <p className="mt-2 text-xs leading-5">Creating a child profile in Family does not add them to a team. Use a team invitation for roster membership.</p>}
     </section>
   );
 }

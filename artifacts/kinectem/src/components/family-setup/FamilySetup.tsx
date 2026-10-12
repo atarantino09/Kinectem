@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserAvatar } from "@/components/UserAvatar";
 import { AlertTriangle, CheckCircle2, Clock, Loader2, Mail } from "lucide-react";
+import { OtherTeamGuidance, TeamSetupContext } from "./TeamSetupGuidance";
 import {
   clearDraft, emptyDraft, errorCode, errorStatus, isEmail, loadDraft,
   planRequest, saveDraft, deliveryLabel, type FamilyDraft, type Relationship,
@@ -23,6 +24,7 @@ export interface FamilySetupProps {
   mode: "team" | "family";
   token?: string;
   teamName?: string;
+  organizationName?: string | null;
   childHint?: string;
   onDone: () => void;
   onSkipLater?: () => void;
@@ -59,7 +61,7 @@ function Steps({ current }: { current: number }) {
   );
 }
 
-export function FamilySetup({ userId, mode, token, teamName, childHint, onDone, onSkipLater, verifyAccount }: FamilySetupProps) {
+export function FamilySetup({ userId, mode, token, teamName, organizationName, childHint, onDone, onSkipLater, verifyAccount }: FamilySetupProps) {
   const qc = useQueryClient();
   const scope = mode === "team" ? `team:${token}` : "family";
   const [draft, setDraftState] = useState<FamilyDraft>(() => {
@@ -253,11 +255,16 @@ export function FamilySetup({ userId, mode, token, teamName, childHint, onDone, 
 
   const co = draft.coParent;
   const delivery = draft.invitation ? deliveryLabel(draft.invitation.emailSent) : null;
+  const rosterName = teamName ? `${teamName}’s roster` : "the roster named on your invitation";
+  const destinationUnknown = mode === "team" && !teamName;
 
   return (
     <Card className="rounded-xl border-border" data-testid="family-setup">
-      <CardContent className="space-y-5 p-4 sm:p-6">
+      <CardContent className="min-w-0 space-y-5 p-4 sm:p-6 [overflow-wrap:anywhere]">
         <Steps current={draft.stage === "done" ? 3 : stageIndex} />
+        {mode === "team" ? <TeamSetupContext teamName={teamName} organizationName={organizationName} /> : (
+          <p className="rounded-lg border border-border p-3 text-sm" data-testid="family-profile-only">Creating a child profile in Family does not add them to a team. Use a team invitation for roster membership.</p>
+        )}
 
         {draft.stage === "coparent" && (
           <div className="space-y-3" data-testid="step-coparent">
@@ -300,7 +307,8 @@ export function FamilySetup({ userId, mode, token, teamName, childHint, onDone, 
 
         {draft.stage === "player" && (
           <div className="space-y-4" data-testid="step-player">
-            <h2 className="text-lg font-black tracking-tight">Step 3 · Your child’s account</h2>
+            <h2 className="text-lg font-black tracking-tight">Step 3 · {mode === "team" ? `Choose or create a child for ${rosterName}` : "Your child’s account"}</h2>
+            {mode === "team" && <OtherTeamGuidance />}
             {co && <p className="text-xs text-muted-foreground" data-testid="text-staged-coparent">After you finish this step and your child’s account is ready, we’ll email a family invitation to {co.firstName} {co.lastName} ({co.email})—the other parent you added in Step 2.</p>}
             {kids.isLoading ? <Skeleton className="h-16 rounded-lg" /> : kids.isError ? (
               <div className="space-y-2 rounded-lg border border-destructive/40 p-3 text-sm" data-testid="error-children-load">
@@ -311,20 +319,20 @@ export function FamilySetup({ userId, mode, token, teamName, childHint, onDone, 
               <>
                 {(kids.data ?? []).length > 0 && (
                   <div className="space-y-2" data-testid="list-existing-children">
-                    <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Choose your existing player</div>
+                    <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{mode === "team" ? `Choose your existing child for ${rosterName}` : "Choose your existing player"}</div>
                     {(kids.data ?? []).map((c) => (
-                      <div key={c.id} className="flex items-center gap-3 rounded-lg border border-border p-3" data-testid={`row-linked-child-${c.id}`}>
+                      <div key={c.id} className="flex min-w-0 flex-wrap items-center gap-3 rounded-lg border border-border p-3" data-testid={`row-linked-child-${c.id}`}>
                         <UserAvatar avatarUrl={c.avatarUrl} displayName={`${c.firstName} ${c.lastName}`.trim() || "Child"} size="md" />
-                        <div className="min-w-0 flex-1 truncate font-bold">{c.firstName} {c.lastName}</div>
-                        <Button type="button" variant="brand" size="sm" disabled={busy} onClick={() => void selectExisting(c)} data-testid={`btn-select-child-${c.id}`}>
-                          {mode === "team" ? "Use for this team" : "Select"}
+                        <div className="min-w-0 flex-1 font-bold">{c.firstName} {c.lastName}</div>
+                        <Button type="button" variant="brand" size="sm" className="h-auto max-w-full whitespace-normal py-2" disabled={busy || destinationUnknown} onClick={() => void selectExisting(c)} data-testid={`btn-select-child-${c.id}`}>
+                          {mode === "team" ? `Add to ${rosterName}` : "Select"}
                         </Button>
                       </div>
                     ))}
                   </div>
                 )}
                 {(kids.data ?? []).length > 0 && !showCreate ? (
-                  <Button type="button" variant="outline" className="w-full font-bold" onClick={() => setShowCreate(true)} data-testid="btn-show-create-child-form">Create my child’s account</Button>
+                  <Button type="button" variant="outline" className="h-auto w-full whitespace-normal py-2 font-bold" onClick={() => setShowCreate(true)} data-testid="btn-show-create-child-form">{mode === "team" ? `Create a new child for ${rosterName}` : "Create my child’s account"}</Button>
                 ) : (
                   <form onSubmit={(e) => { e.preventDefault(); void submitCreate(false); }} className="space-y-3" data-testid="form-new-player">
                     <p className="text-xs text-muted-foreground">Use your child’s name. They don’t need their own email.</p>
@@ -338,11 +346,11 @@ export function FamilySetup({ userId, mode, token, teamName, childHint, onDone, 
                       <div className="space-y-2 rounded-lg border border-amber-400 bg-amber-50 p-3 text-xs text-amber-900" role="alert" data-testid="warning-possible-duplicate">
                         <p className="font-bold">A player with a similar name may already exist here.</p>
                         <p>Ask the other parent before continuing. We never link players by name. Only continue if this is a different child.</p>
-                        <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void submitCreate(true)} data-testid="btn-confirm-distinct">This is a different player, create it</Button>
+                        <Button type="button" variant="outline" size="sm" className="h-auto max-w-full whitespace-normal py-2" disabled={busy || destinationUnknown} onClick={() => void submitCreate(true)} data-testid="btn-confirm-distinct">This is a different player, create it</Button>
                       </div>
                     )}
-                    <Button type="submit" variant="brand" disabled={busy || duplicate} data-testid="btn-add-child">
-                      {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{mode === "team" ? "Create child’s account & join team" : "Create child’s account"}
+                    <Button type="submit" variant="brand" className="h-auto max-w-full whitespace-normal py-2" disabled={busy || duplicate || destinationUnknown} data-testid="btn-add-child">
+                      {busy && <Loader2 className="mr-2 h-4 w-4 shrink-0 animate-spin" />}{mode === "team" ? `Create child’s account & add to ${rosterName}` : "Create child’s account"}
                     </Button>
                   </form>
                 )}
@@ -355,15 +363,16 @@ export function FamilySetup({ userId, mode, token, teamName, childHint, onDone, 
 
         {draft.stage === "done" && (
           <div className="space-y-3" data-testid="step-done">
-            <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm" data-testid="row-added-child">
-              <CheckCircle2 className="h-4 w-4 text-emerald-700" />
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm" data-testid="row-added-child">
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-700" />
               <span className="font-bold">{draft.childName}</span>
-              <span className="ml-auto text-xs font-bold uppercase tracking-wider text-emerald-700">{mode === "team" ? "On roster" : "Ready"}</span>
+              <span className="text-xs font-bold text-emerald-700">{mode === "team" ? `Added to ${rosterName}` : "Ready in Family — not added to a team"}</span>
             </div>
+            {mode === "team" && <OtherTeamGuidance />}
             {co && (
               <div className="space-y-2 rounded-lg border border-border p-3 text-sm" data-testid="coparent-status">
-                <div className="flex items-center gap-2 font-bold">
-                  <Mail className="h-4 w-4" /> {co.firstName} {co.lastName}
+                <div className="flex flex-wrap items-center gap-2 font-bold">
+                  <Mail className="h-4 w-4 shrink-0" /> {co.firstName} {co.lastName}
                   <span className={`ml-auto inline-flex items-center gap-1 text-xs uppercase tracking-wider ${connected ? "text-emerald-700" : "text-amber-700"}`} data-testid="status-coparent">
                     {connected ? <><CheckCircle2 className="h-3 w-3" /> Connected</> : <><Clock className="h-3 w-3" /> Pending</>}
                   </span>
@@ -381,8 +390,8 @@ export function FamilySetup({ userId, mode, token, teamName, childHint, onDone, 
                 {notice && <p role="alert" className="text-xs text-destructive">{notice}</p>}
               </div>
             )}
-            <Button type="button" variant="brand" className="w-full" disabled={busy || inviting} onClick={finish} data-testid="btn-finish-setup">
-              {mode === "team" ? "Done, go to team" : "Done"}
+            <Button type="button" variant="brand" className="h-auto w-full whitespace-normal py-2" disabled={busy || inviting} onClick={finish} data-testid="btn-finish-setup">
+              {mode === "team" ? `Done, continue to ${teamName ?? "your invitation"}` : "Done"}
             </Button>
           </div>
         )}

@@ -120,3 +120,4 @@
 - [Recap submission intent](recap-submission-intent.md) — retry identity is not content uniqueness; preserve separate recaps and require explicit authorization for existing-post cleanup.
 - [Visible follow controls](visible-follow-controls.md) — team/org headers need one visible follow/unfollow button including the follower count; never bury it in a menu.
 - [Community achievement intent](community-achievement-intent.md) — schedule-independent attestation, explicit retro seasons, UTC deadlines, and no invented historical org credit.
+- [Vitest mock-return teardown](vitest-hook-mock-return.md) — block-body mock-reset hooks prevent mocks from being invoked as teardown callbacks.

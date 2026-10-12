@@ -161,6 +161,15 @@ afterEach(() => {
 });
 
 describe("GuardianPage — parent invite deep-link", () => {
+  it("opens duplicate cleanup instructions from the setup help link without submitting a deletion", async () => {
+    setMockSearch("?help=duplicate-child");
+    renderWithProviders(<GuardianPage />);
+    expect(screen.getByTestId("duplicate-child-help")).toHaveAttribute("open");
+    expect(screen.getByTestId("duplicate-child-help")).toHaveTextContent("Family → that child → Communication controls → Delete account");
+    await screen.findByTestId(`row-child-${CHILD_ID}`);
+    expect(api.fetch.mock.calls.some(([url]) => String(url).includes("request-deletion"))).toBe(false);
+  });
+
   it("renders pending-invite rows and highlights the row matching the deep-link query", async () => {
     setMockSearch(`childId=${CHILD_ID}&entryId=${ENTRY_ID}&teamId=${TEAM_ID}`);
 

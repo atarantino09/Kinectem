@@ -10,14 +10,14 @@ const fetchMock = vi.fn();
 vi.mock("@workspace/api-client-react", () => ({ customFetch: (...args: unknown[]) => fetchMock(...args) }));
 
 function renderSignup(returnTo: string | null = null) {
-  return render(<QueryClientProvider client={new QueryClient()}>
+  return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { throwOnError: false, retry: false } } })}>
     <SignUpForm initialRole="parent" skipPathStep returnTo={returnTo}
       onSwitchSignin={vi.fn()} onError={vi.fn()} onPending={vi.fn()} />
   </QueryClientProvider>);
 }
 
 describe("parent setup messaging", () => {
-  beforeEach(() => fetchMock.mockReset());
+  beforeEach(() => { fetchMock.mockReset(); });
   it("explains the ordered three steps and optional second parent", () => {
     render(<ParentSetupOverview />);
     const items = within(screen.getByTestId("text-parent-steps")).getAllByRole("listitem");
@@ -55,10 +55,20 @@ describe("parent setup messaging", () => {
   });
 
   it("names the invited team during the first parent signup step", async () => {
-    fetchMock.mockResolvedValue({ team: { name: "Example Team" }, invite: { position: "player" } });
+    fetchMock.mockResolvedValue({ team: { name: "Example Team" }, organization: { name: "Example Club" }, invite: { position: "player" } });
     renderSignup("/invites/fixture-team-token");
-    expect(await screen.findByText(/Your child is invited to/)).toHaveTextContent("Example Team");
+    expect(await screen.findByText(/You are adding a child to/)).toHaveTextContent("Example Team");
+    expect(screen.getByTestId("team-setup-context")).toHaveTextContent("Only add children who play on this team.");
+    expect(screen.getByTestId("team-setup-context")).toHaveTextContent("Organization: Example Club");
     expect(screen.getByTestId("parent-setup-overview")).toHaveTextContent("automatically be added to Example Team’s roster");
+  });
+
+  it("does not imply a verified destination or standalone enrollment when an invite cannot load", async () => {
+    fetchMock.mockRejectedValue(new Error("Invite unavailable"));
+    renderSignup("/invites/unavailable");
+    expect(await screen.findByRole("alert")).toHaveTextContent("We couldn’t load the team details");
+    expect(screen.getByTestId("team-setup-context")).toHaveTextContent("has not been verified yet");
+    expect(screen.queryByText(/Creating a child profile in Family/)).not.toBeInTheDocument();
   });
 
   it("keeps the first-step roadmap until the signed-in parent chooses their account", () => {

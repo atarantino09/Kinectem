@@ -91,7 +91,7 @@ export function SignUpForm({
 }: SignUpFormProps) {
   const qc = useQueryClient();
   const inviteToken = /^\/invites\/([^/?#]+)\/?$/.exec(returnTo ?? "")?.[1];
-  const signupInvite = useQuery<{ team: { name: string }; invite: { position: string | null } }>({
+  const signupInvite = useQuery<{ team: { name: string }; organization?: { name: string } | null; invite: { position: string | null } }>({
     queryKey: ["parent-signup-invite", inviteToken],
     queryFn: () => customFetch(`/api/v1/invites/${encodeURIComponent(inviteToken!)}`),
     enabled: initialRole === "parent" && !!inviteToken,
@@ -352,7 +352,7 @@ export function SignUpForm({
     const showInvalidHint = dobComplete && !dobValid;
     return (
       <form className="space-y-4" onSubmit={handleAgeSubmit} data-testid="form-age-gate">
-        {initialRole === "parent" && !isGuardianInviteReturn && <ParentSetupOverview teamName={invitedTeamName} />}
+        {initialRole === "parent" && !isGuardianInviteReturn && <ParentSetupOverview teamName={invitedTeamName} organizationName={signupInvite.data?.organization?.name} teamInvite={!!inviteToken} />}
         {signupInvite.isError && <p role="alert" className="text-xs text-destructive">We couldn’t load the team details. Your invitation will be checked after signup.</p>}
         {orgAdminViaPath && (
           <div className="flex items-center justify-between">
@@ -535,7 +535,7 @@ export function SignUpForm({
           </div>
         </div>
       )}
-      {effectiveRole === "parent" && !isGuardianInviteReturn && <ParentSetupOverview teamName={invitedTeamName} />}
+      {effectiveRole === "parent" && !isGuardianInviteReturn && <ParentSetupOverview teamName={invitedTeamName} organizationName={signupInvite.data?.organization?.name} teamInvite={!!inviteToken} />}
       {signupInvite.isError && <p role="alert" className="text-xs text-destructive">We couldn’t load the team details. Your invitation will be checked after signup.</p>}
       {effectiveRole === "parent" && isGuardianInviteReturn && (
         <div

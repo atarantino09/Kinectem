@@ -18,7 +18,7 @@ vi.mock("wouter", () => ({
 }));
 vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: mocks.toast }) }));
 vi.mock("@/components/family-setup/FamilySetup", () => ({
-  FamilySetup: ({ userId }: { userId: string }) => <div data-testid="step-two-fixture">Step 2 · Add the other parent · {userId}</div>,
+  FamilySetup: ({ userId, teamName, organizationName }: { userId: string; teamName?: string; organizationName?: string }) => <div data-testid="step-two-fixture">Step 2 · Add the other parent · {userId} · {teamName} · {organizationName}</div>,
 }));
 vi.mock("@/components/invite-accept/InviteBenefitsCard", () => ({ InviteBenefitsCard: () => null }));
 
@@ -85,6 +85,8 @@ describe("parent team invitation account step", () => {
     await screen.findByTestId("step-two-fixture");
     expect(accepts()).toHaveLength(1);
     expect(screen.getByTestId("step-two-fixture")).toHaveTextContent(parent.id);
+    expect(screen.getByTestId("step-two-fixture")).toHaveTextContent("Example Team");
+    expect(screen.getByTestId("step-two-fixture")).toHaveTextContent(envelope.organization.name);
   });
   it("does not duplicate acceptance during StrictMode effects or repeated clicks", async () => {
     rememberInviteAccount(mocks.token, parent.id);

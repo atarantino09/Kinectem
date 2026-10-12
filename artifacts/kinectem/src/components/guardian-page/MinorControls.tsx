@@ -173,10 +173,11 @@ export function MinorControls({ child }: Props) {
 
   const deleteAccount = useCallback(async () => {
     const confirmed = window.confirm(
-      `Permanently delete ${child.firstName}'s Kinectem account?\n\n` +
+      `Request deletion of ${child.firstName}'s Kinectem account?\n\n` +
         `The account is locked immediately. After a 30-day cooling-off ` +
-        `period, all of ${child.firstName}'s data is hard-deleted from ` +
-        `our database. This cannot be undone.`,
+        `period, permanent deletion is handled by Kinectem; an automatic purge on day 30 is not guaranteed. ` +
+        `This affects this profile across all teams and parents, not just one roster. ` +
+        `No content or memberships are transferred to another profile. Keep the correct profile first. Permanent deletion cannot be undone.`,
     );
     if (!confirmed) return;
     setBusy("delete");

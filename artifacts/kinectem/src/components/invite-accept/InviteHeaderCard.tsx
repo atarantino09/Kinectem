@@ -74,10 +74,10 @@ export function InviteHeaderCard({
           />
         )}
         <div className="min-w-0 flex-1">
-        <p className="text-xs uppercase tracking-widest font-bold opacity-90">
+        <p className="text-xs uppercase tracking-widest font-bold opacity-90 [overflow-wrap:anywhere]">
           {formatOrgName(organizationName)}
         </p>
-        <h1 className="text-3xl font-black tracking-tight mt-1">
+        <h1 className="text-3xl font-black tracking-tight mt-1 [overflow-wrap:anywhere]">
           {multipleTeams ? "You're invited to join these teams" : "You're invited to "}
           {!multipleTeams && (
             <span className="underline decoration-current">{teamName}</span>
@@ -90,7 +90,7 @@ export function InviteHeaderCard({
         </div>
       </div>
 
-      <CardContent className="p-6 space-y-4">
+      <CardContent className="min-w-0 p-6 space-y-4 [overflow-wrap:anywhere]">
         {multipleTeams && (
           <div
             className="rounded-lg border border-border bg-muted/30 p-3"
@@ -108,7 +108,7 @@ export function InviteHeaderCard({
         )}
         {isPlayerInvite && !needsChildSetup && (
           <div className="space-y-3">
-            <ParentSetupOverview teamName={teamName} />
+            <ParentSetupOverview teamName={teamName} organizationName={organizationName} />
           </div>
         )}
         {isPlayerInvite && loggedIn && (

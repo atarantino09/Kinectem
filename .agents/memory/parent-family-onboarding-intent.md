@@ -22,3 +22,9 @@ An uncertain player-creation response remains the same creation intent even if t
 **Why:** An earlier request can still commit after the browser reports a network error. Giving the retry a new identity can create a second player. A saved invitation also does not prove an email was delivered or that the other parent accepted.
 
 **How to apply:** Preserve the creation intent and original submitted spelling across uncertain retries, and recover its exact result rather than guessing from a name. A missing receipt can mean the first request is still running, not that it failed; any request-reuse conflict must check for the committed profile again. Distinguish saved invitation, confirmed email submission, and accepted guardian access in every family-invitation UI.
+
+Roster invitation setup is for the named team only. Children on other teams use those teams’ separate invitations with the same adult login and reuse existing child profiles. Family profile creation alone is not roster enrollment, and another adult’s access still requires family-invitation acceptance.
+
+**Why:** Parents can mistake family setup for enrolling every sibling on the current invitation, or create a second adult login or duplicate child when enrolling on a different team. One parent’s Family should include all of their linked children across teams.
+
+**How to apply:** Keep the actual team identity distinct from the organization throughout setup. Explain the other-team path before child submission and after completion. Duplicate-profile cleanup is a separate, explicit account-wide deletion request after selecting the correct profile with the other parent; never describe unlinking or team-only removal as duplicate deletion, or promise automatic merges or immediate roster removal. Uncertain keepers or inaccessible profiles should go to existing privacy support.

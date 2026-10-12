@@ -295,6 +295,7 @@ function InviteEntry({ token }: { token: string }) {
           mode="team"
           token={token}
           teamName={envelope.team.name}
+          organizationName={envelope.organization?.name}
           childHint={childHint}
           verifyAccount={async () => {
             const expectedKey = accountKey;

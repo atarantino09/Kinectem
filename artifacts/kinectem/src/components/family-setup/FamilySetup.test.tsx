@@ -1,23 +1,77 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { FamilySetup } from "./FamilySetup";
+import { FamilySetup, type FamilySetupProps } from "./FamilySetup";
 
 const fetchMock = vi.fn();
 vi.mock("@workspace/api-client-react", () => ({ customFetch: (...a: unknown[]) => fetchMock(...a) }));
 vi.mock("@/components/UserAvatar", () => ({ UserAvatar: () => <span /> }));
 
-function setup(verifyAccount?: () => Promise<void>) {
+function setup(verifyAccount?: () => Promise<void>, props: Partial<FamilySetupProps> = {}) {
   const qc = new QueryClient();
   return render(
     <QueryClientProvider client={qc}>
-      <FamilySetup userId="u1" mode="family" onDone={() => {}} verifyAccount={verifyAccount} />
+      <FamilySetup userId="u1" mode="family" onDone={() => {}} verifyAccount={verifyAccount} {...props} />
     </QueryClientProvider>,
   );
 }
 
 describe("FamilySetup", () => {
   beforeEach(() => { sessionStorage.clear(); fetchMock.mockReset(); });
+  it.each(["new", "existing"])("names the team and organization at optional parent, %s-child and completion steps", async (kind) => {
+    const child = { id: "c1", firstName: "Ava", lastName: "Lee", avatarUrl: null };
+    fetchMock.mockImplementation(async (_url: string, init?: RequestInit) =>
+      init?.method === "POST" ? { child } : { data: kind === "existing" ? [child] : [] });
+    setup(undefined, { mode: "team", token: "invite-a", teamName: "Team A", organizationName: "Club A" });
+    expect(screen.getByTestId("team-setup-context")).toHaveTextContent("You are adding a child to Team A. Only add children who play on this team.");
+    expect(screen.getByTestId("team-setup-context")).toHaveTextContent("Organization: Club A");
+    fireEvent.click(screen.getByTestId("btn-coparent-skip"));
+    expect(screen.getByTestId("step-player")).toHaveTextContent("Choose or create a child for Team A’s roster");
+    const guidance = screen.getByTestId("other-team-guidance");
+    expect(guidance).toHaveTextContent("Finish or leave this setup");
+    expect(guidance).toHaveTextContent("same parent account");
+    expect(guidance).toHaveTextContent("Select that child’s existing profile");
+    expect(guidance).toHaveTextContent("appear together in Family");
+    expect(guidance).toHaveTextContent("must accept it");
+    expect(screen.getByRole("link", { name: "Already created a duplicate child?" })).toHaveAttribute("href", "/family?help=duplicate-child");
+    if (kind === "existing") {
+      const select = await screen.findByTestId("btn-select-child-c1");
+      expect(select).toHaveTextContent("Add to Team A’s roster");
+      expect(screen.getByTestId("btn-show-create-child-form")).toHaveTextContent("Create a new child for Team A’s roster");
+      fireEvent.click(select);
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/v1/invites/invite-a/children", expect.objectContaining({ body: JSON.stringify({ childId: "c1" }) })));
+    } else {
+      await screen.findByTestId("input-child-first");
+      expect(screen.getByTestId("btn-add-child")).toHaveTextContent("Create child’s account & add to Team A’s roster");
+      fireEvent.change(screen.getByTestId("input-child-first"), { target: { value: "Ava" } });
+      fireEvent.change(screen.getByTestId("input-child-last"), { target: { value: "Lee" } });
+      fireEvent.click(screen.getByTestId("btn-add-child"));
+    }
+    expect(await screen.findByTestId("row-added-child")).toHaveTextContent("Added to Team A’s roster");
+    expect(screen.getByTestId("btn-finish-setup")).toHaveTextContent("Done, continue to Team A");
+    expect(screen.getByTestId("other-team-guidance")).toHaveTextContent("Don’t create a second parent account or another profile for the same child");
+  });
+
+  it("keeps standalone Family profile creation separate from roster enrollment", async () => {
+    fetchMock.mockImplementation(async (_url: string, init?: RequestInit) => init?.method === "POST"
+      ? { child: { id: "c1", firstName: "Ava", lastName: "Lee" } } : { data: [] });
+    setup();
+    expect(screen.getByTestId("family-profile-only")).toHaveTextContent("does not add them to a team");
+    fireEvent.click(screen.getByTestId("btn-coparent-skip"));
+    await screen.findByTestId("input-child-first");
+    fireEvent.change(screen.getByTestId("input-child-first"), { target: { value: "Ava" } });
+    fireEvent.change(screen.getByTestId("input-child-last"), { target: { value: "Lee" } });
+    fireEvent.click(screen.getByTestId("btn-add-child"));
+    expect(await screen.findByTestId("row-added-child")).toHaveTextContent("Ready in Family — not added to a team");
+  });
+
+  it("does not submit to an unnamed team", async () => {
+    fetchMock.mockResolvedValue({ data: [] });
+    setup(undefined, { mode: "team", token: "unknown" });
+    expect(screen.getByTestId("team-setup-context")).toHaveTextContent("has not been verified yet");
+    fireEvent.click(screen.getByTestId("btn-coparent-skip"));
+    expect(await screen.findByTestId("btn-add-child")).toBeDisabled();
+  });
   it("blocks player creation if the adult session changes before submission", async () => {
     fetchMock.mockResolvedValue({ data: [] });
     const verify = vi.fn().mockRejectedValue(new Error("Your account changed"));

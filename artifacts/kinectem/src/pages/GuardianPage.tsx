@@ -13,6 +13,7 @@ import { PendingGuardianInvites } from "@/components/guardian-page/PendingGuardi
 import { FamilyContactInvitations } from "@/components/guardian-page/FamilyContactInvitations";
 import { useGuardianDashboard } from "@/components/guardian-page/useGuardianDashboard";
 import { FamilySetup } from "@/components/family-setup/FamilySetup";
+import { DuplicateChildHelp } from "@/components/guardian-page/DuplicateChildHelp";
 import { useWhoami } from "@/hooks/useWhoami";
 import { useFamilyContactInvitations } from "@/hooks/useFamilyContacts";
 import {
@@ -154,6 +155,7 @@ export default function GuardianPage() {
       {wantsSetup && myUserId && (
         <FamilySetup key={`${myUserId}:family`} userId={myUserId} mode="family" onDone={leaveSetup} onSkipLater={leaveSetup} />
       )}
+      <DuplicateChildHelp initiallyOpen={searchParams.get("help") === "duplicate-child"} />
        <FamilyContactInvitations />
        {!isGuardian && !followsChild && (
         <Card
