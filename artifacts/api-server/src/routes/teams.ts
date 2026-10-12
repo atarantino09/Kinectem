@@ -958,8 +958,6 @@ router.delete(
     const memberId = req.params.memberId;
     const [t] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
     if (!t) return notFound(res);
-    if (!(await canManageTeam(me.id, t)))
-      return apiError(res, 403, "Team coaches or org admins only");
     const [entry] = await db
       .select()
       .from(rosterEntries)
@@ -969,6 +967,15 @@ router.delete(
       .limit(1);
     if (!entry) {
       return notFound(res);
+    }
+    const canManage = await canManageTeam(me.id, t);
+    const canRemoveChild =
+      !req.isMasquerading &&
+      entry.role === "player" &&
+      (entry.position === null || entry.position === "player") &&
+      (await isActiveGuardian(me.id, entry.userId));
+    if (!canManage && !canRemoveChild) {
+      return apiError(res, 403, "Team managers or this player's active parent/guardian only");
     }
     // Same "last Admin" guard as the PATCH path — removing the last
     // accepted Admin would leave the team with no one able to manage it.
@@ -982,10 +989,28 @@ router.delete(
         );
       }
     }
-    await db.transaction(async (tx) => {
+    const removed = await db.transaction(async (tx) => {
       // Deliberately remove only the roster row. Guardian links describe a
       // family relationship, not team membership, and must survive removal.
-      await tx.delete(rosterEntries).where(eq(rosterEntries.id, entry.id));
+      const [deleted] = await tx.delete(rosterEntries).where(and(
+        eq(rosterEntries.id, entry.id),
+        !canManage ? eq(rosterEntries.role, "player") : undefined,
+        !canManage ? sql`(${rosterEntries.position} IS NULL OR ${rosterEntries.position} = 'player')` : undefined,
+      )).returning({ id: rosterEntries.id });
+      if (!deleted) return false;
+      if (entry.status === "pending") {
+        const [child] = await tx.select({ email: users.email }).from(users)
+          .where(eq(users.id, entry.userId)).limit(1);
+        if (child?.email) {
+          // Cancel a paired personal invite, never the team's shared join link.
+          await tx.update(rosterInvites).set({ status: "revoked" }).where(and(
+            eq(rosterInvites.teamId, teamId),
+            eq(rosterInvites.invitedEmail, child.email.toLowerCase()),
+            eq(rosterInvites.role, entry.role),
+            eq(rosterInvites.status, "pending"),
+          ));
+        }
+      }
       await tx.insert(adminActivityLog).values({
         adminUserId: me.id,
         actionType: "moderation_remove",
@@ -998,7 +1023,9 @@ router.delete(
           memberUserId: entry.userId,
         }),
       });
+      return true;
     });
+    if (!removed) return apiError(res, 409, "This roster spot changed. Refresh the roster and try again.");
     res.status(204).end();
   }),
 );

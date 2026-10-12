@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { UserAvatar } from "@/components/UserAvatar";
-import { Users, UserPlus, ChevronDown } from "lucide-react";
+import { Users, UserPlus, ChevronDown, Pencil } from "lucide-react";
 import type { RosterMember } from "./TeamRosterTabs";
 
 type RailTab = "players" | "staff";
@@ -15,6 +15,8 @@ interface TeamRosterRailProps {
   canManage?: boolean;
   onOpenInvite?: () => void;
   defaultOpen?: boolean;
+  myChildIds?: ReadonlySet<string>;
+  onEditChild?: (member: RosterMember) => void;
 }
 
 export function TeamRosterRail({
@@ -23,6 +25,8 @@ export function TeamRosterRail({
   canManage = false,
   onOpenInvite,
   defaultOpen = true,
+  myChildIds,
+  onEditChild,
 }: TeamRosterRailProps) {
   const [open, setOpen] = useState(defaultOpen);
   const [tab, setTab] = useState<RailTab>("players");
@@ -114,8 +118,8 @@ export function TeamRosterRail({
       ) : (
         <ul className="flex flex-col p-2">
           {list.map((m) => (
-            <li key={m.id}>
-              <Link href={`/users/${m.userId}`}>
+            <li key={m.id} className="flex items-center gap-1 min-w-0">
+              <Link href={`/users/${m.userId}`} className="flex-1 min-w-0">
                 <div
                   className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/60 cursor-pointer group"
                   data-testid={`rail-roster-row-${m.id}`}
@@ -145,6 +149,20 @@ export function TeamRosterRail({
                   </div>
                 </div>
               </Link>
+              {tab === "players" && myChildIds?.has(m.userId) && onEditChild && (
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="h-11 w-11 shrink-0 text-muted-foreground hover:text-foreground"
+                  aria-label={`Edit ${m.displayName}`}
+                  title={`Manage ${m.displayName} on this team`}
+                  onClick={() => onEditChild(m)}
+                  data-testid={`btn-rail-edit-${m.id}`}
+                >
+                  <Pencil className="w-4 h-4" />
+                </Button>
+              )}
             </li>
           ))}
         </ul>

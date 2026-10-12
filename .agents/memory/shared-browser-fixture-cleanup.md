@@ -14,7 +14,7 @@ counter; deleting the fixture org and usage did not reverse that increment.
 **How to apply:** Record each successful test-only redemption, then subtract
 only that delta during cleanup so concurrent legitimate redemptions remain.
 
-Ad-hoc `tsx` fixture scripts do not type-check Drizzle inputs. Unknown insert
+Ad-hoc `tsx` fixture scripts and Vitest fixtures do not type-check Drizzle inputs. Unknown insert
 properties are silently ignored; API response field names are not necessarily
 database schema field names. Inspect the schema before inserting, and create
 multi-record fixtures in a transaction.

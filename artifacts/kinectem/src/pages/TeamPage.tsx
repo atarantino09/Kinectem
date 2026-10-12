@@ -17,6 +17,8 @@ import {
   getGetTeamByIdQueryKey,
   getListFeedQueryKey,
   queryOpts,
+  useListUserChildren,
+  getListUserChildrenQueryKey,
 } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -39,6 +41,7 @@ import {
   type RosterInvite,
 } from "@/components/team-page/TeamRosterTabs";
 import { TeamRosterRail } from "@/components/team-page/TeamRosterRail";
+import { RemoveChildFromTeamDialog } from "@/components/team-page/RemoveChildFromTeamDialog";
 import { useWhoami } from "@/hooks/useWhoami";
 import { AdoptTeamDialog } from "@/components/team-page/AdoptTeamDialog";
 import { AdoptLinkCard } from "@/components/team-page/AdoptLinkCard";
@@ -105,6 +108,7 @@ export default function TeamPage() {
       };
     }, [search]);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [removingChild, setRemovingChild] = useState<RosterMember | null>(null);
   const [welcomeOpen, setWelcomeOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [adoptOpen, setAdoptOpen] = useState(false);
@@ -168,6 +172,12 @@ export default function TeamPage() {
     query: queryOpts({ enabled: !!orgRef?.id }),
   });
   const { data: me } = useGetLoggedInUser();
+  const { data: childLinks } = useListUserChildren(me?.id ?? "", {
+    query: { enabled: !!me?.id, queryKey: getListUserChildrenQueryKey(me?.id ?? "") },
+  });
+  const myChildIds = new Set(
+    (childLinks?.data ?? []).filter((link) => link.status === "active").map((link) => link.child.id),
+  );
   const { data: who } = useWhoami();
   const { data: familyInvitations } = useFamilyContactInvitations(!!me?.id);
 
@@ -558,6 +568,8 @@ export default function TeamPage() {
               canManage={canManage}
               onOpenInvite={() => setInviteOpen(true)}
               defaultOpen={false}
+              myChildIds={myChildIds}
+              onEditChild={setRemovingChild}
             />
             {canViewSchedule && (
               <ScheduleUpNext
@@ -643,7 +655,10 @@ export default function TeamPage() {
 
       {isLg && (
         <aside className="lg:sticky lg:top-20 lg:self-start lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto space-y-6">
-          <TeamRosterRail players={players} staff={staff} />
+          <TeamRosterRail
+            players={players} staff={staff}
+            myChildIds={myChildIds} onEditChild={setRemovingChild}
+          />
           {canViewSchedule && (
             <ScheduleUpNext
               teamId={teamId}
@@ -653,6 +668,12 @@ export default function TeamPage() {
         </aside>
       )}
 
+      <RemoveChildFromTeamDialog
+        teamId={teamId}
+        member={removingChild}
+        viewerId={me?.id}
+        onClose={() => setRemovingChild(null)}
+      />
       <InviteRosterDialog
         teamId={teamId}
         seasonId={seasonId}

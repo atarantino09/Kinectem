@@ -60,6 +60,7 @@ import {
   Users,
 } from "lucide-react";
 import { EditRosterMemberDialog } from "./EditRosterMemberDialog";
+import { RemoveChildFromTeamDialog } from "./RemoveChildFromTeamDialog";
 import { InviteFamilyContactDialog } from "@/components/guardian-page/InviteFamilyContactDialog";
 
 export type ParentRef = {
@@ -125,6 +126,7 @@ export function TeamRosterTabs({
     () => new Set<string>(),
   );
   const [editingMember, setEditingMember] = useState<RosterMember | null>(null);
+  const [removingChild, setRemovingChild] = useState<RosterMember | null>(null);
   const [familyInvitePlayer, setFamilyInvitePlayer] = useState<RosterMember | null>(null);
   const { data: childLinks } = useListUserChildren(meId ?? "", {
     query: { enabled: !!meId, queryKey: getListUserChildrenQueryKey(meId ?? "") },
@@ -483,6 +485,7 @@ export function TeamRosterTabs({
   const renderActions = (m: RosterMember) => {
     const isMe = meId === m.userId;
     const isPending = m.status === "pending";
+    const canRemoveChild = myChildIds.has(m.userId) && players.some((player) => player.id === m.id);
     return (
       <div className="flex items-center justify-end gap-2">
         {isPending && isMe && (
@@ -506,12 +509,12 @@ export function TeamRosterTabs({
             </Button>
           </>
         )}
-        {canManage && (
+        {(canManage || canRemoveChild) && (
           <Button
             size="icon"
             variant="ghost"
-            className="h-7 w-7 text-muted-foreground hover:text-foreground"
-            onClick={() => setEditingMember(m)}
+            className={`${canManage ? "h-7 w-7" : "h-11 w-11 shrink-0"} text-muted-foreground hover:text-foreground`}
+            onClick={() => canManage ? setEditingMember(m) : setRemovingChild(m)}
             data-testid={`btn-edit-${m.id}`}
             aria-label={`Edit ${m.displayName}`}
           >
@@ -1057,6 +1060,12 @@ export function TeamRosterTabs({
         onOpenChange={(v) => {
           if (!v) setEditingMember(null);
         }}
+      />
+      <RemoveChildFromTeamDialog
+        teamId={teamId}
+        member={removingChild}
+        viewerId={meId}
+        onClose={() => setRemovingChild(null)}
       />
 
       {/* Task #673 — "Share link" dialog. Surfaces the join link and a
