@@ -109,6 +109,8 @@ RETURNS TABLE(metric text,value int) LANGUAGE sql AS $$
  UNION ALL SELECT 'updates',count(*)::int FROM eligible WHERE live_category IN ('update','plan')
  UNION ALL SELECT 'retro',count(*)::int FROM eligible WHERE live_category='retro'
  UNION ALL SELECT 'photos',count(*)::int FROM eligible WHERE has_photos
+ UNION ALL SELECT 'team_photo',count(*)::int FROM teams
+   WHERE p_subject='team' AND id=p_id AND nullif(btrim(banner_url),'') IS NOT NULL
  UNION ALL SELECT 'story',count(*)::int FROM eligible WHERE live_category IN ('current','org_update')
  UNION ALL SELECT 'participation',CASE WHEN count(*) FILTER(WHERE participating)>=2
     THEN floor(100.0*count(*) FILTER(WHERE participating)/nullif(count(*),0))::int ELSE 0 END FROM participation

@@ -28,6 +28,21 @@ const wrap = () => render(<QueryClientProvider client={new QueryClient()}><Achie
 beforeEach(() => { state.data = null; state.error = undefined; update.mockClear(); });
 
 describe("AchievementsPanel", () => {
+  it.each([false, true])("explains the team-photo requirement without calling it a recap (earned: %s)", (earned) => {
+    state.data = { ...base, subject: "team", canManage: true,
+      catalog: [{ key: "team-photo", name: "Team Photo", subject: "team", thresholds: [1], criteria: 'Upload a team photo using "Add photo" at the top of your team page.' }],
+      awards: earned ? [{ key: "team-photo", tier: 1, threshold: 1, earnedAt: "2026-10-12" }] : [],
+      featured: earned ? ["team-photo"] : [], progress: { "team-photo": earned ? 1 : 0 },
+    };
+    render(<QueryClientProvider client={new QueryClient()}><AchievementsPanel subject="team" id="t" /></QueryClientProvider>);
+    fireEvent.click(screen.getByTestId("button-open-achievements-team"));
+    const row = screen.getByTestId("achievement-team-photo");
+    expect(row.textContent).toContain("Required: upload 1 team photo");
+    expect(row.textContent).toContain(earned ? "Team photo badge earned." : "No team photo yet.");
+    expect(row.textContent).not.toContain("qualifying recaps");
+    if (earned) expect(screen.getByTestId("button-feature-team-photo")).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("shows only featured badges; viewers with none see nothing", () => {
     state.data = { ...base, featured: ["team-storyteller"] };
     wrap();

@@ -13,7 +13,7 @@ type Demo = {
 };
 const values: Record<string, number> = {
   "first-story": 18, "team-storyteller": 18, "reliable-reporter": 6, "beyond-scoreboard": 8, "retro-recapper": 0,
-  "first-whistle": 28, "team-storytellers": 28, "on-a-roll": 6, "game-day-memories": 12,
+  "first-whistle": 28, "team-photo": 1, "team-storytellers": 28, "on-a-roll": 6, "game-day-memories": 12,
   "our-story-begins": 126, "club-chroniclers": 126, "connected-club": 50,
 };
 const initial = Object.fromEntries((["team", "organization", "user"] as const).map((subject) => {

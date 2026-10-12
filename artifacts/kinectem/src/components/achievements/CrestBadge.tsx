@@ -14,7 +14,7 @@ const SHIELD = "M24 2 L44 8 V30 C44 42 34 50 24 55 C14 50 4 42 4 30 V8 Z";
 
 export function CrestBadge({ name, tier, locked = false, size = 44 }: { name: string; tier?: 1 | 2 | 3; locked?: boolean; size?: number }) {
   const uid = useId().replace(/:/g, "");
-  const Icon = locked ? Lock : name.includes("Memories") ? Camera : /Reporter|Roll/.test(name) ? CalendarCheck
+  const Icon = locked ? Lock : /Memories|Photo/.test(name) ? Camera : /Reporter|Roll/.test(name) ? CalendarCheck
     : /Club|Chroniclers|Storytellers/.test(name) ? Users : name.includes("Whistle") ? ShieldCheck : BookOpen;
   const m = tier ? METAL[tier] : BASE;
   const h = size * 1.15;

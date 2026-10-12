@@ -215,6 +215,7 @@ export function TeamHeaderCard({
       });
       await qc.invalidateQueries({ queryKey: getGetTeamByIdQueryKey(team.id) });
       toast({ title: "Team photo updated" });
+      await qc.invalidateQueries({ queryKey: ["achievements", "team", team.id] });
     } catch (err) {
       toast({
         title:

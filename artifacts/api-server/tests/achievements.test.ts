@@ -31,6 +31,50 @@ beforeEach(async () => {
 });
 
 describe("community achievements", () => {
+  it("awards and features a team photo immediately, once, without adding recap credit", async () => {
+    const { agent, team, org, user } = await fixture();
+    expect((await agent.get(`/api/v1/achievements/team/${team.id}`)).body.awards).toEqual([]);
+    const photo = "data:image/png;base64,iVBORw0KGgo=";
+    const upload = await agent.patch(`/api/v1/teams/${team.id}`).send({ bannerUrl: photo });
+    expect(upload.status).toBe(200);
+    const awardQuery = sql`SELECT * FROM achievement_awards WHERE subject='team' AND subject_id=${team.id}::uuid AND key='team-photo'`;
+    const awarded = await q(awardQuery);
+    expect(awarded).toHaveLength(1);
+    expect(awarded[0]).toMatchObject({ tier: 1, threshold: 1, celebrated: false });
+    const firstEarnedAt = awarded[0].earned_at;
+    const view = await agent.get(`/api/v1/achievements/team/${team.id}`);
+    expect(view.body.featured).toContain("team-photo");
+    expect(view.body.progress["team-photo"]).toBe(1);
+    expect(view.body.progress["game-day-memories"]).toBe(0);
+    expect(await q(sql`SELECT * FROM achievement_contributions WHERE team_id=${team.id}::uuid`)).toHaveLength(0);
+    expect(await q(sql`SELECT * FROM achievement_streaks WHERE team_id=${team.id}::uuid`)).toHaveLength(0);
+    expect(await q(sql`SELECT * FROM achievement_awards WHERE subject_id IN (${org.id}::uuid,${user.id}::uuid)`)).toHaveLength(0);
+    expect((await agent.patch(`/api/v1/teams/${team.id}`).send({ bannerUrl: `${photo}AA==` })).status).toBe(200);
+    expect(await q(awardQuery)).toHaveLength(1);
+    expect((await q(awardQuery))[0].earned_at).toEqual(firstEarnedAt);
+    expect((await agent.patch(`/api/v1/teams/${team.id}`).send({ bannerUrl: null })).status).toBe(200);
+    const removed = await agent.get(`/api/v1/achievements/team/${team.id}`);
+    expect(removed.body.awards.some((a: { key: string }) => a.key === "team-photo")).toBe(true);
+    expect(removed.body.featured).toContain("team-photo");
+  });
+
+  it("recognizes existing team photos but not logos or blank photos, preserving private collections", async () => {
+    const { agent, team, org } = await fixture();
+    await db.update(organizations).set({ logoUrl: "https://example.com/logo.png" }).where(eq(organizations.id, org.id));
+    await db.update(teams).set({ bannerUrl: "   " }).where(eq(teams.id, team.id));
+    const blank = await agent.get(`/api/v1/achievements/team/${team.id}`);
+    expect(blank.body.progress["team-photo"]).toBe(0);
+    await db.execute(sql`INSERT INTO achievement_settings(subject,subject_id,visibility,featured)
+      VALUES('team',${team.id}::uuid,'private','{}')
+      ON CONFLICT(subject,subject_id) DO UPDATE SET visibility='private'`);
+    // An older upload receives its badge through the normal achievement evaluation.
+    await db.update(teams).set({ bannerUrl: "https://example.com/team-photo.jpg" }).where(eq(teams.id, team.id));
+    const existing = await agent.get(`/api/v1/achievements/team/${team.id}`);
+    expect(existing.body.awards.some((a: { key: string }) => a.key === "team-photo")).toBe(true);
+    expect(existing.body.featured).toContain("team-photo");
+    expect(existing.body.visibility).toBe("private");
+  });
+
   it("recovers older recaps, updates, plans and original retro recaps after the initial backfill has completed", async () => {
     const { user, team, org } = await fixture();
     const old = { publishedAt: new Date("2025-02-01"), createdAt: new Date("2025-02-01") };
@@ -113,8 +157,8 @@ describe("community achievements", () => {
     expect((await agent.put(url).send({ featured: keys })).status).toBe(200);
     expect((await agent.get(url)).body.featured).toEqual(keys);
   });
-  it("defines all twelve catalogs and exact named-tier thresholds", () => {
-    expect(ACHIEVEMENT_CATALOG).toHaveLength(12);
+  it("defines all thirteen achievements and exact named-tier thresholds", () => {
+    expect(ACHIEVEMENT_CATALOG).toHaveLength(13);
     for (const item of ACHIEVEMENT_CATALOG) {
       item.thresholds.forEach((n, index) => {
         expect(earnedTier(item.thresholds, n)).toBe(index + 1);
@@ -125,6 +169,7 @@ describe("community achievements", () => {
 
   it("unlocks every volume, photo, streak and organization tier without schedules", async () => {
     const { user, org, team } = await fixture();
+    await db.update(teams).set({ bannerUrl: "https://example.test/team-photo.jpg" }).where(eq(teams.id, team.id));
     await db.insert(articles).values(Array.from({ length: 250 }, (_, i) => ({
       teamId: team.id, authorId: user.id, title: `Distinct ${i}`, body: "A legitimate separate contribution.",
       gameDate: new Date("2026-09-01"), status: "published" as const,

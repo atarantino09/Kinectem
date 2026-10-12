@@ -196,7 +196,7 @@ export function AchievementsPanel({ subject, id, title = "Achievements", enabled
                     <p className="font-bold text-sm break-words">{c.name}{a && c.thresholds.length > 1 && <span className="ml-2 text-xs text-muted-foreground">{TIER_LABEL[a.tier]} ({a.threshold})</span>}</p>
                     <p className="text-xs text-muted-foreground">{c.criteria}</p>
                     {c.thresholds.length > 1 && <p className="text-[11px] text-muted-foreground mt-0.5">Tiers: {c.thresholds.map((t, i) => `${TIER_LABEL[(i + 1) as 1 | 2 | 3]} ${t}`).join(" / ")}</p>}
-                    {c.thresholds.length === 1 && <p className="text-[11px] text-muted-foreground mt-0.5">Required: {c.key === "connected-club" ? "50% of eligible teams, at least 2 participating" : "1 qualifying contribution"}</p>}
+                    {c.thresholds.length === 1 && <p className="text-[11px] text-muted-foreground mt-0.5">Required: {c.key === "connected-club" ? "50% of eligible teams, at least 2 participating" : c.key === "team-photo" ? "upload 1 team photo" : "1 qualifying contribution"}</p>}
                     {c.key === "connected-club" && data.canManage && data.participation && <p className="text-xs font-semibold mt-1">
                       {data.participation.filter((t) => t.participating).length} of {data.participation.length} eligible teams participating within 30 days
                       {data.participation.length > 0 ? ` (${Math.floor(100 * data.participation.filter((t) => t.participating).length / data.participation.length)}%)` : ""}.
@@ -206,10 +206,10 @@ export function AchievementsPanel({ subject, id, title = "Achievements", enabled
                       <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted" role="progressbar" aria-label={`${c.name} progress`} aria-valuemin={0} aria-valuemax={next} aria-valuenow={Math.min(prog, next)}><div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, (prog / next) * 100)}%` }} /></div>
                     )}
                     {prog !== undefined && next !== null && !STREAK_KEYS.has(c.key) && c.key !== "connected-club" && (
-                      <p className="text-xs font-semibold mt-1" data-testid={`progress-${c.key}`}>{prog} qualifying {c.key === "beyond-scoreboard" ? "contributions" : "recaps"}; next: {c.thresholds.length > 1 ? TIER_LABEL[(c.thresholds.indexOf(next) + 1) as 1 | 2 | 3] : c.name} at {next}</p>
+                      <p className="text-xs font-semibold mt-1" data-testid={`progress-${c.key}`}>{c.key === "team-photo" ? "No team photo yet. Add one at the top of your team page to earn this badge." : <>{prog} qualifying {c.key === "beyond-scoreboard" ? "contributions" : "recaps"}; next: {c.thresholds.length > 1 ? TIER_LABEL[(c.thresholds.indexOf(next) + 1) as 1 | 2 | 3] : c.name} at {next}</>}</p>
                     )}
                     {prog !== undefined && next !== null && STREAK_KEYS.has(c.key) && <p className="text-xs font-semibold mt-1">Best run: {prog}; next tier at {next}. Current runs are shown above; an earned badge does not imply an active streak.</p>}
-                    {prog !== undefined && next === null && c.key !== "connected-club" && <p className="text-xs font-semibold mt-1">{STREAK_KEYS.has(c.key) ? `Best run: ${prog}; current runs shown above.` : `${prog} qualifying contributions.`} Highest level earned.</p>}
+                    {prog !== undefined && next === null && c.key !== "connected-club" && <p className="text-xs font-semibold mt-1">{c.key === "team-photo" ? "Team photo badge earned." : <>{STREAK_KEYS.has(c.key) ? `Best run: ${prog}; current runs shown above.` : `${prog} qualifying contributions.`} Highest level earned.</>}</p>}
                   </div>
                   {data.canManage && a && (
                     <Button size="sm" variant={featured ? "brand" : "outline"} aria-pressed={featured} disabled={update.isPending} onClick={() => setFeatured(c.key)} data-testid={`button-feature-${c.key}`}>

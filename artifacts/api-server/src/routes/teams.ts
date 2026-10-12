@@ -198,6 +198,9 @@ router.post(
               : undefined,
         })
         .returning();
+      if (t.bannerUrl?.trim()) {
+        await tx.execute(sql`SELECT achievement_evaluate('team',${t.id}::uuid)`);
+      }
       // Platform admins bulk-creating teams for an org hand-off must not
       // appear on any roster (they manage via the canManageTeam bypass);
       // everyone else joins their new team as its admin coach.
@@ -384,11 +387,17 @@ router.patch(
     if (Object.keys(patch).length === 0) {
       return apiError(res, 400, "no updatable fields");
     }
-    const [t] = await db
-      .update(teams)
-      .set(patch)
-      .where(eq(teams.id, req.params.teamId))
-      .returning();
+    const t = await db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(teams)
+        .set(patch)
+        .where(eq(teams.id, req.params.teamId))
+        .returning();
+      if (updated && typeof patch.bannerUrl === "string" && patch.bannerUrl.trim()) {
+        await tx.execute(sql`SELECT achievement_evaluate('team',${updated.id}::uuid)`);
+      }
+      return updated;
+    });
     if (!t) return notFound(res);
     // Task #628 — solo teams have no parent org.
     let org: typeof organizations.$inferSelect | null = null;
