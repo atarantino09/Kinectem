@@ -1649,8 +1649,8 @@ export default function CompetitionPage() {
             setRecapTeamFilter("all");
             setRecapDateFilter("all");
           };
-          // Brackets stay in the organizer's saved order, then unbracketed
-          // recaps trail under "Other"; each section is always split by week.
+           // Preserve bracket/week order without reserving a new grid row for
+           // every group. Labels remain on each card and in the filters.
           const groupedSections: { key: string; label: string; recaps: FeaturedRecap[] }[] =
             usedBrackets
               .filter((b) => shownRecaps.some((r) => recapBrackets.get(r.id)?.key === b.id))
@@ -1955,34 +1955,16 @@ export default function CompetitionPage() {
                 </Button>
               </div>
             ) : (
-            <div className="grid gap-x-3 gap-y-4 md:grid-cols-2 lg:grid-cols-3" data-testid="rail-grouped-sections">
-              {groupedSections.map((s) => (
-                <div
-                  key={s.key}
-                  className={`min-w-0 space-y-1.5 ${s.recaps.length > 1 ? "md:col-span-2 lg:col-span-3" : ""}`}
-                  data-testid={`section-bracket-${s.key}`}
-                >
-                  <div className="space-y-3">
-                    {recapGroups(
-                      s.recaps.map((r) => ({
-                        ...r,
-                        matchDate: r.effectiveGameDate ?? null,
-                      })),
-                      c,
-                    ).map((weekGroup) => (
-                      <div
-                        key={weekGroup.key}
-                        className="space-y-1"
-                        data-testid={`section-recap-week-${s.key}-${weekGroup.key}`}
-                      >
-                        <div className={`grid min-w-0 gap-2.5 ${s.recaps.length > 1 ? "sm:grid-cols-2 lg:grid-cols-3" : ""}`}>
-                          {weekGroup.items.map(renderRecapCard)}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
+            <div className="grid min-w-0 grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3" data-testid="rail-grouped-sections">
+              {groupedSections.flatMap((section) =>
+                recapGroups(
+                  section.recaps.map((recap) => ({
+                    ...recap,
+                    matchDate: recap.effectiveGameDate ?? null,
+                  })),
+                  c,
+                ).flatMap((weekGroup) => weekGroup.items),
+              ).map(renderRecapCard)}
             </div>
             )}
           </section>

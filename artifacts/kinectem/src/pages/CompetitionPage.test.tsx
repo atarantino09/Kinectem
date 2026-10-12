@@ -244,10 +244,36 @@ describe("competition partnership directory", () => {
     const rail = screen.getByTestId("rail-featured-recaps");
     expect(rail.compareDocumentPosition(screen.getByTestId("section-competition-album")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(rail).toHaveClass("space-y-2.5", "text-black");
-    expect(screen.getByTestId("rail-grouped-sections")).toHaveClass("grid", "gap-y-4", "md:grid-cols-2");
+    expect(screen.getByTestId("rail-grouped-sections")).toHaveClass("grid", "gap-2.5", "sm:grid-cols-2", "lg:grid-cols-3");
     expect(within(rail).queryByRole("heading", { level: 4 })).not.toBeInTheDocument();
     expect(within(rail).queryByRole("heading", { level: 3 })).not.toBeInTheDocument();
   });
+  it("packs different brackets and weeks into one grid while preserving their order", async () => {
+    const recap = (id: string, bracketId: string, gameDate: string) => ({
+      id, title: id, body: "A strong team performance.", summary: null,
+      coverImageUrl: null, gameDate, effectiveGameDate: gameDate, opponentName: null,
+      teamScore: null, opponentScore: null, teamId: "team-a", teamName: "Alpha",
+      bracketId, publishedAt: `${gameDate}T12:00:00Z`,
+    });
+    mockedFetch.mockResolvedValue({
+      ...competitionResponse({ type: "league" }),
+      brackets: [{ id: "gold", label: "Gold", sortOrder: 0 }, { id: "silver", label: "Silver", sortOrder: 1 }],
+      featuredRecaps: [
+        recap("silver-first", "silver", "2026-05-04"),
+        recap("gold-later", "gold", "2026-05-11"),
+        recap("gold-first", "gold", "2026-05-04"),
+      ],
+    });
+    renderWithProviders(<CompetitionPage />);
+    await screen.findByTestId("card-featured-recap-gold-first");
+    const grid = screen.getByTestId("rail-grouped-sections");
+    expect(Array.from(grid.children).map((link) => link.getAttribute("href"))).toEqual([
+      "/posts/gold-first", "/posts/gold-later", "/posts/silver-first",
+    ]);
+    expect(within(grid).getByTestId("bracket-featured-recap-gold-first")).toHaveTextContent("Gold");
+    expect(within(grid).getByTestId("bracket-featured-recap-silver-first")).toHaveTextContent("Silver");
+  });
+
   it("filters featured recaps by bracket together with team, date, and search, then clears every filter", async () => {
     const user = userEvent.setup();
     const recap = (id: string, bracketId: string | null, teamId: string, gameDate = "2026-05-04") => ({
