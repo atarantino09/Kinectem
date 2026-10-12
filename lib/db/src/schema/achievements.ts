@@ -6,7 +6,9 @@ export const achievementRollout = pgTable("achievement_rollout", {
   id: boolean("id").primaryKey().default(true),
   startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
   backfillDone: boolean("backfill_done").notNull().default(false),
-}, (t) => [check("achievement_rollout_id_check", sql`${t.id}`)]);
+// Explicit comparison keeps the constraint expression round-trippable by
+// schema introspection/diff tools; a bare boolean column can be double-wrapped.
+}, (t) => [check("achievement_rollout_id_check", sql`${t.id} = true`)]);
 export const achievementContributions = pgTable("achievement_contributions", {
   kind: text("kind").notNull(), refId: uuid("ref_id").notNull(),
   authorId: uuid("author_id").references(() => users.id, { onDelete: "set null" }),

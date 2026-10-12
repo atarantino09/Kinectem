@@ -9,7 +9,7 @@ export const ACHIEVEMENT_MIGRATION = {
   sql: `
 ALTER TABLE articles ADD COLUMN IF NOT EXISTS previous_season jsonb;
 CREATE TABLE IF NOT EXISTS achievement_rollout (
-  id boolean PRIMARY KEY DEFAULT true CHECK(id), started_at timestamptz NOT NULL DEFAULT now(),
+  id boolean PRIMARY KEY DEFAULT true CHECK(id = true), started_at timestamptz NOT NULL DEFAULT now(),
   backfill_done boolean NOT NULL DEFAULT false
 );
 ALTER TABLE achievement_rollout ADD COLUMN IF NOT EXISTS backfill_done boolean NOT NULL DEFAULT false;

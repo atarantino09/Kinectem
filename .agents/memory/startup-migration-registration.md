@@ -1,31 +1,20 @@
 ---
-name: Startup migration registration
-description: Schema changes need a registered entry in migrations.ts, not just a raw SQL apply to the dev DB.
+name: Managed schema migration boundary
+description: Use the development schema and Publish for managed production migrations, not new startup DDL
 ---
 
-# Startup migrations must be registered, not just dev-applied
+For this project's managed PostgreSQL, schema changes belong in the schema
+source and development database. Publish computes and applies the
+development-to-production schema diff. Existing startup migration code is
+legacy infrastructure, not a reason to add new deployment-time schema patches.
 
-The api-server applies schema via an **ordered startup-migration list** in
-`artifacts/api-server/src/lib/migrations.ts` (`MIGRATIONS` array, run by
-`runStartupMigrations()` on every boot). Each entry is `{ name, sql }` and the
-SQL is run with `sql.raw` inside a try/catch (failures log loudly but don't
-block boot).
+**Why:** Publish's migration validation reads the actual development schema and
+tests the generated changes on a disposable production fork. An earlier memory
+incorrectly claimed production and test schemas came exclusively from startup
+registrations.
 
-**Rule:** any DB schema change (new table, new/altered column) must be added as
-a new idempotent SQL const + appended to the `MIGRATIONS` array. `pnpm db push`
-or a one-off raw SQL applied to the dev DB only mutates the *dev* database —
-production and fresh test DBs get their schema **exclusively** from this list.
-
-**Why:** the tournament-tables feature nearly shipped tables that existed only in the dev
-DB. The Drizzle schema (`lib/db/src/schema/index.ts`) had the tables, dev had
-them applied, typecheck passed, the live app worked — but there was no
-`MIGRATIONS` entry, so a production deploy would have had no tournament tables
-and every funnel route would 500.
-
-**How to apply:**
-- Write SQL idempotently: `CREATE TABLE/INDEX IF NOT EXISTS`, guarded
-  `CREATE TYPE` via `DO $migration$ ... pg_type` block, `ADD COLUMN IF NOT
-  EXISTS`, and `ALTER COLUMN ... DROP NOT NULL` (a no-op when already nullable).
-- Verify after restart in the api-server workflow log: every entry logs
-  `Applied startup migration { migration: "<name>" }`.
-- Confirm the column/table landed with an `information_schema.columns` query.
+**How to apply:** Follow the database skill, verify development changes, inspect
+the pending diff, and have the user retry Publish. Do not add production push
+scripts, build hooks, or startup-time DDL to bypass that flow. Production
+inspection is read-only. Keep equivalent existing bootstrap definitions aligned
+when needed without introducing another schema-application path.

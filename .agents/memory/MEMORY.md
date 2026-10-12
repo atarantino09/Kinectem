@@ -23,7 +23,8 @@
 - [Code review remediation](code-review-remediation.md) — session cookie stays SameSite=None (NOT Lax); cursor pagination blocked by locked openapi.yaml; optional-secret gaps warn not fatal.
 - [api-server typecheck baseline](api-server-typecheck-baseline.md) — api-server leaf typecheck is broken at baseline (express5/drizzle); how to tell your errors from the TS7030/TS2769/`string|string[]`/AuthorRoleLabel noise; rateLimit needs `name`.
 - [One-time data migrations](one-time-migrations.md) — MIGRATIONS re-run every boot; one-shot data cleanups must be gated on a one_time_migration_markers row or they re-delete future rows.
-- [Startup migration registration](startup-migration-registration.md) — schema changes need a registered entry in migrations.ts MIGRATIONS array; dev push/raw SQL alone never reaches production.
+- [Managed schema migration boundary](startup-migration-registration.md) — Publish handles production schema; existing startup DDL is legacy, not a new production repair path.
+- [Publish boolean checks](publish-boolean-check.md) — bare boolean CHECK is valid PostgreSQL but can be double-wrapped by Publish; explicit comparisons round-trip correctly.
 - [Competition console claim preview](competition-claim-preview.md) — claim-link visitors get the full console read-only & expanded via synthetic row + disabled fieldset; gate owner-only queries.
 - [Two org-claim flows](org-claim-flows.md) — ownerless org pages have a review-gated claim *request* AND a secret-token instant claim *link*; don't conflate; both owner-exclusive via one-owner index.
 - [Stripe org billing](stripe-org-billing.md) — yearly discounts are first-year only; FREE2027 defers the first full-price charge until August 1, 2027 rather than discounting it.
