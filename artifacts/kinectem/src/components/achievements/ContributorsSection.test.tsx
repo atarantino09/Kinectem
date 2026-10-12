@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type { Contributor } from "@/hooks/use-achievements";
 
 const state = vi.hoisted(() => ({ data: [] as Contributor[] }));
@@ -13,6 +13,20 @@ import { ContributorsSection } from "./ContributorsSection";
 
 beforeEach(() => { state.data = []; });
 describe("public career badges", () => {
+  it("starts collapsed and opens and closes from its heading", () => {
+    state.data = [{ id: "coach", name: "Coach", role: "Coach", teams: [], awards: [], featured: [] }];
+    render(<ContributorsSection orgId="org" />);
+    const toggle = screen.getByRole("button", { name: "Coaches & Contributors (1)" });
+    const card = screen.getByTestId("contributor-coach");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(card).not.toBeVisible();
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(card).toBeVisible();
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(card).not.toBeVisible();
+  });
   it("shows all four earned selections once at highest tier in a wrapping row", () => {
     const keys = ["first-story", "team-storyteller", "beyond-scoreboard", "retro-recapper"];
     state.data = [{
@@ -22,6 +36,7 @@ describe("public career badges", () => {
         { key: "team-storyteller", tier: 3, threshold: 50, earnedAt: "" }],
     }];
     render(<ContributorsSection orgId="org" />);
+    fireEvent.click(screen.getByRole("button", { name: "Coaches & Contributors (1)" }));
     const card = screen.getByTestId("contributor-coach");
     expect(card.textContent).toContain("Retro Recapper");
     expect(card.textContent).toContain("Gold · 50");

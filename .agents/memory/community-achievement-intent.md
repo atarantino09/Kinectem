@@ -14,6 +14,17 @@ Use UTC publication-day buckets, with the deadline at the end of the tenth follo
 
 **How to apply:** Preserve affiliation captured at first eligible contribution. Team moves must not transfer prior milestone or participation credit to the new organization. Public personal awards are career achievements, not claims that every contribution belonged to the current club.
 
+Earlier eligible posts must count toward the appropriate volume/photo badges,
+including explicitly attested previous-season recaps; the rollout date is not a
+cutoff for earned contribution totals.
+
+**Why:** The user explicitly requested that previous posts contribute toward
+unlocking achievements, not only posts written after the feature launched.
+
+**How to apply:** Recover missing eligible history without duplicating credit,
+replaying streaks, inventing past affiliations, or overriding display/privacy
+choices. Continue to exclude drafts, hidden content and newspaper clippings.
+
 Newly earned distinct badges should be publicly featured by default, without requiring
 an owner to open a collection. Explicit privacy and manual unfeaturing remain owner
 choices; tier upgrades and quiet historical recognition must not undo them.

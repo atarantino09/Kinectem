@@ -225,7 +225,8 @@ DO $$ DECLARE item record; BEGIN
  IF (SELECT backfill_done FROM achievement_rollout WHERE id=true) THEN RETURN; END IF;
 INSERT INTO achievement_contributions(kind,ref_id,author_id,team_id,category,eligible_at,personal_eligible,backfilled,org_attribution_captured)
  SELECT 'article',a.id,a.author_id,a.team_id,
-  CASE WHEN a.article_kind='practice_plan' THEN 'plan' WHEN a.game_date IS NOT NULL OR a.recap_kind='combined' THEN 'current' ELSE 'update' END,
+  CASE WHEN a.article_kind='practice_plan' THEN 'plan' WHEN a.previous_season IS NOT NULL THEN 'retro'
+    WHEN a.game_date IS NOT NULL OR a.recap_kind='combined' THEN 'current' ELSE 'update' END,
   coalesce(a.published_at,a.created_at),
   NOT u.is_minor AND u.role<>'admin' AND u.account_status='active' AND u.deleted_at IS NULL
     AND (u.date_of_birth IS NULL OR u.date_of_birth<=now()-interval '18 years')
@@ -236,7 +237,6 @@ INSERT INTO achievement_contributions(kind,ref_id,author_id,team_id,category,eli
         WHERE t.id=a.team_id AND oa.user_id=u.id AND oa.role IN ('owner','admin'))),true,true
  FROM articles a JOIN users u ON u.id=a.author_id
  WHERE a.status='published' AND a.hidden_at IS NULL AND a.recap_kind IS DISTINCT FROM 'historical'
-  AND a.previous_season IS NULL
   AND coalesce(a.published_at,a.created_at)<(SELECT started_at FROM achievement_rollout)
  ON CONFLICT DO NOTHING;
 INSERT INTO achievement_contributions(kind,ref_id,author_id,organization_id,category,eligible_at,backfilled,org_attribution_captured)

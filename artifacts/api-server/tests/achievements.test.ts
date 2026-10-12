@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { sql, eq } from "drizzle-orm";
-import { db, articles, teams, organizations, rosterEntries, users, assets, albumPhotos, organizationAdmins } from "@workspace/db";
+import { db, articles, teams, organizations, rosterEntries, users, assets, albumPhotos, organizationAdmins, orgPosts } from "@workspace/db";
 import { ACHIEVEMENT_CATALOG, earnedTier } from "../src/lib/achievement-catalog";
 import { ACHIEVEMENT_MIGRATION } from "../src/lib/achievement-migration";
+import { reconcileAchievementHistory } from "../src/lib/achievement-history";
 import { ACHIEVEMENT_SETTINGS_SCHEMA_UPGRADE } from "../../../lib/db/src/achievement-settings-schema-upgrade";
 import { previousSeasonError } from "../src/lib/previous-season";
 import { app, loginAs, request } from "./helpers";
@@ -29,6 +30,56 @@ beforeEach(async () => {
 });
 
 describe("community achievements", () => {
+  it("recovers older recaps, updates, plans and original retro recaps after the initial backfill has completed", async () => {
+    const { user, team, org } = await fixture();
+    const old = { publishedAt: new Date("2025-02-01"), createdAt: new Date("2025-02-01") };
+    await recap(team.id, user.id, { ...old, photoUrls: ["https://example.com/team.jpg"] });
+    for (let n = 0; n < 5; n++) {
+      await recap(team.id, user.id, { ...old, previousSeason: { season: "2025", gamePlayedDate: "2025-02-01", attested: true } });
+      await recap(team.id, user.id, { ...old, gameDate: null, ...(n === 0 ? { articleKind: "practice_plan" as const } : {}) });
+    }
+    await recap(team.id, user.id, { ...old, status: "draft" });
+    await recap(team.id, user.id, { ...old, status: "pending_approval" });
+    await recap(team.id, user.id, { ...old, recapKind: "historical" });
+    await recap(team.id, user.id, { ...old, hiddenAt: new Date() });
+    await db.insert(orgPosts).values({
+      organizationId: org.id, authorId: user.id, title: "Earlier club news", body: "News",
+      status: "published", ...old,
+    });
+    // Simulate a completed but incomplete old backfill on this isolated test DB.
+    await db.execute(sql`TRUNCATE achievement_contributions,achievement_awards,achievement_settings,achievement_streaks,achievement_streak_events`);
+    await db.execute(sql`UPDATE achievement_rollout SET backfill_done=true`);
+    await reconcileAchievementHistory();
+    await reconcileAchievementHistory();
+    const counts = await q(sql`SELECT metric,value FROM achievement_metrics('team',${team.id}::uuid)`);
+    expect(counts.find((m) => m.metric === "current")?.value).toBe(1);
+    expect(counts.find((m) => m.metric === "updates")?.value).toBe(5);
+    expect(counts.find((m) => m.metric === "retro")?.value).toBe(5);
+    expect(counts.find((m) => m.metric === "streak")?.value).toBe(0);
+    expect((await q(sql`SELECT value FROM achievement_metrics('team',${team.id}::uuid) WHERE metric='photos'`))[0].value).toBe(1);
+    const ledger = await q(sql`SELECT * FROM achievement_contributions WHERE team_id=${team.id}::uuid`);
+    expect(ledger).toHaveLength(11);
+    expect(ledger.every((c) => c.backfilled && c.organization_id === null)).toBe(true);
+    expect(await q(sql`SELECT * FROM achievement_streak_events`)).toHaveLength(0);
+    const earned = await q(sql`SELECT key,celebrated FROM achievement_awards WHERE subject_id=${user.id}::uuid`);
+    expect(earned.map((a) => a.key).sort()).toEqual(["beyond-scoreboard", "first-story", "retro-recapper"]);
+    expect(earned.every((a) => a.celebrated)).toBe(true);
+    expect((await q(sql`SELECT value FROM achievement_metrics('organization',${org.id}::uuid) WHERE metric='story'`))[0].value).toBe(1);
+    expect((await q(sql`SELECT visibility,featured FROM achievement_settings WHERE subject='user' AND subject_id=${user.id}::uuid`))[0])
+      .toEqual({ visibility: "private", featured: [] });
+  });
+
+  it("never replaces existing organization snapshots or manual display choices while recovering older work", async () => {
+    const { user, team, org } = await fixture();
+    const existing = await recap(team.id, user.id, { publishedAt: new Date("2025-02-01") });
+    await db.execute(sql`UPDATE achievement_settings SET visibility='private',featured='{}' WHERE subject='user' AND subject_id=${user.id}::uuid`);
+    await reconcileAchievementHistory();
+    expect((await q(sql`SELECT organization_id,backfilled FROM achievement_contributions WHERE ref_id=${existing.id}::uuid`))[0])
+      .toEqual({ organization_id: org.id, backfilled: false });
+    expect((await q(sql`SELECT visibility,featured FROM achievement_settings WHERE subject='user' AND subject_id=${user.id}::uuid`))[0])
+      .toEqual({ visibility: "private", featured: [] });
+  });
+
   it("upgrades the old three-badge schema before fourth-badge publication and manual selection", async () => {
     const { agent, user, team } = await fixture();
     await db.insert(articles).values(Array.from({ length: 10 }, () => ({

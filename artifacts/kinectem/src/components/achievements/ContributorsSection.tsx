@@ -1,3 +1,5 @@
+import { useId, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { Link } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -12,6 +14,8 @@ const NAMES: Record<string, string> = {
 };
 
 export function ContributorsSection({ orgId }: { orgId: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const contentId = useId();
   const { data, isLoading, isError, refetch } = useOrgContributors(orgId);
   if (isLoading) return <Skeleton className="h-24 rounded-xl" />;
   if (isError) {
@@ -25,8 +29,20 @@ export function ContributorsSection({ orgId }: { orgId: string }) {
   if (!data || data.length === 0) return null;
   return (
     <section className="app-surface p-4 sm:p-5" aria-label="Coaches and Contributors" data-testid="section-contributors">
-      <h2 className="text-lg font-black tracking-tight">Coaches &amp; Contributors</h2>
+      <h2 className="text-lg font-black tracking-tight">
+        <button
+          type="button"
+          className="flex w-full items-center justify-between gap-3 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          aria-expanded={expanded}
+          aria-controls={contentId}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          <span>Coaches &amp; Contributors <span className="text-sm font-medium text-muted-foreground">({data.length})</span></span>
+          <ChevronDown aria-hidden="true" className={`h-5 w-5 shrink-0 text-muted-foreground transition-transform ${expanded ? "rotate-180" : ""}`} />
+        </button>
+      </h2>
       <p className="text-xs text-muted-foreground mt-0.5">Career achievements shared publicly by people who write for this organization's teams. Listed alphabetically.</p>
+      <div id={contentId} hidden={!expanded}>
       <ul className="mt-3 grid gap-3 sm:grid-cols-2">
         {data.map((c) => {
           const best = bestAwards(c.awards);
@@ -48,6 +64,7 @@ export function ContributorsSection({ orgId }: { orgId: string }) {
           );
         })}
       </ul>
+      </div>
     </section>
   );
 }
