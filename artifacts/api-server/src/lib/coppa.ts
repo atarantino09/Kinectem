@@ -11,6 +11,7 @@ import { and, eq } from "drizzle-orm";
 import crypto from "node:crypto";
 import { apiError } from "./spec-helpers";
 import { logger } from "./logger";
+import { SUPPORT_EMAIL } from "./support-contact";
 
 // Single source of truth for the parental-consent notice. Any change
 // requires bumping `CONSENT_NOTICE_VERSION` so we can prove which
@@ -21,7 +22,7 @@ import { logger } from "./logger";
 // named infrastructure providers) the FTC's "Direct Notice"
 // guidance requires. Bump again on any wording change so we can
 // prove which version a parent saw at consent time.
-export const CONSENT_NOTICE_VERSION = "1.1.0";
+export const CONSENT_NOTICE_VERSION = "1.1.1";
 export const CONSENT_NOTICE_TEXT = `
 Kinectem is a youth-sports social platform operated by Kinectem, Inc.,
 2261 Market Street #4567, San Francisco, CA 94114. Federal law (the
@@ -31,7 +32,7 @@ information from a child under 13.
 
 OPERATOR CONTACT
 - Mail: Kinectem, Inc., 2261 Market Street #4567, San Francisco, CA 94114
-- Email: privacy@kinectem.com
+- Email: ${SUPPORT_EMAIL}
 - Phone: +1 (415) 555-0137
 
 WHAT WE COLLECT FROM YOUR CHILD
@@ -79,10 +80,10 @@ You can review the personal information we have collected from your
 child, request its deletion, or refuse to permit further collection
 or use. Use the Family page to export the data, request deletion, or
 revoke consent (which immediately disables the account). You can
-also email privacy@kinectem.com with any request. We respond within
+also email ${SUPPORT_EMAIL} with any request. We respond within
 10 business days.
 
-Questions: privacy@kinectem.com.
+Questions: ${SUPPORT_EMAIL}.
 `.trim();
 
 // Email-plus pacing: how long after the first guardian click we hold

@@ -19,7 +19,7 @@ describe("duplicate child cleanup help", () => {
     expect(details).toHaveTextContent("Removing a child from one team");
     expect(details).toHaveTextContent("No content, memberships, or consent history is merged or transferred automatically");
     expect(details).toHaveTextContent("Don’t unlink the last guardian or create more profiles");
-    expect(screen.getByRole("link", { name: "Kinectem privacy support" })).toHaveAttribute("href", "mailto:privacy@kinectem.com");
+    expect(screen.getByRole("link", { name: "Kinectem privacy support" })).toHaveAttribute("href", "mailto:hello@kinectem.com");
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 

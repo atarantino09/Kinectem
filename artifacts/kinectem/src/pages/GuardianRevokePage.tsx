@@ -3,6 +3,7 @@ import { useRoute } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Trophy, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { SUPPORT_EMAIL } from "@/lib/support-contact";
 
 // Task #359 — one-click revoke. Lands here from the link in the
 // finalized-consent email. We require an explicit click so a stray
@@ -83,7 +84,7 @@ export default function GuardianRevokePage() {
               <h1 className="font-black tracking-tight text-2xl">Consent revoked</h1>
               <p className="text-sm text-slate-600">
                 {state.athleteName}'s account has been disabled. They can no longer
-                sign in. Email <span className="font-medium">privacy@kinectem.com</span>{" "}
+                sign in. Email <span className="font-medium">{SUPPORT_EMAIL}</span>{" "}
                 if you want their data deleted.
               </p>
             </div>

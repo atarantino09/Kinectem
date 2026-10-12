@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { SUPPORT_EMAIL } from "../lib/support-contact";
 import { db, users, passwordResets, apiKeys, parentalConsents } from "@workspace/db";
 import { ensureActiveGuardianLink } from "../lib/guardian-links";
 import { and, asc, eq, isNull } from "drizzle-orm";
@@ -189,7 +190,7 @@ function blockOnAccountStatus(
     apiError(
       res,
       403,
-      "This account has been disabled because a parent or guardian revoked consent. Contact privacy@kinectem.com if you believe this is a mistake.",
+      `This account has been disabled because a parent or guardian revoked consent. Contact ${SUPPORT_EMAIL} if you believe this is a mistake.`,
       { extras: { accountStatus: "disabled" } },
     );
     return true;

@@ -1,5 +1,6 @@
 import { Link } from "wouter";
 import { Trophy } from "lucide-react";
+import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/support-contact";
 
 // Task #359 — the COPPA direct notice to parents. Mirrors the verbatim
 // notice text the consent-flow API serves so a parent who lands here
@@ -41,8 +42,8 @@ export default function CoppaNoticePage() {
             <li>Mail: Kinectem, Inc., 2261 Market Street #4567, San Francisco, CA 94114</li>
             <li>
               Email:{" "}
-              <a className="text-blue-600 hover:underline" href="mailto:privacy@kinectem.com">
-                privacy@kinectem.com
+              <a className="text-blue-600 hover:underline" href={SUPPORT_MAILTO}>
+                {SUPPORT_EMAIL}
               </a>
             </li>
             <li>Phone: +1 (415) 555-0137</li>
@@ -124,7 +125,7 @@ export default function CoppaNoticePage() {
             <strong>deletion</strong> (locks the account immediately and
             hard-deletes after a 30-day cooling-off window), or{" "}
             <strong>revoke</strong> consent. You can also email
-            privacy@kinectem.com with any request — we respond within 10
+            {SUPPORT_EMAIL} with any request — we respond within 10
             business days.
           </p>
         </section>
@@ -153,8 +154,8 @@ export default function CoppaNoticePage() {
           <h2 className="font-bold text-xl">Contact</h2>
           <p>
             Email{" "}
-            <a className="text-blue-600 hover:underline" href="mailto:privacy@kinectem.com">
-              privacy@kinectem.com
+            <a className="text-blue-600 hover:underline" href={SUPPORT_MAILTO}>
+              {SUPPORT_EMAIL}
             </a>{" "}
             with any question or to request data access or deletion.
           </p>

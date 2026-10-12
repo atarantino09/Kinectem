@@ -1,5 +1,6 @@
 import { Link } from "wouter";
 import { Trophy } from "lucide-react";
+import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/support-contact";
 
 // Task #359 — privacy policy with the COPPA-required Direct Notice
 // section linked. Hand-authored so the wording stays human-reviewed
@@ -31,8 +32,8 @@ export default function PrivacyPolicyPage() {
           <p>
             Kinectem is operated by Kinectem, Inc., 2261 Market Street
             #4567, San Francisco, CA 94114. Reach the privacy team at{" "}
-            <a className="text-blue-600 hover:underline" href="mailto:privacy@kinectem.com">
-              privacy@kinectem.com
+            <a className="text-blue-600 hover:underline" href={SUPPORT_MAILTO}>
+              {SUPPORT_EMAIL}
             </a>{" "}
             or +1 (415) 555-0137.
           </p>
@@ -103,8 +104,8 @@ export default function PrivacyPolicyPage() {
             account deletion (locks immediately, hard-deletes after a
             30-day cooling-off window), or revoke consent — all from the
             Family page. You can also email{" "}
-            <a className="text-blue-600 hover:underline" href="mailto:privacy@kinectem.com">
-              privacy@kinectem.com
+            <a className="text-blue-600 hover:underline" href={SUPPORT_MAILTO}>
+              {SUPPORT_EMAIL}
             </a>{" "}
             with any data-access or deletion request, including for an
             under-13 account. We respond within 10 business days.
@@ -117,7 +118,7 @@ export default function PrivacyPolicyPage() {
             If you are the guardian of a child whose photo appears in a
             recap or highlight without your approval, open the post and
             use the <strong>Request takedown</strong> link, or email
-            privacy@kinectem.com. The post is hidden while we review the
+            {SUPPORT_EMAIL}. The post is hidden while we review the
             request.
           </p>
         </section>
