@@ -6,7 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import {
-  MAX_FEATURED, useAcknowledgeAchievements, useAchievements, usePauseTeamStreak,
+  useAcknowledgeAchievements, useAchievements, usePauseTeamStreak,
   useUpdateAchievementSettings, type AchievementSubject,
 } from "@/hooks/use-achievements";
 import { TIER_LABEL, bestAwards, formatDeadlineUtc, hoursUntil, nextThreshold, orderForRow } from "@/lib/achievements";
@@ -53,15 +53,14 @@ export function AchievementsPanel({ subject, id, title = "Achievements", enabled
 
   const { items, best } = orderForRow(data.catalog, data.awards, data.featured);
   const isUser = subject === "user";
-  const hiddenFromPublic = isUser && data.canManage && data.visibility === "private";
+  const hiddenFromPublic = data.canManage && data.visibility === "private";
+  const privateCopy = isUser
+    ? "Only you can see your achievements. Switch to Public in the collection to share them on your profile."
+    : `Only authorized ${subject === "team" ? "team" : "organization"} managers can see these achievements. Posts, membership, access, and coaches' career badges are unchanged.`;
   if (best.size === 0 && !data.canManage) return null;
 
   const setFeatured = (key: string) => {
     const has = data.featured.includes(key);
-    if (!has && data.featured.length >= MAX_FEATURED) {
-      toast({ title: `Feature up to ${MAX_FEATURED} badges`, description: "Unfeature one first." });
-      return;
-    }
     update.mutate({ featured: has ? data.featured.filter((k) => k !== key) : [...data.featured, key] }, {
       onError: () => toast({ title: "Couldn't update featured badges", variant: "destructive" }),
     });
@@ -89,7 +88,7 @@ export function AchievementsPanel({ subject, id, title = "Achievements", enabled
       )}
       {hiddenFromPublic && (
         <p className="mt-3 text-xs text-muted-foreground" data-testid="text-achievements-private">
-          Only you can see your achievements. Switch to Public in the collection to share them on your profile.
+          {privateCopy}
         </p>
       )}
       {data.canManage && data.streaks?.filter((s) => !s.paused && s.status !== "expired"
@@ -100,7 +99,7 @@ export function AchievementsPanel({ subject, id, title = "Achievements", enabled
         </p>
       ))}
       {items.length === 0 && data.canManage ? (
-        <p className="mt-3 text-sm text-muted-foreground" data-testid={`empty-achievements-${subject}`}>{best.size === 0 ? "No badges earned yet. Publish game recaps to start your collection." : "No badges featured. Open your collection and feature up to 3."}</p>
+        <p className="mt-3 text-sm text-muted-foreground" data-testid={`empty-achievements-${subject}`}>{best.size === 0 ? "No badges earned yet. Newly earned badges are automatically featured, with achievements Public by default." : "No badges featured. Open your collection to select badges."}</p>
       ) : items.length > 0 ? (
         <ul className="mt-3 flex flex-wrap gap-3" data-testid={`row-achievements-${subject}`}>
           {items.map((c) => {
@@ -130,11 +129,11 @@ export function AchievementsPanel({ subject, id, title = "Achievements", enabled
             </DialogDescription>
           </DialogHeader>
           {data.canManage && <p className="text-xs text-muted-foreground">Streak tracking began {new Date(data.rolloutAt).toLocaleDateString()}. Earlier recaps may count for volume, but do not create historical streaks. Each UTC publication day counts once; the deadline is the end of the tenth following UTC day.</p>}
-          {isUser && data.canManage && (
+          {data.canManage && (
             <label className="flex items-center justify-between gap-3 rounded-lg border p-3">
               <span className="text-sm">
-                <span className="font-bold block">Show achievements on my profile</span>
-                <span className="text-xs text-muted-foreground">{data.visibility === "public" ? "Public" : "Private"}. This only affects achievements.</span>
+                <span className="font-bold block">{isUser ? "Show achievements on my profile" : `Show achievements on this ${subject === "team" ? "team" : "organization"} page`}</span>
+                <span className="text-xs text-muted-foreground">{data.visibility === "public" ? "Public" : "Private"}. This only affects achievements. New collections are Public by default; newly earned badges are automatically featured. {hiddenFromPublic && privateCopy}</span>
               </span>
               <Switch checked={data.visibility === "public"} onCheckedChange={toggleVisibility} disabled={update.isPending} aria-label="Public achievements" data-testid="switch-achievements-visibility" />
             </label>

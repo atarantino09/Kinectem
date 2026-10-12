@@ -25,4 +25,12 @@ describe("achievements helpers", () => {
     expect(hoursUntil("2024-01-01T12:00:00Z", Date.parse("2024-01-01T00:00:00Z"))).toBe(12);
     expect(hoursUntil(null)).toBeNull();
   });
+  it("does not truncate four badges and deduplicates keys at their highest tier", () => {
+    const catalog = ["a", "b", "c", "d"].map((key) => ({ ...cat[0], key }));
+    const { items, best } = orderForRow(catalog,
+      [aw("a", 1, 10), aw("a", 3, 50), aw("b", 1, 10), aw("c", 1, 10), aw("d", 1, 10)],
+      ["a", "b", "c", "d", "a", "unearned"]);
+    expect(items.map((c) => c.key)).toEqual(["a", "b", "c", "d"]);
+    expect(best.get("a")?.tier).toBe(3);
+  });
 });

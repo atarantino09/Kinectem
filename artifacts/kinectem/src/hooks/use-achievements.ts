@@ -20,7 +20,6 @@ export type Contributor = {
   awards: AchievementAward[]; featured: string[];
 };
 
-export const MAX_FEATURED = 3;
 export const achievementsKey = (subject: AchievementSubject, id: string) => ["achievements", subject, id] as const;
 export const contributorsKey = (orgId: string) => ["achievements", "contributors", orgId] as const;
 

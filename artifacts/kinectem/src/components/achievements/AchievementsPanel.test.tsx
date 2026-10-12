@@ -3,10 +3,11 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const state: { data: unknown; error?: unknown } = { data: null };
+const update = vi.hoisted(() => vi.fn());
 vi.mock("@/hooks/use-achievements", async (orig) => ({
   ...(await orig<typeof import("@/hooks/use-achievements")>()),
   useAchievements: () => ({ data: state.data, isLoading: false, isError: !!state.error, error: state.error, refetch: vi.fn() }),
-  useUpdateAchievementSettings: () => ({ mutate: vi.fn(), isPending: false }),
+  useUpdateAchievementSettings: () => ({ mutate: update, isPending: false }),
   useAcknowledgeAchievements: () => ({ mutate: vi.fn() }),
   usePauseTeamStreak: () => ({ mutate: vi.fn(), isPending: false }),
 }));
@@ -24,7 +25,7 @@ const awards = [
 const base = { subject: "user", id: "u", canManage: false, visibility: "public", featured: [], catalog, awards, rolloutAt: "x" };
 const wrap = () => render(<QueryClientProvider client={new QueryClient()}><AchievementsPanel subject="user" id="u" /></QueryClientProvider>);
 
-beforeEach(() => { state.data = null; state.error = undefined; });
+beforeEach(() => { state.data = null; state.error = undefined; update.mockClear(); });
 
 describe("AchievementsPanel", () => {
   it("shows only featured badges; viewers with none see nothing", () => {
@@ -60,5 +61,35 @@ describe("AchievementsPanel", () => {
     state.error = { status: 404 };
     const { container } = wrap();
     expect(container.textContent).toBe("");
+  });
+  it.each(["user", "team", "organization"] as const)("provides achievement-only privacy controls for %s managers", (subject) => {
+    state.data = { ...base, subject, canManage: true, visibility: "private" };
+    render(<QueryClientProvider client={new QueryClient()}><AchievementsPanel subject={subject} id="u" /></QueryClientProvider>);
+    expect(screen.getByTestId("text-achievements-private").textContent).toContain(subject === "user" ? "Only you" : "managers");
+    fireEvent.click(screen.getByTestId(`button-open-achievements-${subject}`));
+    fireEvent.click(screen.getByTestId("switch-achievements-visibility"));
+    expect(update).toHaveBeenCalledWith({ visibility: "public" }, expect.any(Object));
+    expect(screen.getByText(/This only affects achievements/).textContent).toContain("Public by default");
+  });
+  it("allows a fourth featured badge and manual removal, displaying all badges once", () => {
+    const extraCatalog = [
+      ...catalog,
+      { key: "beyond-scoreboard", name: "Beyond the Scoreboard", thresholds: [5, 15, 30], criteria: "c", subject: "user" },
+      { key: "retro-recapper", name: "Retro Recapper", thresholds: [5, 20, 50], criteria: "c", subject: "user" },
+    ];
+    const earned = [...awards, ...extraCatalog.slice(2).map((c) => ({ key: c.key, tier: 1, threshold: 5, earnedAt: "x" }))];
+    const selected = extraCatalog.slice(0, 3).map((c) => c.key);
+    state.data = { ...base, canManage: true, catalog: extraCatalog, awards: earned, featured: selected };
+    const view = wrap();
+    fireEvent.click(screen.getByTestId("button-open-achievements-user"));
+    fireEvent.click(screen.getByTestId("button-feature-retro-recapper"));
+    expect(update).toHaveBeenLastCalledWith({ featured: [...selected, "retro-recapper"] }, expect.any(Object));
+    fireEvent.click(screen.getByTestId("button-feature-first-story"));
+    expect(update).toHaveBeenLastCalledWith({ featured: selected.slice(1) }, expect.any(Object));
+    state.data = { ...base, catalog: extraCatalog, awards: earned, featured: [...selected, "retro-recapper"] };
+    view.rerender(<QueryClientProvider client={new QueryClient()}><AchievementsPanel subject="user" id="u" /></QueryClientProvider>);
+    const row = screen.getByTestId("row-achievements-user");
+    expect(row.querySelectorAll("li")).toHaveLength(4);
+    expect(row.className).toContain("flex-wrap");
   });
 });

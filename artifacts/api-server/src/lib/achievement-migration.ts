@@ -1,6 +1,6 @@
 import { ACHIEVEMENT_CATALOG } from "./achievement-catalog";
 const catalogRows = ACHIEVEMENT_CATALOG.flatMap((item) => item.thresholds.map((threshold, i) =>
-  `('${item.subject}','${item.key}','${item.metric}',${i + 1},${threshold})`,
+   `('${item.subject}','${item.key}','${item.metric}',${i + 1},${threshold},${ACHIEVEMENT_CATALOG.indexOf(item)})`,
 )).join(",");
 // Capture attribution in the content transaction, not in a later HTTP callback.
 // Ledger identity is a persisted contribution, never a content hash.
@@ -33,10 +33,27 @@ CREATE TABLE IF NOT EXISTS achievement_awards (
   celebrated boolean NOT NULL DEFAULT false, PRIMARY KEY(subject,subject_id,key,tier)
 );
 CREATE TABLE IF NOT EXISTS achievement_settings (
-  subject text NOT NULL, subject_id uuid NOT NULL, visibility text NOT NULL DEFAULT 'private',
+  subject text NOT NULL, subject_id uuid NOT NULL, visibility text NOT NULL DEFAULT 'public',
   featured text[] NOT NULL DEFAULT '{}', PRIMARY KEY(subject,subject_id),
-  CHECK(visibility IN ('private','public')), CHECK(cardinality(featured)<=3)
+  CHECK(visibility IN ('private','public'))
 );
+-- Data-only transition: old team/org visibility was ignored. A marker makes
+-- subsequent explicit Private choices survive every bootstrap/restart.
+CREATE TABLE IF NOT EXISTS one_time_migration_markers (
+ name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now()
+);
+DO $$ BEGIN
+ PERFORM pg_advisory_xact_lock(hashtextextended('achievement-evaluation',0));
+ IF NOT EXISTS(SELECT 1 FROM one_time_migration_markers WHERE name='achievement-subject-privacy') THEN
+   -- A missing legacy personal row also meant Private. Materialize that
+   -- default without exposing or featuring any already-earned badges.
+   INSERT INTO achievement_settings(subject,subject_id,visibility)
+     SELECT DISTINCT subject,subject_id,'private' FROM achievement_awards WHERE subject='user'
+     ON CONFLICT DO NOTHING;
+   UPDATE achievement_settings SET visibility='public' WHERE subject IN ('team','organization');
+   INSERT INTO one_time_migration_markers(name) VALUES('achievement-subject-privacy');
+ END IF;
+END $$;
 CREATE TABLE IF NOT EXISTS achievement_streaks (
   team_id uuid NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
   contributor_id text NOT NULL, current_count int NOT NULL DEFAULT 0, best int NOT NULL DEFAULT 0,
@@ -100,14 +117,34 @@ RETURNS TABLE(metric text,value int) LANGUAGE sql AS $$
      OR (p_subject='team' AND team_id=p_id AND contributor_id='team');
 $$;
 CREATE OR REPLACE FUNCTION achievement_evaluate(p_subject text,p_id uuid,p_quiet boolean DEFAULT false)
-RETURNS void LANGUAGE sql AS $$
- INSERT INTO achievement_awards(subject,subject_id,key,tier,threshold,celebrated)
- SELECT p_subject,p_id,c.key,c.tier,c.threshold,p_quiet FROM
-   (VALUES ${catalogRows}) AS c(subject,key,metric,tier,threshold)
- JOIN achievement_metrics(p_subject,p_id) m ON m.metric=c.metric
- WHERE c.subject=p_subject AND m.value>=c.threshold
- ON CONFLICT DO NOTHING;
-$$;
+RETURNS void LANGUAGE plpgsql AS $$
+DECLARE new_keys text[];
+BEGIN
+  -- Same lock as settings writes, including when there is no settings row yet.
+  PERFORM pg_advisory_xact_lock(hashtextextended('achievement-settings:'||p_subject||':'||p_id,0));
+  WITH candidates AS (
+    SELECT c.* FROM (VALUES ${catalogRows}) AS c(subject,key,metric,tier,threshold,ordinal)
+    JOIN achievement_metrics(p_subject,p_id) m ON m.metric=c.metric
+    WHERE c.subject=p_subject AND m.value>=c.threshold
+  ), first_keys AS (
+    SELECT DISTINCT c.key,c.ordinal FROM candidates c WHERE NOT EXISTS(
+      SELECT 1 FROM achievement_awards a WHERE a.subject=p_subject AND a.subject_id=p_id AND a.key=c.key)
+  ), inserted AS (
+    INSERT INTO achievement_awards(subject,subject_id,key,tier,threshold,celebrated)
+    SELECT p_subject,p_id,c.key,c.tier,c.threshold,p_quiet FROM candidates c
+    ON CONFLICT DO NOTHING RETURNING key
+  )
+  SELECT array_agg(f.key ORDER BY f.ordinal) INTO new_keys FROM first_keys f
+    WHERE EXISTS(SELECT 1 FROM inserted i WHERE i.key=f.key);
+  IF new_keys IS NOT NULL THEN
+    INSERT INTO achievement_settings(subject,subject_id,visibility,featured)
+      VALUES(p_subject,p_id,CASE WHEN p_quiet AND p_subject='user' THEN 'private' ELSE 'public' END,
+        CASE WHEN p_quiet THEN '{}'::text[] ELSE new_keys END)
+    ON CONFLICT(subject,subject_id) DO UPDATE SET featured=achievement_settings.featured ||
+      ARRAY(SELECT k FROM unnest(CASE WHEN p_quiet THEN '{}'::text[] ELSE new_keys END) k
+        WHERE NOT k=ANY(achievement_settings.featured));
+  END IF;
+END $$;
 CREATE OR REPLACE FUNCTION achievement_advance(p_team uuid,p_person text,p_at timestamptz)
 RETURNS void LANGUAGE plpgsql AS $$
 DECLARE s achievement_streaks; n int; d date := (p_at AT TIME ZONE 'UTC')::date;

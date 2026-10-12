@@ -4,6 +4,7 @@ import { sql, eq } from "drizzle-orm";
 import { db, articles, teams, organizations, rosterEntries, users, assets, albumPhotos, organizationAdmins } from "@workspace/db";
 import { ACHIEVEMENT_CATALOG, earnedTier } from "../src/lib/achievement-catalog";
 import { ACHIEVEMENT_MIGRATION } from "../src/lib/achievement-migration";
+import { ACHIEVEMENT_SETTINGS_SCHEMA_UPGRADE } from "../../../lib/db/src/achievement-settings-schema-upgrade";
 import { previousSeasonError } from "../src/lib/previous-season";
 import { app, loginAs, request } from "./helpers";
 
@@ -28,6 +29,38 @@ beforeEach(async () => {
 });
 
 describe("community achievements", () => {
+  it("upgrades the old three-badge schema before fourth-badge publication and manual selection", async () => {
+    const { agent, user, team } = await fixture();
+    await db.insert(articles).values(Array.from({ length: 10 }, () => ({
+      teamId: team.id, authorId: user.id, title: "Current story", body: "Story",
+      status: "published" as const, gameDate: new Date(),
+    })));
+    await db.insert(articles).values(Array.from({ length: 5 }, () => ({
+      teamId: team.id, authorId: user.id, title: "Update", body: "Update", status: "published" as const,
+    })));
+    expect((await q(sql`SELECT featured FROM achievement_settings WHERE subject='user' AND subject_id=${user.id}::uuid`))[0].featured).toHaveLength(3);
+    // Restore the actual old DB definition, not just the old TypeScript schema.
+    await db.execute(sql`ALTER TABLE achievement_settings ALTER COLUMN visibility SET DEFAULT 'private'`);
+    await db.execute(sql`ALTER TABLE achievement_settings ADD CONSTRAINT achievement_settings_featured_check CHECK(cardinality(featured)<=3)`);
+    // Same narrow schema sync that task merge runs on DEVELOPMENT, with
+    // Publish subsequently computing the production diff. Never runtime DDL.
+    await db.execute(sql.raw(ACHIEVEMENT_SETTINGS_SCHEMA_UPGRADE));
+    await db.execute(sql.raw(ACHIEVEMENT_SETTINGS_SCHEMA_UPGRADE));
+    expect(await q(sql`SELECT conname FROM pg_constraint WHERE conrelid='achievement_settings'::regclass
+      AND conname='achievement_settings_featured_check'`)).toEqual([]);
+    expect((await q(sql`SELECT column_default FROM information_schema.columns WHERE table_name='achievement_settings'
+      AND column_name='visibility'`))[0].column_default).toContain("public");
+    for (let i = 0; i < 5; i++) {
+      await recap(team.id, user.id, { previousSeason: { season: "2025", gamePlayedDate: "2025-02-01", attested: true } });
+    }
+    expect((await q(sql`SELECT count(*)::int AS n FROM articles WHERE team_id=${team.id}::uuid`))[0].n).toBe(20);
+    const url = `/api/v1/achievements/user/${user.id}`;
+    const keys = (await agent.get(url)).body.featured;
+    expect(keys).toEqual(["first-story", "team-storyteller", "beyond-scoreboard", "retro-recapper"]);
+    expect((await agent.put(url).send({ featured: [] })).status).toBe(200);
+    expect((await agent.put(url).send({ featured: keys })).status).toBe(200);
+    expect((await agent.get(url)).body.featured).toEqual(keys);
+  });
   it("defines all twelve catalogs and exact named-tier thresholds", () => {
     expect(ACHIEVEMENT_CATALOG).toHaveLength(12);
     for (const item of ACHIEVEMENT_CATALOG) {
@@ -189,7 +222,7 @@ describe("community achievements", () => {
     const { agent, user, org, team } = await fixture();
     await recap(team.id, user.id);
     const url = `/api/v1/achievements/user/${user.id}`;
-    expect((await request(app).get(url)).status).toBe(404);
+    expect((await request(app).get(url)).status).toBe(200);
     expect((await agent.get(url)).body.progress["first-story"]).toBe(1);
     expect((await agent.put(url).send({ visibility: "public", featured: ["first-story"] })).status).toBe(200);
     const visible = await request(app).get(url);
@@ -236,5 +269,164 @@ describe("community achievements", () => {
     expect(ledger).toHaveLength(1); expect(ledger[0].organization_id).toBeNull();
     expect(await q(sql`SELECT * FROM achievement_streaks`)).toHaveLength(0);
     expect((await q(sql`SELECT * FROM achievement_awards WHERE subject_id=${user.id}::uuid`)).every((a) => a.celebrated)).toBe(true);
+    expect((await q(sql`SELECT * FROM achievement_settings WHERE subject_id=${user.id}::uuid`))[0])
+      .toMatchObject({ visibility: "private", featured: [] });
+  });
+
+  it("features first awards for every subject and immediately shares contributor badges without collection reads", async () => {
+    const { user, team, org } = await fixture();
+    await recap(team.id, user.id);
+    for (const [subject, id, key] of [["user", user.id, "first-story"], ["team", team.id, "first-whistle"],
+      ["organization", org.id, "our-story-begins"]]) {
+      expect((await q(sql`SELECT visibility,featured FROM achievement_settings WHERE subject=${subject} AND subject_id=${id}::uuid`))[0])
+        .toEqual({ visibility: "public", featured: [key] });
+      const read = await request(app).get(`/api/v1/achievements/${subject}/${id}`);
+      expect(read.status).toBe(200);
+      expect(read.body.featured).toEqual([key]);
+      expect(read.body.progress).toBeUndefined();
+    }
+    const contributors = await request(app).get(`/api/v1/organizations/${org.id}/contributors`);
+    expect(contributors.body.data.find((p: any) => p.id === user.id).featured).toEqual(["first-story"]);
+  });
+
+  it("preserves all-subject Private choices through awards, reads, reconciliation and restart without hiding coaches", async () => {
+    const { agent, user, team, org } = await fixture();
+    await recap(team.id, user.id);
+    for (const [subject, id] of [["user", user.id], ["team", team.id], ["organization", org.id]]) {
+      expect((await agent.put(`/api/v1/achievements/${subject}/${id}`).send({ visibility: "private" })).status).toBe(200);
+    }
+    await recap(team.id, user.id);
+    await db.execute(sql.raw(ACHIEVEMENT_MIGRATION.sql));
+    for (const [subject, id] of [["user", user.id], ["team", team.id], ["organization", org.id]]) {
+      await db.execute(sql`SELECT achievement_evaluate(${subject},${id}::uuid)`);
+      const url = `/api/v1/achievements/${subject}/${id}`;
+      expect((await request(app).get(url)).status).toBe(404);
+      expect((await agent.get(url)).body.visibility).toBe("private");
+      expect((await agent.get(url)).body.progress).toBeDefined();
+    }
+    await agent.put(`/api/v1/achievements/user/${user.id}`).send({ visibility: "public" });
+    const listing = await request(app).get(`/api/v1/organizations/${org.id}/contributors`);
+    expect(listing.body.data.find((p: any) => p.id === user.id).featured).toEqual(["first-story"]);
+    expect((await request(app).get(`/api/v1/teams/${team.id}`)).status).toBe(200);
+    expect((await request(app).get(`/api/v1/organizations/${org.id}`)).status).toBe(200);
+  });
+
+  it("appends a fourth badge, keeps unique highest tiers and does not refeature removed badges on upgrades or retries", async () => {
+    const { agent, user, team } = await fixture();
+    await recap(team.id, user.id);
+    await agent.put(`/api/v1/achievements/user/${user.id}`).send({ featured: [] });
+    await db.insert(articles).values(Array.from({ length: 25 }, (_, i) => ({
+      teamId: team.id, authorId: user.id, title: `Volume ${i}`, body: "Story", status: "published" as const, gameDate: new Date(),
+    })));
+    await db.insert(articles).values(Array.from({ length: 5 }, () => ({
+      teamId: team.id, authorId: user.id, title: "Update", body: "Update", status: "published" as const, gameDate: null,
+    })));
+    await db.insert(articles).values(Array.from({ length: 5 }, () => ({
+      teamId: team.id, authorId: user.id, title: "Retro", body: "Original story", status: "published" as const,
+      previousSeason: { season: "2025", gamePlayedDate: "2025-02-01", attested: true }, gameDate: new Date("2025-02-01"),
+    })));
+    await db.execute(sql`INSERT INTO achievement_streaks(team_id,contributor_id,best) VALUES(${team.id}::uuid,${user.id},4)
+      ON CONFLICT(team_id,contributor_id) DO UPDATE SET best=4`);
+    await Promise.all(Array.from({ length: 4 }, () => db.execute(sql`SELECT achievement_evaluate('user',${user.id}::uuid)`)));
+    const read = await agent.get(`/api/v1/achievements/user/${user.id}`);
+    expect(read.body.featured).toEqual(["team-storyteller", "beyond-scoreboard", "retro-recapper", "reliable-reporter"]);
+    expect(read.body.awards.filter((a: any) => a.key === "team-storyteller")).toHaveLength(1);
+    expect(read.body.awards.find((a: any) => a.key === "team-storyteller").tier).toBe(2);
+    expect((await agent.put(`/api/v1/achievements/user/${user.id}`).send({ featured: read.body.featured })).status).toBe(200);
+    expect((await agent.put(`/api/v1/achievements/user/${user.id}`).send({ featured: ["first-story", "first-story"] })).status).toBe(400);
+    await agent.put(`/api/v1/achievements/user/${user.id}`).send({ featured: ["beyond-scoreboard"] });
+    await db.execute(sql`UPDATE achievement_streaks SET best=12 WHERE team_id=${team.id}::uuid AND contributor_id=${user.id}`);
+    await db.execute(sql`SELECT achievement_evaluate('user',${user.id}::uuid)`);
+    expect((await agent.get(`/api/v1/achievements/user/${user.id}`)).body.featured).toEqual(["beyond-scoreboard"]);
+  });
+
+  it("rejects unauthorized writes for every subject and serializes privacy and awards", async () => {
+    const { agent, user, team, org } = await fixture();
+    const { agent: stranger } = await loginAs("daniela@kinectem.demo");
+    for (const [subject, id] of [["user", user.id], ["team", team.id], ["organization", org.id]]) {
+      const url = `/api/v1/achievements/${subject}/${id}`;
+      expect((await request(app).put(url).send({ visibility: "private" })).status).toBe(401);
+      expect((await stranger.put(url).send({ visibility: "private" })).status).toBe(403);
+    }
+    await Promise.all([
+      recap(team.id, user.id),
+      ...[["user", user.id], ["team", team.id], ["organization", org.id]].map(async ([subject, id]) => {
+        expect((await agent.put(`/api/v1/achievements/${subject}/${id}`).send({ visibility: "private" })).status).toBe(200);
+      }),
+    ]);
+    for (const id of [user.id, team.id, org.id]) {
+      expect((await q(sql`SELECT visibility,featured FROM achievement_settings WHERE subject_id=${id}::uuid`))[0].visibility).toBe("private");
+      expect((await q(sql`SELECT featured FROM achievement_settings WHERE subject_id=${id}::uuid`))[0].featured).toHaveLength(1);
+    }
+    await Promise.all([
+      recap(team.id, user.id),
+      agent.put(`/api/v1/achievements/team/${team.id}`).send({ featured: [] }),
+    ]);
+    await db.execute(sql`SELECT achievement_evaluate('team',${team.id}::uuid)`);
+    expect((await agent.get(`/api/v1/achievements/team/${team.id}`)).body.featured).toEqual([]);
+  });
+
+  it("transitions ignored legacy team/org privacy once, preserving personal defaults and manual features", async () => {
+    const { user, team, org } = await fixture();
+    await recap(team.id, user.id);
+    const { user: legacyPublic } = await loginAs("daniela@kinectem.demo");
+    await db.execute(sql`INSERT INTO achievement_settings(subject,subject_id,visibility,featured)
+      VALUES('user',${legacyPublic.id}::uuid,'public',ARRAY['first-story'])`);
+    await db.execute(sql`DELETE FROM one_time_migration_markers WHERE name='achievement-subject-privacy'`);
+    await db.execute(sql`UPDATE achievement_settings SET visibility='private',featured='{}' WHERE subject<>'user'`);
+    await db.execute(sql`DELETE FROM achievement_settings WHERE subject='user' AND subject_id=${user.id}::uuid`);
+    await db.execute(sql.raw(ACHIEVEMENT_MIGRATION.sql));
+    expect((await q(sql`SELECT visibility,featured FROM achievement_settings WHERE subject='user' AND subject_id=${user.id}::uuid`))[0])
+      .toEqual({ visibility: "private", featured: [] });
+    expect((await q(sql`SELECT visibility,featured FROM achievement_settings WHERE subject_id=${legacyPublic.id}::uuid`))[0])
+      .toEqual({ visibility: "public", featured: ["first-story"] });
+    expect((await q(sql`SELECT visibility FROM achievement_settings WHERE subject_id=${team.id}::uuid`))[0].visibility).toBe("public");
+    await db.execute(sql`UPDATE achievement_settings SET visibility='private' WHERE subject_id IN (${team.id}::uuid,${org.id}::uuid)`);
+    await db.execute(sql.raw(ACHIEVEMENT_MIGRATION.sql));
+    expect((await q(sql`SELECT visibility FROM achievement_settings WHERE subject_id=${team.id}::uuid`))[0].visibility).toBe("private");
+    expect((await q(sql`SELECT featured FROM achievement_settings WHERE subject_id=${team.id}::uuid`))[0].featured).toEqual([]);
+  });
+
+  it("quiet awards do not feature historical badges or refeature them on later evaluation", async () => {
+    const { agent, user, team } = await fixture();
+    await recap(team.id, user.id);
+    await agent.put(`/api/v1/achievements/user/${user.id}`).send({ visibility: "private", featured: [] });
+    await db.execute(sql`INSERT INTO achievement_streaks(team_id,contributor_id,best) VALUES(${team.id}::uuid,${user.id},4)
+      ON CONFLICT(team_id,contributor_id) DO UPDATE SET best=4`);
+    await db.execute(sql`SELECT achievement_evaluate('user',${user.id}::uuid,true)`);
+    await db.execute(sql`SELECT achievement_evaluate('user',${user.id}::uuid)`);
+    expect((await agent.get(`/api/v1/achievements/user/${user.id}`)).body.featured).toEqual([]);
+    expect((await q(sql`SELECT celebrated FROM achievement_awards WHERE subject_id=${user.id}::uuid AND key='reliable-reporter'`))[0].celebrated).toBe(true);
+    await db.insert(articles).values(Array.from({ length: 5 }, () => ({
+      teamId: team.id, authorId: user.id, title: "Private plan", body: "Do not expose drills",
+      articleKind: "practice_plan" as const, status: "published" as const,
+    })));
+    const managed = await agent.get(`/api/v1/achievements/user/${user.id}`);
+    expect(managed.body.featured).toEqual(["beyond-scoreboard"]);
+    expect(managed.body.visibility).toBe("private");
+    await agent.put(`/api/v1/achievements/user/${user.id}`).send({ visibility: "public" });
+    const publicRead = await request(app).get(`/api/v1/achievements/user/${user.id}`);
+    expect(publicRead.body.progress).toBeUndefined();
+    expect(JSON.stringify(publicRead.body)).not.toContain("Do not expose drills");
+  });
+
+  it("never bypasses profile, minor, inactive/deleted, support-admin or archived-team protections", async () => {
+    const { agent, user, team, org } = await fixture();
+    await recap(team.id, user.id);
+    const url = `/api/v1/achievements/user/${user.id}`;
+    for (const patch of [
+      { profileVisibility: "private" as const }, { profileVisibility: "followers" as const },
+      { isMinor: true }, { dateOfBirth: new Date("2020-01-01") },
+      { accountStatus: "disabled" as const }, { deletedAt: new Date() }, { role: "admin" as const },
+    ]) {
+      await db.update(users).set(patch).where(eq(users.id, user.id));
+      expect((await request(app).get(url)).status).toBe(404);
+      expect((await request(app).get(`/api/v1/organizations/${org.id}/contributors`)).body.data).toEqual([]);
+      await db.update(users).set({ profileVisibility: "public", isMinor: false, dateOfBirth: null,
+        accountStatus: "active", deletedAt: null, role: "coach" }).where(eq(users.id, user.id));
+    }
+    await db.update(teams).set({ archivedAt: new Date() }).where(eq(teams.id, team.id));
+    expect((await request(app).get(`/api/v1/achievements/team/${team.id}`)).status).toBe(404);
+    expect((await agent.get(`/api/v1/achievements/team/${team.id}`)).status).toBe(200);
   });
 });

@@ -30,11 +30,10 @@ export const achievementAwards = pgTable("achievement_awards", {
 }, (t) => [primaryKey({ columns: [t.subject, t.subjectId, t.key, t.tier] })]);
 export const achievementSettings = pgTable("achievement_settings", {
   subject: text("subject").notNull(), subjectId: uuid("subject_id").notNull(),
-  visibility: text("visibility").notNull().default("private"),
+  visibility: text("visibility").notNull().default("public"),
   featured: text("featured").array().notNull().default(sql`'{}'::text[]`),
 }, (t) => [primaryKey({ columns: [t.subject, t.subjectId] }),
-  check("achievement_settings_visibility_check", sql`${t.visibility} IN ('private','public')`),
-  check("achievement_settings_featured_check", sql`cardinality(${t.featured})<=3`)]);
+  check("achievement_settings_visibility_check", sql`${t.visibility} IN ('private','public')`)]);
 export const achievementStreaks = pgTable("achievement_streaks", {
   teamId: uuid("team_id").notNull().references(() => teams.id, { onDelete: "cascade" }),
   contributorId: text("contributor_id").notNull(),

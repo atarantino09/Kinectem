@@ -13,3 +13,15 @@ Use UTC publication-day buckets, with the deadline at the end of the tenth follo
 **Why:** There is no universal season boundary, and current organization membership is not evidence of past membership. Suppress historical celebration floods while preserving earned awards permanently.
 
 **How to apply:** Preserve affiliation captured at first eligible contribution. Team moves must not transfer prior milestone or participation credit to the new organization. Public personal awards are career achievements, not claims that every contribution belonged to the current club.
+
+Newly earned distinct badges should be publicly featured by default, without requiring
+an owner to open a collection. Explicit privacy and manual unfeaturing remain owner
+choices; tier upgrades and quiet historical recognition must not undo them.
+
+**Why:** Recognition should appear immediately, but existing private personal work
+and deliberate display choices must not be exposed retroactively. Team and
+organization achievement privacy is separate from coaches' career achievements.
+
+**How to apply:** Keep achievement controls subject-specific and independent of
+profile privacy, posts, memberships, and organization access. Do not bulk-feature
+already-earned badges when reevaluating criteria or changing defaults.

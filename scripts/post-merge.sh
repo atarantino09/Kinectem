@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 pnpm install --frozen-lockfile
+# Apply this narrow development schema change without a broad push that can
+# prompt on unrelated tables. Publish remains the production migration path.
+pnpm --filter @workspace/api-server exec tsx scripts/sync-achievement-settings-dev.ts --development
 # The API service runs its registered, idempotent migrations on startup.
 # Workflow reconciliation restarts it after this script. A forced Drizzle push
 # can prompt to truncate populated tables despite --force and then exit 0

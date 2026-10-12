@@ -22,7 +22,7 @@ async function awards(subject: AchievementSubject, id: string): Promise<Award[]>
 async function settings(subject: AchievementSubject, id: string) {
   return (await rows<{ visibility: "public" | "private"; featured: string[] }>(sql`
     SELECT visibility,featured FROM achievement_settings WHERE subject=${subject} AND subject_id=${id}::uuid`))[0]
-    ?? { visibility: "private" as const, featured: [] };
+    ?? { visibility: "public" as const, featured: [] };
 }
 async function access(subject: AchievementSubject, id: string, viewerId?: string) {
   if (subject === "user") {
@@ -63,14 +63,15 @@ router.get("/achievements/:subject/:id", asyncHandler(async (req, res): Promise<
   if (!subject.success || !id.success) { apiError(res, 400, "Invalid achievement subject."); return; }
   const rights = await access(subject.data, id.data, req.sessionUser?.id);
   if (!rights) { notFound(res); return; }
-  // Repairs interrupted older app evaluations and serializes settings-independent awards.
+  // Repairs interrupted evaluations; new awards and settings share a subject lock.
   await db.execute(sql`SELECT achievement_evaluate(${subject.data},${id.data}::uuid)`);
   const earned = await awards(subject.data, id.data);
   const prefs = await settings(subject.data, id.data);
+  if (!rights.canManage && prefs.visibility !== "public") { notFound(res); return; }
   const rollout = await rows<{ rolloutAt: string }>(sql`SELECT started_at AS "rolloutAt" FROM achievement_rollout`);
   const result: Record<string, unknown> = {
     subject: subject.data, id: id.data, ...rights,
-    visibility: subject.data === "user" ? prefs.visibility : "public",
+    visibility: prefs.visibility,
     featured: prefs.featured.filter((key) => earned.some((a) => a.key === key)),
     catalog: ACHIEVEMENT_CATALOG.filter((c) => c.subject === subject.data),
     awards: earned.map((a) => rights.canManage ? a : { key: a.key, tier: a.tier, threshold: a.threshold, earnedAt: a.earnedAt }),
@@ -118,10 +119,9 @@ router.put("/achievements/:subject/:id", asyncHandler(async (req, res): Promise<
   if (!req.sessionUser) { apiError(res, 401, "Not authenticated"); return; }
   const subject = Subject.safeParse(req.params.subject), id = Id.safeParse(req.params.id);
   const input = z.object({ visibility: z.enum(["private", "public"]).optional(),
-    featured: z.array(z.string()).max(3).refine((v) => new Set(v).size === v.length).optional() }).strict().safeParse(req.body);
+    featured: z.array(z.string()).refine((v) => new Set(v).size === v.length).optional() }).strict().safeParse(req.body);
   if (!subject.success || !id.success || !input.success) { apiError(res, 400, "Invalid achievement settings."); return; }
   if (!(await access(subject.data, id.data, req.sessionUser.id))?.canManage) { apiError(res, 403, "Only the owner or authorized manager can change achievements."); return; }
-  if (subject.data !== "user" && input.data.visibility) { apiError(res, 400, "Visibility is a personal achievement setting."); return; }
   const earned = await awards(subject.data, id.data);
   if (input.data.featured?.some((key) => !earned.some((a) => a.key === key))) { apiError(res, 400, "Only earned achievements can be featured."); return; }
   await db.transaction(async (tx) => {
@@ -129,7 +129,7 @@ router.put("/achievements/:subject/:id", asyncHandler(async (req, res): Promise<
     const old = (await rows<{ visibility: string; featured: string[] }>(sql`
       SELECT visibility,featured FROM achievement_settings WHERE subject=${subject.data} AND subject_id=${id.data}::uuid`, tx))[0];
     await tx.execute(sql`INSERT INTO achievement_settings(subject,subject_id,visibility,featured)
-      VALUES(${subject.data},${id.data}::uuid,${input.data.visibility ?? old?.visibility ?? "private"},
+      VALUES(${subject.data},${id.data}::uuid,${input.data.visibility ?? old?.visibility ?? "public"},
         ARRAY(SELECT jsonb_array_elements_text(${JSON.stringify(input.data.featured ?? old?.featured ?? [])}::jsonb)) )
       ON CONFLICT(subject,subject_id) DO UPDATE SET visibility=excluded.visibility,featured=excluded.featured`);
   });

@@ -30,7 +30,7 @@ export function ContributorsSection({ orgId }: { orgId: string }) {
       <ul className="mt-3 grid gap-3 sm:grid-cols-2">
         {data.map((c) => {
           const best = bestAwards(c.awards);
-          const keys = c.featured.filter((k) => best.has(k)).slice(0, 3);
+          const keys = [...new Set(c.featured)].filter((k) => best.has(k));
           return (
             <li key={c.id} className="rounded-lg border p-3 min-w-0" data-testid={`contributor-${c.id}`}>
               <Link href={`/users/${c.id}`} className="font-bold text-sm hover:underline block truncate">{c.name}</Link>

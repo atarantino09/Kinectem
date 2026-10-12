@@ -98,7 +98,7 @@
 - [Critical email MIME parity](critical-email-mime-parity.md) — compliance, security, and billing terms must remain equivalent in HTML and plaintext even when only HTML is visually restructured.
 - [Vite invalid hook after dependency merge](vite-invalid-hook-cache.md) — if all components fail at React hooks after lockfile changes, clear the artifact's Vite cache before changing app code.
 - [Mockup sandbox preview routing](mockup-sandbox-routing.md) — old canvas iframes may outlive missing sandbox files; verify dev-domain routing before debugging the design.
-- [Post-merge schema safety](post-merge-schema-safety.md) — forced Drizzle push can prompt and exit 0 without applying schema; use registered startup migrations after merges.
+- [Post-merge schema safety](post-merge-schema-safety.md) — broad forced pushes can silently skip changes; narrowly sync development at merge, then let Publish migrate production.
 - [Game-day discovery intent](game-day-discovery-intent.md) — top spotlight is Explore only; followed posts stay in Latest activity below, without autoplay or global fallback.
 - [API workflow port ownership](api-workflow-port-ownership.md) — a managed restart can leave an older watcher bound to the API port; verify the listener, not just workflow status.
 - [Promo usage accounting](promo-usage-accounting.md) — pre-tracking dates may use qualified subscription-creation estimates; redemption is not proof of a paid invoice discount.

@@ -17,13 +17,12 @@ export function nextThreshold(item: AchievementCatalogItem, award?: AchievementA
   return t.find((n) => !award || n > award.threshold) ?? null;
 }
 
-/** Row shows ONLY selected featured badges (max 3) that are earned. */
+/** Row shows each selected earned badge once, at its highest tier. */
 export function orderForRow(catalog: AchievementCatalogItem[], awards: AchievementAward[], featured: string[]) {
   const best = bestAwards(awards);
-  const items = featured
+  const items = [...new Set(featured)]
     .map((k) => catalog.find((c) => c.key === k && best.has(k)))
-    .filter((c): c is AchievementCatalogItem => !!c)
-    .slice(0, 3);
+    .filter((c): c is AchievementCatalogItem => !!c);
   return { best, items };
 }
 
