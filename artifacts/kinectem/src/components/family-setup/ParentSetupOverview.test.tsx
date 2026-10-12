@@ -23,6 +23,9 @@ describe("parent setup messaging", () => {
     const items = within(screen.getByTestId("text-parent-steps")).getAllByRole("listitem");
     expect(items).toHaveLength(3);
     expect(items[0]).toHaveTextContent("Create your parent account");
+    expect(within(items[0]).getByTestId("note-existing-parent-account")).toHaveTextContent("Sign in and continue creating your next child’s account");
+    expect(items[0]).toHaveTextContent("You and the other parent can reuse your existing accounts—no new parent accounts needed.");
+    expect(within(items[1]).queryByTestId("note-existing-parent-account")).not.toBeInTheDocument();
     expect(items[1]).toHaveTextContent("Add the other parent");
     expect(items[1]).toHaveTextContent("(optional)");
     expect(items[1]).toHaveTextContent("or skip");

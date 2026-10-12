@@ -24,6 +24,11 @@ export function ParentSetupOverview({ teamName, organizationName, teamInvite = f
                 {step.optional && <span className="ml-1.5 text-xs font-normal text-violet-700">(optional)</span>}
               </p>
               <p className="text-xs leading-5 text-slate-700">{step.detail}</p>
+              {index === 0 && (
+                <p className="mt-1 text-xs leading-5 text-violet-900" data-testid="note-existing-parent-account">
+                  <strong>Already have a parent account?</strong> Sign in and continue creating your next child’s account. You and the other parent can reuse your existing accounts—no new parent accounts needed.
+                </p>
+              )}
             </div>
           </li>
         ))}

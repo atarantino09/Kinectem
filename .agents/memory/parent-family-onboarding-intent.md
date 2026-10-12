@@ -25,6 +25,13 @@ An uncertain player-creation response remains the same creation intent even if t
 
 Roster invitation setup is for the named team only. Children on other teams use those teams’ separate invitations with the same adult login and reuse existing child profiles. Family profile creation alone is not roster enrollment, and another adult’s access still requires family-invitation acceptance.
 
+Step 1 must explicitly tell returning parents to sign in with their existing
+account when adding a second or subsequent child. Both adults reuse their
+existing parent accounts; they must not create new adult accounts per child.
+
+**Why:** The user requested this reassurance at Step 1 so parents see it before
+starting another child’s setup, not only in later other-team guidance.
+
 **Why:** Parents can mistake family setup for enrolling every sibling on the current invitation, or create a second adult login or duplicate child when enrolling on a different team. One parent’s Family should include all of their linked children across teams.
 
 **How to apply:** Keep the actual team identity distinct from the organization throughout setup. Explain the other-team path before child submission and after completion. Duplicate-profile cleanup is a separate, explicit account-wide deletion request after selecting the correct profile with the other parent; never describe unlinking or team-only removal as duplicate deletion, or promise automatic merges or immediate roster removal. Uncertain keepers or inaccessible profiles should go to existing privacy support.

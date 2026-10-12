@@ -2,10 +2,10 @@ import { Link } from "wouter";
 
 export function TeamSetupContext({ teamName, organizationName }: { teamName?: string; organizationName?: string | null }) {
   return (
-    <section className="min-w-0 rounded-lg border border-amber-300 border-l-4 bg-amber-50 p-3 text-sm text-amber-950 [overflow-wrap:anywhere]" aria-label="Invited team" data-testid="team-setup-context">
+    <section className="min-w-0 rounded-lg border border-amber-300 border-l-4 bg-amber-50 p-3 text-sm text-red-700 [overflow-wrap:anywhere]" aria-label="Invited team" data-testid="team-setup-context">
       {teamName ? (
         <>
-          <p className="font-medium">You are adding a child to <strong>{teamName}</strong>. <span className="font-bold text-amber-900">Only add children who play on this team.</span></p>
+          <p className="font-semibold">You are adding a child to <strong className="font-extrabold">{teamName}</strong>. <span className="font-extrabold">Only add children who play on this team.</span></p>
           {organizationName && <p className="mt-1 text-xs text-amber-800">Organization: {organizationName}</p>}
         </>
       ) : <p>The invited team has not been verified yet. Check the invitation’s team details before adding a child.</p>}
