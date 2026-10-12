@@ -368,7 +368,7 @@ export function FamilySetup({ userId, mode, token, teamName, organizationName, c
               <span className="font-bold">{draft.childName}</span>
               <span className="text-xs font-bold text-emerald-700">{mode === "team" ? `Added to ${rosterName}` : "Ready in Family — not added to a team"}</span>
             </div>
-            {mode === "team" && <OtherTeamGuidance />}
+            {mode === "team" && <OtherTeamGuidance setupComplete />}
             {co && (
               <div className="space-y-2 rounded-lg border border-border p-3 text-sm" data-testid="coparent-status">
                 <div className="flex flex-wrap items-center gap-2 font-bold">

@@ -13,12 +13,19 @@ export function TeamSetupContext({ teamName, organizationName }: { teamName?: st
   );
 }
 
-export function OtherTeamGuidance() {
+export function OtherTeamGuidance({ setupComplete = false }: { setupComplete?: boolean } = {}) {
   return (
-    <aside className="rounded-lg border border-border bg-muted/30 p-3 text-xs leading-5 [overflow-wrap:anywhere]" aria-label="Children on other teams" data-testid="other-team-guidance">
-      <p className="font-bold">Child on another team?</p>
-      <p>Finish or leave this setup, open that other team’s invitation, and sign in with the same parent account. Select that child’s existing profile if already created, or create it there if new. The child will join the team named on that invitation. Don’t create a second parent account or another profile for the same child.</p>
-      <p className="mt-2">All children added through your account stay linked to you and appear together in Family, even on different teams. Another parent needs a family invitation and must accept it to access a child; access is not automatic.</p>
+    <aside className="rounded-lg border border-border bg-muted/30 p-3 text-sm leading-5 [overflow-wrap:anywhere]" aria-label="Children on other teams" data-testid="other-team-guidance">
+      <p className="font-bold">Adding a child to another team?</p>
+      <ol className="mt-2 list-decimal space-y-2 pl-5">
+        <li>{setupComplete ? <>Tap <strong>Done</strong> below, then open the other team’s invitation.</> : <>Finish adding your child to this team, then open the other team’s invitation.</>}</li>
+        <li>Sign in with your <strong>same parent account</strong>. No new parent account needed.</li>
+        <li>Choose your child’s existing account, or create one for a different child you haven’t added yet.</li>
+      </ol>
+      <div className="mt-3 space-y-2 border-t border-border pt-3 text-xs">
+        <p>All your children appear together in <strong>Family</strong>, even on different teams.</p>
+        <p>The other parent must accept a family invitation before they can see that child in their account.</p>
+      </div>
       <Link href="/family?help=duplicate-child" className="mt-2 inline-block font-semibold text-primary underline">Already created a duplicate child?</Link>
     </aside>
   );

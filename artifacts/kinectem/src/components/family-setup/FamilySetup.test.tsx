@@ -28,11 +28,13 @@ describe("FamilySetup", () => {
     fireEvent.click(screen.getByTestId("btn-coparent-skip"));
     expect(screen.getByTestId("step-player")).toHaveTextContent("Choose or create a child for Team A’s roster");
     const guidance = screen.getByTestId("other-team-guidance");
-    expect(guidance).toHaveTextContent("Finish or leave this setup");
+    expect(guidance).toHaveTextContent("Finish adding your child to this team, then open the other team’s invitation.");
     expect(guidance).toHaveTextContent("same parent account");
-    expect(guidance).toHaveTextContent("Select that child’s existing profile");
-    expect(guidance).toHaveTextContent("appear together in Family");
-    expect(guidance).toHaveTextContent("must accept it");
+    expect(guidance).toHaveTextContent("Choose your child’s existing account");
+    expect(guidance).toHaveTextContent("All your children appear together in Family");
+    expect(guidance).toHaveTextContent("must accept a family invitation");
+    expect(guidance.querySelectorAll("ol > li")).toHaveLength(3);
+    expect(guidance).not.toHaveTextContent("Tap Done below");
     expect(screen.getByRole("link", { name: "Already created a duplicate child?" })).toHaveAttribute("href", "/family?help=duplicate-child");
     if (kind === "existing") {
       const select = await screen.findByTestId("btn-select-child-c1");
@@ -49,7 +51,9 @@ describe("FamilySetup", () => {
     }
     expect(await screen.findByTestId("row-added-child")).toHaveTextContent("Added to Team A’s roster");
     expect(screen.getByTestId("btn-finish-setup")).toHaveTextContent("Done, continue to Team A");
-    expect(screen.getByTestId("other-team-guidance")).toHaveTextContent("Don’t create a second parent account or another profile for the same child");
+    expect(screen.getByTestId("other-team-guidance")).toHaveTextContent("Tap Done below, then open the other team’s invitation.");
+    expect(screen.getByTestId("other-team-guidance")).toHaveTextContent("No new parent account needed.");
+    expect(screen.getByTestId("other-team-guidance")).not.toHaveTextContent("Finish adding your child");
   });
 
   it("keeps standalone Family profile creation separate from roster enrollment", async () => {

@@ -25,6 +25,13 @@ An uncertain player-creation response remains the same creation intent even if t
 
 Roster invitation setup is for the named team only. Children on other teams use those teams’ separate invitations with the same adult login and reuse existing child profiles. Family profile creation alone is not roster enrollment, and another adult’s access still requires family-invitation acceptance.
 
+Keep the optional other-team explanation short and step-by-step. After a child
+has joined, describe the next action rather than implying the current setup is
+unfinished; distinguish reusing a child's account from adding a different child.
+
+**Why:** The user repeatedly found dense family-setup messaging confusing,
+including guidance shown after successful roster enrollment.
+
 Step 1 must explicitly tell returning parents to sign in with their existing
 account when adding a second or subsequent child. Both adults reuse their
 existing parent accounts; they must not create new adult accounts per child.
