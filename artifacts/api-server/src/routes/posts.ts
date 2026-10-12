@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { PreviousSeason, previousSeasonError } from "../lib/previous-season";
 import { createRecapOnce, RecapCreationConflict } from "../lib/recap-creation";
 import { sweepCompetitionRecapMail } from "../lib/competition-recap-scheduler";
 import {
@@ -3080,10 +3081,16 @@ router.post(
       // Game-recap fields. The presence of `gameDate` is what marks
       // an article as a recap and triggers the auto-tag fan-out below.
       let gameDate: Date | null = null;
+      const retroError = previousSeasonError(body.previousSeason, status !== "draft");
+      if (retroError) return apiError(res, 400, retroError);
+      const previousSeason = body.previousSeason == null ? null : PreviousSeason.parse(body.previousSeason);
       if (typeof body.gameDate === "string" && body.gameDate.length > 0) {
         const parsed = new Date(body.gameDate);
         if (!Number.isNaN(parsed.getTime())) gameDate = parsed;
       }
+      // The explicitly attested date, not today's composer default, is the
+      // authoritative played date for an original previous-season recap.
+      if (previousSeason?.gamePlayedDate) gameDate = new Date(`${previousSeason.gamePlayedDate}T12:00:00.000Z`);
       const opponentName: string | null =
         typeof body.opponentName === "string" && body.opponentName.trim().length > 0
           ? body.opponentName.trim()
@@ -3237,6 +3244,7 @@ router.post(
           bracketId,
           status,
           publishedAt: status === "published" ? new Date() : null,
+          previousSeason,
           publishedById: status === "published" ? me.id : null,
         });
       } catch (err) {

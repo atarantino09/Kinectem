@@ -5,6 +5,12 @@ import { seedIfEmpty } from "../src/lib/seed";
 import { resetAllRateLimits } from "../src/middlewares/rate-limit";
 
 const ALL_TABLES = [
+  "achievement_contributions",
+  "achievement_awards",
+  "achievement_settings",
+  "achievement_streaks",
+  "achievement_streak_events",
+  "achievement_pauses",
   "promo_code_conversions",
   "promo_usage",
   "rate_limit_buckets",

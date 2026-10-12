@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestQueryClient } from "@/test/renderWithProviders";
 import { useNewPostForm } from "./useNewPostForm";
 
@@ -61,6 +61,56 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 const submitEvent = () => ({ preventDefault: vi.fn() } as unknown as React.FormEvent);
+afterEach(() => vi.restoreAllMocks());
+
+describe("untouched composer navigation", () => {
+  it.each(["long", "short"] as const)("keeps a new %s composer pristine without navigation or unload warnings", async (initialType) => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const { result } = renderForm({ initialType, initialCompetitionId: null });
+    await waitFor(() => expect(result.current.isDirty).toBe(false));
+    const unload = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(false);
+    const link = document.createElement("a");
+    link.href = "/teams/team-1";
+    const click = vi.fn((event: Event) => event.preventDefault()); // avoid JSDOM native navigation
+    link.addEventListener("click", click);
+    document.body.append(link);
+    try {
+      link.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      expect(click).toHaveBeenCalledOnce();
+      act(() => result.current.requestCancel());
+      expect(confirm).not.toHaveBeenCalled();
+      expect(mocks.navigate).toHaveBeenCalledWith("/teams/team-1");
+    } finally {
+      link.remove();
+    }
+  });
+
+  it.each([null, { season: "2025", gamePlayedDate: "2025-09-01", attested: true }])(
+    "restores a pristine baseline on draft reopen with retro metadata %j", async (previousSeason) => {
+      mocks.fetch.mockImplementation(async (url: string) => url === "/api/v1/posts/article-draft"
+        ? { id: "article-draft", title: "Reopened", body: "Saved content", gameDate: "2025-09-01T12:00:00Z",
+          previousSeason, context: { type: "team", id: "team-1" } }
+        : { data: [], competitions: [] });
+      const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+      const { result } = renderForm({ initialDraftId: "article-draft", initialCompetitionId: null });
+      await waitFor(() => expect(result.current.title).toBe("Reopened"));
+      expect(result.current.isDirty).toBe(false);
+      act(() => result.current.requestCancel());
+      expect(confirm).not.toHaveBeenCalled();
+      act(() => result.current.previousSeason.setEnabled(!previousSeason));
+      expect(result.current.isDirty).toBe(true);
+      const unload = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(unload);
+      expect(unload.defaultPrevented).toBe(true);
+      mocks.navigate.mockClear();
+      act(() => result.current.requestCancel());
+      expect(confirm).toHaveBeenCalledOnce();
+      expect(mocks.navigate).not.toHaveBeenCalled();
+    },
+  );
+});
 
 describe("serialized recap persistence", () => {
   it("coalesces rapid first saves and queues Enter publication on the canonical draft with latest edits", async () => {

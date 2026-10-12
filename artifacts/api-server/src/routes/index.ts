@@ -52,8 +52,10 @@ import competitionPhotoUploadRouter from "./competition-photo-upload";
 import competitionPhotoModerationRouter from "./competition-photo-moderation";
 import historicalRecapsRouter from "./historical-recaps";
 import { guardHistoricalClippingAttachments } from "../middlewares/historical-clipping-attachments";
+import achievementsRouter from "./achievements";
 
 const router: Router = Router();
+router.use(achievementsRouter);
 router.use(guardHistoricalClippingAttachments);
 router.use(competitionReferralsRouter);
 

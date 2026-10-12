@@ -1,3 +1,4 @@
+import { AchievementsPanel } from "@/components/achievements/AchievementsPanel";
 import { useEffect, useMemo, useState } from "react";
 import { TeamCompetitionPhotos } from "@/components/competition-album/TeamCompetitionPhotos";
 import { useParams, useSearch, useLocation, Link } from "wouter";
@@ -535,6 +536,8 @@ export default function TeamPage() {
               : undefined
           }
         />
+
+        <AchievementsPanel subject="team" id={teamId} title="Team achievements" />
 
         <FollowListDialog
           open={followersOpen}

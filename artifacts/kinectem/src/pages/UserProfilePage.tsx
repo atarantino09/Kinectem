@@ -1,3 +1,4 @@
+import { AchievementsPanel } from "@/components/achievements/AchievementsPanel";
 import { useState, useMemo, type ReactNode } from "react";
 import { useParams, Link, useLocation } from "wouter";
 import { useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
@@ -668,6 +669,8 @@ export default function UserProfilePage() {
             );
           })()}
         </div>
+
+        <AchievementsPanel subject="user" id={userId} title="Coach & contributor achievements" />
 
         {/* Affiliations stack: inline on mobile (between hero and posts),
           rendered in the right rail on lg+. Only one copy mounts at a

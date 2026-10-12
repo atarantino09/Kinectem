@@ -1,0 +1,15 @@
+---
+name: Community achievement intent
+description: Schedule independence, conservative historical attribution, and UTC day policy for community recognition.
+---
+Community recognition must not rely on a complete schedule or competition membership. A team manager's authenticated no-game attestation protects an active run indefinitely; it adds no contribution and cannot revive an expired run.
+
+**Why:** Outside-league teams must be equally eligible, and missing schedule entries cannot prove whether games were played. This is intentionally an attestation system, not automatic game verification.
+
+**How to apply:** Keep schedule-based coverage claims and automatic season inference out of these achievements. Use explicit previous-season classification and actual played dates for original retro recaps, never historical newspaper clippings.
+
+Use UTC publication-day buckets, with the deadline at the end of the tenth following UTC day. Disclose the UTC deadline and rollout start. Historical backfill may establish verifiable volume/photo awards, not past streaks or invented team-to-organization affiliation.
+
+**Why:** There is no universal season boundary, and current organization membership is not evidence of past membership. Suppress historical celebration floods while preserving earned awards permanently.
+
+**How to apply:** Preserve affiliation captured at first eligible contribution. Team moves must not transfer prior milestone or participation credit to the new organization. Public personal awards are career achievements, not claims that every contribution belonged to the current club.

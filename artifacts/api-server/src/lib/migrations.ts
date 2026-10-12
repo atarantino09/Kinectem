@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { ACHIEVEMENT_MIGRATION } from "./achievement-migration";
 import { RECAP_CREATION_MIGRATION } from "./recap-creation";
 import { db } from "@workspace/db";
 import { logger } from "./logger";
@@ -3052,6 +3053,7 @@ const MIGRATIONS: Array<{ name: string; sql: string }> = [
   ...FREE_ACCESS_SCHEMA_MIGRATIONS,
   COMPETITION_REFERRAL_MIGRATION,
   COMPETITION_RECAP_MIGRATION,
+  ACHIEVEMENT_MIGRATION,
 ];
 
 export async function runStartupMigrations(): Promise<void> {

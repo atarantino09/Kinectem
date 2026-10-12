@@ -1,4 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
+import { PreviousSeason, previousSeasonError } from "../lib/previous-season";
 import { sweepCompetitionRecapMail } from "../lib/competition-recap-scheduler";
 import {
   db,
@@ -394,6 +395,13 @@ router.patch(
     const body = req.body ?? {};
     const updates: Record<string, unknown> = {};
     if (typeof body.title === "string") updates["title"] = body.title;
+    if ("previousSeason" in body) {
+      if (a.articleKind === "practice_plan" && body.previousSeason != null)
+        return apiError(res, 400, "Practice plans cannot be previous-season game recaps.");
+      const error = previousSeasonError(body.previousSeason, a.status !== "draft");
+      if (error) return apiError(res, 400, error);
+      updates["previousSeason"] = body.previousSeason == null ? null : PreviousSeason.parse(body.previousSeason);
+    }
     if (typeof body.description === "string") updates["summary"] = body.description;
     if (typeof body.body === "string") updates["body"] = body.body;
     if (typeof body.coverImageUrl === "string" || body.coverImageUrl === null)
@@ -554,6 +562,9 @@ router.patch(
     }
     if (Object.keys(updates).length === 0)
       return apiError(res, 400, "no changes");
+    if ("previousSeason" in body && body.previousSeason?.gamePlayedDate) {
+      updates["gameDate"] = new Date(`${body.previousSeason.gamePlayedDate}T12:00:00.000Z`);
+    }
     const [updated] = await db
       .update(articles)
       .set(updates)
@@ -760,6 +771,8 @@ router.post(
           .limit(1)
       : [null];
     const requireApproval = orgSetting?.requireRecapApproval === true;
+    const retroError = previousSeasonError(a.previousSeason, true);
+    if (retroError) return apiError(res, 400, retroError);
     const newStatus =
       isAdmin || !requireApproval ? "published" : "pending_approval";
     const [claimed] = await db

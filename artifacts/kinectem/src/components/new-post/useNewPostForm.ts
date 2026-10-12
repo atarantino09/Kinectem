@@ -18,6 +18,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { safeInternalPath } from "@/lib/safePath";
 import { apiErrorMessage } from "@/lib/api-errors";
+import { previousSeasonPatch, previousSeasonBody, previousSeasonProblemFor } from "@/lib/previousSeason";
 
 type DraftPayload = {
   id: string;
@@ -67,6 +68,7 @@ type DraftPayload = {
   // Only the id is read here — it pre-fills the composer's competition
   // picker when a draft is re-opened so auto-saves don't clear the link.
   competition?: { id?: string | null } | null;
+  previousSeason?: { season?: string; gamePlayedDate?: string; attested?: boolean } | null;
 };
 
 // One row from GET /teams/:teamId/claimed-competitions — competitions
@@ -234,6 +236,7 @@ export function useNewPostForm({
     orgId?: string | null;
   }) => {
     const promises: Promise<unknown>[] = [
+      qc.invalidateQueries({ queryKey: ["achievements"], refetchType: "all" }),
       qc.invalidateQueries({
         queryKey: getListFeedQueryKey(),
         refetchType: "all",
@@ -490,6 +493,15 @@ export function useNewPostForm({
     };
   }, [postType, competitionId]);
 
+  // Previous-season (retro) recap metadata. Absent from PATCH until touched.
+  const [prevEnabled, setPrevEnabled] = useState(false);
+  const [prevSeason, setPrevSeason] = useState("");
+  const [prevPlayed, setPrevPlayed] = useState("");
+  const [prevAttested, setPrevAttested] = useState(false);
+  const [prevTouched, setPrevTouched] = useState(false);
+  const prevState = () => ({ enabled: prevEnabled, season: prevSeason, playedDate: prevPlayed, attested: prevAttested });
+  const previousSeasonValue = () => previousSeasonBody(prevState());
+  const previousSeasonProblem = (): string | null => previousSeasonProblemFor(prevState(), todayLocalIso());
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [saving, setSaving] = useState(false);
   const serialize = (work: () => Promise<void>) => {
@@ -544,6 +556,7 @@ export function useNewPostForm({
     competitionId: string;
     competitionGameId: string;
     bracketId: string;
+    prev?: string;
   }) => JSON.stringify(v);
   const initialSnapshot = buildSnapshot({
     title: "",
@@ -560,6 +573,7 @@ export function useNewPostForm({
     competitionGameId:
       initialCompetitionId && initialMatchId ? initialMatchId : "",
     bracketId: "",
+    prev: JSON.stringify([false, "", "", false]),
   });
   const [baseline, setBaseline] = useState<string>(initialSnapshot);
   const currentSnapshot = buildSnapshot({
@@ -574,6 +588,7 @@ export function useNewPostForm({
     competitionId,
     competitionGameId,
     bracketId,
+    prev: JSON.stringify([prevEnabled, prevSeason, prevPlayed, prevAttested]),
   });
   const isDirty = currentSnapshot !== baseline;
   const dirtyRef = useRef(isDirty);
@@ -686,6 +701,7 @@ export function useNewPostForm({
       videoUrl: videoUrl || null,
       photoUrls: photos,
       gameDate: gameDateForApi(),
+      ...(previousSeasonPatch(prevTouched, prevState()) as object),
       // The composer's competition pick (extra-spec field) rides on
       // both draft-session and edit-published PATCHes — but ONLY once
       // the coach has actually touched the picker. An untouched picker
@@ -819,6 +835,11 @@ export function useNewPostForm({
           ? d.gameDate!.slice(0, 10)
           : d.competition?.id ? "" : todayLocalIso();
         setGameDate(loadedGameDate);
+        setPrevEnabled(!!d.previousSeason);
+        setPrevSeason(d.previousSeason?.season ?? "");
+        setPrevPlayed(d.previousSeason?.gamePlayedDate?.slice(0, 10) ?? "");
+        setPrevAttested(d.previousSeason?.attested === true);
+        setPrevTouched(false);
         // Reflect the post's actual tagging state. A published recap
         // with no game date should leave the checkbox UNchecked so
         // the coach has to explicitly opt back in (otherwise auto-
@@ -922,6 +943,8 @@ export function useNewPostForm({
           // Extra response fields restore context without touching it.
           competitionGameId: (d as typeof d & { competitionGameId?: string | null }).competitionGameId ?? "",
           bracketId: (d as typeof d & { bracketId?: string | null }).bracketId ?? "",
+          prev: JSON.stringify([!!d.previousSeason, d.previousSeason?.season ?? "",
+            d.previousSeason?.gamePlayedDate?.slice(0, 10) ?? "", d.previousSeason?.attested === true]),
         });
         setBaseline(loadedSnapshot);
       })
@@ -977,6 +1000,11 @@ export function useNewPostForm({
     photos,
     gameDate,
     tagRoster,
+    prevEnabled,
+    prevSeason,
+    prevPlayed,
+    prevAttested,
+    prevTouched,
     competitionId,
     competitionGameId,
     competitionTouched,
@@ -1024,6 +1052,7 @@ export function useNewPostForm({
       ...(videoUrl.trim() ? ({ videoUrl: videoUrl.trim() } as object) : {}),
       ...(isShort && videoAssetId ? ({ assetIds: [videoAssetId] } as object) : {}),
       ...(recapDate ? ({ gameDate: recapDate } as object) : {}),
+      ...(!isShort && prevEnabled ? ({ previousSeason: previousSeasonValue() } as object) : {}),
       ...(!isShort && (pickedOpponent ?? initialOpponent)?.trim()
         ? ({
             opponentName: (pickedOpponent ?? initialOpponent)!.trim(),
@@ -1121,6 +1150,11 @@ export function useNewPostForm({
     e.preventDefault();
     if (!title.trim()) {
       toast({ title: "Add a title", variant: "destructive" });
+      return;
+    }
+    const prevProblem = previousSeasonProblem();
+    if (prevProblem) {
+      toast({ title: "Previous-season details needed", description: prevProblem, variant: "destructive" });
       return;
     }
     // Capture the snapshot we're about to persist BEFORE awaits so a
@@ -1542,6 +1576,17 @@ export function useNewPostForm({
     videoUrl,
     gameDate,
     tagRoster,
+    previousSeason: {
+      enabled: prevEnabled,
+      season: prevSeason,
+      playedDate: prevPlayed,
+      attested: prevAttested,
+      problem: previousSeasonProblem(),
+      setEnabled: (v: boolean) => { setPrevEnabled(v); setPrevTouched(true); },
+      setSeason: (v: string) => { setPrevSeason(v); setPrevTouched(true); },
+      setPlayedDate: (v: string) => { setPrevPlayed(v); setPrevTouched(true); },
+      setAttested: (v: boolean) => { setPrevAttested(v); setPrevTouched(true); },
+    },
     // Competition picker surface — the recap composer's explicit
     // competition pick plus the claimed-competitions list it chooses
     // from. `composerTeamId` gates the picker's visibility (no team,

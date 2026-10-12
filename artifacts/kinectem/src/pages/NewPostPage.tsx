@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { FileText, Play } from "lucide-react";
 import { CoAuthorsSection } from "@/components/new-post/CoAuthorsSection";
 import { PostHeaderBar } from "@/components/new-post/PostHeaderBar";
+import { PreviousSeasonFields } from "@/components/achievements/PreviousSeasonFields";
 import { PostFormFields } from "@/components/new-post/PostFormFields";
 import { useNewPostForm } from "@/components/new-post/useNewPostForm";
 import { RecapCompetitionPrompt } from "@/components/new-post/RecapCompetitionPrompt";
@@ -348,6 +349,9 @@ export default function NewPostPage() {
               onSaveDraft={form.onSaveDraft}
               onSubmit={form.onPublish}
             />
+            {form.postType === "long" && !initialProfileOnly && form.loadedKind !== "org_post" && form.loadedKind !== "highlight" && (
+              <PreviousSeasonFields state={form.previousSeason} />
+            )}
           </CardContent>
         </Card>
 

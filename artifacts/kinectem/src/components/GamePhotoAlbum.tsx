@@ -440,6 +440,7 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
       reset();
       setOpen(false);
       await refetch();
+      await queryClient.invalidateQueries({ queryKey: ["achievements"] });
     } catch (err) {
       toast({
         title: "Couldn’t add that media",
@@ -456,6 +457,7 @@ export function GamePhotoAlbum({ postId }: { postId: string }) {
       await deleteAlbumPhoto(postId, photoId);
       setLightbox(null);
       await refetch();
+      await queryClient.invalidateQueries({ queryKey: ["achievements"] });
     } catch (err) {
       toast({
         title: "Couldn’t remove that media",

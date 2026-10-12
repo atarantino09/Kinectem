@@ -7,6 +7,7 @@ import { startConsentScheduler } from "./lib/consent-scheduler";
 import { startGameRecapReminderScheduler } from "./lib/game-recap-reminder-scheduler";
 import { startScheduleReminderScheduler } from "./lib/schedule-reminder-scheduler";
 import { auditSecretStrength } from "./lib/secret-audit";
+import { startAchievementReconciliation } from "./lib/achievement-reconciliation";
 
 const rawPort = process.env["PORT"];
 
@@ -71,6 +72,7 @@ async function start() {
   }
 
   startCompetitionRecapScheduler();
+  startAchievementReconciliation();
   app.listen(port, (err) => {
     if (err) {
       logger.error({ err }, "Error listening on port");

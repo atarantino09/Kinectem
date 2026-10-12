@@ -1,3 +1,5 @@
+import { AchievementsPanel } from "@/components/achievements/AchievementsPanel";
+import { ContributorsSection } from "@/components/achievements/ContributorsSection";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useParams, Link, useLocation, useSearch } from "wouter";
 import {
@@ -1441,6 +1443,9 @@ export default function OrganizationPage() {
               </div>
             )}
           </div>
+
+          <AchievementsPanel subject="organization" id={orgId} title="Organization achievements" />
+          <ContributorsSection orgId={orgId} />
 
           {/* Teams + archived: inline on mobile, in rail on lg+. The
               hook ensures only one instance mounts at a time so testids

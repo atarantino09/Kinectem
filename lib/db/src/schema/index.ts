@@ -2,6 +2,7 @@ import { pgTable, text, integer, timestamp, date, uuid, pgEnum, boolean, primary
 import { relations, sql } from "drizzle-orm";
 import type { ResultGroup, TournamentStoryContent } from "./competition-results-types";
 export { recapCreationRequests } from "./recap-creation-requests";
+export * from "./achievements";
 export type { ResultGroup, ResultGame, ResultStanding, TournamentStoryContent } from "./competition-results-types";
 
 export const userRoleEnum = pgEnum("user_role", ["athlete", "coach", "admin", "parent", "fan"]);
@@ -1003,6 +1004,7 @@ export const articles = pgTable("articles", {
   // "combined" = multi-game recap. Drives a distinct post card pill.
   recapKind: text("recap_kind"),
   historical: jsonb("historical").$type<HistoricalRecapMetadata>(),
+  previousSeason: jsonb("previous_season").$type<{ season: string; gamePlayedDate: string; attested: boolean }>(),
   articleKind: articleKindEnum("article_kind").notNull().default("recap"),
   practiceDates: date("practice_dates").array(),
   // Competitions (§7) — set when this game recap belongs to a claimed
