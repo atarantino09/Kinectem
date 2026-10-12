@@ -25,14 +25,17 @@ unlocking achievements, not only posts written after the feature launched.
 replaying streaks, inventing past affiliations, or overriding display/privacy
 choices. Continue to exclude drafts, hidden content and newspaper clippings.
 
-Newly earned distinct badges should be publicly featured by default, without requiring
-an owner to open a collection. Explicit privacy and manual unfeaturing remain owner
-choices; tier upgrades and quiet historical recognition must not undo them.
+Earned distinct badges should be featured by default, including badges unlocked
+from earlier posts, without requiring an owner to open a collection. Quiet
+historical recognition suppresses celebrations, not featuring. Explicit privacy
+and subsequent manual unfeaturing remain owner choices.
 
-**Why:** Recognition should appear immediately, but existing private personal work
-and deliberate display choices must not be exposed retroactively. Team and
+**Why:** The user explicitly requested automatic featuring on the team page and
+coach profile after noticing earned historical badges remained unfeatured.
+Featuring must still respect profile and achievement privacy. Team and
 organization achievement privacy is separate from coaches' career achievements.
 
 **How to apply:** Keep achievement controls subject-specific and independent of
-profile privacy, posts, memberships, and organization access. Do not bulk-feature
-already-earned badges when reevaluating criteria or changing defaults.
+profile privacy, posts, memberships, and organization access. The transition may
+feature existing empty collections once; never repeat it on every read or sweep,
+or later deliberate unfeaturing would be undone.

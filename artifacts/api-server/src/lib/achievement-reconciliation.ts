@@ -2,6 +2,7 @@ import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import { logger } from "./logger";
 import { reconcileAchievementHistory } from "./achievement-history";
+import { featureExistingAchievements } from "./achievement-featuring";
 
 /** Publication/photo triggers are transactional: failure rolls back the write.
  * This sweep reconciles awards whose rolling participation changed without a
@@ -10,6 +11,7 @@ import { reconcileAchievementHistory } from "./achievement-history";
  */
 export async function reconcileAchievementAwards() {
   await reconcileAchievementHistory();
+  await featureExistingAchievements();
   const subjects = (await db.execute(sql`
     SELECT DISTINCT 'user' AS subject,author_id AS id FROM achievement_contributions WHERE personal_eligible AND author_id IS NOT NULL
     UNION SELECT 'team',id FROM teams

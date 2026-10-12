@@ -138,10 +138,9 @@ BEGIN
     WHERE EXISTS(SELECT 1 FROM inserted i WHERE i.key=f.key);
   IF new_keys IS NOT NULL THEN
     INSERT INTO achievement_settings(subject,subject_id,visibility,featured)
-      VALUES(p_subject,p_id,CASE WHEN p_quiet AND p_subject='user' THEN 'private' ELSE 'public' END,
-        CASE WHEN p_quiet THEN '{}'::text[] ELSE new_keys END)
+      VALUES(p_subject,p_id,'public',new_keys)
     ON CONFLICT(subject,subject_id) DO UPDATE SET featured=achievement_settings.featured ||
-      ARRAY(SELECT k FROM unnest(CASE WHEN p_quiet THEN '{}'::text[] ELSE new_keys END) k
+      ARRAY(SELECT k FROM unnest(new_keys) k
         WHERE NOT k=ANY(achievement_settings.featured));
   END IF;
 END $$;

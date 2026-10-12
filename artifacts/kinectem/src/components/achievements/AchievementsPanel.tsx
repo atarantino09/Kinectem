@@ -99,7 +99,7 @@ export function AchievementsPanel({ subject, id, title = "Achievements", enabled
         </p>
       ))}
       {items.length === 0 && data.canManage ? (
-        <p className="mt-3 text-sm text-muted-foreground" data-testid={`empty-achievements-${subject}`}>{best.size === 0 ? "No badges earned yet. Newly earned badges are automatically featured, with achievements Public by default." : "No badges featured. Open your collection to select badges."}</p>
+        <p className="mt-3 text-sm text-muted-foreground" data-testid={`empty-achievements-${subject}`}>{best.size === 0 ? "No badges earned yet. Earned badges, including those from earlier posts, are automatically featured. New collections are Public by default." : "No badges featured. Open your collection to select badges."}</p>
       ) : items.length > 0 ? (
         <ul className="mt-3 flex flex-wrap gap-3" data-testid={`row-achievements-${subject}`}>
           {items.map((c) => {
@@ -133,7 +133,7 @@ export function AchievementsPanel({ subject, id, title = "Achievements", enabled
             <label className="flex items-center justify-between gap-3 rounded-lg border p-3">
               <span className="text-sm">
                 <span className="font-bold block">{isUser ? "Show achievements on my profile" : `Show achievements on this ${subject === "team" ? "team" : "organization"} page`}</span>
-                <span className="text-xs text-muted-foreground">{data.visibility === "public" ? "Public" : "Private"}. This only affects achievements. New collections are Public by default; newly earned badges are automatically featured. {hiddenFromPublic && privateCopy}</span>
+                <span className="text-xs text-muted-foreground">{data.visibility === "public" ? "Public" : "Private"}. This only affects achievements. New collections are Public by default; earned badges are automatically featured, including badges from earlier posts. You can unfeature badges below. {hiddenFromPublic && privateCopy}</span>
               </span>
               <Switch checked={data.visibility === "public"} onCheckedChange={toggleVisibility} disabled={update.isPending} aria-label="Public achievements" data-testid="switch-achievements-visibility" />
             </label>

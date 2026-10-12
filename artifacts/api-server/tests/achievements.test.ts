@@ -5,6 +5,7 @@ import { db, articles, teams, organizations, rosterEntries, users, assets, album
 import { ACHIEVEMENT_CATALOG, earnedTier } from "../src/lib/achievement-catalog";
 import { ACHIEVEMENT_MIGRATION } from "../src/lib/achievement-migration";
 import { reconcileAchievementHistory } from "../src/lib/achievement-history";
+import { featureExistingAchievements } from "../src/lib/achievement-featuring";
 import { ACHIEVEMENT_SETTINGS_SCHEMA_UPGRADE } from "../../../lib/db/src/achievement-settings-schema-upgrade";
 import { previousSeasonError } from "../src/lib/previous-season";
 import { app, loginAs, request } from "./helpers";
@@ -66,7 +67,7 @@ describe("community achievements", () => {
     expect(earned.every((a) => a.celebrated)).toBe(true);
     expect((await q(sql`SELECT value FROM achievement_metrics('organization',${org.id}::uuid) WHERE metric='story'`))[0].value).toBe(1);
     expect((await q(sql`SELECT visibility,featured FROM achievement_settings WHERE subject='user' AND subject_id=${user.id}::uuid`))[0])
-      .toEqual({ visibility: "private", featured: [] });
+      .toEqual({ visibility: "public", featured: ["first-story", "beyond-scoreboard", "retro-recapper"] });
   });
 
   it("never replaces existing organization snapshots or manual display choices while recovering older work", async () => {
@@ -321,7 +322,7 @@ describe("community achievements", () => {
     expect(await q(sql`SELECT * FROM achievement_streaks`)).toHaveLength(0);
     expect((await q(sql`SELECT * FROM achievement_awards WHERE subject_id=${user.id}::uuid`)).every((a) => a.celebrated)).toBe(true);
     expect((await q(sql`SELECT * FROM achievement_settings WHERE subject_id=${user.id}::uuid`))[0])
-      .toMatchObject({ visibility: "private", featured: [] });
+      .toMatchObject({ visibility: "public", featured: ["first-story"] });
   });
 
   it("features first awards for every subject and immediately shares contributor badges without collection reads", async () => {
@@ -338,6 +339,35 @@ describe("community achievements", () => {
     }
     const contributors = await request(app).get(`/api/v1/organizations/${org.id}/contributors`);
     expect(contributors.body.data.find((p: any) => p.id === user.id).featured).toEqual(["first-story"]);
+  });
+
+  it("features previously earned team and coach badges once, preserves privacy, and respects later manual choices", async () => {
+    const { agent, user, team, org } = await fixture();
+    await recap(team.id, user.id);
+    await db.execute(sql`DELETE FROM one_time_migration_markers WHERE name='achievement-existing-badges-featured'`);
+    await db.execute(sql`UPDATE achievement_settings SET featured='{}'
+      WHERE subject_id IN (${user.id}::uuid,${team.id}::uuid,${org.id}::uuid)`);
+    await featureExistingAchievements();
+    for (const [subject, id, key] of [["user", user.id, "first-story"], ["team", team.id, "first-whistle"],
+      ["organization", org.id, "our-story-begins"]]) {
+      const page = await request(app).get(`/api/v1/achievements/${subject}/${id}`);
+      expect(page.status).toBe(200);
+      expect(page.body.featured).toEqual([key]);
+      expect((await agent.put(`/api/v1/achievements/${subject}/${id}`).send({ featured: [] })).status).toBe(200);
+    }
+    await featureExistingAchievements();
+    await db.execute(sql.raw(ACHIEVEMENT_MIGRATION.sql));
+    for (const [subject, id] of [["user", user.id], ["team", team.id], ["organization", org.id]]) {
+      expect((await agent.get(`/api/v1/achievements/${subject}/${id}`)).body.featured).toEqual([]);
+    }
+    // Featured is not permission to override a deliberately private collection.
+    await db.execute(sql`DELETE FROM one_time_migration_markers WHERE name='achievement-existing-badges-featured'`);
+    await agent.put(`/api/v1/achievements/user/${user.id}`).send({ visibility: "private" });
+    await featureExistingAchievements();
+    const coach = await agent.get(`/api/v1/achievements/user/${user.id}`);
+    expect(coach.body.featured).toEqual(["first-story"]);
+    expect(coach.body.visibility).toBe("private");
+    expect((await request(app).get(`/api/v1/achievements/user/${user.id}`)).status).toBe(404);
   });
 
   it("preserves all-subject Private choices through awards, reads, reconciliation and restart without hiding coaches", async () => {
@@ -438,7 +468,7 @@ describe("community achievements", () => {
     expect((await q(sql`SELECT featured FROM achievement_settings WHERE subject_id=${team.id}::uuid`))[0].featured).toEqual([]);
   });
 
-  it("quiet awards do not feature historical badges or refeature them on later evaluation", async () => {
+  it("quiet awards are featured without celebration, preserve privacy, and respect subsequent unfeaturing", async () => {
     const { agent, user, team } = await fixture();
     await recap(team.id, user.id);
     await agent.put(`/api/v1/achievements/user/${user.id}`).send({ visibility: "private", featured: [] });
@@ -446,8 +476,11 @@ describe("community achievements", () => {
       ON CONFLICT(team_id,contributor_id) DO UPDATE SET best=4`);
     await db.execute(sql`SELECT achievement_evaluate('user',${user.id}::uuid,true)`);
     await db.execute(sql`SELECT achievement_evaluate('user',${user.id}::uuid)`);
-    expect((await agent.get(`/api/v1/achievements/user/${user.id}`)).body.featured).toEqual([]);
+    expect((await agent.get(`/api/v1/achievements/user/${user.id}`)).body.featured).toEqual(["reliable-reporter"]);
     expect((await q(sql`SELECT celebrated FROM achievement_awards WHERE subject_id=${user.id}::uuid AND key='reliable-reporter'`))[0].celebrated).toBe(true);
+    await agent.put(`/api/v1/achievements/user/${user.id}`).send({ featured: [] });
+    await db.execute(sql`SELECT achievement_evaluate('user',${user.id}::uuid,true)`);
+    expect((await agent.get(`/api/v1/achievements/user/${user.id}`)).body.featured).toEqual([]);
     await db.insert(articles).values(Array.from({ length: 5 }, () => ({
       teamId: team.id, authorId: user.id, title: "Private plan", body: "Do not expose drills",
       articleKind: "practice_plan" as const, status: "published" as const,
