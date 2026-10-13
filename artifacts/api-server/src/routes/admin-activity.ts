@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { asyncHandler } from "../lib/async-handler";
 import { requireAdmin } from "../lib/auth";
+import { historicalActivity } from "../lib/historical-activity";
 
 const router = Router();
 router.use(requireAdmin);
@@ -23,8 +24,15 @@ const activity = sql`
     json_build_object('route',a.route)::text, a.created_at,
     'activity', a.effective_user_id
   FROM user_activity_log a
+  UNION ALL
+  SELECT h.id, h.actor_id,
+    CASE WHEN u.role='admin' THEN 'admin' ELSE 'user' END,
+    h.action_type, h.target_type, h.target_id, h.metadata, h.created_at,
+    'historical', NULL::uuid
+  FROM (${historicalActivity}) h LEFT JOIN users u ON u.id=h.actor_id
 `;
 const filters = z.object({
+  source: z.enum(["all", "activity", "audit", "historical"]).default("all"),
   actorType: z.enum(["all", "user", "admin"]).default("all"),
   adminUserId: z.string().uuid().optional(),
   actionType: z.string().max(100).optional(),
@@ -39,6 +47,7 @@ router.get("/activity", asyncHandler(async (req, res) => {
   const f = parsed.data;
   const where = sql`
     (${f.actorType}='all' OR a.actor_type=${f.actorType})
+    AND (${f.source}='all' OR a.source=${f.source})
     AND (${f.adminUserId ?? null}::uuid IS NULL OR a.actor_id=${f.adminUserId ?? null}::uuid)
     AND (${f.actionType ?? null}::text IS NULL OR a.action_type=${f.actionType ?? null})
   `;
@@ -46,7 +55,7 @@ router.get("/activity", asyncHandler(async (req, res) => {
     db.execute(sql`WITH activity AS (${activity})
       SELECT a.*, u.name, u.email FROM activity a
       LEFT JOIN users u ON u.id=a.actor_id WHERE ${where}
-      ORDER BY a.created_at ${f.order === "oldest" ? sql`ASC` : sql`DESC`}, a.id
+      ORDER BY a.created_at ${f.order === "oldest" ? sql`ASC` : sql`DESC`}, a.source, a.id
       LIMIT ${f.limit} OFFSET ${f.offset}`),
     db.execute(sql`WITH activity AS (${activity})
       SELECT count(*)::int AS total FROM activity a WHERE ${where}`),

@@ -22,6 +22,27 @@ function mount() {
 }
 
 describe("admin activity", () => {
+  it("labels historical records and filters by source", async () => {
+    vi.mocked(customFetch).mockImplementation(async (url) => {
+      if (String(url).endsWith("/admins") || String(url).endsWith("/actions")) return { data: [] };
+      return {
+        data: [{ id: "history", actionType: "latest_sign_in_recorded", actorType: "user", source: "historical",
+          metadata: { note: "Most recent saved sign-in only." },
+          admin: { id: "coach", name: "Historical Coach" }, createdAt: "2020-01-01T12:00:00Z" }],
+        pagination: { totalCount: 1, hasMore: false },
+      };
+    });
+    mount();
+    expect(await screen.findByText("Historical record")).toBeTruthy();
+    expect(screen.getByText("Most recent saved sign-in only.")).toBeTruthy();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("combobox", { name: "Activity source" }));
+    await user.click(await screen.findByRole("option", { name: "Historical records" }));
+    await waitFor(() => expect(vi.mocked(customFetch).mock.calls.some(([url]) =>
+      String(url).includes("source=historical"))).toBe(true));
+    await user.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(screen.getByRole("combobox", { name: "Activity source" }).textContent).toBe("All sources");
+  });
   it("shows user events and sends role and date-sort filters", async () => {
     vi.mocked(customFetch).mockImplementation(async (url) => {
       if (String(url).endsWith("/admins")) return { data: [] };
