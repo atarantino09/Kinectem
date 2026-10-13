@@ -124,3 +124,4 @@
 - [Community achievement intent](community-achievement-intent.md) — schedule-independent attestation, explicit retro seasons, UTC deadlines, and no invented historical org credit.
 - [Vitest mock-return teardown](vitest-hook-mock-return.md) — block-body mock-reset hooks prevent mocks from being invoked as teardown callbacks.
 - [Help contact policy](help-contact-policy.md) — general/privacy/family help uses hello; preserve existing competitions contacts and non-help addresses.
+- [Activity log scope](activity-log-scope.md) — general activity supplements audit history; platform-admin classification, real-actor attribution, and privacy boundaries.

@@ -20,6 +20,9 @@ type ActivityItem = {
   targetId: string | null;
   metadata: Record<string, unknown> | null;
   createdAt: string;
+  actorType: "user" | "admin";
+  source: "activity" | "audit";
+  effectiveUserId: string | null;
   admin: { id: string; name: string; email: string } | null;
 };
 
@@ -55,15 +58,20 @@ export default function AdminActivity() {
   const [adminUserId, setAdminUserId] = useState<string>("");
   const [actionType, setActionType] = useState<string>("");
   const [page, setPage] = useState(0);
+  const [actorType, setActorType] = useState("all");
+  const [order, setOrder] = useState("newest");
 
   const params = new URLSearchParams();
   if (adminUserId) params.set("adminUserId", adminUserId);
   if (actionType) params.set("actionType", actionType);
   params.set("limit", String(PAGE_SIZE));
+  params.set("actorType", actorType);
+  params.set("order", order);
   params.set("offset", String(page * PAGE_SIZE));
 
-  const { data, isLoading } = useQuery<ActivityResponse>({
-    queryKey: ["admin", "activity", adminUserId, actionType, page],
+  const { data, isLoading, isError } = useQuery<ActivityResponse>({
+    queryKey: ["admin", "activity", adminUserId, actionType, actorType, order, page],
+    refetchInterval: 30_000,
     queryFn: () =>
       customFetch<ActivityResponse>(`/api/v1/admin/activity?${params}`, {
         method: "GET",
@@ -74,6 +82,7 @@ export default function AdminActivity() {
     data: Array<{ id: string; name: string; email: string }>;
   }>({
     queryKey: ["admin", "activity", "admins"],
+    refetchInterval: 30_000,
     queryFn: () =>
       customFetch<{ data: Array<{ id: string; name: string; email: string }> }>(
         "/api/v1/admin/activity/admins",
@@ -82,13 +91,31 @@ export default function AdminActivity() {
   });
 
   const totalCount = data?.pagination.totalCount ?? 0;
+  const { data: actions } = useQuery<{ data: string[] }>({
+    queryKey: ["admin", "activity", "actions"],
+    queryFn: () => customFetch("/api/v1/admin/activity/actions", { method: "GET" }),
+    refetchInterval: 30_000,
+  });
   const showingFrom = totalCount === 0 ? 0 : page * PAGE_SIZE + 1;
   const showingTo = Math.min(totalCount, page * PAGE_SIZE + (data?.data.length ?? 0));
 
   return (
     <AdminLayout>
       <h1 className="text-2xl font-black mb-4">Activity log</h1>
+      <p className="text-sm text-muted-foreground mb-4">
+        Successful account actions across the platform, plus the existing admin audit history.
+        User activity is recorded from this update onward; page views and background checks are not included.
+        Admins means platform admins, not team or organization staff.
+      </p>
       <div className="flex items-center gap-3 mb-3 flex-wrap">
+        <Select value={actorType} onValueChange={(v) => { setActorType(v); setPage(0); }}>
+          <SelectTrigger className="w-44" aria-label="Activity by role"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All activity</SelectItem>
+            <SelectItem value="user">Users only</SelectItem>
+            <SelectItem value="admin">Admins only</SelectItem>
+          </SelectContent>
+        </Select>
         <Select
           value={adminUserId || "all"}
           onValueChange={(v) => {
@@ -97,10 +124,10 @@ export default function AdminActivity() {
           }}
         >
           <SelectTrigger className="w-56" data-testid="select-admin-filter">
-            <SelectValue placeholder="All admins" />
+            <SelectValue placeholder="All people" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All admins</SelectItem>
+            <SelectItem value="all">All people</SelectItem>
             {(adminsList?.data ?? []).map((a) => (
               <SelectItem key={a.id} value={a.id}>
                 {a.name}
@@ -120,20 +147,29 @@ export default function AdminActivity() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All actions</SelectItem>
-            {ACTION_TYPES.map((t) => (
+            {(actions?.data ?? ACTION_TYPES).map((t) => (
               <SelectItem key={t} value={t}>
-                {t}
+                {t.replaceAll("_", " ")}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        {(adminUserId || actionType) && (
+        <Select value={order} onValueChange={(v) => { setOrder(v); setPage(0); }}>
+          <SelectTrigger className="w-40" aria-label="Sort activity"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="newest">Newest first</SelectItem>
+            <SelectItem value="oldest">Oldest first</SelectItem>
+          </SelectContent>
+        </Select>
+        {(adminUserId || actionType || actorType !== "all" || order !== "newest") && (
           <Button
             variant="ghost"
             size="sm"
             onClick={() => {
               setAdminUserId("");
               setActionType("");
+              setActorType("all");
+              setOrder("newest");
               setPage(0);
             }}
           >
@@ -141,12 +177,14 @@ export default function AdminActivity() {
           </Button>
         )}
       </div>
-      {isLoading ? (
+      {isError ? (
+        <p role="alert" className="text-destructive">Could not load activity. Please try again.</p>
+      ) : isLoading ? (
         <div className="text-muted-foreground">Loading…</div>
       ) : (data?.data ?? []).length === 0 ? (
         <Card>
           <CardContent className="p-6 text-muted-foreground text-sm">
-            No admin actions match the current filters.
+            No activity matches the current filters.
           </CardContent>
         </Card>
       ) : (
@@ -154,10 +192,15 @@ export default function AdminActivity() {
           {(data?.data ?? []).map((a) => (
             <Card key={a.id} data-testid={`activity-${a.id}`}>
               <CardContent className="p-3 flex items-center gap-3 flex-wrap">
-                <Badge variant="outline">{a.actionType}</Badge>
+                <Badge variant={a.actorType === "admin" ? "default" : "secondary"}>
+                  {a.actorType === "admin" ? "Admin" : "User"}
+                </Badge>
+                <Badge variant="outline">{a.actionType.replaceAll("_", " ")}</Badge>
+                {a.source === "audit" && <Badge variant="outline">Audit detail</Badge>}
+                {a.effectiveUserId && <Badge variant="outline">Acting as another user</Badge>}
                 {a.targetType && <Badge variant="secondary">{a.targetType}</Badge>}
                 <span className="text-sm font-medium">
-                  {a.admin?.name ?? "Unknown admin"}
+                  {a.admin?.name ?? "Deleted user"}
                 </span>
                 {a.targetId && (
                   <span className="text-sm text-muted-foreground">
@@ -165,7 +208,7 @@ export default function AdminActivity() {
                   </span>
                 )}
                 {a.metadata && Object.keys(a.metadata).length > 0 && (
-                  <span className="text-xs text-muted-foreground font-mono truncate">
+                  <span className="text-xs text-muted-foreground font-mono break-all min-w-0">
                     {JSON.stringify(a.metadata)}
                   </span>
                 )}

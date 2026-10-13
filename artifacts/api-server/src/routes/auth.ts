@@ -259,6 +259,7 @@ router.post(
       return;
     }
     const sess = await createSession(user.id);
+    res.locals.activityActor = { id: user.id, role: user.role };
     setSessionCookie(res, sess.id, sess.expiresAt);
     await db.update(users).set({ lastSignInAt: new Date() }).where(eq(users.id, user.id));
     res.json(toPrivateUser(user));
@@ -506,6 +507,7 @@ router.post(
       // Clear the age-gate cookie so the visitor's browser doesn't
       // carry an "under 13" flag past signup.
       res.clearCookie(AGE_GATE_COOKIE, { path: "/" });
+      res.locals.activityActor = { id: created.id, role: created.role };
       res.status(201).json({
         ...toPrivateUser(created),
         pendingGuardianConfirmation: true,
@@ -515,6 +517,7 @@ router.post(
 
     res.clearCookie(AGE_GATE_COOKIE, { path: "/" });
     const sess = await createSession(created.id);
+    res.locals.activityActor = { id: created.id, role: created.role };
     setSessionCookie(res, sess.id, sess.expiresAt);
     res.status(201).json(toPrivateUser(created));
     // Task #633 — welcome email (motivational category). Only adults reach
@@ -805,6 +808,7 @@ router.post(
     if (blockOnAccountStatus(res, user)) return;
     const access = signAccessToken(user.id);
     const refresh = await issueRefreshToken(user.id, body.deviceLabel ?? null);
+    res.locals.activityActor = { id: user.id, role: user.role };
     await db.update(users).set({ lastSignInAt: new Date() }).where(eq(users.id, user.id));
     res.json({
       ...tokenResponse({

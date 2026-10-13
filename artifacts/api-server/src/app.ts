@@ -4,6 +4,7 @@ import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
 import router from "./routes";
+import { recordActivity } from "./middlewares/activity";
 import docsRouter from "./routes/docs";
 import foundingAdminPageRouter from "./routes/founding-admin-page";
 import { stripeWebhookHandler } from "./routes/stripe-webhook";
@@ -123,6 +124,7 @@ app.use(loadSession);
 // CSRF defense for cookie-authenticated mutations (runs after loadSession so
 // req.sessionRow is populated). No-op for bearer/API-key and non-browser calls.
 app.use(csrfGuard);
+app.use(recordActivity);
 
 app.get("/api/healthz", (_req, res) => {
   res.json({ ok: true });

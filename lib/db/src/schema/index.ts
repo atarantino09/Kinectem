@@ -1218,6 +1218,23 @@ export const adminActivityLog = pgTable("admin_activity_log", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Request-level activity supplements, but never replaces, the transactional
+// moderation audit. Store route templates only, never request bodies or tokens.
+export const userActivityLog = pgTable("user_activity_log", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  actorId: uuid("actor_id").references(() => users.id, { onDelete: "set null" }),
+  actorType: text("actor_type").notNull(),
+  actionType: text("action_type").notNull(),
+  resource: text("resource").notNull(),
+  route: text("route").notNull(),
+  effectiveUserId: uuid("effective_user_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [
+  index("user_activity_created_idx").on(t.createdAt, t.id),
+  index("user_activity_actor_idx").on(t.actorId, t.createdAt),
+  index("user_activity_type_idx").on(t.actorType, t.createdAt),
+]);
+
 export const conversations = pgTable("conversations", {
   id: uuid("id").primaryKey().defaultRandom(),
   type: conversationTypeEnum("type").notNull().default("direct"),

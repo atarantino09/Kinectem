@@ -79,8 +79,11 @@ import {
   sendEmail,
 } from "../lib/email";
 
+import adminActivityRouter from "./admin-activity";
+
 const router: IRouter = Router();
 router.use(requireAdmin);
+router.use(adminActivityRouter);
 
 function notFound(res: Response, message = "Not found") {
   res.status(404).json({ error: message });
@@ -1392,106 +1395,6 @@ router.post(
 // ---------------------------------------------------------------------------
 // Activity log
 // ---------------------------------------------------------------------------
-
-const ACTION_TYPES = [
-  "hide_content",
-  "unhide_content",
-  "delete_content",
-  "resolve_report",
-  "dismiss_report",
-  "create_user",
-  "update_user",
-  "soft_delete_user",
-  "restore_user",
-  "reset_password",
-  "masquerade_start",
-  "masquerade_stop",
-] as const;
-
-router.get(
-  "/activity",
-  asyncHandler(async (req, res) => {
-    const adminUserId =
-      typeof req.query["adminUserId"] === "string"
-        ? req.query["adminUserId"]
-        : "";
-    const actionType =
-      typeof req.query["actionType"] === "string"
-        ? req.query["actionType"]
-        : "";
-    const limitRaw = parseInt(p(req.query["limit"] as string), 10);
-    const offsetRaw = parseInt(p(req.query["offset"] as string), 10);
-    const limit =
-      Number.isFinite(limitRaw) && limitRaw > 0 && limitRaw <= 200
-        ? limitRaw
-        : 100;
-    const offset = Number.isFinite(offsetRaw) && offsetRaw > 0 ? offsetRaw : 0;
-
-    const conds = [] as ReturnType<typeof eq>[];
-    if (adminUserId) conds.push(eq(adminActivityLog.adminUserId, adminUserId));
-    if (
-      actionType &&
-      (ACTION_TYPES as readonly string[]).includes(actionType)
-    ) {
-      conds.push(
-        eq(
-          adminActivityLog.actionType,
-          actionType as (typeof ACTION_TYPES)[number],
-        ),
-      );
-    }
-    const where = conds.length ? and(...conds) : undefined;
-
-    const [rows, [{ totalCount }]] = await Promise.all([
-      db
-        .select({ a: adminActivityLog, admin: users })
-        .from(adminActivityLog)
-        .leftJoin(users, eq(adminActivityLog.adminUserId, users.id))
-        .where(where)
-        .orderBy(desc(adminActivityLog.createdAt))
-        .limit(limit)
-        .offset(offset),
-      db
-        .select({ totalCount: sql<number>`count(*)::int` })
-        .from(adminActivityLog)
-        .where(where),
-    ]);
-    const data = rows.map((r) => ({
-      id: r.a.id,
-      actionType: r.a.actionType,
-      targetType: r.a.targetType,
-      targetId: r.a.targetId,
-      metadata: r.a.metadata ? JSON.parse(r.a.metadata) : null,
-      createdAt: r.a.createdAt.toISOString(),
-      admin: r.admin
-        ? { id: r.admin.id, name: r.admin.name, email: r.admin.email }
-        : null,
-    }));
-    res.json({
-      data,
-      pagination: {
-        nextCursor: null,
-        hasMore: offset + data.length < totalCount,
-        totalCount,
-        limit,
-        offset,
-      },
-    });
-  }),
-);
-
-// Distinct admins who have logged at least one action (for filter dropdown).
-router.get(
-  "/activity/admins",
-  asyncHandler(async (_req, res) => {
-    const rows = await db
-      .selectDistinct({ id: users.id, name: users.name, email: users.email })
-      .from(adminActivityLog)
-      .innerJoin(users, eq(adminActivityLog.adminUserId, users.id))
-      .orderBy(users.name);
-    res.json({ data: rows });
-  }),
-);
 
 // ---------------------------------------------------------------------------
 // Masquerade
