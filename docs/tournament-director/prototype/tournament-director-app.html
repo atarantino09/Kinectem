@@ -43004,7 +43004,7 @@ ${tourney.directorName || tourney.name}`;
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "btn ghost sm", onClick: onClose, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(X, { size: 16 }) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "mb", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: "var(--brand-l)", border: "1px solid #E4D9F7", borderRadius: 10, padding: "10px 13px", fontSize: 12.5, lineHeight: 1.5, marginBottom: 14 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: "var(--brand-l)", border: "1px solid #E4D9F7", borderRadius: 10, padding: "10px 13px", fontSize: 12.5, lineHeight: 1.5, marginBottom: 12 }, children: [
           "List everyone who coaches ",
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: teamName }),
           ageLabel ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
@@ -43015,10 +43015,17 @@ ${tourney.directorName || tourney.name}`;
             ] })
           ] }) : null,
           ". ",
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "All of them get the team's emails and can sign in to update its scheduling requests." }),
-          " Mark the one ",
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "head coach" }),
-          " \u2014 that's the coach we schedule around (if a head coach runs more than one team, we avoid booking those at the same time). Co-coaches don't create scheduling conflicts."
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "Every coach here gets the team's emails and can sign in to update its scheduling requests" }),
+          " \u2014 so add assistants and co-coaches too, not just the one in charge."
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: "var(--turf-l)", border: "1px solid var(--turf)", borderRadius: 10, padding: "9px 12px", fontSize: 12.5, lineHeight: 1.5, marginBottom: 14, display: "flex", gap: 9, alignItems: "flex-start" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 15, lineHeight: 1.1 }, children: "\u{1F4C5}" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { style: { color: "var(--turf-d)" }, children: "Why the head coach matters:" }),
+            " the head coach is the one person we check for double-bookings ",
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "across all their teams" }),
+            ". If a head coach runs more than one team in this event, we won't put those teams on the field at the same time. Co-coaches and assistants are never checked for conflicts \u2014 so if a coach is really the one juggling multiple teams, make sure they're marked as head on each."
+          ] })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 9 }, children: list.map((c, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { border: "1px solid " + (c.head ? "var(--turf)" : "var(--line)"), background: c.head ? "var(--turf-l)" : "#fff", borderRadius: 11, padding: "10px 12px" }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "between", style: { marginBottom: 8, gap: 8 }, children: [
