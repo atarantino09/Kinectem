@@ -31884,6 +31884,26 @@ How the scheduler already behaves (so you don't send them to change something th
       }
       setTeams((ts) => ts.map((t) => t.id === teamId ? { ...t, coachId: cid } : t));
     };
+    const setTeamCoaches = (teamId, head, coCoaches) => {
+      const hname = (head && head.name || "").trim();
+      const hemail = (head && head.email || "").trim();
+      const hphone = (head && head.phone || "").trim();
+      const cleanCo = (coCoaches || []).map((c2) => ({ name: (c2.name || "").trim(), email: (c2.email || "").trim(), phone: (c2.phone || "").trim() })).filter((c2) => c2.name || c2.email);
+      if (!hname && !hemail) {
+        setTeams((ts) => ts.map((t) => t.id === teamId ? { ...t, coachId: null, coCoaches: cleanCo } : t));
+        return;
+      }
+      let c = coaches.find((x) => hname && x.name.toLowerCase() === hname.toLowerCase() || hemail && (x.email || "").toLowerCase() === hemail.toLowerCase());
+      let cid;
+      if (c) {
+        cid = c.id;
+        setCoaches((cs) => cs.map((x) => x.id === cid ? { ...x, name: hname || x.name, email: hemail || x.email, phone: hphone || x.phone } : x));
+      } else {
+        cid = uid();
+        setCoaches((cs) => [...cs, { id: cid, name: hname || hemail, email: hemail, phone: hphone }]);
+      }
+      setTeams((ts) => ts.map((t) => t.id === teamId ? { ...t, coachId: cid, coachName: hname || t.coachName, coachEmail: hemail || t.coachEmail, coachPhone: hphone || t.coachPhone, coCoaches: cleanCo } : t));
+    };
     const bulkAddGroupsOnly = (rows) => {
       const valid = (rows || []).filter((r) => r.age != null && r.age !== "");
       if (!valid.length) {
@@ -37121,7 +37141,8 @@ Questions? ${tourney.directorName || "Tournament director"}${tourney.directorEma
             onRequest: setTeamRequest,
             onTimes: setGroupTimes,
             fridayNight: !!tourney.fridayNight,
-            onFriday: (id, val) => setTeams((ts) => ts.map((x) => x.id === id ? { ...x, fridayOk: val } : x))
+            onFriday: (id, val) => setTeams((ts) => ts.map((x) => x.id === id ? { ...x, fridayOk: val } : x)),
+            onManageCoaches: (id) => setModal({ type: "coachteam", teamId: id })
           }
         ),
         tt === "chart" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "row", style: { alignItems: "flex-start" }, children: [
@@ -40283,6 +40304,30 @@ ${tourney.directorName || tourney.name}`;
           }
         );
       }
+      if (modal.type === "coachteam") {
+        const t = teams.find((x) => x.id === modal.teamId);
+        if (!t) {
+          close();
+          return null;
+        }
+        const hc = coaches.find((c) => c.id === t.coachId);
+        const head = { name: hc?.name || t.coachName || "", email: hc?.email || t.coachEmail || "", phone: hc?.phone || t.coachPhone || "" };
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          CoachTeamModal,
+          {
+            teamName: t.name,
+            ageLabel: ageName(t.ageGroupId),
+            head,
+            coCoaches: t.coCoaches || [],
+            onClose: close,
+            onSave: (h, co) => {
+              setTeamCoaches(t.id, h, co);
+              flash("Coaches updated");
+              close();
+            }
+          }
+        );
+      }
       if (modal.type === "register") {
         const fmtD = (iso) => iso ? (/* @__PURE__ */ new Date(iso + "T12:00:00")).toLocaleDateString("en-US", { weekday: "short", month: "long", day: "numeric", year: "numeric" }) : "";
         const dateText = tourney.start ? tourney.end && tourney.end !== tourney.start ? fmtD(tourney.start) + " \u2013 " + fmtD(tourney.end) : fmtD(tourney.start) : "";
@@ -42930,6 +42975,91 @@ ${tourney.directorName || tourney.name}`;
       ] })
     ] }) });
   }
+  function CoachTeamModal({ teamName, ageLabel, head, coCoaches, onClose, onSave }) {
+    const seed = [
+      { name: head.name || "", email: head.email || "", phone: head.phone || "", head: true },
+      ...(coCoaches || []).map((c) => ({ name: c.name || "", email: c.email || "", phone: c.phone || "", head: false }))
+    ];
+    const [list, setList] = import_react4.default.useState(seed.length ? seed : [{ name: "", email: "", phone: "", head: true }]);
+    const setRow = (i, patch) => setList((l) => l.map((x, k) => k === i ? { ...x, ...patch } : x));
+    const makeHead = (i) => setList((l) => l.map((x, k) => ({ ...x, head: k === i })));
+    const addRow = () => setList((l) => [...l, { name: "", email: "", phone: "", head: !l.some((x) => x.head) }]);
+    const removeRow = (i) => setList((l) => {
+      let next = l.filter((_, k) => k !== i);
+      if (next.length && !next.some((x) => x.head)) next = next.map((x, k) => k === 0 ? { ...x, head: true } : x);
+      return next.length ? next : [{ name: "", email: "", phone: "", head: true }];
+    });
+    const save = () => {
+      const clean = list.map((x) => ({ name: (x.name || "").trim(), email: (x.email || "").trim(), phone: (x.phone || "").trim(), head: x.head })).filter((x) => x.name || x.email);
+      const h = clean.find((x) => x.head) || clean[0] || { name: "", email: "", phone: "" };
+      const co = clean.filter((x) => x !== h);
+      onSave({ name: h.name, email: h.email, phone: h.phone }, co);
+    };
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "scrim", onMouseDown: (e) => e.target === e.currentTarget && onClose(), children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "modal", style: { maxWidth: 580 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "mh", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h3", { children: [
+          "Coaches \u2014 ",
+          teamName
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "btn ghost sm", onClick: onClose, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(X, { size: 16 }) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "mb", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: "var(--brand-l)", border: "1px solid #E4D9F7", borderRadius: 10, padding: "10px 13px", fontSize: 12.5, lineHeight: 1.5, marginBottom: 14 }, children: [
+          "List everyone who coaches ",
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: teamName }),
+          ageLabel ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+            " ",
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "muted", children: [
+              "\xB7 ",
+              ageLabel
+            ] })
+          ] }) : null,
+          ". ",
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "All of them get the team's emails and can sign in to update its scheduling requests." }),
+          " Mark the one ",
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "head coach" }),
+          " \u2014 that's the coach we schedule around (if a head coach runs more than one team, we avoid booking those at the same time). Co-coaches don't create scheduling conflicts."
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 9 }, children: list.map((c, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { border: "1px solid " + (c.head ? "var(--turf)" : "var(--line)"), background: c.head ? "var(--turf-l)" : "#fff", borderRadius: 11, padding: "10px 12px" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "between", style: { marginBottom: 8, gap: 8 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { style: { display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, fontWeight: 800, cursor: "pointer" }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { type: "radio", name: "headcoach", checked: !!c.head, onChange: () => makeHead(i), style: { accentColor: "var(--turf-d)" } }),
+              c.head ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "chip", style: { fontSize: 10.5, fontWeight: 800, background: "var(--turf)", color: "#fff", border: "none" }, children: "HEAD COACH" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "tiny muted", style: { fontWeight: 700 }, children: "Make head coach" })
+            ] }),
+            list.length > 1 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "btn ghost sm", title: "Remove this coach", onClick: () => removeRow(i), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Trash, { size: 13 }) })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "two", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "field", style: { marginBottom: 8 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("label", { children: "Name" }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: "inp", value: c.name, onChange: (e) => setRow(i, { name: e.target.value }), placeholder: "Coach name" })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "field", style: { marginBottom: 8 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("label", { children: "Email" }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: "inp", type: "email", value: c.email, onChange: (e) => setRow(i, { email: e.target.value }), placeholder: "coach@club.com" })
+            ] })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "field", style: { marginBottom: 0, maxWidth: 220 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [
+              "Phone ",
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "hint", children: "optional" })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { className: "inp", value: c.phone, onChange: (e) => setRow(i, { phone: e.target.value }), placeholder: "(555) 123-4567" })
+          ] })
+        ] }, i)) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { className: "btn sm", style: { marginTop: 11 }, onClick: addRow, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Plus, { size: 13 }),
+          "Add a coach"
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "mf", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "btn", onClick: onClose, children: "Cancel" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { className: "btn pri", onClick: save, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Check, { size: 15 }),
+          "Save coaches"
+        ] })
+      ] })
+    ] }) });
+  }
   function RequestModal({ teams, ageName, onClose, onSubmit }) {
     const [teamId, setTeamId] = (0, import_react4.useState)("");
     const [q, setQ] = (0, import_react4.useState)("");
@@ -45327,7 +45457,7 @@ ${tourney.directorName || tourney.name}`;
       ] })
     ] });
   }
-  function Worktable({ teams, coaches, ageGroups, ageName, requests, onCoach, onRequest, onTimes, fridayNight, onFriday }) {
+  function Worktable({ teams, coaches, ageGroups, ageName, requests, onCoach, onRequest, onTimes, fridayNight, onFriday, onManageCoaches }) {
     const [cd, setCd] = (0, import_react4.useState)({});
     const [rd, setRd] = (0, import_react4.useState)({});
     const [td, setTd] = (0, import_react4.useState)({});
@@ -45402,25 +45532,40 @@ ${tourney.directorName || tourney.name}`;
       const multi = coachTeamCount(t.coachId) > 1;
       const g = ageGroups.find((a) => a.id === t.ageGroupId);
       return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "224px 1fr 1fr 150px", gap: 12, alignItems: "center", padding: "7px 14px", borderTop: "1px solid var(--line2)", background: flag ? "var(--red-l)" : "#fff" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          "input",
-          {
-            className: "inp",
-            style: { padding: "5px 8px" },
-            placeholder: "Assign coach\u2026",
-            value: cVal,
-            onChange: (e) => setCd((d) => ({ ...d, [t.id]: e.target.value })),
-            onBlur: (e) => {
-              onCoach(t.id, e.target.value);
-              setCd((d) => {
-                const n = { ...d };
-                delete n[t.id];
-                return n;
-              });
-            },
-            onKeyDown: enter
-          }
-        ),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              className: "inp",
+              style: { padding: "5px 8px" },
+              placeholder: "Head coach\u2026",
+              value: cVal,
+              onChange: (e) => setCd((d) => ({ ...d, [t.id]: e.target.value })),
+              onBlur: (e) => {
+                onCoach(t.id, e.target.value);
+                setCd((d) => {
+                  const n = { ...d };
+                  delete n[t.id];
+                  return n;
+                });
+              },
+              onKeyDown: enter
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }, children: [
+            t.coCoaches && t.coCoaches.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "tiny muted", title: t.coCoaches.map((c) => c.name || c.email).join(", "), children: [
+              "+",
+              t.coCoaches.length,
+              " co-coach",
+              t.coCoaches.length > 1 ? "es" : ""
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { className: "btn ghost sm", style: { padding: "1px 5px", fontSize: 11, fontWeight: 700, color: "var(--brand-d)" }, onClick: () => onManageCoaches(t.id), title: "Add co-coaches, set the head coach", children: [
+              "Coaches",
+              t.coCoaches && t.coCoaches.length ? " (" + (t.coCoaches.length + 1) + ")" : "",
+              " \u203A"
+            ] })
+          ] })
+        ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontWeight: 700, fontSize: 13.5 }, children: [
           t.name,
           " ",
@@ -48562,16 +48707,27 @@ ${tourney.directorName || tourney.name}`;
     const target = teams.filter((t) => teamIds.includes(t.id));
     const recMap = /* @__PURE__ */ new Map();
     target.forEach((t) => {
+      const club = clubOf(t);
+      const add = (email, name) => {
+        const e = (email || "").trim();
+        if (e && !recMap.has(e.toLowerCase())) recMap.set(e.toLowerCase(), { email: e, name: (name || "").trim(), teamId: t.id, team: t.name, club });
+      };
       const c = coaches.find((x) => x.id === t.coachId);
-      const email = (c?.email || "").trim();
-      if (email && !recMap.has(email.toLowerCase())) recMap.set(email.toLowerCase(), { email, name: c?.name || "", teamId: t.id, team: t.name, club: clubOf(t) });
+      add(c?.email || t.coachEmail, c?.name || t.coachName);
+      (t.coCoaches || []).forEach((cc) => add(cc.email, cc.name));
+      (t.coachEmails || []).forEach((em) => add(em, ""));
     });
     const extraEmails = extra.split(/[,\s]+/).map((s) => s.trim()).filter((e) => /@/.test(e));
     extraEmails.forEach((e) => {
       if (!recMap.has(e.toLowerCase())) recMap.set(e.toLowerCase(), { email: e, name: "", teamId: null, team: "", club: "" });
     });
     const recipients = Array.from(recMap.values());
-    const noEmail = target.filter((t) => !(coaches.find((x) => x.id === t.coachId)?.email || "").trim());
+    const noEmail = target.filter((t) => {
+      const he = (coaches.find((x) => x.id === t.coachId)?.email || t.coachEmail || "").trim();
+      const anyCo = (t.coCoaches || []).some((cc) => (cc.email || "").trim());
+      const anyReg = (t.coachEmails || []).some((em) => (em || "").trim());
+      return !he && !anyCo && !anyReg;
+    });
     const resolve = (txt, r) => {
       const t = teams.find((x) => x.id === r.teamId);
       return (txt || "").replace(/\{coach\}/g, (r.name || "coach").split(" ")[0]).replace(/\{team\}/g, r.team || "your team").replace(/\{club\}/g, r.club || "your club").replace(/\{division\}/g, t?.division || "").replace(/\{age\}/g, t ? ageName(t.ageGroupId) : "").replace(/\{credit\}/g, "$" + creditFor(r.club)).replace(/\{deadline\}/g, deadlineStr);
@@ -48602,7 +48758,7 @@ ${tourney.directorName || tourney.name}`;
               ] }),
               " ",
               /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "tiny muted", children: [
-                "\xB7 head coaches of ",
+                "\xB7 all coaches of ",
                 teamIds.length,
                 " team",
                 teamIds.length === 1 ? "" : "s"
