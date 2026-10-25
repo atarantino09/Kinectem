@@ -143,7 +143,13 @@ into a tournament. Team pages are created here. Guest teams are created with
     "name": "Roxbury 2015 Boys",
     "groupSuggestion": "U11 Boys",      // the app's suggestion; director sets real division
     "level": "", "league": "", "flight": "",
-    "coachEmails": ["coach1@roxburysc.com"],  // 1+; drives invites
+    "coachEmails": ["coach1@roxburysc.com"],  // 1+; every one gets a coach.invite and is a self-service key
+    "coaches": [                              // multiple coaches per team (delta 71). When a Kinectem club is
+      { "name": "Coach One", "email": "coach1@roxburysc.com", "phone": "", "head": true },
+      { "name": "Coach Two", "email": "coach2@roxburysc.com", "phone": "", "head": false }
+    ],                                        // already on Kinectem, pull its coaching staff here. Exactly one
+                                              // head = true (the identity the director's conflict detection keys
+                                              // on). All coaches receive comms + can update the team's requests.
     "kinectem": true,                    // already a Kinectem team vs new
     "logoUrl": "",                       // club/team crest once Kinectem has one — the prototype shows
                                          // a monogram crest (club initials + deterministic color) as a
@@ -244,6 +250,7 @@ Backend must enforce server-side:
 - [ ] Once-per-email free trial enforced server-side.
 - [ ] **Team/club `logoUrl` returned by Kinectem renders in the director UI (cards, grid, scoreboard, printed game cards); monogram crest is the fallback.**
 - [ ] **Partial (saved-but-unpaid) registrations are captured and fed back to the director (see §7).**
+- [ ] **A team can carry multiple coaches (`coaches[]` with one `head: true`, delta 71). An existing Kinectem club's coaches are pulled onto the team; `coach.invite` fires for every coach email; all coaches get comms + email-scoped self-service; the HEAD coach is the identity the director's conflict detection groups on.**
 
 ---
 

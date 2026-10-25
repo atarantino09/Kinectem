@@ -60,9 +60,9 @@
 
 ### 🟦 TD-08 — Teams & coaches
 - **Goal:** clean team + coach data (coach accuracy is what makes conflict detection work).
-- **Build:** registered-teams table with filters (club/division/status/payment) + bulk select → message/edit + payment-type column; per-team coach email; **fuzzy coach de-dupe** with merge suggestions; **assistant-coach flag** per team; **TBD placeholder** teams (add N; fill-in swaps a real team or names in place). *(Partial registrations tab is Phase 2.)*
-- **Done when:** near-duplicate coaches merge to one; assistant flags and placeholders exist and feed the scheduler.
-- **Ref:** handoff → *Teams & coaches*, *Coach/club-admin access model*.
+- **Build:** registered-teams table with filters (club/division/status/payment) + bulk select → message/edit + payment-type column; per-team coach email; **fuzzy coach de-dupe** with merge suggestions; **assistant-coach flag** per team; **TBD placeholder** teams (add N; fill-in swaps a real team or names in place). **Multiple coaches per team with a HEAD-coach selector (delta 71):** list all of a team's coaches (pulled from Kinectem for existing clubs), a per-coach "head" radio; all coaches get comms + email-scoped self-service; the head is the identity conflict-detection groups on; store via a `team_coach` join with `head`. *(Partial registrations tab is Phase 2.)*
+- **Done when:** near-duplicate coaches merge to one; a team can carry several coaches with exactly one head; changing the head changes who the conflict detector treats as the multi-team coach; all listed coach emails receive comms and can update the team's requests; assistant flags and placeholders exist and feed the scheduler.
+- **Ref:** handoff → *Teams & coaches* (delta 71), *Coach/club-admin access model*; scheduler-engine "carry over" #12.
 
 ### 🟦 TD-09 — Pools & brackets (click-to-place)
 - **Goal:** assign teams to pools and order divisions.
