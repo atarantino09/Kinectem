@@ -197,7 +197,7 @@ Consolidated reference for how an event is structured and the recommended format
 - Every division → a **3-game round-robin guarantee**. **Playoff OFF by default but fully available** — the director can add any playoff format (final, final + consolation, semis, crossover) to an indoor division just like outdoor.
 - Indoor also changes the scheduler: a division is **locked to one site** (never split across venues), and the engine **clusters by coach/division** rather than packing by division. Set the indoor game size + length in the game-format table (e.g. a 5v5 futsal format); the 3-game RR guarantee + one-site lock are what make it "indoor."
 
-**Scoring / standings (default, configurable):** Win 3, Draw 1, Loss 0. Tiebreakers in order: head-to-head, goal differential (capped at +3/game), goals against, fewest cards. A champion stays "to be decided" until its deciding game is scored; round-robin divisions crown the top of the table.
+**Scoring / standings (default, configurable):** Win 3, Draw 1, Loss 0. Tiebreakers in order: head-to-head, goal differential (capped at 6 per game), goals against, fewest cards. A champion stays "to be decided" until its deciding game is scored; round-robin divisions crown the top of the table.
 
 ### Divisions & game formats
 - Per division: fee, cap, game size, playoff format.
