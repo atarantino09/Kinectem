@@ -170,6 +170,35 @@ One clean page, now **tabbed: Basics · Branding & docs · Registration · Payme
 - **Reachable from both Payments & settlement and Event setup → Payments & promos (delta 67).** Payouts/Stripe and promo-usage analytics stay on Payments & settlement.
 - Full behavior in "Payments, fees & promo codes" below.
 
+### Division formats, tiers & pools — at a glance
+Consolidated reference for how an event is structured and the recommended format per division. These are **defaults the match creator proposes** from event style (Outdoor/Indoor) + team count + game size; everything is editable per division. Event **STYLE is load-bearing** — it switches both the recommended format and the scheduler regime.
+
+**Structure: divisions → tiers → pools.**
+- **Divisions** — an age-group + gender container the director creates and names (e.g. "U12 Boys", or "U12 Boys Premier" if split by tier). Each carries its own game size (defaulted from age, editable), entry fee, playoff format, round-days. Divisions sort by gender then age; that order carries to the schedule and public page.
+- **Tiers / levels** — teams pick a level at registration (Beginner / Travel / Premier). **Organizer-only — never shown publicly.** Used to decide placement: the director can run a separate division per tier, or keep level as a seeding attribute within one division. Pools view shows tier-colored headers.
+- **Pools** — a division is split into pools for group play by **click-to-place** (auto-split 1–4; each team gets a bracket letter A/B/…). Each pool plays a round robin; 6+ teams feed a crossover playoff. Pool/group games use the **pool block**; playoff games use the **bracket block**.
+
+**Field size per division (default by age, editable):** U8–U10 → 7v7 · U11–U12 → 9v9 · U13+ → 11v11.
+
+**Game length + grid block per size (default, editable per size; pool block and bracket block set separately):**
+- 7v7: 50-min game (two 25-min halves), 5-min halftime, 60-min grid block
+- 9v9: 50-min game (two 25-min halves), 5-min halftime, 60-min grid block
+- 11v11: 60-min game (two 30-min halves), 5-min halftime, 75-min grid block
+(`glen` = actual play minutes on the clock; the grid **block** = play + halftime + transition buffer — what the scheduler reserves, which is why block > play length.)
+
+**OUTDOOR — round-robin group play + playoffs, suggested by team count:**
+- **6+ teams** → two groups, round robin within each, then **crossover playoff**: SF1 = Group A 1st v Group B 2nd, SF2 = Group B 1st v Group A 2nd, then Final (SF winners) + 3rd place (SF losers). Canonical 6-team case = two groups of 3: two pool games, then semis/final/3rd.
+- **5 teams** → one 5-team round robin, **no playoff** (points leader wins).
+- **4 teams** → round robin, then **11v11 → Final only** (1 v 2); **7v7/9v9 → Final + Consolation** (1 v 2 and 3 v 4).
+- **2–3 teams** → round robin + a Final.
+- Playoffs always run on the **last event day**. A leading Friday night (if enabled) starts empty — the director drags games onto it.
+
+**INDOOR — guarantee format, playoffs optional:**
+- Every division → a **3-game round-robin guarantee**. **Playoff OFF by default but fully available** — the director can add any playoff format (final, final + consolation, semis, crossover) to an indoor division just like outdoor.
+- Indoor also changes the scheduler: a division is **locked to one site** (never split across venues), and the engine **clusters by coach/division** rather than packing by division. Set the indoor game size + length in the game-format table (e.g. a 5v5 futsal format); the 3-game RR guarantee + one-site lock are what make it "indoor."
+
+**Scoring / standings (default, configurable):** Win 3, Draw 1, Loss 0. Tiebreakers in order: head-to-head, goal differential (capped at +3/game), goals against, fewest cards. A champion stays "to be decided" until its deciding game is scored; round-robin divisions crown the top of the table.
+
 ### Divisions & game formats
 - Per division: fee, cap, game size, playoff format.
 - **Age → field size defaults (auto-set, adjustable).** U8–U10 → 7v7, U11–U12 → 9v9, U13–U19 (allow up to U23) → 11v11. Only a default — editable. (Field size also drives which fields a game is eligible for.)
