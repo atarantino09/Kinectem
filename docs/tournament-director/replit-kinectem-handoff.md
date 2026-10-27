@@ -222,6 +222,14 @@ Consolidated reference for how an event is structured and the recommended format
 - **Field-space monitor** — a per-size capacity table (Size · Fields · slots/day · Total · Games need, short/tight/✓) + per-field per-day slot counts, so the director spots a crunch before scheduling. Per-day columns are the binding signal.
 - **Venue fill order & finals (delta 47)** — rank which venues/fields fill first (per-size), and mark a preferred finals field (soft, championship Final only, within the division's own venue).
 
+**Preferred finals field — full behavior.** The director can mark one or more fields as a **preferred finals field** (a showcase pitch — turf, stadium). When a division plays its **championship Final**, the scheduler tries to put that Final on a marked field. Rules:
+- **Soft, never forced.** Runs as a **post-pass after the main packing**; only the championship **Final** moves (not semis, consolations, or 3rd-place). A Final is nudged onto a preferred field only if one can host it within the division's limits; if none is free it stays exactly where the packer put it, and it never bumps another game.
+- **Same-venue only.** A Final only moves to a preferred field **at the division's own venue** (divisions are kept at one venue all event, so a Final never jumps venues). So mark a showcase field **at each venue** where finals will run, not just one site.
+- **Timing.** On its original day the Final stays **at or after** its scheduled slot (never earlier, never before group play); it may take a later day; it takes the first open slot on the preferred field that passes all hard rules, else falls back to its original spot.
+- **Multiple + size-aware.** Several fields can be marked; they're tried in **venue/field fill order**; a preferred field only hosts finals of a **size it supports**.
+- **UX.** Set in the auto-schedule wizard's collapsible **"Review venue fill order & finals"** row: expand a venue, each field has a **"Finals" checkbox**; a green **"Final: &lt;field&gt;"** chip shows on the venue when set. Leave all on **Auto** (none checked) and the scheduler chooses — the preference is opt-in.
+- **Data:** a boolean **`finalsField`** on the field record; the engine reads it in the finals post-pass.
+
 ### Pools & brackets
 - **Assign teams to pools by CLICK-TO-PLACE** (click a team, then click a pool/division; auto-split 1–4), writing each team's bracket letter. Even auto-fill grid, tier-colored headers, full-width **"Unassigned" strip on top** as the un-assign target. Locked (scheduled) teams can't move and show a **Swap** action. No native drag.
 - Reorder divisions (one-click sort by gender then age); order carries to schedule + public.

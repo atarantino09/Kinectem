@@ -33,6 +33,7 @@ Covers the areas built so far: **Event setup · Venues & fields (current) · Div
 - [ ] **Design model to support:** list every playable configuration of a piece of ground as its own field; mark every pair that can't coexist as sharing space; true side-by-side halves do NOT share space with each other, only with the full-field version on top of both.
 - [ ] **Venue library** (per director): save/add/reuse venues + their fields across events.
 - [ ] **Field-space monitor** capacity table: per size, per day, slot supply vs games-needed with **short / tight / ✓** states (the binding signal before scheduling). Overlapping configs are the same ground — **not additive capacity**.
+- [ ] **Preferred finals field:** a per-field **"Finals" checkbox** (in the "Review venue fill order & finals" panel) marks a showcase field; a green **"Final: <field>"** chip shows on the venue. It's a **soft** scheduler preference — only the **championship Final** moves, **same-venue only**, never forced, never earlier than its slot, size-aware. Leaving all on **Auto** lets the scheduler choose. Data: `finalsField` boolean on the field.
 
 ## 3. Divisions & pools
 
