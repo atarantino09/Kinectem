@@ -13,6 +13,17 @@
 
 The hard rule of this plan: **ship functional first, polish against the design-fidelity punch-list in parallel.** A milestone is "done" when Andrew can do that day's job on real data — not when it's pixel-perfect.
 
+## Scope confirmed (Oct 28) — what's IN and what's OFF the critical path
+
+Decisions that shape this release:
+- **GotSport is a one-time team-list import only.** The Kinectem Tournament app is the **system of record** for everything after that — divisions, pools, schedule, changes, scoring. Nothing is exported back to GotSport, and the team list is **not** re-imported after scheduling (a re-import would overwrite the built schedule).
+- **The live public schedule is the single source of truth.** Coaches keep checking it up to kickoff. **No change-notification emails** — do not build a change-alert system. The one requirement this creates: **any edit to the schedule must update the public view instantly.**
+- **Game cards print blank roster rows** (25 blank rows; teams/refs fill at the field). No roster data source needed.
+- **Referees enter scores via the QR cards only** — scan → phone score page, no login. **No site-manager logins needed for this event**, so TD-03 company-admin scoring access is **off the critical path** here.
+- **Registration & payment stay in GotSport** for Fall Finale, so the TD app's own registration + payment (Phase 2) is **off the critical path** entirely. Import accepted teams and schedule them.
+
+Net effect: three big chunks drop off the timeline — in-app registration/payment, a messaging/change-notification system, and multi-admin game-day access. That frees the build to focus on import → divisions/pools → schedule → public post → cards → scoring.
+
 ## R1 — Data & intake · live by Mon Nov 2 (5 days out)
 
 **Goal:** the real Fall Finale field of teams is in, organized into divisions and pools, and clubs can start submitting their coach conflicts and scheduling requests.
@@ -50,16 +61,34 @@ The hard rule of this plan: **ship functional first, polish against the design-f
 
 **Go/no-go check:** run auto-schedule on real data → 0 hard conflicts, unplaced games explained → spot-fix on the grid → publish the schedule + public coach schedule → export the match CSV and send it to the ref assignor.
 
+**Publishing model:** the public schedule is the canonical, always-current view — coaches re-check it up to kickoff, so **no change emails**. The only hard requirement: a schedule edit must propagate to the public view immediately. Sharing the link once (however Andrew likes) is enough.
+
 **Risk & fallback:** TD-11 is the hardest feature. If the auto-schedule isn't perfect, the grid's manual click-to-place + conflict flags let Andrew finish it by hand — so the public post can still happen Nov 5.
+
+### The hinge: finalize requests before scheduling (Nov 2 → Nov 5)
+Clubs submit coach conflicts/requests Nov 2–5. The director worktable must **show the incoming requests** so Andrew can **confirm the finalized list before Auto-scheduling** (the scheduler builds around them; the pre-schedule banner reminds him). This review step is the connective tissue between R1 and R2 — build it, don't assume it.
+
+**Do this early:** the moment TD-07/08 work, import the **real Fall Finale export** and run auto-schedule against it — even rough — to shake out scheduler problems with days to fix, not hours. Testing on the real data is the single highest-leverage de-risk in the whole plan.
+
+## Changes & contingencies · Nov 5 → game day (ongoing)
+
+The schedule is live and the app is the system of record, so every post-publish change happens **in the app** and shows on the public view instantly. The build must support, before Nov 14:
+- **Withdraw / drop a team** and **re-run only its division** (By-division flag-and-re-run) so the rest of the schedule stays put.
+- **Fill a TBD placeholder** with a late-added team (repoint its matches).
+- **Move / postpone / cancel a game** (the match status supports postponed/canceled) with the live conflict flags still honored.
+- Weather days: the same move/postpone tools, applied in bulk if needed.
+No notifications fire — coaches see the change when they re-check the live schedule.
 
 ## R3 — Game-day prep · live by Tue Nov 10 (12 days out)
 
 **Goal:** printed game cards with QR codes, ready to hand to referees for scoring.
 
 **Must be working:**
-- **TD-15 Game cards + QR ref scoring** — printable cards (roster rows, tournament logo, big field band, club crest per team); each card's QR opens an unauthenticated phone score page that **writes the score back to the match**; forfeits auto-apply 3–0.
+- **TD-15 Game cards + QR ref scoring** — printable cards with **25 blank roster rows** (teams/refs fill at the field), tournament logo, big field band, club crest per team; each card's QR opens an **unauthenticated, no-login** phone score page that **writes the score back to the match**; forfeits auto-apply 3–0; the score page must also capture **PK shootout results** for knockout ties.
 
 **Build/test window:** Nov 6–9; go-live Nov 10.
+
+**Infra requirement:** the QR score page must sit on a **stable public URL that works on cell data at the fields** (nothing localhost). Test a real scan on a phone over cellular before Nov 10.
 
 **Dependency:** the schedule must be **locked** (R2) so cards carry the right matchups, fields, and times.
 
@@ -75,6 +104,10 @@ The hard rule of this plan: **ship functional first, polish against the design-f
 - **TD-16 Scores, standings & champions** — configurable points + ordered tiebreakers (incl. head-to-head), **GD cap 6/game**; champions gated until the deciding game is scored.
 - **TD-18 Public scoreboard** — live mobile scoreboard, branded.
 - **TD-17 Tournament stats** — can trail into the days after; not required for Saturday kickoff.
+
+**Scoring access:** referees enter scores via the **QR cards only** (no logins). The director confirms/overrides from the console as needed.
+
+**Game-day safety net (lock before Nov 14):** a one-click **"export the whole event"** (schedule + scores to CSV/JSON) so a hiccup never loses the day; confirm the public scoreboard updates as scores land; confirm standings apply the tiebreakers + GD-cap-6 and that a champion only shows once its deciding game is scored.
 
 **Build/test window:** Nov 11–13; live Nov 14–15.
 
