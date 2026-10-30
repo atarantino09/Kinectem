@@ -181,10 +181,12 @@ Consolidated reference for how an event is structured and the recommended format
 
 **Field size per division (default by age, editable):** U8–U10 → 7v7 · U11–U12 → 9v9 · U13+ → 11v11.
 
-**Game length + grid block per size (default, editable per size; pool block and bracket block set separately):**
-- 7v7: 50-min game (two 25-min halves), 5-min halftime, 60-min grid block
-- 9v9: 50-min game (two 25-min halves), 5-min halftime, 60-min grid block
-- 11v11: 60-min game (two 30-min halves), 5-min halftime, 75-min grid block
+**Game length + scheduling blocks per size (default, editable per size; pool block and bracket block set separately — block = grid time reserved = play + halftime + transition buffer):**
+- 7v7: 50-min game (two 25-min halves), 5-min halftime, **Pool block 60, Bracket block 60**
+- 9v9: 50-min game (two 25-min halves), 5-min halftime, **Pool block 60, Bracket block 60**
+- 11v11: 60-min game (two 30-min halves), 5-min halftime, **Pool block 75, Bracket block 75**
+- 5v5 (indoor): no seeded default row — set its size/length in the game-format table when running an indoor event.
+- Turnover-buffer check: if a block < play + halftime, flag red ("⚠ Shorter than N min of play+halftime"); otherwise show "+N min turnover buffer". Data fields: `glen` (play min), `half` (halftime min), `slot` (pool block), `bslot` (bracket block).
 (`glen` = actual play minutes on the clock; the grid **block** = play + halftime + transition buffer — what the scheduler reserves, which is why block > play length.)
 
 **OUTDOOR — round-robin group play + playoffs, suggested by team count:**
